@@ -2,51 +2,75 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Make agent-backed report generation (Insights, Rubric, Analyze) run as background jobs that survive navigation, notify on completion, and are visible/re-attachable from a cross-app activity view.
+**Goal:** Make agent-backed report generation (Insights, Rubric, Analyze) survive navigation, notify on completion, and be visible/re-attachable from a cross-app activity view — with the smallest diff over what already works.
 
-**Architecture:** A process-wide `ReportRunManager` (server, `src/report/`) owns runs in a sequential queue — mirroring the existing `ChatManager`. Report SSE becomes a *view onto a run* rather than *being* the run, so a client disconnect can't abort the work. The React console gets a `useReportRun` hook (re-attaches the latest run of a kind on mount) and an `ActivityProvider`/activity menu that polls the run list, fires the existing notification stack on completion, and deep-links back to each run's panel.
+**Architecture (lightweight — revised after eng review):** The existing report SSE routes already keep computing and cache their result after a client disconnects. So we do NOT take over running them. We add a small in-memory **`ReportRegistry`** that those routes update on start/phase/done/failed, expose `GET /api/report/runs` over it, and build an `ActivityProvider` + activity menu + notify-on-done on top. A `useReportRun` client hook drives each panel's **existing** stream opener, reattaches the latest run of its kind on mount, and refuses to open a second stream for a run already in flight (avoiding double-compute). No queue, no manager, no new streaming endpoint, no concurrency change.
 
 **Tech Stack:** TypeScript, Node, Express (raw routes on `server.expressApp`), React 18, native `EventSource`/`fetch`, Vitest.
 
+## Why this shape (eng-review decisions)
+
+- **Rejected** a `ReportRunManager` that owns runs in a global serial queue + a new re-attachable SSE view. It was a concurrency *regression* (today the three report kinds run concurrently; a queue serializes them and a wedged run would block all reports with no cancel), and the new SSE view added nothing on reattach (which is status-only) over polling. See `../specs/2026-07-13-background-report-runs-design.md`.
+- **Reattach = latest run of the kind** (not a specific per-params run). Simpler; the server registry is already reload-proof. Precise per-run reattach (localStorage pointer + selected-row persistence) is deferred.
+- **Scope: insights, rubric, analyze** — the three agent-backed reports whose routes emit a `done` report. Scorecard (not agent-backed; already SWR) and gem-run (an execution, no report payload) are out of scope.
+
 ## Global Constraints
 
-- **Scope:** Only the three agent-backed report kinds with a clean compute-core seam — **insights, rubric, analyze**. Scorecard (not agent-backed; already stale-while-revalidate) and gem-run (an execution with no `{payload,cached,updatedAt}` core) are **out of scope** for this plan; each is noted as deferred where relevant.
-- **Concurrency:** exactly one run executes at a time (sequential queue), bracketed in `beginForeground()/endForeground()` so the `warm` daemon yields. No global agent mutex.
-- **Persistence:** in-memory registry only. Survives navigation + page reload (registry lives in the server process). A full server restart drops in-flight runs — acceptable, re-running is cache-backed. **No disk, no localStorage pointer.**
-- **Re-attach fidelity:** status + phase, then the report. Live `delta` streaming is preserved *while a client is attached*; no server-side historical delta buffer.
-- **ID generation:** `randomUUID` from `node:crypto` (the repo's non-ChatManager idiom).
-- **SSE writer idiom (verbatim):** `res.write(\`event: ${event}\ndata: ${JSON.stringify(data)}\n\n\`)`.
-- **SSE headers (verbatim):** `{ "Content-Type": "text/event-stream", "Cache-Control": "no-cache, no-transform", Connection: "keep-alive", "X-Accel-Buffering": "no" }`.
+- **Concurrency: unchanged from today.** Report runs are NOT serialized. Different kinds/params run concurrently exactly as they do now. The existing `beginForeground()/endForeground()` bracketing on the routes stays as-is.
+- **Persistence:** in-memory registry only (survives navigation + reload since it lives in the server process; a full restart drops in-flight state, which the result cache re-serves).
+- **Do NOT edit the compute cores** (`computeInsights`/`computeRubric`/`computeWorkflowAnalysis`) or delete any existing route. The existing `/api/insights/stream`, `/api/rubric/stream`, `/api/workflow/analyze/stream` stay and keep working for direct callers.
+- **ID / keys:** a run is identified by `${kind}:${paramsKey}`. `paramsKey` is derived per kind from the route's query (`insights`/`analyze` = `root`; `rubric` = `` `${rubric}:${scope}:${root ?? ""}:${sessionId ?? ""}` ``).
+- **SSE writer idiom (existing, unchanged):** `res.write(\`event: ${e}\n\`); res.write(\`data: ${JSON}\n\n\`)`.
 - **Logger:** `import { createLogger } from "@agentgem/base"`.
-- **Route registration idiom:** `server.expressApp.<method>(path, originGuard, handler)` inside `finalizeCommonApp(app, server)` in `src/appCommon.ts`.
-- **Console tests are NOT in CI** — run them locally. Root `src/__tests__` and `src/report/__tests__` tests ARE CI-gated (`test (24)`).
-- **Marketplace/console has no CSS framework:** every new `class` you add to a `.tsx` needs a matching hand-authored rule (see Task 8's CSS step). Verify styled UI in a real browser, not just jsdom.
+- **Console tests are NOT in CI** — run locally. Root `src/**/__tests__` tests ARE CI-gated (`test (24)`).
+- **Console has no CSS framework:** every new class needs a hand-authored rule (Task 4 CSS step). Verify UI in a real browser.
+- **Ship in two PRs:** PR1 = Tasks 1–6 (core + Insights proof). PR2 = Tasks 7–9 (Rubric + Analyze). Each off freshly-fetched `origin/main`.
+
+## Data flow
+
+```
+INITIAL WATCH (unchanged):
+  panel.start(key, params) ─▶ openInsightsStream(...) ─▶ GET /api/insights/stream
+                                                            │ route: registry.begin(insights,key)
+                                                            │ computeInsights(progress.onPhase → registry.phase)
+   panel folds phase/delta/done into its own state ◀───────┤ done → registry.finish(done); failed → finish(failed)
+   navigate away: es.close() ─ compute continues + caches ─┘ (registry.finish still runs after the await)
+
+NOTIFY + ACTIVITY:
+  ActivityProvider ─ poll GET /api/report/runs (5s) ─▶ registry.list()
+    └─ detectReportDone(prev,next) ─▶ toast + osNotify   |   ActivityMenu renders the list, deep-links
+
+REATTACH (come back):
+  panel mount ─▶ GET /api/report/runs ─▶ latest of kind
+     ├─ running → poll /runs until done, THEN openStream(fresh=false) once (cache hit) → report
+     ├─ done    → openStream(fresh=false) once (cache hit) → report
+     └─ failed  → show error from the record
+  panel.start on an already-running key → attach+poll instead of opening a 2nd stream (no double-compute)
+```
 
 ---
 
-### Task 1: `ReportRunManager` core (server)
+### Task 1: `ReportRegistry` (server)
 
-The registry, sequential queue, dedup, background-completion, and TTL/cap eviction. Runners are injected in Task 2; this task tests with fake runners.
+In-memory tracker of report runs. Pure data structure; the routes drive it in Task 2.
 
 **Files:**
-- Create: `src/report/runManager.ts`
-- Test: `src/report/__tests__/runManager.test.ts`
+- Create: `src/report/registry.ts`
+- Test: `src/report/__tests__/registry.test.ts`
 
 **Interfaces:**
 - Produces:
   ```ts
-  type RunStatus = "queued" | "running" | "done" | "failed";
-  interface RunEvent { type: "phase" | "delta" | "done" | "failed"; phase?: string; text?: string; result?: unknown; error?: string }
-  interface RunRecord { id: string; kind: string; paramsKey: string; params: unknown; status: RunStatus; phase: string; result?: unknown; error?: string; startedAt: number; finishedAt?: number }
-  interface RunSummary { id: string; kind: string; paramsKey: string; status: RunStatus; phase: string; startedAt: number; finishedAt?: number }
-  type ReportRunner = (params: unknown, progress: { onPhase: (p: string) => void; onDelta: (t: string) => void }) => Promise<unknown>;
-  class ReportRunManager {
+  type RunStatus = "running" | "done" | "failed";
+  interface RunRecord { kind: string; paramsKey: string; params: Record<string, string>; status: RunStatus; phase: string; startedAt: number; finishedAt?: number; error?: string }
+  interface RunSummary { id: string; kind: string; paramsKey: string; params: Record<string, string>; status: RunStatus; phase: string; startedAt: number; finishedAt?: number; error?: string }
+  class ReportRegistry {
     constructor(opts?: { now?: () => number; ttlMs?: number; maxDone?: number });
-    register(kind: string, runner: ReportRunner): void;
-    start(kind: string, paramsKey: string, params: unknown): { id: string; existing: boolean };
-    get(id: string): RunRecord | undefined;
-    list(): RunSummary[];
-    subscribe(id: string, onEvent: (e: RunEvent) => void): () => void;
+    begin(kind: string, paramsKey: string, params: Record<string, string>): void;
+    phase(kind: string, paramsKey: string, phase: string): void;
+    finish(kind: string, paramsKey: string, status: "done" | "failed", error?: string): void;
+    get(kind: string, paramsKey: string): RunRecord | undefined;
+    list(): RunSummary[];   // newest first; id = `${kind}:${paramsKey}`
     sweep(): void;
   }
   ```
@@ -54,162 +78,98 @@ The registry, sequential queue, dedup, background-completion, and TTL/cap evicti
 - [ ] **Step 1: Write the failing test**
 
 ```ts
-// src/report/__tests__/runManager.test.ts
+// src/report/__tests__/registry.test.ts
 import { describe, it, expect } from "vitest";
-import { ReportRunManager } from "../runManager.js";
+import { ReportRegistry } from "../registry.js";
 
-// A runner whose completion we control, so we can assert queue + background behavior.
-function deferred<T>() {
-  let resolve!: (v: T) => void, reject!: (e: unknown) => void;
-  const promise = new Promise<T>((res, rej) => { resolve = res; reject = rej; });
-  return { promise, resolve, reject };
-}
-
-describe("ReportRunManager", () => {
-  it("dedups a queued/running run by (kind, paramsKey)", () => {
-    const mgr = new ReportRunManager();
-    const d = deferred<unknown>();
-    mgr.register("insights", () => d.promise);
-    const a = mgr.start("insights", "/proj", { root: "/proj" });
-    const b = mgr.start("insights", "/proj", { root: "/proj" });
-    expect(b.existing).toBe(true);
-    expect(b.id).toBe(a.id);
+describe("ReportRegistry", () => {
+  it("begin marks a run running and list() exposes it newest-first", () => {
+    let t = 100;
+    const r = new ReportRegistry({ now: () => t });
+    r.begin("insights", "/a", { root: "/a" });
+    t = 200;
+    r.begin("rubric", "x:all::", { rubric: "x", scope: "all" });
+    const list = r.list();
+    expect(list.map((x) => x.kind)).toEqual(["rubric", "insights"]);   // newest first
+    expect(list[1]).toMatchObject({ id: "insights:/a", status: "running", params: { root: "/a" } });
   });
 
-  it("runs sequentially: the second queued run does not start until the first finishes", async () => {
-    const mgr = new ReportRunManager();
-    const d1 = deferred<unknown>(), d2 = deferred<unknown>();
-    const started: string[] = [];
-    mgr.register("insights", (p) => { started.push((p as { k: string }).k); return (p as { k: string }).k === "a" ? d1.promise : d2.promise; });
-    mgr.start("insights", "a", { k: "a" });
-    mgr.start("insights", "b", { k: "b" });
-    await Promise.resolve();
-    expect(started).toEqual(["a"]);           // only "a" started
-    d1.resolve({ ok: true });
-    await d1.promise; await Promise.resolve(); await Promise.resolve();
-    expect(started).toEqual(["a", "b"]);      // "b" started after "a" finished
+  it("phase updates the running record", () => {
+    const r = new ReportRegistry();
+    r.begin("insights", "/a", { root: "/a" });
+    r.phase("insights", "/a", "judging");
+    expect(r.get("insights", "/a")?.phase).toBe("judging");
   });
 
-  it("completes in the background after all subscribers unsubscribe", async () => {
-    const mgr = new ReportRunManager();
-    const d = deferred<unknown>();
-    mgr.register("insights", () => d.promise);
-    const { id } = mgr.start("insights", "/p", { root: "/p" });
-    const unsub = mgr.subscribe(id, () => {});
-    unsub();                                   // client "navigated away"
-    d.resolve({ report: 1 });
-    await d.promise; await Promise.resolve();
-    expect(mgr.get(id)?.status).toBe("done");
-    expect(mgr.get(id)?.result).toEqual({ report: 1 });
+  it("finish records terminal status + finishedAt, and a re-begin restarts it", () => {
+    let t = 1;
+    const r = new ReportRegistry({ now: () => t });
+    r.begin("insights", "/a", { root: "/a" });
+    t = 5; r.finish("insights", "/a", "done");
+    expect(r.get("insights", "/a")).toMatchObject({ status: "done", finishedAt: 5 });
+    t = 9; r.begin("insights", "/a", { root: "/a" });   // Re-run
+    expect(r.get("insights", "/a")).toMatchObject({ status: "running", startedAt: 9, finishedAt: undefined });
   });
 
-  it("a late subscriber on a finished run receives done immediately", async () => {
-    const mgr = new ReportRunManager();
-    mgr.register("insights", () => Promise.resolve({ report: 2 }));
-    const { id } = mgr.start("insights", "/p", { root: "/p" });
-    await Promise.resolve(); await Promise.resolve();
-    const events: unknown[] = [];
-    mgr.subscribe(id, (e) => events.push(e));
-    expect(events).toEqual([{ type: "done", result: { report: 2 } }]);
+  it("finish with an error message records it as failed", () => {
+    const r = new ReportRegistry();
+    r.begin("rubric", "k", { rubric: "r" });
+    r.finish("rubric", "k", "failed", "adapter timeout");
+    expect(r.get("rubric", "k")).toMatchObject({ status: "failed", error: "adapter timeout" });
   });
 
-  it("marks a run failed and reports the message", async () => {
-    const mgr = new ReportRunManager();
-    mgr.register("insights", () => Promise.reject(new Error("boom")));
-    const { id } = mgr.start("insights", "/p", { root: "/p" });
-    await Promise.resolve(); await Promise.resolve();
-    expect(mgr.get(id)?.status).toBe("failed");
-    expect(mgr.get(id)?.error).toBe("boom");
-  });
-
-  it("frees the dedup slot after completion so a re-run makes a new id", async () => {
-    const mgr = new ReportRunManager();
-    mgr.register("insights", () => Promise.resolve({}));
-    const a = mgr.start("insights", "/p", { root: "/p" });
-    await Promise.resolve(); await Promise.resolve();
-    const b = mgr.start("insights", "/p", { root: "/p" });
-    expect(b.existing).toBe(false);
-    expect(b.id).not.toBe(a.id);
-  });
-
-  it("sweep evicts finished runs past the TTL", async () => {
+  it("sweep evicts finished runs past the TTL but keeps running ones", () => {
     let t = 1000;
-    const mgr = new ReportRunManager({ now: () => t, ttlMs: 100 });
-    mgr.register("insights", () => Promise.resolve({}));
-    const { id } = mgr.start("insights", "/p", { root: "/p" });
-    await Promise.resolve(); await Promise.resolve();
-    t = 2000;                                  // well past ttl
-    mgr.sweep();
-    expect(mgr.get(id)).toBeUndefined();
+    const r = new ReportRegistry({ now: () => t, ttlMs: 100 });
+    r.begin("insights", "/done", { root: "/done" });
+    r.finish("insights", "/done", "done");
+    r.begin("insights", "/live", { root: "/live" });   // still running
+    t = 2000;
+    r.sweep();
+    expect(r.get("insights", "/done")).toBeUndefined();
+    expect(r.get("insights", "/live")).toBeDefined();
   });
 });
 ```
 
 - [ ] **Step 2: Run test to verify it fails**
 
-Run: `cd /Users/rfeng/Projects/ninemind/agentgem-worktrees/async-report-runs && npx vitest run src/report/__tests__/runManager.test.ts`
-Expected: FAIL — `Cannot find module '../runManager.js'`.
+Run: `cd /Users/rfeng/Projects/ninemind/agentgem-worktrees/async-report-runs && npx vitest run src/report/__tests__/registry.test.ts`
+Expected: FAIL — `Cannot find module '../registry.js'`.
 
 - [ ] **Step 3: Write minimal implementation**
 
 ```ts
-// src/report/runManager.ts
+// src/report/registry.ts
 // Copyright (c) 2026 NineMind, Inc.
 // SPDX-License-Identifier: MIT
 //
-// Process-wide registry for background report runs. Generalizes the ChatManager
-// pattern (packages/run/src/chatSession.ts) to agent-backed report generation:
-// one sequential queue (honoring the warm foreground gate), dedup by (kind,
-// paramsKey), background-completion (the run promise is owned here, never by a
-// request), and TTL/cap eviction of finished runs. In-memory only — a run
-// survives client navigation + page reload (this lives in the server process)
-// but not a full server restart.
-import { randomUUID } from "node:crypto";
+// In-memory tracker of agent-backed report runs (insights | rubric | analyze).
+// The existing SSE routes drive it (begin/phase/finish); it exists only to power
+// the activity view + notify-on-done and to let a returning panel discover a run.
+// The RESULT is never stored here — the compute cores' own cache holds it, and a
+// reattaching panel re-opens the existing stream (a cache hit) to load it.
 import { createLogger } from "@agentgem/base";
-import { beginForeground, endForeground } from "../warm/orchestrator.js";
 
-const log = createLogger("report-run");
+const log = createLogger("report-registry");
 
-export type RunStatus = "queued" | "running" | "done" | "failed";
-
-export interface RunEvent {
-  type: "phase" | "delta" | "done" | "failed";
-  phase?: string;
-  text?: string;
-  result?: unknown;
-  error?: string;
-}
+export type RunStatus = "running" | "done" | "failed";
 
 export interface RunRecord {
-  id: string;
   kind: string;
   paramsKey: string;
-  params: unknown;
+  params: Record<string, string>;   // the route query, so a reattach can rebuild the stream
   status: RunStatus;
   phase: string;
-  result?: unknown;
-  error?: string;
   startedAt: number;
   finishedAt?: number;
+  error?: string;
 }
 
-export interface RunSummary {
-  id: string; kind: string; paramsKey: string; status: RunStatus; phase: string; startedAt: number; finishedAt?: number;
-}
+export interface RunSummary extends RunRecord { id: string }
 
-export type ReportRunner = (
-  params: unknown,
-  progress: { onPhase: (p: string) => void; onDelta: (t: string) => void },
-) => Promise<unknown>;
-
-interface LiveRun { record: RunRecord; listeners: Set<(e: RunEvent) => void> }
-
-export class ReportRunManager {
-  private runs = new Map<string, LiveRun>();
-  private byKey = new Map<string, string>();   // `${kind}:${paramsKey}` -> id, only while queued/running
-  private queue: string[] = [];
-  private activeId: string | null = null;
-  private runners = new Map<string, ReportRunner>();
+export class ReportRegistry {
+  private runs = new Map<string, RunRecord>();   // key = `${kind}:${paramsKey}`
   private now: () => number;
   private ttlMs: number;
   private maxDone: number;
@@ -220,427 +180,285 @@ export class ReportRunManager {
     this.maxDone = opts.maxDone ?? 50;
   }
 
-  register(kind: string, runner: ReportRunner): void { this.runners.set(kind, runner); }
+  private key(kind: string, paramsKey: string): string { return `${kind}:${paramsKey}`; }
 
-  start(kind: string, paramsKey: string, params: unknown): { id: string; existing: boolean } {
-    const fullKey = `${kind}:${paramsKey}`;
-    const existingId = this.byKey.get(fullKey);
-    if (existingId) return { id: existingId, existing: true };
-    if (!this.runners.has(kind)) throw new Error(`unknown report kind: ${kind}`);
-    const id = randomUUID();
-    const record: RunRecord = { id, kind, paramsKey, params, status: "queued", phase: "queued", startedAt: this.now() };
-    this.runs.set(id, { record, listeners: new Set() });
-    this.byKey.set(fullKey, id);
-    this.queue.push(id);
-    this.pump();
-    return { id, existing: false };
+  begin(kind: string, paramsKey: string, params: Record<string, string>): void {
+    this.runs.set(this.key(kind, paramsKey), { kind, paramsKey, params, status: "running", phase: "starting", startedAt: this.now() });
   }
 
-  get(id: string): RunRecord | undefined { return this.runs.get(id)?.record; }
+  phase(kind: string, paramsKey: string, phase: string): void {
+    const r = this.runs.get(this.key(kind, paramsKey));
+    if (r && r.status === "running") r.phase = phase;
+  }
+
+  finish(kind: string, paramsKey: string, status: "done" | "failed", error?: string): void {
+    const r = this.runs.get(this.key(kind, paramsKey));
+    if (!r) return;
+    r.status = status; r.finishedAt = this.now();
+    if (status === "done") r.phase = "done";
+    if (error) r.error = error;
+  }
+
+  get(kind: string, paramsKey: string): RunRecord | undefined { return this.runs.get(this.key(kind, paramsKey)); }
 
   list(): RunSummary[] {
-    return [...this.runs.values()]
-      .map(({ record: r }) => ({ id: r.id, kind: r.kind, paramsKey: r.paramsKey, status: r.status, phase: r.phase, startedAt: r.startedAt, finishedAt: r.finishedAt }))
+    return [...this.runs.entries()]
+      .map(([id, r]) => ({ id, ...r }))
       .sort((a, b) => b.startedAt - a.startedAt);
-  }
-
-  subscribe(id: string, onEvent: (e: RunEvent) => void): () => void {
-    const live = this.runs.get(id);
-    if (!live) { onEvent({ type: "failed", error: "run not found" }); return () => {}; }
-    const r = live.record;
-    if (r.status === "done") { onEvent({ type: "done", result: r.result }); return () => {}; }
-    if (r.status === "failed") { onEvent({ type: "failed", error: r.error }); return () => {}; }
-    onEvent({ type: "phase", phase: r.phase });   // catch a late subscriber up to the current phase
-    live.listeners.add(onEvent);
-    return () => live.listeners.delete(onEvent);
   }
 
   sweep(): void {
     const cutoff = this.now() - this.ttlMs;
-    for (const { record: r } of [...this.runs.values()]) {
-      if ((r.status === "done" || r.status === "failed") && r.finishedAt != null && r.finishedAt < cutoff) this.runs.delete(r.id);
+    for (const [id, r] of this.runs) {
+      if (r.status !== "running" && r.finishedAt != null && r.finishedAt < cutoff) this.runs.delete(id);
     }
-    const finished = [...this.runs.values()]
-      .filter(({ record: r }) => r.status === "done" || r.status === "failed")
-      .sort((a, b) => (a.record.finishedAt ?? 0) - (b.record.finishedAt ?? 0));
-    while (finished.length > this.maxDone) this.runs.delete(finished.shift()!.record.id);
-  }
-
-  private emit(live: LiveRun, e: RunEvent): void {
-    for (const l of live.listeners) { try { l(e); } catch { /* dead subscriber */ } }
-  }
-
-  private pump(): void {
-    if (this.activeId) return;
-    const id = this.queue.shift();
-    if (!id) return;
-    const live = this.runs.get(id);
-    if (!live) { this.pump(); return; }
-    this.activeId = id;
-    void this.run(live).finally(() => { this.activeId = null; this.sweep(); this.pump(); });
-  }
-
-  private async run(live: LiveRun): Promise<void> {
-    const r = live.record;
-    const runner = this.runners.get(r.kind);
-    if (!runner) { r.status = "failed"; r.error = `unknown report kind: ${r.kind}`; r.finishedAt = this.now(); return; }
-    r.status = "running"; r.phase = "starting";
-    beginForeground();
-    try {
-      const result = await runner(r.params, {
-        onPhase: (p) => { r.phase = p; this.emit(live, { type: "phase", phase: p }); },
-        onDelta: (t) => { this.emit(live, { type: "delta", text: t }); },
-      });
-      r.status = "done"; r.phase = "done"; r.result = result; r.finishedAt = this.now();
-      this.emit(live, { type: "done", result });
-    } catch (err) {
-      r.status = "failed"; r.error = (err as Error)?.message ?? String(err); r.finishedAt = this.now();
-      this.emit(live, { type: "failed", error: r.error });
-      log.warn("run %s (%s) failed: %s", r.id, r.kind, r.error);
-    } finally {
-      endForeground();
-      this.byKey.delete(`${r.kind}:${r.paramsKey}`);   // free the dedup slot; a re-run makes a new run
-    }
+    const finished = [...this.runs.entries()]
+      .filter(([, r]) => r.status !== "running")
+      .sort((a, b) => (a[1].finishedAt ?? 0) - (b[1].finishedAt ?? 0));
+    while (finished.length > this.maxDone) this.runs.delete(finished.shift()![0]);
+    log.debug("swept; %d runs retained", this.runs.size);
   }
 }
 ```
 
 - [ ] **Step 4: Run test to verify it passes**
 
-Run: `npx vitest run src/report/__tests__/runManager.test.ts`
-Expected: PASS (7 tests).
+Run: `npx vitest run src/report/__tests__/registry.test.ts`
+Expected: PASS (5 tests).
 
 - [ ] **Step 5: Commit**
 
 ```bash
-git add src/report/runManager.ts src/report/__tests__/runManager.test.ts
-git commit -m "feat(report): ReportRunManager — sequential background run registry"
+git add src/report/registry.ts src/report/__tests__/registry.test.ts
+git commit -m "feat(report): in-memory ReportRegistry for run tracking"
 ```
 
 ---
 
-### Task 2: Runner registry (insights, rubric, analyze)
+### Task 2: Route tracking + `GET /api/report/runs`
 
-Thin adapters over the existing compute cores. Each returns a kind-specific, panel-shaped result (opaque to the manager).
+Thread a small `track` object into the three stream functions so they report lifecycle to the registry, and expose the list route. `track` is optional, so existing tests keep passing.
 
 **Files:**
-- Create: `src/report/kinds.ts`
-- Test: `src/report/__tests__/kinds.test.ts`
+- Modify: `src/insightsStream.ts`, `src/rubricStream.ts`, `src/workflowStream.ts` (add an optional `track` param + calls)
+- Modify: `src/appCommon.ts` (create registry, build a tracker per request, wrap the 3 routes, register `GET /api/report/runs`, periodic sweep)
+- Create: `src/report/track.ts` (the `RunTracker` type + a `makeTracker(registry, kind, paramsKey, params)` helper)
+- Test: `src/report/__tests__/track.test.ts`
 
 **Interfaces:**
-- Consumes: `ReportRunManager.register` (Task 1); `computeInsights` (`src/insightsCore.ts`), `computeRubric`/`resolveRubric` (`src/rubricCore.ts`), `computeWorkflowAnalysis` (`src/workflowCore.ts`).
+- Consumes: `ReportRegistry` (Task 1).
 - Produces:
   ```ts
-  function registerReportKinds(mgr: ReportRunManager): void;   // registers "insights" | "rubric" | "analyze"
-  // Result shapes (what each run's `result` / the client hook's report will be):
-  interface InsightsRunResult { report: InsightsPayload["report"]; degraded: boolean; scanned: number | null; updatedAt: number | null }
-  interface RubricRunResult  { report: RubricReport; updatedAt: number | null }
-  interface AnalyzeRunResult { report: WorkflowAnalysisPayload; updatedAt: number | null }
+  interface RunTracker { phase(p: string): void; done(): void; failed(msg: string): void }
+  function makeTracker(reg: ReportRegistry, kind: string, paramsKey: string, params: Record<string,string>): RunTracker;
+  function insightsParamsKey(q: Record<string, unknown>): string;   // root
+  function rubricParamsKey(q: Record<string, unknown>): string;     // `${rubric}:${scope}:${root??""}:${sessionId??""}`
+  function analyzeParamsKey(q: Record<string, unknown>): string;    // root
+  // streamInsights/streamRubric/streamWorkflowAnalyze gain an optional 3rd arg `track?: RunTracker`.
   ```
 
 - [ ] **Step 1: Write the failing test**
 
 ```ts
-// src/report/__tests__/kinds.test.ts
+// src/report/__tests__/track.test.ts
 import { describe, it, expect } from "vitest";
-import { ReportRunManager } from "../runManager.js";
-import { registerReportKinds } from "../kinds.js";
+import { ReportRegistry } from "../registry.js";
+import { makeTracker, insightsParamsKey, rubricParamsKey } from "../track.js";
 
-describe("registerReportKinds", () => {
-  it("registers insights, rubric, and analyze", () => {
-    const mgr = new ReportRunManager();
-    // Registration must not throw and each kind must be startable (dedup slot proves register() ran).
-    registerReportKinds(mgr);
-    expect(() => mgr.start("insights", "/p", { root: "/p" })).not.toThrow();
-    expect(() => mgr.start("rubric", "r:all::", { rubric: "r", scope: { kind: "all" } })).not.toThrow();
-    expect(() => mgr.start("analyze", "/p", { root: "/p" })).not.toThrow();
+describe("makeTracker", () => {
+  it("registers begin on creation and forwards phase/done to the registry", () => {
+    const reg = new ReportRegistry();
+    const t = makeTracker(reg, "insights", "/a", { root: "/a" });
+    expect(reg.get("insights", "/a")?.status).toBe("running");
+    t.phase("judging");
+    expect(reg.get("insights", "/a")?.phase).toBe("judging");
+    t.done();
+    expect(reg.get("insights", "/a")?.status).toBe("done");
   });
 
-  it("rejects an unknown kind", () => {
-    const mgr = new ReportRunManager();
-    registerReportKinds(mgr);
-    expect(() => mgr.start("bogus", "x", {})).toThrow(/unknown report kind/);
+  it("forwards failed with the message", () => {
+    const reg = new ReportRegistry();
+    const t = makeTracker(reg, "rubric", "k", { rubric: "r" });
+    t.failed("boom");
+    expect(reg.get("rubric", "k")).toMatchObject({ status: "failed", error: "boom" });
+  });
+});
+
+describe("paramsKey derivation", () => {
+  it("insights key is the root", () => {
+    expect(insightsParamsKey({ root: "/proj" })).toBe("/proj");
+  });
+  it("rubric key composes rubric:scope:root:sessionId", () => {
+    expect(rubricParamsKey({ rubric: "hygiene", scope: "project", root: "/p" })).toBe("hygiene:project:/p:");
+    expect(rubricParamsKey({ rubric: "hygiene", scope: "all" })).toBe("hygiene:all::");
   });
 });
 ```
 
 - [ ] **Step 2: Run test to verify it fails**
 
-Run: `npx vitest run src/report/__tests__/kinds.test.ts`
-Expected: FAIL — `Cannot find module '../kinds.js'`.
+Run: `npx vitest run src/report/__tests__/track.test.ts`
+Expected: FAIL — `Cannot find module '../track.js'`.
 
-- [ ] **Step 3: Write minimal implementation**
+- [ ] **Step 3: Write `src/report/track.ts`**
 
 ```ts
-// src/report/kinds.ts
+// src/report/track.ts
 // Copyright (c) 2026 NineMind, Inc.
 // SPDX-License-Identifier: MIT
 //
-// Runner adapters over the existing cache-aware compute cores. Each runner is a
-// thin bridge: forward the manager's onPhase/onDelta into the core's progress
-// callbacks and return the panel-shaped result. The compute cores are unchanged.
-import type { ReportRunManager } from "./runManager.js";
-import { computeInsights } from "../insightsCore.js";
-import { computeRubric, resolveRubric } from "../rubricCore.js";
-import { computeWorkflowAnalysis } from "../workflowCore.js";
-import type { RubricScope } from "@agentgem/insight";
+// Bridges an SSE report route to the ReportRegistry. makeTracker() marks the run
+// running immediately (begin), then the route forwards phase/done/failed. The
+// terminal calls run AFTER the route's awaited compute settles, so they record
+// correctly even when the client disconnected mid-run (background completion).
+import type { ReportRegistry } from "./registry.js";
 
-interface InsightsParams { root: string; dir?: string; fresh?: boolean }
-interface RubricParams { rubric: string; scope: RubricScope; dir?: string; fresh?: boolean }
-interface AnalyzeParams { root: string; dir?: string; fresh?: boolean }
+export interface RunTracker { phase(p: string): void; done(): void; failed(msg: string): void }
 
-export function registerReportKinds(mgr: ReportRunManager): void {
-  mgr.register("insights", async (params, prog) => {
-    const { root, dir, fresh } = params as InsightsParams;
-    const { payload, updatedAt } = await computeInsights(root, {
+export function makeTracker(reg: ReportRegistry, kind: string, paramsKey: string, params: Record<string, string>): RunTracker {
+  reg.begin(kind, paramsKey, params);
+  return {
+    phase: (p) => reg.phase(kind, paramsKey, p),
+    done: () => reg.finish(kind, paramsKey, "done"),
+    failed: (msg) => reg.finish(kind, paramsKey, "failed", msg),
+  };
+}
+
+const str = (v: unknown): string => (typeof v === "string" ? v : "");
+
+export function insightsParamsKey(q: Record<string, unknown>): string { return str(q.root); }
+export function analyzeParamsKey(q: Record<string, unknown>): string { return str(q.root); }
+export function rubricParamsKey(q: Record<string, unknown>): string {
+  const scope = str(q.scope) || "project";
+  return `${str(q.rubric)}:${scope}:${str(q.root)}:${str(q.sessionId)}`;
+}
+```
+
+- [ ] **Step 4: Run test to verify it passes**
+
+Run: `npx vitest run src/report/__tests__/track.test.ts`
+Expected: PASS (4 assertions across 4 tests).
+
+- [ ] **Step 5: Thread `track` into `src/insightsStream.ts`**
+
+Change the signature and the three lifecycle points (the compute progress, the done send, the failed send). Full new file:
+
+```ts
+// src/insightsStream.ts  (SPDX header unchanged)
+import { computeInsights } from "./insightsCore.js";
+import type { RunTracker } from "./report/track.js";
+
+interface SseReq { query: Record<string, unknown> }
+interface SseRes {
+  writeHead(status: number, headers: Record<string, string>): void;
+  write(chunk: string): void;
+  end(): void;
+}
+
+export async function streamInsights(req: SseReq, res: SseRes, track?: RunTracker): Promise<void> {
+  const root = typeof req.query.root === "string" ? req.query.root : "";
+  const dir = typeof req.query.dir === "string" ? req.query.dir : undefined;
+  const fresh = req.query.fresh === "1";
+
+  res.writeHead(200, { "Content-Type": "text/event-stream", "Cache-Control": "no-cache, no-transform", Connection: "keep-alive", "X-Accel-Buffering": "no" });
+  const send = (event: string, data: unknown) => { res.write(`event: ${event}\n`); res.write(`data: ${JSON.stringify(data)}\n\n`); };
+
+  try {
+    if (!root) { send("failed", { message: "missing root" }); track?.failed("missing root"); return; }
+    const { payload, cached, updatedAt } = await computeInsights(root, {
       dir, force: fresh,
       progress: {
-        onPhase: (p, extra) => prog.onPhase(extra?.sessions != null ? `${p} (${extra.sessions} sessions)` : p),
-        onDelta: prog.onDelta,
+        onPhase: (phase, extra) => { send("phase", { phase, ...(extra ?? {}) }); track?.phase(extra?.sessions != null ? `${phase} (${extra.sessions} sessions)` : phase); },
+        onDelta: (text) => send("delta", { text }),
       },
     });
-    return { report: payload.report, degraded: payload.degraded, scanned: payload.signalSummary?.sessionsScanned ?? null, updatedAt };
-  });
-
-  mgr.register("rubric", async (params, prog) => {
-    const { rubric, scope, dir, fresh } = params as RubricParams;
-    const resolved = resolveRubric(rubric, dir);
-    if (!resolved) throw new Error(`unknown rubric: ${rubric}`);
-    prog.onPhase("evaluating");
-    const { payload, updatedAt } = await computeRubric(resolved, scope, { dir, force: fresh, onDelta: prog.onDelta });
-    return { report: payload, updatedAt };
-  });
-
-  mgr.register("analyze", async (params, prog) => {
-    const { root, dir, fresh } = params as AnalyzeParams;
-    const { payload, updatedAt } = await computeWorkflowAnalysis(root, {
-      dir, force: fresh,
-      progress: { onPhase: (p) => prog.onPhase(p), onDelta: prog.onDelta },
-    });
-    return { report: payload, updatedAt };
-  });
+    send("done", { ...payload, cached, updatedAt });
+    track?.done();
+  } catch (err) {
+    const msg = (err as Error)?.message ?? String(err);
+    send("failed", { message: msg });
+    track?.failed(msg);
+  } finally {
+    res.end();
+  }
 }
 ```
 
-- [ ] **Step 4: Run test to verify it passes**
+- [ ] **Step 6: Thread `track` into `src/rubricStream.ts` and `src/workflowStream.ts` (same pattern)**
 
-Run: `npx vitest run src/report/__tests__/kinds.test.ts`
-Expected: PASS (2 tests).
+For each: add `track?: RunTracker` as the last param; call `track?.phase(...)` inside the `onPhase`/`onDelta` progress (rubric has only `onDelta` — call `track?.phase("evaluating")` once right before `computeRubric`, since rubric has no phase callback); call `track?.done()` right after the `send("done", ...)`; and in every early-return `send("failed", ...)` and the `catch`, add `track?.failed(msg)`. Do not change any other logic. (Rubric's multiple early `send("failed", ...)` guards each get a paired `track?.failed(<same message>)`.)
 
-- [ ] **Step 5: Commit**
+- [ ] **Step 7: Wire the registry + routes in `src/appCommon.ts`**
+
+Add imports near the warm/originGuard imports (~line 53–56):
+```ts
+import { ReportRegistry } from "./report/registry.js";
+import { makeTracker, insightsParamsKey, rubricParamsKey, analyzeParamsKey } from "./report/track.js";
+```
+
+Replace the three existing route registrations (`/api/insights/stream` line 253, `/api/rubric/stream` line 261, `/api/workflow/analyze/stream` line 238) so each builds a tracker and passes it. First, just before them, create the registry:
+```ts
+  // Report activity registry: the three agent-backed report routes record their
+  // run lifecycle here so the console can notify-on-done and show what is running.
+  // In-memory; swept for TTL. The compute + cache are untouched — this only tracks.
+  const reportRegistry = new ReportRegistry();
+  setInterval(() => reportRegistry.sweep(), 60_000).unref();
+  server.expressApp.get("/api/report/runs", originGuard, (_req, res) => res.json({ runs: reportRegistry.list() } as never));
+```
+Then the three wrapped routes:
+```ts
+  server.expressApp.get("/api/workflow/analyze/stream", originGuard, async (req, res) => {
+    const track = makeTracker(reportRegistry, "analyze", analyzeParamsKey(req.query as never), req.query as never);
+    beginForeground();
+    try { await streamWorkflowAnalyze(req as never, res as never, track); } finally { endForeground(); }
+  });
+  server.expressApp.get("/api/insights/stream", originGuard, async (req, res) => {
+    const track = makeTracker(reportRegistry, "insights", insightsParamsKey(req.query as never), req.query as never);
+    beginForeground();
+    try { await streamInsights(req as never, res as never, track); } finally { endForeground(); }
+  });
+  server.expressApp.get("/api/rubric/stream", originGuard, async (req, res) => {
+    const track = makeTracker(reportRegistry, "rubric", rubricParamsKey(req.query as never), req.query as never);
+    beginForeground();
+    try { await streamRubric(req as never, res as never, track); } finally { endForeground(); }
+  });
+```
+Note: `makeTracker` calls `registry.begin` synchronously, so a run shows `running` the instant the route is hit — before the first `await`. The `track.done()/failed()` calls inside the stream functions run after the awaited compute settles, so background completion (client gone) still records correctly.
+
+- [ ] **Step 8: Typecheck + tests (incl. existing stream tests still green)**
+
+Run: `npm run build && npx vitest run src/report src/__tests__`
+Expected: build PASS; new report tests PASS; existing insights/rubric/workflow stream tests still PASS (track is optional).
+
+- [ ] **Step 9: Commit**
 
 ```bash
-git add src/report/kinds.ts src/report/__tests__/kinds.test.ts
-git commit -m "feat(report): runner adapters for insights/rubric/analyze"
+git add src/report/track.ts src/report/__tests__/track.test.ts src/insightsStream.ts src/rubricStream.ts src/workflowStream.ts src/appCommon.ts
+git commit -m "feat(report): stream routes report lifecycle to the registry + /api/report/runs"
 ```
 
 ---
 
-### Task 3: Report run routes + wiring in `appCommon`
+### Task 3: `useReportRun` client hook
 
-Register the four routes and instantiate the manager alongside `ChatManager`.
-
-**Files:**
-- Modify: `src/appCommon.ts` (add imports near line 53–56; instantiate + register routes near the existing SSE block ~line 236–264)
-- Test: `src/report/__tests__/routes.test.ts`
-
-**Interfaces:**
-- Consumes: `ReportRunManager` (Task 1), `registerReportKinds` (Task 2), `originGuard`, `beginForeground/endForeground` already imported.
-- Produces: routes `POST /api/report/run`, `GET /api/report/runs`, `GET /api/report/run/:id`, `GET /api/report/run/:id/stream`. To keep them testable without booting the whole app, extract the handler-wiring into a small pure function `registerReportRoutes(app, manager)`:
-  ```ts
-  interface ExpressLike { post(path: string, ...h: unknown[]): void; get(path: string, ...h: unknown[]): void }
-  function registerReportRoutes(app: ExpressLike, manager: ReportRunManager, guard: unknown): void;
-  ```
-
-- [ ] **Step 1: Write the failing test**
-
-```ts
-// src/report/__tests__/routes.test.ts
-import { describe, it, expect, vi } from "vitest";
-import { ReportRunManager } from "../runManager.js";
-import { registerReportRoutes } from "../routes.js";
-
-// Minimal Express double: capture handlers by "METHOD path", ignore the guard arg.
-function fakeApp() {
-  const handlers = new Map<string, (req: any, res: any) => void>();
-  const reg = (m: string) => (path: string, ..._rest: any[]) => { handlers.set(`${m} ${path}`, _rest[_rest.length - 1]); };
-  return { app: { post: reg("POST"), get: reg("GET") }, handlers };
-}
-function fakeRes() {
-  return { statusCode: 200, body: undefined as unknown, headers: {} as Record<string, string>, writes: [] as string[], ended: false,
-    status(c: number) { this.statusCode = c; return this; },
-    json(b: unknown) { this.body = b; return this; },
-    writeHead(c: number, h: Record<string, string>) { this.statusCode = c; this.headers = h; },
-    write(s: string) { this.writes.push(s); return true; },
-    end() { this.ended = true; },
-    on() { /* no-op */ } };
-}
-
-describe("registerReportRoutes", () => {
-  it("POST /api/report/run starts a run and returns its id", () => {
-    const mgr = new ReportRunManager();
-    mgr.register("insights", () => new Promise(() => {}));   // never resolves; stays running
-    const { app, handlers } = fakeApp();
-    registerReportRoutes(app as any, mgr, {});
-    const res = fakeRes();
-    handlers.get("POST /api/report/run")!({ body: { kind: "insights", paramsKey: "/p", params: { root: "/p" } } }, res);
-    expect((res.body as { id: string }).id).toBeTruthy();
-    expect(mgr.list()).toHaveLength(1);
-  });
-
-  it("POST /api/report/run 400s without kind/paramsKey", () => {
-    const { app, handlers } = fakeApp();
-    registerReportRoutes(app as any, new ReportRunManager(), {});
-    const res = fakeRes();
-    handlers.get("POST /api/report/run")!({ body: {} }, res);
-    expect(res.statusCode).toBe(400);
-  });
-
-  it("GET /api/report/run/:id 404s for an unknown id", () => {
-    const { app, handlers } = fakeApp();
-    registerReportRoutes(app as any, new ReportRunManager(), {});
-    const res = fakeRes();
-    handlers.get("GET /api/report/run/:id")!({ params: { id: "nope" } }, res);
-    expect(res.statusCode).toBe(404);
-  });
-
-  it("GET /api/report/run/:id/stream writes a phase frame for a running run", () => {
-    const mgr = new ReportRunManager();
-    mgr.register("insights", () => new Promise(() => {}));
-    const { app, handlers } = fakeApp();
-    registerReportRoutes(app as any, mgr, {});
-    const { id } = mgr.start("insights", "/p", { root: "/p" });
-    const res = fakeRes();
-    handlers.get("GET /api/report/run/:id/stream")!({ params: { id }, on: () => {} }, res);
-    expect(res.headers["Content-Type"]).toBe("text/event-stream");
-    expect(res.writes.join("")).toContain("event: phase");
-  });
-});
-```
-
-- [ ] **Step 2: Run test to verify it fails**
-
-Run: `npx vitest run src/report/__tests__/routes.test.ts`
-Expected: FAIL — `Cannot find module '../routes.js'`.
-
-- [ ] **Step 3: Write minimal implementation (extracted route module)**
-
-```ts
-// src/report/routes.ts
-// Copyright (c) 2026 NineMind, Inc.
-// SPDX-License-Identifier: MIT
-//
-// Raw-Express wiring for the report run registry. Extracted from appCommon so it
-// is unit-testable with an Express double. The SSE view route subscribes to a
-// run and forwards its events; closing the stream (client disconnect) only
-// unsubscribes — the run keeps executing (background-completion).
-import type { ReportRunManager } from "./runManager.js";
-
-interface ExpressLike {
-  post(path: string, ...handlers: unknown[]): void;
-  get(path: string, ...handlers: unknown[]): void;
-}
-
-const SSE_HEADERS = {
-  "Content-Type": "text/event-stream",
-  "Cache-Control": "no-cache, no-transform",
-  Connection: "keep-alive",
-  "X-Accel-Buffering": "no",
-} as const;
-
-export function registerReportRoutes(app: ExpressLike, manager: ReportRunManager, guard: unknown): void {
-  app.post("/api/report/run", guard, (req: { body?: unknown }, res: { status(c: number): { json(b: unknown): void }; json(b: unknown): void }) => {
-    const { kind, paramsKey, params } = (req.body ?? {}) as { kind?: string; paramsKey?: string; params?: unknown };
-    if (!kind || !paramsKey) { res.status(400).json({ error: "kind and paramsKey are required" }); return; }
-    try {
-      const { id, existing } = manager.start(kind, paramsKey, params);
-      res.json({ id, existing });
-    } catch (err) {
-      res.status(400).json({ error: (err as Error).message });
-    }
-  });
-
-  app.get("/api/report/runs", guard, (_req: unknown, res: { json(b: unknown): void }) => {
-    res.json({ runs: manager.list() });
-  });
-
-  app.get("/api/report/run/:id", guard, (req: { params: { id: string } }, res: { status(c: number): { json(b: unknown): void }; json(b: unknown): void }) => {
-    const rec = manager.get(req.params.id);
-    if (!rec) { res.status(404).json({ error: "not found" }); return; }
-    res.json(rec);
-  });
-
-  app.get("/api/report/run/:id/stream", guard, (req: { params: { id: string }; on(ev: string, cb: () => void): void }, res: { writeHead(c: number, h: Record<string, string>): void; write(s: string): void; end(): void }) => {
-    res.writeHead(200, { ...SSE_HEADERS });
-    const send = (event: string, data: unknown) => res.write(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`);
-    const unsub = manager.subscribe(req.params.id, (e) => {
-      if (e.type === "phase") send("phase", { phase: e.phase });
-      else if (e.type === "delta") send("delta", { text: e.text });
-      else if (e.type === "done") { send("done", { result: e.result }); res.end(); }
-      else if (e.type === "failed") { send("failed", { error: e.error }); res.end(); }
-    });
-    req.on("close", () => unsub());
-  });
-}
-```
-
-- [ ] **Step 4: Run test to verify it passes**
-
-Run: `npx vitest run src/report/__tests__/routes.test.ts`
-Expected: PASS (4 tests).
-
-- [ ] **Step 5: Wire into `appCommon.ts`**
-
-Add imports next to the existing warm/originGuard imports (near lines 53–56):
-
-```ts
-import { ReportRunManager } from "./report/runManager.js";
-import { registerReportKinds } from "./report/kinds.js";
-import { registerReportRoutes } from "./report/routes.js";
-```
-
-Immediately after the `/api/rubric/stream` route registration (after line 264), add:
-
-```ts
-  // Background report runs: start-or-attach, list, state, and a live SSE view over
-  // one ReportRunManager per process. The manager owns each run's promise (never a
-  // request), so navigating away can't abort it; runs are swept on completion and
-  // periodically for TTL. Kinds: insights | rubric | analyze (see src/report/kinds).
-  const reportRuns = new ReportRunManager();
-  registerReportKinds(reportRuns);
-  setInterval(() => reportRuns.sweep(), 60_000).unref();
-  registerReportRoutes(server.expressApp as never, reportRuns, originGuard as never);
-```
-
-- [ ] **Step 6: Typecheck + full root suite**
-
-Run: `npm run build && npx vitest run src/report`
-Expected: build PASS; report tests PASS.
-
-- [ ] **Step 7: Commit**
-
-```bash
-git add src/report/routes.ts src/report/__tests__/routes.test.ts src/appCommon.ts
-git commit -m "feat(report): report run routes + appCommon wiring"
-```
-
----
-
-### Task 4: `useReportRun` client hook
-
-Reattaches the latest run of a kind on mount; `start()` POSTs then opens the live SSE view. No localStorage — the server registry is the source of truth across reloads.
+Drives a panel's existing stream opener; reattaches the latest run of its kind on mount; refuses to open a second stream for a key already in flight.
 
 **Files:**
 - Create: `packages/console/src/report/useReportRun.ts`
 - Test: `packages/console/src/report/__tests__/useReportRun.test.tsx`
 
 **Interfaces:**
-- Consumes: the Task 3 routes.
+- Consumes: `GET /api/report/runs` (Task 2); a panel-supplied `openStream`.
 - Produces:
   ```ts
-  type RunStatus = "idle" | "queued" | "running" | "done" | "failed";
-  interface ReportRunState<T> { id: string | null; params: unknown | null; status: RunStatus; phase: string; deltas: string; report: T | null; error: string | null }
-  function useReportRun<T>(apiBase: string, kind: string): { state: ReportRunState<T>; start: (paramsKey: string, params: unknown) => void };
+  type RunPhase = "idle" | "running" | "done" | "failed";
+  interface Handlers<T> { phase: (p: string) => void; delta: (t: string) => void; done: (payload: T) => void; failed: (msg: string) => void }
+  interface OpenStream<T> { (fresh: boolean, params: Record<string, string>, h: Handlers<T>): () => void }
+  interface ReportRunView<T> { status: RunPhase; phase: string; deltas: string; report: T | null; error: string | null; params: Record<string, string> | null }
+  function useReportRun<T>(apiBase: string, kind: string, openStream: OpenStream<T>): {
+    view: ReportRunView<T>;
+    start: (paramsKey: string, params: Record<string, string>, fresh?: boolean) => void;
+  };
   ```
 
 - [ ] **Step 1: Write the failing test**
@@ -651,55 +469,65 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 import { renderHook, act, waitFor } from "@testing-library/react";
 import { useReportRun } from "../useReportRun.js";
 
-// A controllable EventSource double installed on globalThis.
-class FakeES {
-  static last: FakeES | null = null;
-  listeners = new Map<string, (e: MessageEvent) => void>();
-  closed = false;
-  constructor(public url: string) { FakeES.last = this; }
-  addEventListener(t: string, cb: (e: MessageEvent) => void) { this.listeners.set(t, cb); }
-  close() { this.closed = true; }
-  fire(t: string, data: unknown) { this.listeners.get(t)?.({ data: JSON.stringify(data) } as MessageEvent); }
+// A fake openStream we can drive; records how it was called.
+function makeOpen() {
+  const calls: { fresh: boolean; params: Record<string, string> }[] = [];
+  let hExternal: any = null;
+  const open = (fresh: boolean, params: Record<string, string>, h: any) => { calls.push({ fresh, params }); hExternal = h; return () => {}; };
+  return { open, calls, fire: (t: string, v?: any) => hExternal[t](v) };
 }
 
-beforeEach(() => {
-  (globalThis as any).EventSource = FakeES as unknown;
-  FakeES.last = null;
-});
+beforeEach(() => vi.restoreAllMocks());
 
 describe("useReportRun", () => {
-  it("start() POSTs, opens the view, and folds phase/done into state", async () => {
-    const fetchMock = vi.fn()
-      .mockResolvedValueOnce({ ok: true, json: async () => ({ runs: [] }) })            // mount reattach: no runs
-      .mockResolvedValueOnce({ ok: true, json: async () => ({ id: "r1", existing: false }) }); // POST start
-    vi.stubGlobal("fetch", fetchMock);
-
-    const { result } = renderHook(() => useReportRun<{ n: number }>("http://x", "insights"));
-    await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(1));   // mount poll done
+  it("start() with no in-flight run opens a live stream and folds events", async () => {
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue({ ok: true, json: async () => ({ runs: [] }) }));
+    const o = makeOpen();
+    const { result } = renderHook(() => useReportRun<{ n: number }>("http://x", "insights", o.open));
+    await waitFor(() => expect(fetch).toHaveBeenCalled());   // mount poll (no runs)
 
     act(() => result.current.start("/p", { root: "/p" }));
-    await waitFor(() => expect(result.current.state.id).toBe("r1"));
-    expect(FakeES.last?.url).toContain("/api/report/run/r1/stream");
+    await waitFor(() => expect(o.calls.length).toBe(1));
+    expect(o.calls[0]).toEqual({ fresh: false, params: { root: "/p" } });
 
-    act(() => FakeES.last!.fire("phase", { phase: "judging" }));
-    expect(result.current.state.status).toBe("running");
-    expect(result.current.state.phase).toBe("judging");
-
-    act(() => FakeES.last!.fire("done", { result: { n: 42 } }));
-    expect(result.current.state.status).toBe("done");
-    expect(result.current.state.report).toEqual({ n: 42 });
+    act(() => o.fire("phase", "judging"));
+    expect(result.current.view.status).toBe("running");
+    expect(result.current.view.phase).toBe("judging");
+    act(() => o.fire("done", { n: 7 }));
+    expect(result.current.view.status).toBe("done");
+    expect(result.current.view.report).toEqual({ n: 7 });
   });
 
-  it("reattaches the latest run of the kind on mount", async () => {
-    const fetchMock = vi.fn()
-      .mockResolvedValueOnce({ ok: true, json: async () => ({ runs: [{ id: "r9", kind: "insights", startedAt: 2 }, { id: "r8", kind: "rubric", startedAt: 3 }] }) })
-      .mockResolvedValueOnce({ ok: true, json: async () => ({ id: "r9", params: { root: "/p" }, status: "running", phase: "judging" }) });
-    vi.stubGlobal("fetch", fetchMock);
+  it("start() on an already-running key does NOT open a stream (avoids double-compute)", async () => {
+    vi.stubGlobal("fetch", vi.fn()
+      .mockResolvedValueOnce({ ok: true, json: async () => ({ runs: [] }) })   // mount
+      .mockResolvedValueOnce({ ok: true, json: async () => ({ runs: [{ id: "insights:/p", kind: "insights", paramsKey: "/p", params: { root: "/p" }, status: "running", phase: "judging", startedAt: 1 }] }) })); // start guard
+    const o = makeOpen();
+    const { result } = renderHook(() => useReportRun("http://x", "insights", o.open));
+    await waitFor(() => expect(fetch).toHaveBeenCalledTimes(1));
 
-    const { result } = renderHook(() => useReportRun("http://x", "insights"));
-    await waitFor(() => expect(result.current.state.id).toBe("r9"));
-    expect(result.current.state.status).toBe("running");
-    expect(FakeES.last?.url).toContain("/api/report/run/r9/stream");
+    act(() => result.current.start("/p", { root: "/p" }));
+    await waitFor(() => expect(result.current.view.status).toBe("running"));
+    expect(o.calls.length).toBe(0);   // attached via poll, no stream opened
+  });
+
+  it("reattaches a DONE run on mount by opening the stream once (cache hit)", async () => {
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue({ ok: true, json: async () => ({ runs: [{ id: "insights:/p", kind: "insights", paramsKey: "/p", params: { root: "/p" }, status: "done", phase: "done", startedAt: 1, finishedAt: 2 }] }) }));
+    const o = makeOpen();
+    const { result } = renderHook(() => useReportRun<{ n: number }>("http://x", "insights", o.open));
+    await waitFor(() => expect(o.calls.length).toBe(1));
+    expect(o.calls[0]).toEqual({ fresh: false, params: { root: "/p" } });
+    act(() => o.fire("done", { n: 3 }));
+    expect(result.current.view.report).toEqual({ n: 3 });
+  });
+
+  it("reattaches a FAILED run on mount from the record (no stream)", async () => {
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue({ ok: true, json: async () => ({ runs: [{ id: "rubric:k", kind: "rubric", paramsKey: "k", params: {}, status: "failed", phase: "x", startedAt: 1, finishedAt: 2, error: "boom" }] }) }));
+    const o = makeOpen();
+    const { result } = renderHook(() => useReportRun("http://x", "rubric", o.open));
+    await waitFor(() => expect(result.current.view.status).toBe("failed"));
+    expect(result.current.view.error).toBe("boom");
+    expect(o.calls.length).toBe(0);
   });
 });
 ```
@@ -713,117 +541,129 @@ Expected: FAIL — `Cannot find module '../useReportRun.js'`.
 
 ```ts
 // packages/console/src/report/useReportRun.ts
-// A React hook that turns a report action into a background run. On mount it
-// reattaches the latest run of `kind` (surviving navigation + reload, since the
-// registry lives in the server process). `start()` POSTs to create/attach a run,
-// then opens the live SSE view for phase/delta/done. Losing the view (unmount)
-// never stops the run.
-import { useEffect, useRef, useState } from "react";
+// Adds background/reattach/notify awareness to a report panel WITHOUT changing how
+// it streams. The panel passes its existing stream opener (openInsightsStream etc.,
+// normalized to Handlers<T>); the hook decides WHEN to open it: live on a fresh
+// start, once-on-done for a reattach (a cache hit), never for a key already running
+// (it polls /api/report/runs instead, so we don't kick off a duplicate compute).
+import { useCallback, useEffect, useRef, useState } from "react";
 
-export type RunStatus = "idle" | "queued" | "running" | "done" | "failed";
+export type RunPhase = "idle" | "running" | "done" | "failed";
+export interface Handlers<T> { phase: (p: string) => void; delta: (t: string) => void; done: (payload: T) => void; failed: (msg: string) => void }
+export interface OpenStream<T> { (fresh: boolean, params: Record<string, string>, h: Handlers<T>): () => void }
+export interface ReportRunView<T> { status: RunPhase; phase: string; deltas: string; report: T | null; error: string | null; params: Record<string, string> | null }
 
-export interface ReportRunState<T> {
-  id: string | null;
-  params: unknown | null;
-  status: RunStatus;
-  phase: string;
-  deltas: string;
-  report: T | null;
-  error: string | null;
-}
+interface RunSummary { id: string; kind: string; paramsKey: string; params: Record<string, string>; status: "running" | "done" | "failed"; phase: string; startedAt: number; error?: string }
 
-interface RunView { id: string; kind: string; startedAt: number }
-interface RunRecordView<T> { id: string; params: unknown; status: RunStatus; phase: string; result?: T; error?: string }
+const IDLE = { status: "idle" as RunPhase, phase: "", deltas: "", report: null, error: null, params: null };
+const POLL_MS = 1500;
 
-const IDLE = { id: null, params: null, status: "idle" as RunStatus, phase: "", deltas: "", report: null, error: null };
+export function useReportRun<T>(apiBase: string, kind: string, openStream: OpenStream<T>) {
+  const [view, setView] = useState<ReportRunView<T>>(IDLE);
+  const closeRef = useRef<(() => void) | null>(null);
+  const pollRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const aliveRef = useRef(true);
 
-export function useReportRun<T>(apiBase: string, kind: string): {
-  state: ReportRunState<T>;
-  start: (paramsKey: string, params: unknown) => void;
-} {
-  const [state, setState] = useState<ReportRunState<T>>(IDLE);
-  const esRef = useRef<EventSource | null>(null);
+  const handlers = useCallback((): Handlers<T> => ({
+    phase: (p) => setView((s) => ({ ...s, status: "running", phase: p })),
+    delta: (t) => setView((s) => ({ ...s, deltas: s.deltas + t })),
+    done: (payload) => setView((s) => ({ ...s, status: "done", phase: "done", report: payload })),
+    failed: (msg) => setView((s) => ({ ...s, status: "failed", error: msg })),
+  }), []);
 
-  const openView = (id: string) => {
-    esRef.current?.close();
-    const es = new EventSource(`${apiBase}/api/report/run/${encodeURIComponent(id)}/stream`);
-    esRef.current = es;
-    const data = (m: Event) => JSON.parse((m as MessageEvent).data);
-    es.addEventListener("phase", (m) => { const d = data(m); setState((s) => ({ ...s, status: "running", phase: d.phase })); });
-    es.addEventListener("delta", (m) => { const d = data(m); setState((s) => ({ ...s, deltas: s.deltas + d.text })); });
-    es.addEventListener("done", (m) => { const d = data(m); setState((s) => ({ ...s, status: "done", phase: "done", report: d.result as T })); es.close(); });
-    es.addEventListener("failed", (m) => { const d = data(m); setState((s) => ({ ...s, status: "failed", error: d.error })); es.close(); });
-    es.addEventListener("error", () => { /* transient — keep last state */ });
-  };
+  const openLive = useCallback((fresh: boolean, params: Record<string, string>) => {
+    closeRef.current?.();
+    setView({ ...IDLE, status: "running", phase: "starting", params });
+    closeRef.current = openStream(fresh, params, handlers());
+  }, [openStream, handlers]);
 
-  const start = (paramsKey: string, params: unknown) => {
-    setState({ ...IDLE, params, status: "queued", phase: "queued" });
-    void fetch(`${apiBase}/api/report/run`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ kind, paramsKey, params }) })
-      .then((r) => r.json())
-      .then(({ id }: { id: string }) => { setState((s) => ({ ...s, id })); openView(id); })
-      .catch(() => setState((s) => ({ ...s, status: "failed", error: "failed to start run" })));
-  };
+  const fetchRuns = useCallback(async (): Promise<RunSummary[]> => {
+    try { const r = await fetch(`${apiBase}/api/report/runs`); return r.ok ? ((await r.json()).runs as RunSummary[]) : []; } catch { return []; }
+  }, [apiBase]);
 
-  useEffect(() => {
-    let cancelled = false;
-    void fetch(`${apiBase}/api/report/runs`).then((r) => (r.ok ? r.json() : { runs: [] })).then(({ runs }: { runs: RunView[] }) => {
-      if (cancelled) return;
-      const mine = runs.filter((x) => x.kind === kind).sort((a, b) => b.startedAt - a.startedAt)[0];
-      if (!mine) return;
-      void fetch(`${apiBase}/api/report/run/${encodeURIComponent(mine.id)}`).then((r) => (r.ok ? r.json() : null)).then((rec: RunRecordView<T> | null) => {
-        if (cancelled || !rec) return;
-        if (rec.status === "done") setState({ id: rec.id, params: rec.params, status: "done", phase: "done", deltas: "", report: (rec.result ?? null) as T | null, error: null });
-        else if (rec.status === "failed") setState({ id: rec.id, params: rec.params, status: "failed", phase: rec.phase, deltas: "", report: null, error: rec.error ?? "failed" });
-        else { setState({ id: rec.id, params: rec.params, status: "running", phase: rec.phase, deltas: "", report: null, error: null }); openView(rec.id); }
-      });
+  // Poll /runs for one key until it leaves "running", then open the stream once (cache hit) to load the report.
+  const attachAndPoll = useCallback((paramsKey: string, params: Record<string, string>) => {
+    setView({ ...IDLE, status: "running", phase: "resuming…", params });
+    const tick = async () => {
+      const runs = await fetchRuns();
+      if (!aliveRef.current) return;
+      const rec = runs.find((x) => x.kind === kind && x.paramsKey === paramsKey);
+      if (!rec || rec.status === "running") { if (rec?.phase) setView((s) => ({ ...s, phase: rec.phase })); pollRef.current = setTimeout(tick, POLL_MS); return; }
+      if (rec.status === "failed") { setView((s) => ({ ...s, status: "failed", error: rec.error ?? "failed" })); return; }
+      openLive(false, params);   // done → cache hit loads the report
+    };
+    pollRef.current = setTimeout(tick, POLL_MS);
+  }, [fetchRuns, kind, openLive]);
+
+  const start = useCallback((paramsKey: string, params: Record<string, string>, fresh = false) => {
+    if (pollRef.current) { clearTimeout(pollRef.current); pollRef.current = null; }
+    if (fresh) { openLive(true, params); return; }
+    // Guard: if this key is already running, attach instead of opening a 2nd stream.
+    void fetchRuns().then((runs) => {
+      const rec = runs.find((x) => x.kind === kind && x.paramsKey === paramsKey);
+      if (rec && rec.status === "running") attachAndPoll(paramsKey, params);
+      else openLive(false, params);
     });
-    return () => { cancelled = true; esRef.current?.close(); };
+  }, [fetchRuns, kind, openLive, attachAndPoll]);
+
+  // Mount: reattach the latest run of this kind.
+  useEffect(() => {
+    aliveRef.current = true;
+    void fetchRuns().then((runs) => {
+      if (!aliveRef.current) return;
+      const rec = runs.filter((x) => x.kind === kind).sort((a, b) => b.startedAt - a.startedAt)[0];
+      if (!rec) return;
+      if (rec.status === "running") attachAndPoll(rec.paramsKey, rec.params);
+      else if (rec.status === "failed") setView({ ...IDLE, status: "failed", phase: rec.phase, error: rec.error ?? "failed", params: rec.params });
+      else openLive(false, rec.params);   // done → cache hit
+    });
+    return () => { aliveRef.current = false; closeRef.current?.(); if (pollRef.current) clearTimeout(pollRef.current); };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [apiBase, kind]);
 
-  return { state, start };
+  return { view, start };
 }
 ```
 
 - [ ] **Step 4: Run test to verify it passes**
 
 Run: `npx vitest run packages/console/src/report/__tests__/useReportRun.test.tsx`
-Expected: PASS (2 tests).
+Expected: PASS (4 tests).
 
 - [ ] **Step 5: Commit**
 
 ```bash
 git add packages/console/src/report/useReportRun.ts packages/console/src/report/__tests__/useReportRun.test.tsx
-git commit -m "feat(console): useReportRun hook — start + reattach-latest"
+git commit -m "feat(console): useReportRun — reattach-latest + duplicate-run guard over existing streams"
 ```
 
 ---
 
-### Task 5: `detectReportDone` + `ActivityProvider` + activity menu + Shell mount
+### Task 4: `detectReportDone` + `ActivityProvider` + activity menu + Shell mount
 
-The cross-app surface: poll the run list, fire the existing notify stack on new completions, render a bell dropdown that deep-links back.
+The cross-app surface. Poll `/api/report/runs`, fire the existing notify stack on new completions (with the baseline fix), render a bell-adjacent dropdown that deep-links back.
 
 **Files:**
 - Modify: `packages/console/src/notify/events.ts` (add `detectReportDone`)
 - Create: `packages/console/src/notify/ActivityProvider.tsx`
 - Create: `packages/console/src/notify/ActivityMenu.tsx`
 - Modify: `packages/console/src/shell/Shell.tsx` (mount provider; render menu next to `NotifyBell`)
-- Modify: `packages/console/src/shell/theme.css` (activity menu rules)
+- Modify: `packages/console/src/shell/theme.css`
 - Test: `packages/console/src/notify/__tests__/reportEvents.test.ts`
 
 **Interfaces:**
-- Consumes: `dispatch`, `osNotify`, `readNotifyPref`, `useToast` (existing); the `GET /api/report/runs` route (Task 3).
+- Consumes: `dispatch`, `osNotify`, `readNotifyPref`, `useToast` (existing); `GET /api/report/runs`.
 - Produces:
   ```ts
   interface ReportSnapshot { terminal: Record<string, "done" | "failed">; kindOf: Record<string, string> }
-  function detectReportDone(prev: ReportSnapshot | null, next: ReportSnapshot): NotifyEvent[];
-  interface ActivityRun { id: string; kind: string; status: "queued" | "running" | "done" | "failed"; phase: string; startedAt: number }
-  function useActivity(): { runs: ActivityRun[] };            // context hook
+  function detectReportDone(prev: ReportSnapshot | null, next: ReportSnapshot, opts?: { firstBaselineAt?: number; startedAt?: Record<string, number> }): NotifyEvent[];
+  interface ActivityRun { id: string; kind: string; paramsKey: string; status: "running" | "done" | "failed"; phase: string; startedAt: number }
+  function useActivity(): { runs: ActivityRun[] };
   function ActivityProvider(props: { apiBase: string; children: ReactNode }): ReactElement;
   function ActivityMenu(): ReactElement;
   ```
 
-- [ ] **Step 1: Write the failing test (detector only — the provider/menu are browser-verified)**
+- [ ] **Step 1: Write the failing test (detector; #6 baseline fix included)**
 
 ```ts
 // packages/console/src/notify/__tests__/reportEvents.test.ts
@@ -833,23 +673,28 @@ import { detectReportDone, type ReportSnapshot } from "../events.js";
 const snap = (terminal: Record<string, "done" | "failed">, kindOf: Record<string, string> = {}): ReportSnapshot => ({ terminal, kindOf });
 
 describe("detectReportDone", () => {
-  it("returns nothing on the first snapshot (no baseline)", () => {
-    expect(detectReportDone(null, snap({ a: "done" }, { a: "insights" }))).toEqual([]);
+  it("first snapshot: fires for a run that finished AFTER the provider mounted (baseline fix)", () => {
+    // A cached run that completes between mount and first poll should still notify.
+    const next = snap({ a: "done" }, { a: "insights" });
+    const evs = detectReportDone(null, next, { firstBaselineAt: 100, startedAt: { a: 150 } });   // started after mount
+    expect(evs).toHaveLength(1);
   });
 
-  it("fires one event per newly-terminal run", () => {
-    const prev = snap({}, { a: "insights" });
+  it("first snapshot: does NOT fire for a run that was already terminal before mount", () => {
     const next = snap({ a: "done" }, { a: "insights" });
-    const evs = detectReportDone(prev, next);
+    const evs = detectReportDone(null, next, { firstBaselineAt: 100, startedAt: { a: 50 } });   // started before mount
+    expect(evs).toEqual([]);
+  });
+
+  it("fires one event per newly-terminal run on a normal transition", () => {
+    const evs = detectReportDone(snap({}, { a: "insights" }), snap({ a: "done" }, { a: "insights" }));
     expect(evs).toHaveLength(1);
     expect(evs[0].title).toMatch(/Insights/);
     expect(evs[0].message).toMatch(/ready/);
   });
 
   it("does not re-fire for an already-terminal run", () => {
-    const prev = snap({ a: "done" }, { a: "insights" });
-    const next = snap({ a: "done", b: "failed" }, { a: "insights", b: "rubric" });
-    const evs = detectReportDone(prev, next);
+    const evs = detectReportDone(snap({ a: "done" }, { a: "insights" }), snap({ a: "done", b: "failed" }, { a: "insights", b: "rubric" }));
     expect(evs).toHaveLength(1);
     expect(evs[0].message).toMatch(/failed/);
   });
@@ -859,30 +704,39 @@ describe("detectReportDone", () => {
 - [ ] **Step 2: Run test to verify it fails**
 
 Run: `npx vitest run packages/console/src/notify/__tests__/reportEvents.test.ts`
-Expected: FAIL — `detectReportDone` is not exported.
+Expected: FAIL — `detectReportDone` not exported.
 
 - [ ] **Step 3: Add `detectReportDone` to `events.ts`**
 
 Append to `packages/console/src/notify/events.ts`:
-
 ```ts
 export interface ReportSnapshot {
-  terminal: Record<string, "done" | "failed">;   // run id -> its terminal status
-  kindOf: Record<string, string>;                 // run id -> kind, for the message
+  terminal: Record<string, "done" | "failed">;   // run id -> terminal status
+  kindOf: Record<string, string>;                 // run id -> kind
 }
 
 const KIND_LABEL: Record<string, string> = { insights: "Insights", rubric: "Rubric", analyze: "Analysis" };
 
-// One NotifyEvent per run that became terminal since `prev`. No baseline → nothing
-// (avoids firing for runs that were already done when the app opened).
-export function detectReportDone(prev: ReportSnapshot | null, next: ReportSnapshot): NotifyEvent[] {
-  if (!prev) return [];
+// One NotifyEvent per run that became terminal since `prev`. On the FIRST snapshot
+// (prev === null) we normally stay silent, EXCEPT for a run that started after the
+// provider mounted (firstBaselineAt) — that's an instant cached run that finished
+// before the first poll and would otherwise be swallowed (#6).
+export function detectReportDone(
+  prev: ReportSnapshot | null,
+  next: ReportSnapshot,
+  opts?: { firstBaselineAt?: number; startedAt?: Record<string, number> },
+): NotifyEvent[] {
   const out: NotifyEvent[] = [];
   for (const [id, status] of Object.entries(next.terminal)) {
-    if (prev.terminal[id]) continue;
+    if (prev) {
+      if (prev.terminal[id]) continue;
+    } else {
+      const started = opts?.startedAt?.[id];
+      if (!(opts?.firstBaselineAt != null && started != null && started >= opts.firstBaselineAt)) continue;
+    }
     const label = KIND_LABEL[next.kindOf[id]] ?? "Report";
     out.push({
-      key: `report-${id}`,
+      key: `report-${id}-${status}`,
       title: status === "done" ? `${label} ready` : `${label} failed`,
       message: status === "done" ? `Your ${label.toLowerCase()} report finished.` : `Your ${label.toLowerCase()} report failed.`,
     });
@@ -894,15 +748,15 @@ export function detectReportDone(prev: ReportSnapshot | null, next: ReportSnapsh
 - [ ] **Step 4: Run test to verify it passes**
 
 Run: `npx vitest run packages/console/src/notify/__tests__/reportEvents.test.ts`
-Expected: PASS (3 tests).
+Expected: PASS (4 tests).
 
 - [ ] **Step 5: Create `ActivityProvider.tsx`**
 
 ```tsx
 // packages/console/src/notify/ActivityProvider.tsx
-// Mounted once in Shell. Polls the report run list, exposes it via context for
-// the activity menu, and fires the existing notify stack (toast + OS banner) when
-// a run becomes terminal — mirroring NotificationsProvider's poll+detect+fire.
+// Mounted once in Shell. Polls the report run list, exposes it via context for the
+// activity menu, and fires the existing notify stack (toast + OS banner) when a run
+// becomes terminal — mirroring NotificationsProvider's poll+detect+fire.
 import { createContext, useContext, useEffect, useRef, useState, type ReactElement, type ReactNode } from "react";
 import { useToast } from "../shell/Toast.js";
 import { dispatch } from "./dispatch.js";
@@ -912,7 +766,7 @@ import { detectReportDone, type ReportSnapshot } from "./events.js";
 
 const POLL_MS = 5000;
 
-export interface ActivityRun { id: string; kind: string; status: "queued" | "running" | "done" | "failed"; phase: string; startedAt: number }
+export interface ActivityRun { id: string; kind: string; paramsKey: string; status: "running" | "done" | "failed"; phase: string; startedAt: number }
 
 const ActivityCtx = createContext<{ runs: ActivityRun[] }>({ runs: [] });
 export const useActivity = () => useContext(ActivityCtx);
@@ -921,20 +775,23 @@ export function ActivityProvider({ apiBase, children }: { apiBase: string; child
   const { push } = useToast();
   const [runs, setRuns] = useState<ActivityRun[]>([]);
   const prev = useRef<ReportSnapshot | null>(null);
+  const mountAt = useRef<number>(0);
 
   useEffect(() => {
     let alive = true;
+    mountAt.current = performance.now() ? Date.now() : Date.now();   // wall clock; matches server startedAt
     const poll = async () => {
       try {
         const r = await fetch(`${apiBase}/api/report/runs`);
         if (!alive || !r.ok) return;
-        const { runs: list } = (await r.json()) as { runs: ActivityRun[] };
+        const list = ((await r.json()).runs as ActivityRun[]) ?? [];
         setRuns(list);
         const terminal: Record<string, "done" | "failed"> = {};
         const kindOf: Record<string, string> = {};
-        for (const x of list) { kindOf[x.id] = x.kind; if (x.status === "done" || x.status === "failed") terminal[x.id] = x.status; }
+        const startedAt: Record<string, number> = {};
+        for (const x of list) { kindOf[x.id] = x.kind; startedAt[x.id] = x.startedAt; if (x.status !== "running") terminal[x.id] = x.status; }
         const next: ReportSnapshot = { terminal, kindOf };
-        for (const ev of detectReportDone(prev.current, next)) {
+        for (const ev of detectReportDone(prev.current, next, { firstBaselineAt: mountAt.current, startedAt })) {
           dispatch(ev, { enabled: readNotifyPref(), hidden: document.visibilityState === "hidden" || !document.hasFocus(), toast: push, notify: osNotify });
         }
         prev.current = next;
@@ -953,9 +810,8 @@ export function ActivityProvider({ apiBase, children }: { apiBase: string; child
 
 ```tsx
 // packages/console/src/notify/ActivityMenu.tsx
-// A bell/inbox button showing the count of active runs; the dropdown lists recent
-// runs and deep-links back to each one's panel (the panel reattaches the latest
-// run of its kind on mount). Sits next to NotifyBell in the shell header.
+// A button showing the count of in-flight runs; the dropdown lists recent runs and
+// deep-links to each one's panel (the panel reattaches the latest run of its kind).
 import { useState, type ReactElement } from "react";
 import { useActivity, type ActivityRun } from "./ActivityProvider.js";
 
@@ -965,7 +821,6 @@ const KIND_LABEL: Record<string, string> = { insights: "Insights", rubric: "Rubr
 function label(r: ActivityRun): string {
   const kind = KIND_LABEL[r.kind] ?? r.kind;
   if (r.status === "running") return `${kind} — ${r.phase}`;
-  if (r.status === "queued") return `${kind} — queued`;
   if (r.status === "failed") return `${kind} — failed`;
   return `${kind} — done`;
 }
@@ -973,23 +828,15 @@ function label(r: ActivityRun): string {
 export function ActivityMenu(): ReactElement {
   const { runs } = useActivity();
   const [open, setOpen] = useState(false);
-  const active = runs.filter((r) => r.status === "running" || r.status === "queued").length;
+  const active = runs.filter((r) => r.status === "running").length;
 
-  const go = (r: ActivityRun) => {
-    const route = ROUTE_FOR[r.kind];
-    if (route) window.location.hash = route;
-    setOpen(false);
-  };
+  const go = (r: ActivityRun) => { const route = ROUTE_FOR[r.kind]; if (route) window.location.hash = route; setOpen(false); };
 
   return (
     <div className="activity-menu">
-      <button
-        type="button"
-        className={"activity-toggle" + (active > 0 ? " is-active" : "")}
+      <button type="button" className={"activity-toggle" + (active > 0 ? " is-active" : "")}
         aria-label={active > 0 ? `${active} running report${active === 1 ? "" : "s"}` : "Report activity"}
-        aria-expanded={open}
-        onClick={() => setOpen((o) => !o)}
-      >
+        aria-expanded={open} onClick={() => setOpen((o) => !o)}>
         🗂{active > 0 && <span className="activity-count">{active}</span>}
       </button>
       {open && (
@@ -998,8 +845,7 @@ export function ActivityMenu(): ReactElement {
             ? <div className="activity-empty">No recent reports.</div>
             : runs.slice(0, 12).map((r) => (
                 <button key={r.id} type="button" role="menuitem" className={"activity-row activity-" + r.status} onClick={() => go(r)}>
-                  <span className={"activity-dot activity-dot-" + r.status} aria-hidden="true" />
-                  {label(r)}
+                  <span className={"activity-dot activity-dot-" + r.status} aria-hidden="true" />{label(r)}
                 </button>
               ))}
         </div>
@@ -1011,27 +857,12 @@ export function ActivityMenu(): ReactElement {
 
 - [ ] **Step 7: Mount in `Shell.tsx`**
 
-Add imports (near lines 8–9):
+Add imports (~lines 8–9):
 ```tsx
 import { ActivityProvider } from "../notify/ActivityProvider.js";
 import { ActivityMenu } from "../notify/ActivityMenu.js";
 ```
-
-Wrap the console tree with `ActivityProvider` — change the opening (line 154) and closing (line 209) so it sits inside `IdentityProvider` (it needs `useToast`, which `ToastProvider` supplies at the top):
-```tsx
-      <IdentityProvider apiBase={apiBase}>
-      <ActivityProvider apiBase={apiBase}>
-      <div
-        className={"console" + ...}
-        ...
-```
-and the matching close before `</IdentityProvider>`:
-```tsx
-      </div>
-      </ActivityProvider>
-      </IdentityProvider>
-```
-
+Wrap the console tree with `ActivityProvider` just inside `IdentityProvider` (it needs `useToast` from the outer `ToastProvider`): add `<ActivityProvider apiBase={apiBase}>` right after `<IdentityProvider apiBase={apiBase}>` (line 154) and the matching `</ActivityProvider>` right before `</IdentityProvider>` (line 209).
 Render the menu next to the bell (line 171):
 ```tsx
             AgentGem
@@ -1039,24 +870,21 @@ Render the menu next to the bell (line 171):
             <ActivityMenu />
 ```
 
-- [ ] **Step 8: Add CSS to `theme.css`**
-
-Append hand-authored rules using the existing design tokens (mirror `.notify-bell`):
+- [ ] **Step 8: Add CSS to `theme.css`** (mirror `.notify-bell`; use existing tokens — `grep -n "\-\-ink\|\-\-surface\|\-\-brand" packages/console/src/shell/theme.css` first and match names; rgba fallbacks where a token is absent):
 ```css
 .activity-menu { position: relative; display: inline-flex; }
 .activity-toggle { background: none; border: 0; cursor: pointer; font-size: 15px; padding: 2px 4px; position: relative; opacity: .7; }
 .activity-toggle:hover, .activity-toggle.is-active { opacity: 1; }
 .activity-count { position: absolute; top: -2px; right: -4px; min-width: 14px; height: 14px; padding: 0 3px; border-radius: 7px; background: var(--brand); color: #fff; font-size: 10px; line-height: 14px; text-align: center; }
-.activity-pop { position: absolute; top: 100%; right: 0; z-index: 30; margin-top: 4px; min-width: 240px; background: var(--surface); border: 1px solid var(--ink-10, rgba(0,0,0,.12)); border-radius: 8px; box-shadow: 0 6px 24px rgba(0,0,0,.18); padding: 4px; }
-.activity-empty { padding: 10px 12px; color: var(--ink-60, #666); font-size: 13px; }
+.activity-pop { position: absolute; top: 100%; right: 0; z-index: 30; margin-top: 4px; min-width: 240px; background: var(--surface); border: 1px solid rgba(0,0,0,.12); border-radius: 8px; box-shadow: 0 6px 24px rgba(0,0,0,.18); padding: 4px; }
+.activity-empty { padding: 10px 12px; color: #666; font-size: 13px; }
 .activity-row { display: flex; align-items: center; gap: 8px; width: 100%; text-align: left; background: none; border: 0; cursor: pointer; padding: 8px 10px; border-radius: 6px; font-size: 13px; color: var(--ink); }
-.activity-row:hover { background: var(--ink-05, rgba(0,0,0,.05)); }
+.activity-row:hover { background: rgba(0,0,0,.05); }
 .activity-dot { width: 8px; height: 8px; border-radius: 50%; flex: 0 0 auto; }
-.activity-dot-running, .activity-dot-queued { background: var(--brand); }
+.activity-dot-running { background: var(--brand); }
 .activity-dot-done { background: #2e9e5b; }
 .activity-dot-failed { background: #d24b4b; }
 ```
-(If a token like `--ink-10` isn't defined in `theme.css`, use the rgba fallback shown; confirm with `grep -n "\-\-ink" packages/console/src/shell/theme.css` and match existing token names.)
 
 - [ ] **Step 9: Typecheck + tests**
 
@@ -1072,34 +900,43 @@ git commit -m "feat(console): report-done notifications + activity menu"
 
 ---
 
-### Task 6: Insights panel retrofit (the working proof)
+### Task 5: Insights panel retrofit (the working proof)
 
-Swap the bespoke `generate()` + stream state for `useReportRun`. This is the end-to-end proof: run Insights, navigate away, get notified, come back and see it.
+Keep the panel's report state, rendering, and `openInsightsStream` wiring; wrap them with `useReportRun` so the run survives navigation and reattaches on return.
 
 **Files:**
 - Modify: `packages/console/src/panels/Insights/index.tsx`
+- Test: `packages/console/src/panels/Insights/index.test.tsx` (new — the Issue-2 smoke test)
 
 **Interfaces:**
-- Consumes: `useReportRun` (Task 4). The insights run's `report` is `InsightsRunResult = { report: InsightsReportView; degraded: boolean; scanned: number | null; updatedAt: number | null }` (Task 2).
+- Consumes: `useReportRun` (Task 3). The insights `done` payload is `T = { report: InsightsReportView; degraded: boolean; scanned?: number; updatedAt: number | null }` (exactly what `openInsightsStream`'s `done` already delivers).
 
-- [ ] **Step 1: Replace state + generate with the hook**
+- [ ] **Step 1: Replace the stream driver with the hook**
 
-Remove the imports of `openInsightsStream` usage remnants is unnecessary (keep `InsightsReportView` type import from `./insightsStream.js`). Add:
+Add `import { useReportRun, type Handlers } from "../../report/useReportRun.js";`. Define the payload type near the top:
 ```tsx
-import { useReportRun } from "../../report/useReportRun.js";
+type InsightsDone = { report: InsightsReportView; degraded: boolean; scanned?: number; updatedAt: number | null };
 ```
-Define the run result type near the top of the file (after imports):
-```tsx
-interface InsightsRunResult { report: InsightsReportView; degraded: boolean; scanned: number | null; updatedAt: number | null }
-```
-
-Replace the streaming state block (`index.tsx:33-42`, i.e. `phase/out/report/updatedAt/scanned/degraded/error/running/closeRef`) and the two effects/`generate` (`:44-60`) with:
+Replace the streaming state block (`index.tsx:33-42`) and the effects + `generate` (`:44-60`) with:
 ```tsx
   const [projects, setProjects] = useState<ProjectCandidate[] | null>(null);
   const [recents, setRecents] = useState<RecentEntry[] | null>(null);
   const [activePath, setActivePath] = useState<string | null>(null);
   const [query, setQuery] = useState("");
-  const { state, start } = useReportRun<InsightsRunResult>(apiBase, "insights");
+
+  // openStream adapter: the hook decides WHEN to open; this maps openInsightsStream's
+  // events to the normalized Handlers and closes over the current root.
+  const openStream = useCallback(
+    (fresh: boolean, params: Record<string, string>, h: Handlers<InsightsDone>) =>
+      openInsightsStream(apiBase, params.root, (e) => {
+        if (e.type === "phase") h.phase(e.sessions != null ? `${e.phase} (${e.sessions} sessions)` : e.phase);
+        else if (e.type === "delta") h.delta(e.text);
+        else if (e.type === "done") h.done({ report: e.report, degraded: e.degraded, scanned: e.scanned, updatedAt: e.updatedAt });
+        else if (e.type === "failed") h.failed(e.message);
+      }, fresh),
+    [apiBase],
+  );
+  const { view, start } = useReportRun<InsightsDone>(apiBase, "insights", openStream);
 
   useEffect(() => {
     const client = makeClient(apiBase);
@@ -1107,217 +944,217 @@ Replace the streaming state block (`index.tsx:33-42`, i.e. `phase/out/report/upd
     testbedRecentsRoute.call(client).then((r) => setRecents(r.recents)).catch(() => setRecents([]));
   }, [apiBase]);
 
-  // Reattached a run on mount (e.g. came back after navigating away) → select its row.
-  useEffect(() => {
-    const root = (state.params as { root?: string } | null)?.root;
-    if (root && !activePath) setActivePath(root);
-  }, [state.params, activePath]);
+  // Reattached a run on mount → select its row.
+  useEffect(() => { const root = view.params?.root; if (root && !activePath) setActivePath(root); }, [view.params, activePath]);
 
-  const generate = (path: string, fresh = false) => {
-    setActivePath(path);
-    start(path, { root: path, fresh });
-  };
+  const generate = (path: string, fresh = false) => { setActivePath(path); start(path, { root: path }, fresh); };
 ```
-Note: `paramsKey` for insights is just the project path (`start(path, { root: path, fresh })`).
+Add `useCallback` to the React import. `paramsKey` for insights is the path itself (`start(path, { root: path }, fresh)`).
 
-- [ ] **Step 2: Update the render to read from `state`**
+- [ ] **Step 2: Map render fields from `view`**
 
-Derive the view fields from the hook. Replace the row's status/report block (`index.tsx:100-141`) references:
-- `running` → `const running = state.status === "queued" || state.status === "running";`
-- `phase` → `state.phase`
-- `error` → `state.error`
-- `out` (live deltas) → `state.deltas`
-- `report` → `state.report?.report ?? null`
-- `updatedAt` → `state.report?.updatedAt ?? null`
-- `scanned` → `state.report?.scanned ?? null`
-- `degraded` → `state.report?.degraded ?? false`
-
-Concretely, add just above the `return`:
+Just above the `return`, derive the names the existing JSX (`:100-141`) already uses:
 ```tsx
-  const running = state.status === "queued" || state.status === "running";
-  const report = state.report?.report ?? null;
-  const updatedAt = state.report?.updatedAt ?? null;
-  const scanned = state.report?.scanned ?? null;
-  const degraded = state.report?.degraded ?? false;
-  const phase = state.phase;
-  const error = state.error;
-  const out = state.deltas;
+  const running = view.status === "running";
+  const report = view.report?.report ?? null;
+  const updatedAt = view.report?.updatedAt ?? null;
+  const scanned = view.report?.scanned ?? null;
+  const degraded = view.report?.degraded ?? false;
+  const phase = view.phase;
+  const error = view.error;
+  const out = view.deltas;
 ```
-The existing JSX (`:100-141`) then compiles unchanged, because it already references `running`, `report`, `updatedAt`, `scanned`, `degraded`, `phase`, `error`, `out`. The row button `disabled={running}` and `onClick={() => generate(r.path)}` stay. `Re-run ↻` stays `onClick={() => generate(r.path, true)}`.
+The existing JSX compiles unchanged (it already references these names). `InsightsReportCard` still receives an `InsightsReportView`, which is `view.report?.report`.
 
-- [ ] **Step 3: Typecheck**
+- [ ] **Step 3: Write the Issue-2 smoke test**
 
-Run: `cd packages/console && npx tsc --noEmit`
-Expected: PASS. (If TS complains that `report` is possibly the old `InsightsReportView` vs new — ensure `InsightsReportCard report={report}` still receives `InsightsReportView`; `state.report?.report` is exactly that type.)
+```tsx
+// packages/console/src/panels/Insights/index.test.tsx
+import { describe, it, expect, vi, beforeEach } from "vitest";
+import { render, screen, fireEvent, waitFor } from "@testing-library/react";
+import { Insights } from "./index.js";
 
-- [ ] **Step 4: Manual browser verification (required — jsdom can't prove this)**
+// Fake EventSource so openInsightsStream can drive the panel.
+class FakeES {
+  static last: FakeES | null = null;
+  listeners = new Map<string, (e: MessageEvent) => void>();
+  constructor(public url: string) { FakeES.last = this; }
+  addEventListener(t: string, cb: (e: MessageEvent) => void) { this.listeners.set(t, cb); }
+  close() {}
+  fire(t: string, data: unknown) { this.listeners.get(t)?.({ data: JSON.stringify(data) } as MessageEvent); }
+}
 
-Run the console against a project with session history. Verify end-to-end:
-1. Click **Insights →** on a project → live phase/`run-transcript` deltas stream as before.
-2. While it runs, navigate to another panel (e.g. Sessions). The `🗂` activity menu shows `1` and lists "Insights — <phase>".
-3. On completion (with notifications enabled) a toast fires; if the window is backgrounded, an OS banner fires.
-4. Return to **Insights** → the previously-run project row is selected and shows the finished report (loaded from the run record). The activity menu lists "Insights — done".
-5. Open the activity menu entry → navigates to `#/insights` and shows the same report.
+beforeEach(() => {
+  (globalThis as any).EventSource = FakeES as unknown;
+  FakeES.last = null;
+  // /api/report/runs (mount reattach: none) + the two testbed routes.
+  vi.stubGlobal("fetch", vi.fn(async (u: string) => {
+    if (String(u).includes("/api/report/runs")) return { ok: true, json: async () => ({ runs: [] }) } as any;
+    return { ok: true, json: async () => ({ projects: [{ path: "/proj", flavor: "claude", name: "proj" }], recents: [] }) } as any;
+  }));
+});
 
-Document the run command you used (per the repo's `run` skill) in the commit body.
+describe("Insights panel (retrofit smoke test)", () => {
+  it("renders the report when a run reports done", async () => {
+    render(<Insights apiBase="http://x" />);
+    const btn = await screen.findAllByText("Insights →");
+    fireEvent.click(btn[0]);
+    await waitFor(() => expect(FakeES.last).not.toBeNull());
+    FakeES.last!.fire("done", {
+      report: { totals: { sessions: 2, mostly: 1, partially: 1, not: 0 }, outcomes_summary: "went well", narrative: "N", by_model: [], friction: [], publish_candidates: [] },
+      signalSummary: { sessionsScanned: 2 }, degraded: false, updatedAt: 123,
+    });
+    await waitFor(() => expect(screen.getByText("went well")).toBeTruthy());   // InsightsReportCard rendered
+  });
+});
+```
 
-- [ ] **Step 5: Commit**
+- [ ] **Step 4: Typecheck + test**
+
+Run: `cd packages/console && npx tsc --noEmit && npx vitest run src/panels/Insights src/report`
+Expected: PASS.
+
+- [ ] **Step 5: Manual browser verification (required — jsdom can't prove notifications/appearance)**
+
+Run the console against a project with session history:
+1. Click **Insights →** → live phase + `run-transcript` deltas stream as today.
+2. Navigate to Sessions mid-run → the `🗂` menu shows `1` and lists "Insights — <phase>".
+3. On completion, a toast fires (OS banner if the window is backgrounded).
+4. Return to **Insights** → the row is selected and shows the finished report (reattach → cache-hit stream open).
+5. Start Insights on project A, then B; leave and return → panel shows B (reattach-latest, as designed).
+6. **Re-run ↻** while a run is in flight → forces a fresh compute (does not silently no-op).
+
+- [ ] **Step 6: Commit**
 
 ```bash
-git add packages/console/src/panels/Insights/index.tsx
-git commit -m "feat(console): Insights runs in the background via useReportRun"
+git add packages/console/src/panels/Insights/index.tsx packages/console/src/panels/Insights/index.test.tsx
+git commit -m "feat(console): Insights survives navigation via useReportRun"
 ```
 
 ---
 
-### Task 7: Rubrics panel retrofit
+### Task 6: PR1 — core + Insights
 
-**Files:**
-- Read first: `packages/console/src/panels/Rubrics/index.tsx` and `packages/console/src/panels/Rubrics/rubricStream.ts` (to see the current scope selection + `openRubricStream` usage — the same `generate()`-closes-stream idiom as Insights).
-- Modify: `packages/console/src/panels/Rubrics/index.tsx`
+- [ ] **Step 1: Full suites**
 
-**Interfaces:**
-- Consumes: `useReportRun` (Task 4). The rubric run's `report` is `RubricRunResult = { report: RubricReportView; updatedAt: number | null }`. `paramsKey` = `` `${rubric}:${scope.kind}:${scope.root ?? ""}:${scope.sessionId ?? ""}` ``.
-
-- [ ] **Step 1: Swap the stream driver for the hook**
-
-Add `import { useReportRun } from "../../report/useReportRun.js";` and define:
-```tsx
-interface RubricRunResult { report: RubricReportView; updatedAt: number | null }
-```
-Replace the panel's streaming `useState` (report/phase/deltas/running/error/updatedAt/cached) + its `openRubricStream` driver with:
-```tsx
-  const { state, start } = useReportRun<RubricRunResult>(apiBase, "rubric");
-```
-Rewrite the panel's "run" handler (the one that today calls `openRubricStream(apiBase, params, onEvent, fresh)`) to:
-```tsx
-  const run = (params: { rubric: string; scope: "all" | "project" | "session"; root?: string; sessionId?: string }, fresh = false) => {
-    const scope = params.scope === "all"
-      ? { kind: "all" as const }
-      : params.scope === "project"
-        ? { kind: "project" as const, root: params.root! }
-        : { kind: "session" as const, root: params.root!, sessionId: params.sessionId! };
-    const key = `${params.rubric}:${scope.kind}:${(scope as { root?: string }).root ?? ""}:${(scope as { sessionId?: string }).sessionId ?? ""}`;
-    start(key, { rubric: params.rubric, scope, fresh });
-  };
-```
-Map the render fields exactly as Insights: `running = state.status === "queued" || state.status === "running"`, `report = state.report?.report ?? null`, `updatedAt = state.report?.updatedAt ?? null`, `phase = state.phase`, `error = state.error`, live deltas = `state.deltas`. Keep the existing report-card component and scope selectors untouched.
-
-- [ ] **Step 2: Typecheck**
-
-Run: `cd packages/console && npx tsc --noEmit`
+Run: `cd /Users/rfeng/Projects/ninemind/agentgem-worktrees/async-report-runs && npm run build && npx vitest run src && (cd packages/console && npx tsc --noEmit && npx vitest run)`
 Expected: PASS.
 
-- [ ] **Step 3: Manual browser verification**
-
-Run a rubric at a scope; navigate away mid-run; confirm the activity menu shows "Rubric — <phase>", a completion notification fires, and returning to Rubrics re-shows the report.
-
-- [ ] **Step 4: Commit**
-
-```bash
-git add packages/console/src/panels/Rubrics/index.tsx
-git commit -m "feat(console): Rubric evaluation runs in the background"
-```
-
----
-
-### Task 8: Curate Analyze panel retrofit
-
-**Files:**
-- Read first: `packages/console/src/panels/Curate/Analyze.tsx` and `packages/console/src/panels/Curate/analyzeStream.ts`.
-- Modify: `packages/console/src/panels/Curate/Analyze.tsx`
-
-**Interfaces:**
-- Consumes: `useReportRun` (Task 4). Unlike insights/rubric, the analyze `done` payload spreads `candidates` (there is no single `report` object — see `analyzeStream.ts`: `done` carries `candidates: AnalyzeCandidate[]`). The analyze run's result is `AnalyzeRunResult = { report: { candidates: AnalyzeCandidate[] }; updatedAt: number | null }` (the runner in Task 2 returns the server `WorkflowAnalysisPayload`, whose `candidates` field is what the panel reads). `paramsKey` = the project root.
-
-- [ ] **Step 1: Swap the stream driver for the hook**
-
-Add imports:
-```tsx
-import { useReportRun } from "../../report/useReportRun.js";
-import type { AnalyzeCandidate } from "./analyzeStream.js";
-```
-Define the run-result type (structural — only `candidates` is consumed):
-```tsx
-interface AnalyzeRunResult { report: { candidates: AnalyzeCandidate[] }; updatedAt: number | null }
-```
-Replace the streaming `useState` + `openAnalyzeStream` driver with:
-```tsx
-  const { state, start } = useReportRun<AnalyzeRunResult>(apiBase, "analyze");
-  const analyze = (root: string, fresh = false) => start(root, { root, fresh });
-```
-Map render fields (note analyze renders `candidates`, not a `report` object):
-```tsx
-  const running = state.status === "queued" || state.status === "running";
-  const candidates = state.report?.report?.candidates ?? [];
-  const updatedAt = state.report?.updatedAt ?? null;
-  const phase = state.phase;
-  const error = state.error;
-  const out = state.deltas;
-```
-Keep the Analyze result UI (it already renders `candidates`) and the `consumePendingAnalyze()` hand-off (Insights → Curate): if a pending root is consumed on mount, call `analyze(root)` as it does today. If the current UI showed candidates only when non-empty, keep that guard against `candidates.length`.
-
-- [ ] **Step 2: Typecheck**
-
-Run: `cd packages/console && npx tsc --noEmit`
-Expected: PASS.
-
-- [ ] **Step 3: Manual browser verification**
-
-From Insights, click "Build a Gem from this project →" (hands off to Curate/Analyze); confirm analysis runs, survives navigation, notifies, and re-shows on return. Also run Analyze directly.
-
-- [ ] **Step 4: Commit**
-
-```bash
-git add packages/console/src/panels/Curate/Analyze.tsx
-git commit -m "feat(console): Curate analysis runs in the background"
-```
-
----
-
-### Task 9: Full suite + PR
-
-**Files:** none (verification + integration).
-
-- [ ] **Step 1: Root suite (CI-gated)**
-
-Run: `cd /Users/rfeng/Projects/ninemind/agentgem-worktrees/async-report-runs && npm run build && npx vitest run src`
-Expected: PASS (includes `src/report/**`).
-
-- [ ] **Step 2: Console suite (local — not in CI)**
-
-Run: `cd packages/console && npx tsc --noEmit && npx vitest run`
-Expected: PASS.
-
-- [ ] **Step 3: Push + PR**
+- [ ] **Step 2: Push + PR (off freshly-fetched origin/main)**
 
 ```bash
 git push -u origin feat/async-report-runs
-gh pr create --title "Background report runs (Insights, Rubric, Analyze)" --body "$(cat <<'BODY'
-Generalizes the ChatManager durable-session pattern to agent-backed report
-generation. Report SSE becomes a view onto a run owned by a sequential in-memory
-ReportRunManager, so a client disconnect can't abort the work. Adds notify-on-done
-via the existing notify stack and a Bell-adjacent activity menu that deep-links
-back to each run's panel. Wires Insights, Rubric, and Analyze.
+gh pr create --title "Background report runs: registry + Insights (PR1)" --body "$(cat <<'BODY'
+Lightweight background-report-runs, part 1. The existing report SSE routes already
+continue + cache after a client disconnects; this adds an in-memory ReportRegistry
+they update, GET /api/report/runs, a notify-on-done ActivityProvider + activity menu,
+and a useReportRun hook that reattaches the latest run of a kind on mount and refuses
+to open a duplicate stream. Wires Insights end-to-end. No queue, no concurrency change.
 
-Scorecard (not agent-backed; already SWR) and gem-run (an execution with no compute
-core to wrap) are deliberately out of scope — see docs/superpowers/specs/2026-07-13-background-report-runs-design.md.
+Rubric + Analyze follow in PR2. Scorecard/gem-run out of scope (see spec).
 
 🤖 Generated with [Claude Code](https://claude.com/claude-code)
 BODY
 )"
 ```
 
-- [ ] **Step 4: Watch CI, merge when green**
+- [ ] **Step 3: Watch CI, merge when green, verify each commit on origin/main**
 
 ```bash
 gh run watch <run-id> --exit-status && gh pr merge --rebase --delete-branch
+git fetch origin && git grep -l "class ReportRegistry" origin/main -- src/report/registry.ts && git grep -l "useReportRun" origin/main -- packages/console/src/report/useReportRun.ts
 ```
-Then verify each commit's content is on `origin/main` (grep `origin/main:src/report/runManager.ts` for `class ReportRunManager`, and `origin/main:packages/console/src/report/useReportRun.ts` for `useReportRun`), per the repo's dropped-commit trap.
 
 ---
 
-## Deferred (documented, not in this plan)
+### Task 7: Rubric panel retrofit (PR2)
 
-- **Scorecard (Mine):** not agent-backed (`collectScorecard` is a pure sync scan) and already stale-while-revalidate. If uniformity is later wanted, add a `scorecard` runner wrapping `collectScorecard(dir, projects, Date.now(), { onProgress })` — but there is no user-facing gap today.
-- **Gem-run (Optimize):** an *execution*, not a read-only report; `streamGemRun` drives SSE directly with no `{payload,cached,updatedAt}` core. Backgrounding it needs a compute-core extraction first — its own spec.
+**Files:**
+- Read first: `packages/console/src/panels/Rubrics/index.tsx` + `rubricStream.ts` (current `openRubricStream(apiBase, params, onEvent, fresh)` usage).
+- Modify: `packages/console/src/panels/Rubrics/index.tsx`
+
+**Interfaces:**
+- Consumes: `useReportRun` (Task 3). Rubric `done` payload `T = { report: RubricReportView; cached: boolean; updatedAt: number | null }`. `paramsKey` = `` `${rubric}:${scope}:${root ?? ""}:${sessionId ?? ""}` `` — **must match `rubricParamsKey` on the server** (Task 2). `params` passed to the hook = `{ rubric, scope, root, sessionId }` (only the keys present).
+
+- [ ] **Step 1: Swap the driver for the hook**
+
+Add `import { useReportRun, type Handlers } from "../../report/useReportRun.js";` and:
+```tsx
+type RubricDone = { report: RubricReportView; cached: boolean; updatedAt: number | null };
+```
+Provide the openStream adapter mapping `openRubricStream`'s events (`start`/`delta`/`done`/`failed`) to `Handlers` (map the `start` event to `h.phase("evaluating")`, `delta`→`h.delta`, `done`→`h.done({ report, cached, updatedAt })`, `failed`→`h.failed(message)`), reconstructing the `RubricScopeParams` from `params`. Replace the panel's run handler with:
+```tsx
+  const { view, start } = useReportRun<RubricDone>(apiBase, "rubric", openStream);
+  const run = (p: { rubric: string; scope: "all" | "project" | "session"; root?: string; sessionId?: string }, fresh = false) => {
+    const key = `${p.rubric}:${p.scope}:${p.root ?? ""}:${p.sessionId ?? ""}`;
+    const params: Record<string, string> = { rubric: p.rubric, scope: p.scope };
+    if (p.root) params.root = p.root; if (p.sessionId) params.sessionId = p.sessionId;
+    start(key, params, fresh);
+  };
+```
+Map render fields as in Task 5 Step 2 (`running = view.status === "running"`, `report = view.report?.report ?? null`, `updatedAt = view.report?.updatedAt ?? null`, `phase = view.phase`, `error = view.error`, deltas = `view.deltas`). Keep the report card + scope selectors unchanged.
+
+- [ ] **Step 2: Typecheck + manual browser verify** (`cd packages/console && npx tsc --noEmit`; run a rubric, navigate away mid-run, confirm activity menu + notify + reattach).
+
+- [ ] **Step 3: Commit** — `git commit -m "feat(console): Rubric evaluation survives navigation"`
+
+---
+
+### Task 8: Curate Analyze panel retrofit (PR2)
+
+**Files:**
+- Read first: `packages/console/src/panels/Curate/Analyze.tsx` + `analyzeStream.ts` (`openAnalyzeStream(apiBase, root, fresh, onEvent)`; `done` carries `candidates`, not a `report`).
+- Modify: `packages/console/src/panels/Curate/Analyze.tsx`
+
+**Interfaces:**
+- Consumes: `useReportRun` (Task 3). Analyze `done` payload `T = { candidates: AnalyzeCandidate[]; cached: boolean }`. `paramsKey` = the project root.
+
+- [ ] **Step 1: Swap the driver for the hook**
+
+Add `import { useReportRun, type Handlers } from "../../report/useReportRun.js";` and `import type { AnalyzeCandidate } from "./analyzeStream.js";`. Define `type AnalyzeDone = { candidates: AnalyzeCandidate[]; cached: boolean };`. openStream adapter maps `openAnalyzeStream(apiBase, params.root, fresh, onEvent)` events (`phase`→`h.phase`, `delta`→`h.delta`, `done`→`h.done({ candidates: e.candidates, cached: e.cached })`, `failed`→`h.failed(e.message)`). Then:
+```tsx
+  const { view, start } = useReportRun<AnalyzeDone>(apiBase, "analyze", openStream);
+  const analyze = (root: string, fresh = false) => start(root, { root }, fresh);
+```
+Render fields: `running = view.status === "running"`, `candidates = view.report?.candidates ?? []`, `phase = view.phase`, `error = view.error`, deltas = `view.deltas`. Preserve the `consumePendingAnalyze()` hand-off (Insights → Curate): if a pending root is consumed on mount, call `analyze(root)` (this races with the hook's own mount reattach — the reattach is a no-op if no analyze run exists, and if one does, `start`'s guard attaches rather than double-opening).
+
+- [ ] **Step 2: Typecheck + manual browser verify** (from Insights, "Build a Gem from this project →" hands off to Analyze; confirm run survives navigation + notifies + reattaches).
+
+- [ ] **Step 3: Commit** — `git commit -m "feat(console): Curate analysis survives navigation"`
+
+---
+
+### Task 9: PR2 — Rubric + Analyze
+
+- [ ] **Step 1:** `cd packages/console && npx tsc --noEmit && npx vitest run` → PASS.
+- [ ] **Step 2:** Push a fresh branch off freshly-fetched `origin/main` (do NOT append to the merged PR1 branch), open PR2, watch CI, merge, verify both commits' markers on `origin/main`.
+
+---
+
+## Deferred (documented, not in scope)
+
+- **Scorecard (Mine):** not agent-backed (`collectScorecard` is a pure sync scan) and already stale-while-revalidate — no user-visible gap. Its route emits `stale`/`progress`, not a single `done` report, so it doesn't fit the `track.done()` shape without extra work.
+- **Gem-run (Optimize):** an execution, not a report; `streamGemRun` has no `done` report payload to reattach to.
+- **Precise per-run reattach:** reattach is by latest-of-kind. Restoring the exact run a user was viewing (localStorage pointer + selected-row persistence) is deferred — revisit only if the multi-run edge (two Insights projects, return lands on the newer) actually bites.
+- **Cancel a running report:** not needed in this design (no queue; a wedged run only affects its own key, and the existing routes already behave this way today).
+- **Phase in the activity menu for rubric:** rubric's route has no phase callback, so its menu label shows a single "evaluating" phase until done. Fine for v1.
+
+## GSTACK REVIEW REPORT
+
+| Review | Trigger | Why | Runs | Status | Findings |
+|--------|---------|-----|------|--------|----------|
+| Eng Review | `/plan-eng-review` | Architecture & tests (required) | 1 | issues_open→resolved | 2 review issues + 1 scope split + outside-voice pivot; all folded |
+| Outside Voice | Claude subagent | Independent 2nd opinion | 1 | issues_found | 7 findings; #1/#2/#7 drove the architecture pivot, #3 bug fixed, #6 folded |
+
+- **CROSS-MODEL:** The review accepted the `ReportRunManager` + serial-queue + new-SSE-view framing; the outside voice showed it was a concurrency regression serving the weakest goal. Both converged (with user approval) on the lightweight registry-over-existing-routes design now in this plan.
+- **VERDICT:** ENG CLEARED — plan rewritten to the reviewed design; ready to implement. Ships in two PRs (core+Insights, then Rubric+Analyze).
+
+**Decisions folded into the plan:**
+- Scope split into two PRs (blast radius / dropped-commit-trap).
+- Reattach = latest-of-kind (Issue 1); precise pointer deferred.
+- Insights retrofit smoke test added (Issue 2).
+- Pivot to lightweight registry over existing routes (cross-model tension).
+- `#3` Re-run/force bug dissolved by design; `#5` moot (routes kept); `#6` baseline-notification fix included.
+
+**UNRESOLVED DECISIONS:**
+- T2 (P2): whether to cap `attachAndPoll` at ~10min now or defer — left to the user; not blocking.
