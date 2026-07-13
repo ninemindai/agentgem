@@ -20,6 +20,11 @@
 //
 // Why a dispatch hook: see the long note in playCache.ts. Keying on the matched route (ctor +
 // methodName) cannot drift from the route table the way a path string can.
+//
+// This hook is aggregator-specific (keys on AggregatorController) and is wired in by
+// mountAggregator (serverAggregator.ts), NOT buildCommonApp — the desktop client entry never
+// mounts AggregatorController, and a value import of it here would statically pull the whole
+// DB-backed controller (and its aggregator/PGlite transitive deps) into the client bundle.
 import { type RestDispatchHook } from "@agentback/rest";
 import { AggregatorController } from "./aggregator.controller.js";
 
