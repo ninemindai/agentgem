@@ -54,18 +54,34 @@ Three components, each one job. The write path and read path are decoupled: reca
 never blocks on a scan, and a cold/empty store degrades to exactly today's BM25
 ordering (α·0).
 
-### 1. `artifact_outcomes` store (new)
+### 1. `artifact_outcomes` store (new — its own DB, owned by `insight`)
 
-A new table in the existing local `~/.agentgem/transcript-index.db`
-(`packages/capture/src/transcriptIndex.ts`) — the incremental, path-keyed usage
-index. Not in `recall-index.db`: the outcome triple is a *usage* fact, and keeping
-the score out of the recall index means re-scoring never forces a recall reindex.
+A **new, dedicated** local store `~/.agentgem/artifact-outcomes.db`, owned by the
+`insight` package (where facets are produced). **Not** `transcript-index.db` and
+**not** `recall-index.db`, for a lifecycle reason that is load-bearing:
+
+- `transcript-index.db` holds **byte-derived** data — "a pure function of the file's
+  bytes" (`transcriptIndex.ts:9-12`), reparsed on mtime change, and a `SCHEMA_VERSION`
+  bump **drops every derived table and rebuilds from bytes** (`transcriptIndex.ts:106-115`).
+  That is correct for cheap, reconstructible data. Outcome triples are the opposite:
+  **expensive, non-deterministic LLM judgments** (`judgeSessions`, two agent passes) that
+  cannot be rebuilt from bytes and must never be dropped on a schema bump. Housing them
+  under the byte-store's drop-and-rebuild governance would silently wipe the entire
+  proven-use history on any future migration.
+- `insights-cache.json` (where facets live today) is a **50-entry evictable cache**
+  (`insightsCache.ts:15`) — also wrong for a compounding asset.
+
+So byte-derived and judgment-derived data get **separate stores with opposite
+lifecycles**: `artifact-outcomes.db` is append/upsert-only, never dropped by
+transcript-index migrations, and carries its own independent schema version. The read
+side is unaffected — recall does a cross-DB lookup (both local SQLite), pointed at
+`artifact-outcomes.db`.
 
 ```sql
 CREATE TABLE artifact_outcomes (
   session_id    TEXT NOT NULL,   -- join key; the transcript UUID
-  artifact_type TEXT NOT NULL,   -- 'skill' | 'mcp_server' | 'hook'
-  artifact_name TEXT NOT NULL,   -- resolved inventory name (binds to a GemSelection)
+  artifact_type TEXT NOT NULL,   -- 'skill' | 'agent'  (the two kinds SkillAgentEvent carries)
+  artifact_name TEXT NOT NULL,   -- the raw token from eventSeries (skill: "superpowers:brainstorming"; agent: subagent_type)
   outcome       TEXT NOT NULL,   -- 'mostly_achieved' | 'partially_achieved' | 'not_achieved'
   project       TEXT,            -- confounder guard + recall's existing filter
   agent         TEXT,            -- confounder guard (which harness)
@@ -77,6 +93,12 @@ CREATE TABLE artifact_outcomes (
 CREATE INDEX artifact_outcomes_lookup ON artifact_outcomes (artifact_type, artifact_name);
 ```
 
+Coverage (v1): **skills and subagents only** — the two kinds `SkillAgentEvent`
+carries (`workflowScan.ts:478,495`). MCP-server and hook usage is byte-tracked in
+`raw_usage`/`hook_usage` but is **not** in `eventSeries`, so it carries no
+session-level outcome to join; extending proven-use to those types is out of scope
+(§ Out of scope) and additive to the same table.
+
 Grain: **one row per artifact-firing-in-a-session** — the un-aggregated level
 `buildAttestation` collapses. Keeping it un-collapsed is the point: the score is
 computed at read time, so the scoring formula can change later without re-scanning.
@@ -85,8 +107,12 @@ over baseline is a later query" and "lift needs a full re-scan forever";
 `mission_hint` is already on `SessionSequence`, so it is free at write time.
 
 Idempotency: the writer upserts on the PK, so re-scanning a session replaces its
-rows rather than double-counting — matching `transcriptIndex.ts`'s existing
-`(path, type, name)` keying.
+rows rather than double-counting — the same upsert-on-natural-key discipline
+`transcriptIndex.ts` uses for `(path, kind, token)`.
+
+The writer is owned by `insight` and invoked on the judge pass (where
+`SessionSequence.eventSeries` and `SessionFacet` are both already in scope), **not**
+by the byte-driven `syncUsage` path.
 
 ### 2. `outcome-score` (new pure module)
 
@@ -180,19 +206,23 @@ House pattern (pure function → deterministic test):
 
 Not tested here: the LLM judge itself (existing shipped code), the ACP distill agent.
 
-## Compatibility
+## Compatibility & resolution staleness
 
-**Interaction with `2026-07-10-transcript-index-raw-rows-design.md` (in flight).**
-That spec moves `global_usage` from resolved rows to raw tokens resolved at query
-time, to avoid a 17.4 s full-corpus rebuild on inventory churn. `artifact_outcomes`
-stores **resolved** `artifact_name` (from the `eventSeries × facet` join, which
-resolves via inventory), so it inherits the same invalidation question: if the
-inventory renames or remaps an artifact, historical resolved rows can go stale.
-Two options, decided in planning: (a) accept staleness — a renamed artifact simply
-starts a fresh score, acceptable for a bounded boost; (b) store the raw token
-alongside the resolved name and resolve at read time, mirroring the raw-rows
-approach. Lean (a) for v1 — the blast radius is a re-rank nudge, not a correctness
-guarantee — and revisit if raw-rows lands first.
+`2026-07-10-transcript-index-raw-rows-design.md` has **shipped** (`transcriptIndex.ts`
+is `SCHEMA_VERSION = "2"`, `raw_usage`/`hook_usage` tables, resolution at query time).
+This is why §1 puts outcomes in a **separate** DB rather than extending that store —
+their lifecycles are opposite (see §1). There is no cross-table migration coupling:
+`artifact-outcomes.db` carries its own schema version and is never touched by a
+transcript-index bump.
+
+**Resolution staleness (accept, v1).** `artifact_outcomes` stores the artifact
+identifier as it appears in `SessionSequence.eventSeries` (for a skill, the raw token
+the transcript carried, e.g. `superpowers:brainstorming`, `workflowScan.ts:445`). If
+the inventory later renames or remaps an artifact, historical rows can point at an old
+identifier. **v1 accepts this** — a renamed artifact simply starts accumulating a fresh
+score, which is fine for a bounded re-rank nudge (not a correctness guarantee). The
+alternative (resolve at read time, mirroring raw-rows) is deferred; the blast radius
+does not justify it now.
 
 ## Out of scope
 
@@ -212,6 +242,9 @@ guarantee — and revisit if raw-rows lands first.
 5. **Recency decay** in the score — `at_ms` stored, not weighted.
 6. **Tuned constants** — `PARTIAL_CREDIT = 0.5`, `ALPHA = 0.3` are shipped defaults,
    not researched values; tuned after the validation instrument, not before.
+7. **MCP-server / hook proven-use** — not in `eventSeries`, so no session-level
+   outcome to join. Additive to the same table if their usage ever gains an
+   outcome-bearing event.
 
 The through-line: v1 builds the **machinery** (durable triple + shared scoring + one
 proven consumer + the instrument to judge the signal). It does not ship the pitch
