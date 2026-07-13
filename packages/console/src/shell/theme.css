@@ -1677,6 +1677,18 @@ button.scorecard-intent { line-height: 1.4; }
 .phases span[data-lit="true"] { background: var(--accent); color: #fff; border-color: var(--accent); box-shadow: var(--shadow-sm); }
 .dream-counts { margin: 0; color: var(--ink-soft); font: 13px/1.4 var(--font-ui); }
 .dream-scene .dream-btn { margin-left: auto; }
+.dream-progress { display: flex; align-items: center; gap: 14px; flex: 1 1 auto; flex-wrap: wrap; }
+.dream-progress-phases { display: flex; gap: 6px; list-style: none; margin: 0; padding: 0; }
+.dream-progress-phase { display: inline-flex; align-items: center; gap: 6px; padding: 3px 10px; border-radius: 999px;
+  font: 600 10.5px/1 var(--font-mono); letter-spacing: .09em; border: 1px solid var(--line); color: var(--ink-soft); background: var(--raised); }
+.dream-progress-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--line); flex: none; }
+.dream-progress-phase[data-state="done"] { color: var(--emerald); border-color: rgba(47, 107, 58, .32); }
+.dream-progress-phase[data-state="done"] .dream-progress-dot { background: var(--emerald); }
+.dream-progress-phase[data-state="running"] { color: var(--accent); border-color: var(--accent); box-shadow: var(--shadow-sm); }
+.dream-progress-phase[data-state="running"] .dream-progress-dot { background: var(--accent); animation: warming-pulse 1.5s ease-in-out infinite; }
+.dream-progress-now { margin: 0; color: var(--ink-soft); font: 13px/1.4 var(--font-ui); }
+.dream-progress-now strong { color: var(--ink); font-weight: 600; }
+@media (prefers-reduced-motion: reduce) { .dream-progress-phase[data-state="running"] .dream-progress-dot { animation: none; } }
 
 .dream-queue { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; }
 .dream-queue li { display: flex; align-items: baseline; gap: 8px; padding: 9px 2px;
