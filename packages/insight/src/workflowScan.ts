@@ -7,7 +7,7 @@
 // servers, hooks), keyed to their exact inventory names so the result binds
 // straight to a GemSelection. This is the trust boundary: everything downstream
 // (the ACP recommender, the UI) only ranks/explains what this produced.
-import { readdirSync, readFileSync, statSync } from "node:fs";
+import { readdirSync, readFileSync, statSync, openSync, readSync, closeSync } from "node:fs";
 import { join } from "node:path";
 import type { ArtifactType, ProjectInventory, HookArtifact } from "@agentgem/model";
 import { scrubStep, scrubProse, type ScrubbedStep } from "./scrub.js";
@@ -92,17 +92,33 @@ export interface WorkflowSignal {
 }
 
 // A session's cwd never changes; read just enough lines to find it.
+// The session cwd lives in the FIRST record of a transcript (session metadata), so a bounded
+// head read finds it — reading the whole (often multi-MB) file just to parse line 1 is what made
+// bucketTranscriptsByCwd read the entire ~GB corpus per Mine load. Matches the same head-read
+// assumption testbed's discoverProjects already relies on. A cwd absent from the first 64KB is
+// treated as "no cwd" (the file is skipped from bucketing), exactly as a null return was before.
+const CWD_HEAD_BYTES = 1 << 16; // 64KB
+
 function sessionCwd(file: string): string | null {
-  let text: string;
-  try { text = readFileSync(file, "utf8"); } catch { return null; }
-  for (const line of text.split("\n")) {
-    if (!line.trim()) continue;
-    try {
-      const rec = JSON.parse(line) as Record<string, unknown>;
-      if (typeof rec.cwd === "string") return rec.cwd;
-    } catch { /* skip malformed */ }
-  }
-  return null;
+  let fd: number;
+  try { fd = openSync(file, "r"); } catch { return null; }
+  try {
+    const buf = Buffer.alloc(CWD_HEAD_BYTES);
+    const n = readSync(fd, buf, 0, CWD_HEAD_BYTES, 0);
+    const text = buf.toString("utf8", 0, n);
+    // Only scan COMPLETE lines: if the 64KB window cut the last line mid-way, drop it so we never
+    // JSON.parse a truncated record. The cwd record is line 1, so this never loses it in practice.
+    const lastNl = text.lastIndexOf("\n");
+    const scannable = lastNl >= 0 ? text.slice(0, lastNl) : text;
+    for (const line of scannable.split("\n")) {
+      if (!line.trim()) continue;
+      try {
+        const rec = JSON.parse(line) as Record<string, unknown>;
+        if (typeof rec.cwd === "string") return rec.cwd;
+      } catch { /* skip malformed */ }
+    }
+    return null;
+  } catch { return null; } finally { closeSync(fd); }
 }
 
 /**
