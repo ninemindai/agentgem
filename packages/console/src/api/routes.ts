@@ -896,7 +896,7 @@ export const BenchmarkSchema = z.array(z.object({
   producers: z.number(), verifiedProducers: z.number(),
 }));
 export type BenchmarkRow = z.infer<typeof BenchmarkSchema>[number];
-export const benchmarksRoute = defineRoute("GET", "/api/aggregator/benchmarks", {
+export const benchmarksRoute = defineRoute("GET", "/api/benchmark", {
   query: z.object({ gemDigest: z.string().optional() }),
   response: BenchmarkSchema,
 });
@@ -908,7 +908,7 @@ export const EffectivenessSchema = z.array(z.object({
   producers: z.number(), verifiedProducers: z.number(), organic: z.number(), confidence: z.number(), score: z.number(),
 }));
 export type EffectivenessRow = z.infer<typeof EffectivenessSchema>[number];
-export const effectivenessRoute = defineRoute("GET", "/api/aggregator/effectiveness", {
+export const effectivenessRoute = defineRoute("GET", "/api/benchmark/effectiveness", {
   query: z.object({ gemName: z.string().optional(), sort: z.enum(["producers", "score"]).optional(), minConfidence: z.coerce.number().optional() }),
   response: EffectivenessSchema,
 });
