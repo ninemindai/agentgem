@@ -1,124 +1,85 @@
 # Benchmark Producer Wiring Implementation Plan
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+>
+> **Revised after `/plan-eng-review` (2026-07-13).** Key changes vs. the first draft: bulk contribution is **ingredients-only** (no LLM judge, no `facetsForGem`, no per-gem outcome scoping — see spec "Design refinements #2"); scope **sliced into two PRs**; and seven verified defects folded in (see the GSTACK REVIEW REPORT at the bottom).
 
-**Goal:** Make the hosted benchmark receive real, k-anonymised outcome data via a consent-gated producer contribution over the user's published gems.
+**Goal:** Populate the hosted benchmark with real producer + ingredient/usage data via a consent-gated background contribution over the user's published gems, and fix the ingest base-URL default. (Per-model *outcomes* keep coming from the existing interactive `sign_and_publish` path.)
 
-**Architecture:** A local-core "contribute" flow (toggle + manual route + warmable) enumerates the producer's published gems (signed `/my-gems` list ∩ local workspaces), runs one global scan + judge, scopes outcomes per gem by session id, and posts anonymous ed25519-signed attestations to the hosted aggregator. The aggregator ingest is extended to fix its base-URL default and to refresh a producer's outcomes on resubmit.
+**Architecture:** A local-core "contribute" flow (toggle + manual route + cheap warmable) enumerates the producer's published gems (signed `/my-gems` list ∩ local workspaces), scans the corpus once, and posts anonymous ed25519-signed attestations (ingredients only) to the aggregator. Aggregator ingest is extended to default its base URL and refresh a producer's data on resubmit without disturbing the adoption time-series.
 
-**Tech Stack:** TypeScript (ESM, Node ≥24), Zod, `@agentback/openapi` controllers, Drizzle + PGlite (aggregator), Vitest, `@agentgem/insight` (scan/judge/attestation), React (`packages/console`).
+**Tech Stack:** TypeScript (ESM, Node ≥24), Zod, `@agentback/openapi` controllers, Drizzle + PGlite (aggregator), Vitest, `@agentgem/insight` (scan), `@agentgem/archive` (`computeLock`/`readGemArchive`), React (`packages/console`).
+
+## Ship plan (two PRs)
+
+- **PR1 — pipeline (Tasks 1-8):** aggregator + insight + core + warmable. The toggle is flipped for validation via the config file or `AGENTGEM_BENCHMARK_CONTRIBUTE=1`. Lands and bakes on its own.
+- **PR2 — UI (Task 9):** console Benchmark-tab toggle + "Contribute now" button + `styles.css`. Depends on PR1's routes.
 
 ## Global Constraints
 
-- **Attestations are anonymous:** always build with `account: null`. Org attribution comes only from the separate `account_bindings` table, never the payload.
-- **Consent is off by default:** `benchmarkContribute` defaults to `false`; never contribute unless it is explicitly `true`.
-- **Only published gems** are attested — enumerated as (signed owned-gems list) ∩ (local workspaces that rebuild the `Gem`).
-- **No module-scoped mutable state** (repo rule): the toggle helpers read/write disk on every call; no in-memory cache.
-- **Every new `ex-*` className in a `.tsx` gets a matching rule in `packages/marketplace/src/styles.css`** in the same change (console/marketplace has no CSS framework). Reuse `--ink`/`--surface`/`--brand` tokens.
-- **grep the codebase with `grep -a`** — some source files are binary-classified and silently skipped otherwise.
-- Aggregator unit tests live in `src/aggregator/__tests__/` and use `makeTestDb()` from `@agentgem/aggregator`. They are **not** in CI (`test (24)` only gates root `dist/__tests__`); run them locally.
+- **Attestations are anonymous** (`account: null`, ed25519 pubkey only). Org attribution is derived server-side from `account_bindings`, never the payload. Note: contribution is only possible for **bound** producers (the `/my-gems` list is account-scoped), and a bound producer is server-side de-anonymizable — state this in the consent copy.
+- **Consent off by default:** `benchmarkContribute` defaults to `false`; never contribute unless explicitly `true`.
+- **Bulk contribution carries NO outcome histogram** — `buildAttestation` is called without `facets`.
+- **No module-scoped mutable state** (repo rule): toggle helpers read/write disk each call.
+- **PR2 only:** every new `ex-*` className gets a matching `packages/marketplace/src/styles.css` rule in the same change.
+- **grep with `grep -a`** — some source files are binary-classified and silently skipped otherwise.
+- Aggregator unit tests live in `src/aggregator/__tests__/` and use `makeTestDb()`. Not in CI (`test (24)` gates only root `dist/__tests__`); run locally. Rebuild an upstream package's `dist/` (`pnpm --filter <pkg> build`) before running a task whose test imports across the package boundary.
 
 ---
 
 ## File Structure
 
-**Aggregator (receiver):**
-- `packages/aggregator/src/ingest.ts` — resubmit → update-in-place; `IngestResult.updated`.
-- `packages/aggregator/src/project.ts` — new `updateAttestation()`.
-- `src/aggregator.controller.ts` — new signed `POST /api/aggregator/my-gems`.
-
-**Insight (producer library):**
-- `packages/insight/src/ingestClient.ts` — base-URL default resolution.
-- `packages/insight/src/workflowScan.ts` — `ArtifactUsage.sessionIds`.
-- `packages/insight/src/facetsForGem.ts` (new) — per-gem facet scoping helper.
-
-**Core (producer):**
-- `src/benchmark/config.ts` (new) — `benchmarkContribute()` / `setBenchmarkContribute()`.
-- `src/gem/myGemsClient.ts` (new) — signed owned-gems list client.
-- `src/benchmark/contributeCore.ts` (new) — enumerate → scan → judge → per-gem scope → build/sign/post.
-- `src/benchmark.proxy.controller.ts` — `GET/POST /api/benchmark/contribute-setting` + `POST /api/benchmark/contribute`.
-- `src/warm/registry.ts` — `contribute` warmable.
-
-**Console (UI):**
-- `packages/console/src/panels/Benchmark/*` — toggle + "Contribute now" button.
-- `packages/marketplace/src/styles.css` — matching rules.
+**Aggregator:** `packages/aggregator/src/ingest.ts` (resubmit update-in-place, race-safe, `IngestResult.updated`), `project.ts` (`updateAttestation`, preserves `ingested_at`), `src/aggregator.controller.ts` (signed `POST /my-gems`).
+**Insight:** `packages/insight/src/ingestClient.ts` (base default). *(No `facetsForGem`, no `sessionIds` change — dropped.)*
+**Core:** `src/benchmark/config.ts`, `src/gem/myGemsClient.ts`, `src/benchmark/contributeCore.ts`, `src/benchmark.proxy.controller.ts` (routes), `src/warm/registry.ts` (cheap warmable).
+**Console (PR2):** `packages/console/src/panels/Benchmark/*`, `packages/marketplace/src/styles.css`.
 
 ---
 
-## Task 1: Aggregator — update outcomes on resubmit
+## Task 1: Aggregator — refresh on resubmit (preserve `ingested_at`, race-safe)
 
-**Files:**
-- Modify: `packages/aggregator/src/project.ts`
-- Modify: `packages/aggregator/src/ingest.ts`
-- Test: `src/aggregator/__tests__/ingest.test.ts`
+**Files:** Modify `packages/aggregator/src/project.ts`, `packages/aggregator/src/ingest.ts`; Test `src/aggregator/__tests__/ingest.test.ts`.
 
-**Interfaces:**
-- Produces: `updateAttestation(db, id, att)` re-projects one attestation in place; `IngestResult` accepted variant gains `updated: boolean`.
-- Consumes: existing `makeTestDb`, `buildAttestation`, `signAttestation`, `loadOrCreateIdentity`.
+**Interfaces produced:** `updateAttestation(db, id, att)` re-projects in place; `IngestResult` accepted variant gains `updated: boolean`.
 
-- [ ] **Step 1: Write the failing test** — append to `src/aggregator/__tests__/ingest.test.ts`.
+Fixes folded in: **#4** (do NOT stamp `ingested_at` on update — it's the adoption bucket dimension), **#8** (unique-violation race between the manual route and the warm tick).
 
-The existing `make(digest)` builds an attestation with a fresh identity each call (different producer key). Add a helper that reuses one identity and takes judged facets, then assert resubmit replaces the outcome histogram while producer/attestation counts stay put.
+- [ ] **Step 1: Failing test** — append to `ingest.test.ts` (reuses the file's `gem`/`signal`/`make`; add a fixed identity so resubmit == same producer):
 
 ```ts
-import type { SessionFacet } from "@agentgem/insight";
-
-// One fixed identity → same producer key across builds (resubmit == same producer).
 const fixedId = loadOrCreateIdentity(mkdtempSync(join(tmpdir(), "agg-fixed-")));
-function makeWith(digest: string, facets: SessionFacet[]) {
-  // signal must expose the artifact's sessionIds so buildAttestation's caller could scope;
-  // here we pass facets directly to exercise the histogram.
-  return signAttestation(buildAttestation({ gem, signal, gemDigest: digest, salt: "S", facets }), fixedId, 1);
-}
-const facet = (sessionId: string, outcome: SessionFacet["outcome"]): SessionFacet =>
-  ({ sessionId, task: "t", outcome, friction_detail: "", model: "claude-opus-4-8", origin: "llm" });
+const makeFixed = (digest: string, invocations: number) => signAttestation(
+  buildAttestation({ gem, signal: { ...signal, artifacts: [{ ...signal.artifacts[0], invocations, sessionsUsedIn: 2 }] }, gemDigest: digest, salt: "S" }), fixedId, 1);
 
-describe("ingestAttestation resubmit", () => {
-  it("replaces a producer's outcomes on resubmit without adding rows or bumping counts", async () => {
-    const db = await makeTestDb();
-    const first = makeWith("sha256:resub", [facet("s1", "mostly_achieved")]);
-    const r1 = await ingestAttestation(db, first);
-    expect(r1).toMatchObject({ accepted: true, idempotent: false, updated: false });
-
-    const second = makeWith("sha256:resub", [facet("s1", "mostly_achieved"), facet("s2", "mostly_achieved"), facet("s3", "mostly_achieved")]);
-    const r2 = await ingestAttestation(db, second);
-    expect(r2).toMatchObject({ accepted: true, idempotent: true, updated: true });
-
-    // exactly one attestation + one producer, attest_count unchanged
-    expect((await db.execute<{ c: number }>(sql`select count(*)::int as c from attestations`)).rows[0].c).toBe(1);
-    expect((await db.execute<{ c: number }>(sql`select count(*)::int as c from producers`)).rows[0].c).toBe(1);
-    expect((await db.execute<{ c: number }>(sql`select attest_count as c from producers`)).rows[0].c).toBe(1);
-    // outcomes reflect the LATEST submission (mostly total = 3, not 1)
-    const mostly = (await db.execute<{ c: number }>(sql`select coalesce(sum(mostly),0)::int as c from model_outcomes`)).rows[0].c;
-    expect(mostly).toBe(3);
-  });
+it("resubmit refreshes usage in place without new rows, count bumps, or ingested_at churn", async () => {
+  const db = await makeTestDb();
+  const r1 = await ingestAttestation(db, makeFixed("sha256:re", 5));
+  expect(r1).toMatchObject({ accepted: true, idempotent: false, updated: false });
+  const before = (await db.execute<{ t: string }>(sql`select ingested_at::text as t from attestations`)).rows[0].t;
+  const r2 = await ingestAttestation(db, makeFixed("sha256:re", 9));
+  expect(r2).toMatchObject({ accepted: true, idempotent: true, updated: true });
+  expect((await db.execute<{ c: number }>(sql`select count(*)::int c from attestations`)).rows[0].c).toBe(1);
+  expect((await db.execute<{ c: number }>(sql`select attest_count c from producers`)).rows[0].c).toBe(1);
+  const after = (await db.execute<{ t: string }>(sql`select ingested_at::text t from attestations`)).rows[0].t;
+  expect(after).toBe(before); // #4: ingested_at preserved
+  expect((await db.execute<{ c: number }>(sql`select invocations c from usage_edges where invocations = 9`)).rows.length).toBe(1);
 });
 ```
 
-- [ ] **Step 2: Run test to verify it fails**
+- [ ] **Step 2: Run — FAIL.** `cd packages/aggregator && pnpm build && cd ../.. && pnpm vitest run src/aggregator/__tests__/ingest.test.ts -t "resubmit"`
 
-Run: `cd packages/aggregator && pnpm build && cd ../.. && pnpm vitest run src/aggregator/__tests__/ingest.test.ts -t "resubmit"`
-Expected: FAIL — `updated` is `undefined` and `mostly` is `1` (old idempotent path returned early without updating).
-
-- [ ] **Step 3: Add `updateAttestation` to `project.ts`**
-
-Add `eq` to the drizzle import and export the update path (same id, no `attest_count` bump):
+- [ ] **Step 3: `updateAttestation` in `project.ts`** (add `eq` import; NO `ingestedAt` in the `set`, NO `attest_count` bump):
 
 ```ts
 import { eq, sql } from "drizzle-orm";
-// ... existing imports ...
 
-/** Re-project an EXISTING attestation in place (same id) from a resubmission.
- *  Refreshes scalar fields and fully replaces this attestation's usage_edges and
- *  model_outcomes. Does NOT touch producers.attest_count — it is the same producer
- *  re-submitting the same gem version, so k-anon distinct-producer math is unchanged. */
 export async function updateAttestation(db: AppDb, id: string, att: UsageAttestation): Promise<{ id: string; publicIngredients: number; privateCount: number }> {
   const { nodes, privateCount } = publicNodes(att);
   await db.transaction(async (tx) => {
     await tx.update(attestations).set({
       gemName: att.gem.name, harnessId: att.source.harness.id, models: att.source.models,
       scanSessions: att.source.scan.sessions, scanSpanDays: att.source.scan.spanDays,
-      signalDigest: att.evidence.signalDigest, privateCount, ingestedAt: sql`now()`,
+      signalDigest: att.evidence.signalDigest, privateCount, // NOTE: ingested_at intentionally NOT touched (#4)
     }).where(eq(attestations.id, id));
     await tx.delete(usageEdges).where(eq(usageEdges.attestationId, id));
     await tx.delete(modelOutcomes).where(eq(modelOutcomes.attestationId, id));
@@ -135,9 +96,7 @@ export async function updateAttestation(db: AppDb, id: string, att: UsageAttesta
 }
 ```
 
-- [ ] **Step 4: Switch the resubmit branch in `ingest.ts` to update-in-place**
-
-Extend the result type and replace the early-return branch:
+- [ ] **Step 4: Race-safe resubmit branch in `ingest.ts`.** Extend the result type and handle the concurrent-first-insert unique violation on `attestations_gem_digest_producer_key`:
 
 ```ts
 import { projectAttestation, updateAttestation } from "./project.js";
@@ -145,78 +104,79 @@ import { projectAttestation, updateAttestation } from "./project.js";
 export type IngestResult =
   | { accepted: true; id: string; publicIngredients: number; privateCount: number; idempotent: boolean; updated: boolean }
   | { accepted: false; rejected: "bad-signature" | "inconsistent" };
+
+async function priorId(db: AppDb, att: UsageAttestation): Promise<string | null> {
+  const r = await db.execute<{ id: string }>(sql`select id from attestations where gem_digest = ${att.gem.digest} and producer_pubkey = ${att.producer.publicKey}`);
+  return r.rows[0]?.id ?? null;
+}
 ```
 
-Replace the `if (prior.rows.length > 0) { ... }` block:
+Replace the `if (prior.rows.length > 0) { ... }` block through the final `projectAttestation` return with:
 
 ```ts
-  if (prior.rows.length > 0) {
-    const p = await updateAttestation(db, prior.rows[0].id, att);
+  const existing = await priorId(db, att);
+  if (existing) {
+    const p = await updateAttestation(db, existing, att);
     return { accepted: true, ...p, idempotent: true, updated: true };
   }
-  const p = await projectAttestation(db, att);
-  return { accepted: true, ...p, idempotent: false, updated: false };
+  try {
+    const p = await projectAttestation(db, att);
+    return { accepted: true, ...p, idempotent: false, updated: false };
+  } catch (e) {
+    // #8: a concurrent first-insert (manual route vs warm tick) lost the unique race → treat as resubmit.
+    if (String((e as { code?: string }).code) === "23505" || /unique|duplicate/i.test(String((e as Error).message))) {
+      const id = await priorId(db, att);
+      if (id) { const p = await updateAttestation(db, id, att); return { accepted: true, ...p, idempotent: true, updated: true }; }
+    }
+    throw e;
+  }
 ```
 
-(The existing "idempotent on gem_digest" and "two producers" tests still pass: `toMatchObject` is partial, the attestation count stays 1 on resubmit, and two distinct producers still each insert.)
+- [ ] **Step 5: Run — PASS** (new + existing ingest tests). `pnpm vitest run src/aggregator/__tests__/ingest.test.ts`
 
-- [ ] **Step 5: Run tests to verify they pass**
-
-Run: `cd packages/aggregator && pnpm build && cd ../.. && pnpm vitest run src/aggregator/__tests__/ingest.test.ts`
-Expected: PASS (all cases, including the two pre-existing ones).
-
-- [ ] **Step 6: Commit**
-
-```bash
-git add packages/aggregator/src/project.ts packages/aggregator/src/ingest.ts src/aggregator/__tests__/ingest.test.ts
-git commit -m "feat(aggregator): refresh a producer's outcomes on attestation resubmit"
-```
+- [ ] **Step 6: Commit** — `git commit -m "feat(aggregator): refresh producer data on resubmit; preserve ingested_at; race-safe insert"`
 
 ---
 
 ## Task 2: Aggregator — signed `POST /api/aggregator/my-gems`
 
-**Files:**
-- Modify: `src/aggregator.controller.ts`
-- Test: `src/aggregator/__tests__/controller.test.ts`
+**Files:** Modify `packages/aggregator/src/catalog.ts` (payload), `packages/aggregator/src/index.ts` (export), `src/aggregator.controller.ts`; Test `src/aggregator/__tests__/controller.test.ts`.
 
-**Interfaces:**
-- Consumes: `resolveSignedAccount(db, {pubkey,payload,signedAt,signature})` (`packages/aggregator/src/catalog.ts:212`), `listCatalogGemsForOwner(db, accountId)` (`catalog.ts:307`), `myGemsSigningPayload` (new, Task defines it inline).
-- Produces: route `POST /api/aggregator/my-gems`, body `{ pubkey, signedAt, signature }`, response `{ gems: { key, version, name }[] }`. Mirrors the existing `/gem-status` route exactly.
+Fixes folded in: **#7** (`CatalogRow.gemKey` not `.key`; `resolveSignedAccount` returns a discriminated union — narrow on `.ok`; test must use `Date.now()` or it fails the 300 s freshness window).
 
-- [ ] **Step 1: Add a signing payload for the list request** in `packages/aggregator/src/catalog.ts` (next to `gemStatusSigningPayload`).
+- [ ] **Step 1:** Add to `catalog.ts` next to `gemStatusSigningPayload`:
 
 ```ts
-/** Signed payload proving producer-key ownership for the owned-gems list. */
 export function myGemsSigningPayload(pubkey: string, signedAt: number): string {
   return canonicalJSON({ action: "my-gems", pubkey, signedAt });
 }
 ```
+Confirm it's re-exported: `grep -a "catalog" packages/aggregator/src/index.ts`.
 
-Export it from `packages/aggregator/src/index.ts` if `catalog.ts` exports are re-exported there (they are — verify with `grep -a "catalog" packages/aggregator/src/index.ts`).
-
-- [ ] **Step 2: Write the failing controller test** in `src/aggregator/__tests__/controller.test.ts` (follow the file's existing pattern for building a controller + signed request; reuse its `makeTestDb` + identity helpers).
+- [ ] **Step 2: Failing test** in `controller.test.ts` (reuse the file's bind + publish helpers; **`signedAt: Date.now()`**):
 
 ```ts
 it("my-gems returns the signed-in producer's owned gems", async () => {
   const db = await makeTestDb();
-  // bind pubkey -> account, publish one gem owned by that account (reuse the file's existing
-  // publish/bind helpers), then:
+  // bind pubkey->account and publish a gem "demo" owned by that account (file's existing helpers)…
   const id = loadOrCreateIdentity(mkdtempSync(join(tmpdir(), "mg-")));
-  const signedAt = 1;
-  const signature = signDetached(id, myGemsSigningPayload(id.publicKey, signedAt)); // helper the file already uses
-  const ctrl = new AggregatorController(db);
-  const r = await ctrl.myGems({ body: { pubkey: id.publicKey, signedAt, signature } });
+  const signedAt = Date.now();                                   // #7: within FRESHNESS_MS
+  const signature = /* file's signer */ signDetached(id, myGemsSigningPayload(id.publicKey, signedAt));
+  const r = await new AggregatorController(db).myGems({ body: { pubkey: id.publicKey, signedAt, signature } });
   expect(r.gems.map((g) => g.name)).toContain("demo");
+});
+it("my-gems returns [] for an unbound / bad-signature key", async () => {
+  const db = await makeTestDb();
+  const id = loadOrCreateIdentity(mkdtempSync(join(tmpdir(), "mg2-")));
+  const signedAt = Date.now();
+  const r = await new AggregatorController(db).myGems({ body: { pubkey: id.publicKey, signedAt, signature: signDetached(id, myGemsSigningPayload(id.publicKey, signedAt)) } });
+  expect(r.gems).toEqual([]);                                    // no account_bindings row → resolveSignedAccount not ok
 });
 ```
 
-- [ ] **Step 3: Run it — expect FAIL** (`ctrl.myGems` undefined).
+- [ ] **Step 3: Run — FAIL.** `pnpm vitest run src/aggregator/__tests__/controller.test.ts -t "my-gems"`
 
-Run: `pnpm vitest run src/aggregator/__tests__/controller.test.ts -t "my-gems"`
-Expected: FAIL.
-
-- [ ] **Step 4: Add the route** to `AggregatorController` in `src/aggregator.controller.ts` (place it beside `/gem-status`).
+- [ ] **Step 4: Route** in `AggregatorController` (narrow on `.ok`; map `gemKey`):
 
 ```ts
 import { resolveSignedAccount, listCatalogGemsForOwner, myGemsSigningPayload } from "@agentgem/aggregator";
@@ -224,7 +184,6 @@ import { resolveSignedAccount, listCatalogGemsForOwner, myGemsSigningPayload } f
 const MyGemsBody = z.object({ pubkey: z.string(), signedAt: z.number(), signature: z.string() });
 const MyGemsResult = z.object({ gems: z.array(z.object({ key: z.string(), version: z.string(), name: z.string() })) });
 
-// inside the class:
 @post("/my-gems", { body: MyGemsBody, response: MyGemsResult })
 async myGems(input: { body: z.infer<typeof MyGemsBody> }): Promise<z.infer<typeof MyGemsResult>> {
   const acct = await resolveSignedAccount(this.db, {
@@ -232,431 +191,123 @@ async myGems(input: { body: z.infer<typeof MyGemsBody> }): Promise<z.infer<typeo
     payload: myGemsSigningPayload(input.body.pubkey, input.body.signedAt),
     signedAt: input.body.signedAt, signature: input.body.signature,
   });
-  if (!acct?.accountId) return { gems: [] };
+  if (!acct.ok) return { gems: [] };                              // #7: union — narrow on .ok
   const rows = await listCatalogGemsForOwner(this.db, acct.accountId);
-  return { gems: rows.map((g) => ({ key: g.key, version: g.version, name: g.key.split("/").slice(1).join("/") || g.key })) };
+  return { gems: rows.map((g) => ({ key: g.gemKey, version: g.version, name: g.gemKey.split("/").slice(1).join("/") || g.gemKey })) };
 }
 ```
+Verify `resolveSignedAccount`'s exact success shape: `grep -a "resolveSignedAccount" packages/aggregator/src/catalog.ts` (it returns `{ ok: true, accountId, login } | { ok: false, rejected }`).
 
-Confirm `resolveSignedAccount`'s exact return shape with `grep -a "export .*resolveSignedAccount" packages/aggregator/src/catalog.ts` and adjust the `acct?.accountId` access to match (it maps pubkey → `account_bindings` → accountId).
+- [ ] **Step 5: Run — PASS.** `pnpm vitest run src/aggregator/__tests__/controller.test.ts`
 
-- [ ] **Step 5: Run tests — expect PASS.** Also confirm `/gem-status` still passes.
-
-Run: `pnpm vitest run src/aggregator/__tests__/controller.test.ts`
-Expected: PASS.
-
-- [ ] **Step 6: Commit**
-
-```bash
-git add packages/aggregator/src/catalog.ts packages/aggregator/src/index.ts src/aggregator.controller.ts src/aggregator/__tests__/controller.test.ts
-git commit -m "feat(aggregator): signed POST /my-gems lists the producer's owned gems"
-```
+- [ ] **Step 6: Commit** — `git commit -m "feat(aggregator): signed POST /my-gems lists the producer's owned gems"`
 
 ---
 
 ## Task 3: Insight — ingest client base default
 
-**Files:**
-- Modify: `packages/insight/src/ingestClient.ts`
-- Test: `packages/insight/src/__tests__/ingestClient.test.ts` (create if absent)
+**Files:** Modify `packages/insight/src/ingestClient.ts`; Test `packages/insight/src/__tests__/ingestClient.test.ts`.
 
-**Interfaces:**
-- Produces: `postAttestation` resolves its endpoint `explicit → AGENTGEM_INGEST_URL → AGENTGEM_AGGREGATOR_URL + "/api/aggregator/ingest" → DEFAULT + "/api/aggregator/ingest"`; explicit `""` disables (returns `{ skipped: true }`).
+- [ ] **Step 1: Failing test** — default → `https://api.agentgem.ai/api/aggregator/ingest`; `AGENTGEM_AGGREGATOR_URL` → `<base>/api/aggregator/ingest`; `AGENTGEM_INGEST_URL` full-URL override wins; explicit `""` → `{ skipped: true }` and `http` not called. (Delete both env vars in the default case.)
 
-- [ ] **Step 1: Write the failing test.**
+- [ ] **Step 2: Run — FAIL.** `pnpm vitest run packages/insight/src/__tests__/ingestClient.test.ts`
 
-```ts
-import { describe, it, expect, vi } from "vitest";
-import { postAttestation } from "../ingestClient.js";
-const att = { signature: "x" } as any;
-
-describe("postAttestation endpoint resolution", () => {
-  it("falls back to the aggregator default ingest path when no env is set", async () => {
-    delete process.env.AGENTGEM_INGEST_URL; delete process.env.AGENTGEM_AGGREGATOR_URL;
-    const http = vi.fn(async () => ({ status: 200, json: async () => ({ ingestId: "i1" }) }));
-    await postAttestation({ attestation: att, http });
-    expect(http.mock.calls[0][0]).toBe("https://api.agentgem.ai/api/aggregator/ingest");
-  });
-  it("uses AGENTGEM_AGGREGATOR_URL + ingest path", async () => {
-    process.env.AGENTGEM_AGGREGATOR_URL = "http://127.0.0.1:9"; delete process.env.AGENTGEM_INGEST_URL;
-    const http = vi.fn(async () => ({ status: 200, json: async () => ({ ingestId: "i1" }) }));
-    await postAttestation({ attestation: att, http });
-    expect(http.mock.calls[0][0]).toBe("http://127.0.0.1:9/api/aggregator/ingest");
-  });
-  it("explicit empty endpoint disables", async () => {
-    const http = vi.fn();
-    expect(await postAttestation({ attestation: att, endpoint: "", http })).toEqual({ skipped: true });
-    expect(http).not.toHaveBeenCalled();
-  });
-});
-```
-
-- [ ] **Step 2: Run — expect FAIL** (`http` called with `""` today, or default resolution missing).
-
-Run: `pnpm vitest run packages/insight/src/__tests__/ingestClient.test.ts`
-Expected: FAIL.
-
-- [ ] **Step 3: Implement resolution.** Replace the endpoint line in `postAttestation`:
+- [ ] **Step 3: Implement** — replace the endpoint line in `postAttestation`:
 
 ```ts
 const DEFAULT_AGGREGATOR_URL = "https://api.agentgem.ai";
-
 function resolveIngestEndpoint(explicit?: string): string {
-  if (explicit !== undefined) return explicit;                       // incl. "" = disabled
-  if (process.env.AGENTGEM_INGEST_URL) return process.env.AGENTGEM_INGEST_URL; // full URL override
-  const base = process.env.AGENTGEM_AGGREGATOR_URL || DEFAULT_AGGREGATOR_URL;
-  return `${base}/api/aggregator/ingest`;
+  if (explicit !== undefined) return explicit;                    // incl. "" = disabled
+  if (process.env.AGENTGEM_INGEST_URL) return process.env.AGENTGEM_INGEST_URL; // full-URL override
+  return `${process.env.AGENTGEM_AGGREGATOR_URL || DEFAULT_AGGREGATOR_URL}/api/aggregator/ingest`;
 }
 ```
+Use `const endpoint = resolveIngestEndpoint(args.endpoint);` (the existing `if (!endpoint) return { skipped: true };` still covers `""`).
 
-In `postAttestation`, replace `const endpoint = args.endpoint ?? process.env.AGENTGEM_INGEST_URL ?? "";` with `const endpoint = resolveIngestEndpoint(args.endpoint);` (the existing `if (!endpoint) return { skipped: true };` still handles the `""` case).
+- [ ] **Step 4: Run — PASS.** `cd packages/insight && pnpm build && cd ../.. && pnpm vitest run packages/insight/src/__tests__/ingestClient.test.ts`
 
-- [ ] **Step 4: Run — expect PASS.**
-
-Run: `cd packages/insight && pnpm build && cd ../.. && pnpm vitest run packages/insight/src/__tests__/ingestClient.test.ts`
-Expected: PASS.
-
-- [ ] **Step 5: Commit**
-
-```bash
-git add packages/insight/src/ingestClient.ts packages/insight/src/__tests__/ingestClient.test.ts
-git commit -m "fix(insight): ingest client defaults to the hosted aggregator like every sibling client"
-```
+- [ ] **Step 5: Commit** — `git commit -m "fix(insight): ingest client defaults to the hosted aggregator"`
 
 ---
 
-## Task 4: Insight — per-artifact `sessionIds` + `facetsForGem`
+## Task 4: Core — `benchmarkContribute` toggle
 
-**Files:**
-- Modify: `packages/insight/src/workflowScan.ts` (`ArtifactUsage` + its construction)
-- Create: `packages/insight/src/facetsForGem.ts`
-- Modify: `packages/insight/src/index.ts` (export `facetsForGem`)
-- Test: `packages/insight/src/__tests__/facetsForGem.test.ts`
+**Files:** Create `src/benchmark/config.ts`; Test `src/benchmark/__tests__/config.test.ts`. Copy `src/dream/config.ts` verbatim, swapping the path to `<base>/.agentgem/benchmark/config.json` and env to `AGENTGEM_BENCHMARK_CONTRIBUTE`.
 
-**Interfaces:**
-- Produces: `ArtifactUsage.sessionIds: string[]`; `facetsForGem(signal: WorkflowSignal, gem: Gem, facets: SessionFacet[]): SessionFacet[]` — returns only facets whose `sessionId` is in the union of the gem's skill/mcp artifacts' `sessionIds`.
-- Consumes: `Gem` (`@agentgem/model`), `SessionFacet` (`./facets.js`), `WorkflowSignal`/`ArtifactUsage` (`./workflowScan.js`).
-
-- [ ] **Step 1: Expose `sessionIds` on `ArtifactUsage`.** In `workflowScan.ts` add the field to the `ArtifactUsage` interface (near `invocations`/`sessionsUsedIn`, ~line 18):
-
-```ts
-  sessionsUsedIn: number;     // distinct sessions it fired in
-  sessionIds: string[];       // the distinct session ids (superset coordinate for per-gem outcome scoping)
-```
-
-Where the `artifacts: ArtifactUsage[]` array is built from the accumulator (~line 582-588, `sessionsUsedIn: e?.acc.sessions.size ?? 0`), add:
-
-```ts
-      sessionsUsedIn: e?.acc.sessions.size ?? 0,
-      sessionIds: e ? [...e.acc.sessions] : [],
-```
-
-(The accumulator already holds `sessions: Set<string>` — line ~228/434 — so this only surfaces existing data.)
-
-- [ ] **Step 2: Write the failing test** `packages/insight/src/__tests__/facetsForGem.test.ts`.
-
-```ts
-import { describe, it, expect } from "vitest";
-import { facetsForGem } from "../facetsForGem.js";
-import type { SessionFacet } from "../facets.js";
-
-const gem = { name: "g", createdFrom: "c", artifacts: [{ type: "skill" as const, name: "qa", source: "s", content: "x" }], checks: [], requiredSecrets: [] };
-const signal: any = { artifacts: [
-  { type: "skill", name: "qa", invocations: 3, sessionsUsedIn: 2, sessionIds: ["s1", "s2"] },
-  { type: "skill", name: "other", invocations: 1, sessionsUsedIn: 1, sessionIds: ["s3"] },
-] };
-const f = (sessionId: string): SessionFacet => ({ sessionId, task: "t", outcome: "mostly_achieved", friction_detail: "", model: "m", origin: "llm" });
-
-describe("facetsForGem", () => {
-  it("keeps only facets for sessions where the gem's artifacts were used", () => {
-    const kept = facetsForGem(signal, gem as any, [f("s1"), f("s2"), f("s3")]);
-    expect(kept.map((x) => x.sessionId).sort()).toEqual(["s1", "s2"]);
-  });
-});
-```
-
-- [ ] **Step 3: Run — expect FAIL** (module missing).
-
-Run: `pnpm vitest run packages/insight/src/__tests__/facetsForGem.test.ts`
-Expected: FAIL.
-
-- [ ] **Step 4: Implement `facetsForGem.ts`.**
-
-```ts
-// Copyright (c) 2026 NineMind, Inc.
-// SPDX-License-Identifier: MIT
-// Scope judged outcomes to a single gem: keep only the facets whose session used
-// one of the gem's skill/mcp artifacts. Enables per-gem outcome histograms from a
-// single global scan+judge (no per-gem cwd needed).
-import type { Gem } from "@agentgem/model";
-import type { SessionFacet } from "./facets.js";
-import type { WorkflowSignal } from "./workflowScan.js";
-
-export function facetsForGem(signal: WorkflowSignal, gem: Gem, facets: SessionFacet[]): SessionFacet[] {
-  const names = new Set<string>();
-  for (const a of gem.artifacts) if (a.type === "skill" || a.type === "mcpServer") names.add(`${a.type}:${a.name}`);
-  const sessions = new Set<string>();
-  for (const u of signal.artifacts) {
-    const key = `${u.type === "mcp" ? "mcpServer" : u.type}:${u.name}`;
-    if (names.has(key)) for (const sid of u.sessionIds) sessions.add(sid);
-  }
-  return facets.filter((f) => sessions.has(f.sessionId));
-}
-```
-
-Verify the artifact-`type` vocabulary: `grep -a "type:" packages/insight/src/workflowScan.ts | head` and the gem artifact type names (`grep -a "type ===" packages/insight/src/attestation.ts`). Align the `mcp`/`mcpServer` normalization above with what the scan emits and what `buildAttestation` matches (attestation.ts keys by `${a.type}:${a.name}` on gem artifacts).
-
-- [ ] **Step 5: Export + run — expect PASS.** Add `export * from "./facetsForGem.js";` to `packages/insight/src/index.ts`.
-
-Run: `cd packages/insight && pnpm build && cd ../.. && pnpm vitest run packages/insight/src/__tests__/facetsForGem.test.ts`
-Expected: PASS.
-
-- [ ] **Step 6: Commit**
-
-```bash
-git add packages/insight/src/workflowScan.ts packages/insight/src/facetsForGem.ts packages/insight/src/index.ts packages/insight/src/__tests__/facetsForGem.test.ts
-git commit -m "feat(insight): per-artifact sessionIds + facetsForGem for per-gem outcome scoping"
-```
+- [ ] **Step 1: Failing test** — default `false`; `setBenchmarkContribute(true)` persists; corrupt JSON → falls back to `false`. Run against a temp `base`.
+- [ ] **Step 2: Run — FAIL.** `pnpm vitest run src/benchmark/__tests__/config.test.ts`
+- [ ] **Step 3: Implement** `benchmarkContribute(base?)` / `setBenchmarkContribute(enabled, base?)` reading `cfgPath(base)` fresh each call (mirror `dreamEnabled`/`setDreamEnabled`). Confirm the `agentgemHome` import: `grep -a "agentgemHome" src/dream/config.ts`.
+- [ ] **Step 4: Run — PASS.**
+- [ ] **Step 5: Commit** — `git commit -m "feat(benchmark): benchmarkContribute consent toggle (off by default)"`
 
 ---
 
-## Task 5: Core — `benchmarkContribute` toggle persistence
+## Task 5: Core — signed owned-gems client
 
-**Files:**
-- Create: `src/benchmark/config.ts`
-- Test: `src/benchmark/__tests__/config.test.ts`
+**Files:** Create `src/gem/myGemsClient.ts`; Test `src/gem/__tests__/myGemsClient.test.ts`. Mirror `src/gem/gemStatusClient.ts` (same base resolution + `sign` helper).
 
-**Interfaces:**
-- Produces: `benchmarkContribute(base?): boolean` (default false), `setBenchmarkContribute(enabled: boolean, base?): void`. Reads/writes `<base>/.agentgem/benchmark/config.json`; live (fresh disk read each call). Mirrors `src/dream/config.ts`.
+**Interfaces produced:** `postMyGems({ identity, endpoint?, http?, now? }): Promise<{ key: string; version: string; name: string }[]>`. Degrades to `[]` on non-2xx / throw / malformed body.
 
-- [ ] **Step 1: Write the failing test.**
-
-```ts
-import { describe, it, expect } from "vitest";
-import { mkdtempSync } from "node:fs";
-import { tmpdir } from "node:os";
-import { join } from "node:path";
-import { benchmarkContribute, setBenchmarkContribute } from "../config.js";
-
-describe("benchmarkContribute toggle", () => {
-  it("defaults to false and persists across calls", () => {
-    const base = mkdtempSync(join(tmpdir(), "bmk-"));
-    expect(benchmarkContribute(base)).toBe(false);
-    setBenchmarkContribute(true, base);
-    expect(benchmarkContribute(base)).toBe(true);
-    setBenchmarkContribute(false, base);
-    expect(benchmarkContribute(base)).toBe(false);
-  });
-});
-```
-
-- [ ] **Step 2: Run — expect FAIL.**
-
-Run: `pnpm vitest run src/benchmark/__tests__/config.test.ts`
-Expected: FAIL.
-
-- [ ] **Step 3: Implement `config.ts`** (copy the shape of `src/dream/config.ts` verbatim, changing paths/env).
-
-```ts
-// Copyright (c) 2026 NineMind, Inc.
-// SPDX-License-Identifier: MIT
-import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
-import { join } from "node:path";
-import { agentgemHome } from "@agentgem/model"; // same source dream/config.ts uses; confirm import
-
-function cfgPath(base: string): string { return join(base, ".agentgem", "benchmark", "config.json"); }
-
-export function benchmarkContribute(base: string = agentgemHome()): boolean {
-  try {
-    const cfg = JSON.parse(readFileSync(cfgPath(base), "utf8")) as { enabled?: boolean };
-    if (typeof cfg.enabled === "boolean") return cfg.enabled;
-  } catch { /* fall through to env / default */ }
-  const env = process.env.AGENTGEM_BENCHMARK_CONTRIBUTE;
-  return env === "1" || env === "true";
-}
-
-export function setBenchmarkContribute(enabled: boolean, base: string = agentgemHome()): void {
-  try {
-    mkdirSync(join(base, ".agentgem", "benchmark"), { recursive: true });
-    writeFileSync(cfgPath(base), JSON.stringify({ enabled }));
-  } catch { /* best-effort, mirrors setDreamEnabled */ }
-}
-```
-
-Confirm the `agentgemHome` import path used by `src/dream/config.ts` (`grep -a "agentgemHome" src/dream/config.ts`) and match it exactly.
-
-- [ ] **Step 4: Run — expect PASS.**
-
-Run: `pnpm vitest run src/benchmark/__tests__/config.test.ts`
-Expected: PASS.
-
-- [ ] **Step 5: Commit**
-
-```bash
-git add src/benchmark/config.ts src/benchmark/__tests__/config.test.ts
-git commit -m "feat(benchmark): benchmarkContribute consent toggle (off by default), dream-config pattern"
-```
+- [ ] **Step 1: Failing test** — signed POST to `/api/aggregator/my-gems` returns owned gems; non-2xx → `[]`; thrown http → `[]`.
+- [ ] **Step 2: Run — FAIL.** `pnpm vitest run src/gem/__tests__/myGemsClient.test.ts`
+- [ ] **Step 3: Implement** — copy `gemStatusClient.ts` structure; swap payload to `myGemsSigningPayload(identity.publicKey, signedAt)`, path to `/api/aggregator/my-gems`, parse `body.gems`. Match the exact `sign` call `gemStatusClient` uses (`grep -a "sign" src/gem/gemStatusClient.ts`) so the aggregator's `verify` accepts it. `signedAt = args.now ?? Date.now()`.
+- [ ] **Step 4: Run — PASS.**
+- [ ] **Step 5: Commit** — `git commit -m "feat(gem): postMyGems signed owned-gems client"`
 
 ---
 
-## Task 6: Core — signed owned-gems client
+## Task 6: Core — `contributeCore` (ingredients-only)
 
-**Files:**
-- Create: `src/gem/myGemsClient.ts`
-- Test: `src/gem/__tests__/myGemsClient.test.ts`
+**Files:** Create `src/benchmark/contributeCore.ts`; Test `src/benchmark/__tests__/contributeCore.test.ts`.
 
-**Interfaces:**
-- Consumes: `myGemsSigningPayload` (Task 2), `signDetached`/identity signing as used by `src/gem/gemStatusClient.ts`, `resolveBase` pattern from `gemStatusClient.ts`.
-- Produces: `postMyGems({ identity, endpoint?, http? }): Promise<{ key: string; version: string; name: string }[]>`. Mirrors `postGemStatus` (`src/gem/gemStatusClient.ts:25`).
+Fixes folded in: **#3** (`readGemArchive(readWorkspace(name).files)` — `readWorkspace` has **no** `.gem`), **#5** (`computeLock(files).gemDigest` — there is no `gemDigestOf`), **#9** (match owned gem → workspace and confirm identity, don't attest an unrelated same-named workspace). **No judge, no facets** — ingredients-only.
 
-- [ ] **Step 1: Write the failing test** (inject `http`, assert it signs + posts to `/api/aggregator/my-gems` and parses `gems`).
+**Interfaces produced:** `contribute(deps?): Promise<{ enabled: boolean; results: { gem: string; status: "ingested" | "updated" | "skipped" | "failed"; reason?: string }[] }>`. All effects injectable.
+
+- [ ] **Step 1: Failing test** (injected deps; no fs/net):
 
 ```ts
-import { describe, it, expect, vi } from "vitest";
-import { mkdtempSync } from "node:fs"; import { tmpdir } from "node:os"; import { join } from "node:path";
-import { loadOrCreateIdentity } from "@agentgem/model";
-import { postMyGems } from "../myGemsClient.js";
-
-describe("postMyGems", () => {
-  it("posts a signed request and returns owned gems", async () => {
-    const identity = loadOrCreateIdentity(mkdtempSync(join(tmpdir(), "mg-c-")));
-    const http = vi.fn(async () => ({ status: 200, json: async () => ({ gems: [{ key: "me/demo", version: "1.0.0", name: "demo" }] }) }));
-    const gems = await postMyGems({ identity, endpoint: "http://127.0.0.1:9", http });
-    expect(http.mock.calls[0][0]).toBe("http://127.0.0.1:9/api/aggregator/my-gems");
-    expect(gems).toEqual([{ key: "me/demo", version: "1.0.0", name: "demo" }]);
-  });
-});
-```
-
-- [ ] **Step 2: Run — expect FAIL.**
-
-Run: `pnpm vitest run src/gem/__tests__/myGemsClient.test.ts`
-Expected: FAIL.
-
-- [ ] **Step 3: Implement `myGemsClient.ts`** — open `src/gem/gemStatusClient.ts` and copy its structure (base resolution, `sign`, POST, error→[] degradation). Swap the payload/path/parse:
-
-```ts
-// Copyright (c) 2026 NineMind, Inc.
-// SPDX-License-Identifier: MIT
-import type { Identity } from "@agentgem/model";
-import { sign } from "@agentgem/model";                       // same signer gemStatusClient uses; confirm name
-import { myGemsSigningPayload } from "@agentgem/aggregator";
-import { DEFAULT_AGGREGATOR_URL } from "./shareClient.js";
-
-export type MyGemsHttp = (url: string, init: { method: string; headers: Record<string, string>; body: string }) => Promise<{ status: number; json(): Promise<unknown> }>;
-const defaultHttp: MyGemsHttp = async (url, init) => { const r = await fetch(url, { ...init, signal: AbortSignal.timeout(10_000) }); return { status: r.status, json: () => r.json() }; };
-function resolveBase(endpoint?: string): string { if (endpoint !== undefined) return endpoint; if (process.env.AGENTGEM_AGGREGATOR_URL) return process.env.AGENTGEM_AGGREGATOR_URL; return DEFAULT_AGGREGATOR_URL; }
-
-export async function postMyGems(args: { identity: Identity; endpoint?: string; http?: MyGemsHttp; now?: number }): Promise<{ key: string; version: string; name: string }[]> {
-  const base = resolveBase(args.endpoint); if (!base) return [];
-  const signedAt = args.now ?? Date.now();
-  const payload = myGemsSigningPayload(args.identity.publicKey, signedAt);
-  const signature = sign(args.identity, payload);          // match gemStatusClient's signing call exactly
-  const http = args.http ?? defaultHttp;
-  try {
-    const res = await http(`${base}/api/aggregator/my-gems`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ pubkey: args.identity.publicKey, signedAt, signature }) });
-    if (res.status < 200 || res.status >= 300) return [];
-    const body = (await res.json()) as { gems?: { key: string; version: string; name: string }[] };
-    return Array.isArray(body.gems) ? body.gems : [];
-  } catch { return []; }
-}
-```
-
-Match `sign`/signing to what `gemStatusClient.ts` actually calls (`grep -a "sign" src/gem/gemStatusClient.ts`) — reuse the identical helper so the aggregator's `verify` accepts it.
-
-- [ ] **Step 4: Run — expect PASS.**
-
-Run: `pnpm vitest run src/gem/__tests__/myGemsClient.test.ts`
-Expected: PASS.
-
-- [ ] **Step 5: Commit**
-
-```bash
-git add src/gem/myGemsClient.ts src/gem/__tests__/myGemsClient.test.ts
-git commit -m "feat(gem): postMyGems signed owned-gems list client"
-```
-
----
-
-## Task 7: Core — `contributeCore`
-
-**Files:**
-- Create: `src/benchmark/contributeCore.ts`
-- Test: `src/benchmark/__tests__/contributeCore.test.ts`
-
-**Interfaces:**
-- Consumes: `benchmarkContribute` (Task 5), `postMyGems` (Task 6), `listWorkspaces`/`readWorkspace` (`@agentgem/base`), `scanWorkflow`/`judgeSessions`/`buildAttestation`/`facetsForGem` (`@agentgem/insight`), `signAttestation` + `postAttestation` (`@agentgem/insight`), `loadOrCreateIdentity`/`claudeTranscriptsForCwd`.
-- Produces: `contribute(deps?): Promise<{ enabled: boolean; results: { gem: string; status: "ingested" | "updated" | "skipped" | "failed"; reason?: string }[] }>`. All external effects injectable for tests.
-
-- [ ] **Step 1: Write the failing test** with fully injected deps (no real scan/judge/network).
-
-```ts
-import { describe, it, expect, vi } from "vitest";
-import { contribute } from "../contributeCore.js";
-
 const deps = () => ({
   enabled: () => true,
   identity: { publicKey: "PK" } as any,
   listOwned: vi.fn(async () => [{ key: "me/demo", version: "1", name: "demo" }, { key: "me/ghost", version: "1", name: "ghost" }]),
-  readWorkspaceGem: vi.fn((name: string) => name === "demo" ? { name: "demo", artifacts: [{ type: "skill", name: "qa" }] } as any : null),
-  scan: vi.fn(() => ({ artifacts: [{ type: "skill", name: "qa", invocations: 1, sessionsUsedIn: 1, sessionIds: ["s1"] }] }) as any),
-  judge: vi.fn(async () => ({ facets: [{ sessionId: "s1", outcome: "mostly_achieved", model: "m", friction_detail: "", origin: "llm", task: "t" }], degraded: false })),
-  build: vi.fn((a: any) => ({ built: a.gem.name, facets: a.facets })),
+  readGem: vi.fn((name: string) => name === "demo" ? { name: "demo", artifacts: [{ type: "skill", name: "qa" }] } as any : null),
+  scan: vi.fn(() => ({ artifacts: [{ type: "skill", name: "qa", invocations: 1, sessionsUsedIn: 1 }], sessions: { scanned: 1, firstMs: 0, lastMs: 0, spanDays: 1 }, models: [] }) as any),
+  digestOf: vi.fn(() => "sha256:d"),
+  build: vi.fn((a: any) => { expect(a.facets).toBeUndefined(); return { gem: { name: a.gem.name } }; }), // ingredients-only: no facets
   sign: vi.fn((a: any) => a),
   post: vi.fn(async () => ({ ingestId: "i1" })),
 });
-
-describe("contribute", () => {
-  it("no-ops when disabled", async () => {
-    const d = { ...deps(), enabled: () => false };
-    const r = await contribute(d as any);
-    expect(r).toEqual({ enabled: false, results: [] });
-    expect(d.post).not.toHaveBeenCalled();
-  });
-  it("attests owned gems that have a local workspace, skips the rest", async () => {
-    const d = deps();
-    const r = await contribute(d as any);
-    expect(d.post).toHaveBeenCalledTimes(1);                        // only "demo"
-    expect(r.results).toEqual([
-      { gem: "demo", status: "ingested" },
-      { gem: "ghost", status: "skipped", reason: "no local workspace" },
-    ]);
-  });
-  it("marks a gem failed when post throws, batch continues", async () => {
-    const d = deps(); d.post = vi.fn(async () => { throw new Error("net"); });
-    const r = await contribute(d as any);
-    expect(r.results.find((x) => x.gem === "demo")).toMatchObject({ status: "failed" });
-  });
+it("no-ops when disabled", async () => { const d = { ...deps(), enabled: () => false }; expect(await contribute(d as any)).toEqual({ enabled: false, results: [] }); expect(d.post).not.toHaveBeenCalled(); });
+it("attests owned gems with a matching workspace, skips the rest, never judges", async () => {
+  const d = deps(); const r = await contribute(d as any);
+  expect(d.post).toHaveBeenCalledTimes(1);
+  expect(r.results).toEqual([{ gem: "demo", status: "ingested" }, { gem: "ghost", status: "skipped", reason: "no local workspace" }]);
 });
+it("isolates a per-gem post failure", async () => { const d = deps(); d.post = vi.fn(async () => { throw new Error("net"); }); expect((await contribute(d as any)).results[0]).toMatchObject({ status: "failed" }); });
 ```
 
-- [ ] **Step 2: Run — expect FAIL.**
+- [ ] **Step 2: Run — FAIL.** `pnpm vitest run src/benchmark/__tests__/contributeCore.test.ts`
 
-Run: `pnpm vitest run src/benchmark/__tests__/contributeCore.test.ts`
-Expected: FAIL.
-
-- [ ] **Step 3: Implement `contributeCore.ts`.** Real deps default to the concrete implementations; tests inject fakes. One global scan+judge, per-gem facet scoping.
+- [ ] **Step 3: Implement.** Real deps wire the concrete impls; scan is done **once** and reused across gems.
 
 ```ts
-// Copyright (c) 2026 NineMind, Inc.
-// SPDX-License-Identifier: MIT
 import { homedir } from "node:os"; import { join } from "node:path";
-import { listWorkspaces, readWorkspace } from "@agentgem/base";
-import { scanWorkflow, judgeSessions, buildAttestation, signAttestation, postAttestation, facetsForGem, claudeTranscriptsForCwd } from "@agentgem/insight";
+import { readWorkspace } from "@agentgem/base";
+import { readGemArchive, computeLock } from "@agentgem/archive";
+import { scanWorkflow, buildAttestation, signAttestation, postAttestation, claudeTranscriptsForCwd } from "@agentgem/insight";
 import { loadOrCreateIdentity, type Gem } from "@agentgem/model";
 import { benchmarkContribute } from "./config.js";
 import { postMyGems } from "../gem/myGemsClient.js";
 
 export interface ContributeResult { gem: string; status: "ingested" | "updated" | "skipped" | "failed"; reason?: string }
-
-// All boundary effects are injectable so the core is unit-testable without fs/net/LLM.
 export interface ContributeDeps {
   enabled: () => boolean;
   identity: ReturnType<typeof loadOrCreateIdentity>;
   listOwned: () => Promise<{ key: string; version: string; name: string }[]>;
-  readWorkspaceGem: (name: string) => Gem | null;
+  readGem: (name: string) => Gem | null;                 // #3: readGemArchive(readWorkspace(name).files)
   scan: () => ReturnType<typeof scanWorkflow>;
-  judge: (signal: ReturnType<typeof scanWorkflow>) => ReturnType<typeof judgeSessions>;
+  digestOf: (gem: Gem, files: Record<string, string>) => string; // #5: computeLock(files).gemDigest
   build: typeof buildAttestation;
   sign: (att: ReturnType<typeof buildAttestation>) => ReturnType<typeof buildAttestation>;
   post: (att: ReturnType<typeof buildAttestation>) => Promise<{ ingestId: string } | { skipped: true }>;
@@ -669,32 +320,30 @@ function defaultDeps(): ContributeDeps {
     enabled: () => benchmarkContribute(),
     identity,
     listOwned: () => postMyGems({ identity }),
-    readWorkspaceGem: (name) => { try { return readWorkspace(name).gem; } catch { return null; } },
-    scan: () => scanWorkflow(paths, /* ScanInventory */ buildScanInventory(), { retainSequences: true }),
-    judge: (signal) => judgeSessions(signal),
+    readGem: (name) => { try { return readGemArchive(readWorkspace(name).files); } catch { return null; } }, // #3
+    scan: () => scanWorkflow(paths, buildScanInventory(), { retainSequences: false }),
+    digestOf: (_gem, files) => computeLock(files).gemDigest,     // #5
     build: buildAttestation,
     sign: (att) => signAttestation(att, identity, Date.now()),
     post: (att) => postAttestation({ attestation: att }),
   };
 }
-// buildScanInventory: assemble ScanInventory for the current corpus — reuse the same helper the
-// distill MCP path uses (grep -a "ScanInventory" src/distill/mcpServer.ts); wire it in during impl.
+// buildScanInventory: assemble ScanInventory for the current corpus (reuse the distill helper —
+// grep -a "ScanInventory" src/distill/mcpServer.ts). retainSequences:false — we need artifact counts, not judged outcomes.
 
 export async function contribute(deps: ContributeDeps = defaultDeps()): Promise<{ enabled: boolean; results: ContributeResult[] }> {
   if (!deps.enabled()) return { enabled: false, results: [] };
   const owned = await deps.listOwned();
   if (owned.length === 0) return { enabled: true, results: [] };
-
-  const signal = deps.scan();
-  const { facets, degraded } = await deps.judge(signal);
+  const signal = deps.scan();                                    // ONCE, reused
   const results: ContributeResult[] = [];
   for (const o of owned) {
-    const gem = deps.readWorkspaceGem(o.name);
-    if (!gem) { results.push({ gem: o.name, status: "skipped", reason: "no local workspace" }); continue; }
+    const detail = readWorkspaceFiles(o.name);                   // { gem, files } | null — see below
+    if (!detail || detail.gem.name !== o.name) {                 // #9: confirm identity, not just a same-name workspace
+      results.push({ gem: o.name, status: "skipped", reason: "no local workspace" }); continue;
+    }
     try {
-      const scoped = degraded ? [] : facetsForGem(signal, gem, facets);   // degraded judge → no outcomes
-      const digest = gemDigestOf(gem);                                     // same digest fn buildAttestation/publish use
-      const att = deps.sign(deps.build({ gem, signal, gemDigest: digest, salt: contributionSalt(), account: null, facets: scoped }));
+      const att = deps.sign(deps.build({ gem: detail.gem, signal, gemDigest: deps.digestOf(detail.gem, detail.files), salt: contributionSalt(), account: null })); // NO facets
       const r = await deps.post(att);
       results.push({ gem: o.name, status: "skipped" in r ? "skipped" : "ingested", ...("skipped" in r ? { reason: "ingest disabled" } : {}) });
     } catch (e) { results.push({ gem: o.name, status: "failed", reason: (e as Error).message }); }
@@ -703,224 +352,163 @@ export async function contribute(deps: ContributeDeps = defaultDeps()): Promise<
 }
 ```
 
-Resolve two helpers during implementation (both already exist in the publish path — `grep -a`): `gemDigestOf(gem)` = the digest function `buildGem`/publish uses for `gemDigest`; `contributionSalt()` = the per-workspace salt used by the distill `buildAttestationTool` (`grep -a "salt" src/distill/mcpServer.ts`). Keep `readWorkspaceGem` returning the workspace's rebuilt `Gem` (`readWorkspace(name).gem` — confirm the field name with `grep -a "readWorkspace" packages/base/src/workspaces.ts`).
+Resolve during impl (each has a `grep -a`): `readWorkspaceFiles(name)` returns `{ gem: readGemArchive(files), files }` from `readWorkspace(name).files` (the test's `readGem` seam stands in for it — adjust the seam to also return `files` for `digestOf`, or fold `digestOf` to take only the gem if a name-based digest is acceptable); `contributionSalt()` — the per-workspace salt the distill `buildAttestationTool` uses (`grep -a "salt" src/distill/mcpServer.ts`). The `#9` identity check compares the rebuilt gem's name to the owned gem's name-part; tighten to digest if the catalog row later carries one.
 
-> Note on `updated` status: the post client returns only `{ ingestId }` (it can't see the aggregator's `updated` flag through the current response). Report `ingested` for any accepted post. Surfacing `updated` to the producer is a follow-up (would require threading `updated` through the ingest HTTP response + `postAttestation`); out of scope here.
+> `updated` status: `postAttestation` returns only `{ ingestId }`, so the producer can't see the aggregator's `updated` flag — report `ingested` for any accepted post. (Threading `updated` back through the HTTP response is a P3 follow-up.)
 
-- [ ] **Step 4: Run — expect PASS.**
-
-Run: `pnpm vitest run src/benchmark/__tests__/contributeCore.test.ts`
-Expected: PASS.
-
-- [ ] **Step 5: Commit**
-
-```bash
-git add src/benchmark/contributeCore.ts src/benchmark/__tests__/contributeCore.test.ts
-git commit -m "feat(benchmark): contributeCore — enumerate published gems, scan+judge, per-gem attest"
-```
+- [ ] **Step 4: Run — PASS.** `pnpm vitest run src/benchmark/__tests__/contributeCore.test.ts`
+- [ ] **Step 5: Commit** — `git commit -m "feat(benchmark): contributeCore — ingredients-only attestations over published gems"`
 
 ---
 
-## Task 8: Core — contribute routes + consent gate
+## Task 7: Core — contribute + setting routes
 
-**Files:**
-- Modify: `src/benchmark.proxy.controller.ts`
-- Test: `src/__tests__/benchmarkContribute.route.test.ts` (or the controller's existing test location)
+**Files:** Modify `src/benchmark.proxy.controller.ts`; Test `src/__tests__/benchmarkContribute.route.test.ts`.
 
-**Interfaces:**
-- Produces: `GET /api/benchmark/contribute-setting` → `{ enabled }`; `POST /api/benchmark/contribute-setting` body `{ enabled }` → `{ enabled }`; `POST /api/benchmark/contribute` → 409 (`AgentError`) when off, else `{ results }`.
-- Consumes: `benchmarkContribute`/`setBenchmarkContribute` (Task 5), `contribute` (Task 7).
+**Produces:** `GET/POST /api/benchmark/contribute-setting` (`{ enabled }`), `POST /api/benchmark/contribute` (409 `AgentError` when off, else `{ results }`).
 
-- [ ] **Step 1: Write the failing test** — assert 409 when off, and that the setting round-trips. Use a temp home so the toggle file is isolated (pass `base` through, or set `AGENTGEM_BENCHMARK_CONTRIBUTE`).
+- [ ] **Step 1: Failing test** — `POST /contribute` rejects with `status: 409` when off; setting round-trips (isolate with a temp home / `AGENTGEM_BENCHMARK_CONTRIBUTE`).
+- [ ] **Step 2: Run — FAIL.** `pnpm vitest run src/__tests__/benchmarkContribute.route.test.ts`
+- [ ] **Step 3: Add routes** (verified `AgentError` shape from `share.proxy.controller.ts:38`: `new AgentError(msg, { status, code, retryable })`):
 
 ```ts
-it("POST /contribute returns 409 when the toggle is off", async () => {
-  const ctrl = new BenchmarkProxyController();
-  await expect(ctrl.contribute()).rejects.toMatchObject({ status: 409 });
-});
-```
-
-- [ ] **Step 2: Run — expect FAIL.**
-
-Run: `pnpm vitest run src/__tests__/benchmarkContribute.route.test.ts`
-Expected: FAIL.
-
-- [ ] **Step 3: Add the routes** to `BenchmarkProxyController` in `src/benchmark.proxy.controller.ts`.
-
-```ts
-import { AgentError } from "@agentgem/model";                    // same error class other 4xx routes throw
+import { AgentError } from "@agentgem/model";
 import { benchmarkContribute, setBenchmarkContribute } from "./benchmark/config.js";
 import { contribute } from "./benchmark/contributeCore.js";
 
 const ContributeSetting = z.object({ enabled: z.boolean() });
-const ContributeResultRow = z.object({ gem: z.string(), status: z.enum(["ingested", "updated", "skipped", "failed"]), reason: z.string().optional() });
-const ContributeResponse = z.object({ results: z.array(ContributeResultRow) });
+const ContributeResponse = z.object({ results: z.array(z.object({ gem: z.string(), status: z.enum(["ingested","updated","skipped","failed"]), reason: z.string().optional() })) });
 
 @get("/contribute-setting", { response: ContributeSetting })
-async getContributeSetting(): Promise<z.infer<typeof ContributeSetting>> { return { enabled: benchmarkContribute() }; }
-
+async getContributeSetting() { return { enabled: benchmarkContribute() }; }
 @post("/contribute-setting", { body: ContributeSetting, response: ContributeSetting })
-async setContributeSetting(input: { body: z.infer<typeof ContributeSetting> }): Promise<z.infer<typeof ContributeSetting>> {
-  setBenchmarkContribute(input.body.enabled); return { enabled: input.body.enabled };
-}
-
+async setContributeSetting(input: { body: z.infer<typeof ContributeSetting> }) { setBenchmarkContribute(input.body.enabled); return { enabled: input.body.enabled }; }
 @post("/contribute", { response: ContributeResponse })
-async contribute(): Promise<z.infer<typeof ContributeResponse>> {
+async contribute() {
   if (!benchmarkContribute()) throw new AgentError("benchmark contribution is disabled", { status: 409, code: "contribute_disabled", retryable: false });
-  const r = await contribute();
-  return { results: r.results };
+  return { results: (await contribute()).results };
 }
 ```
 
-Confirm `AgentError` import + the empty-`@post` body convention against the sibling routes in the same controller.
-
-- [ ] **Step 4: Run — expect PASS.**
-
-Run: `pnpm vitest run src/__tests__/benchmarkContribute.route.test.ts`
-Expected: PASS.
-
-- [ ] **Step 5: Commit**
-
-```bash
-git add src/benchmark.proxy.controller.ts src/__tests__/benchmarkContribute.route.test.ts
-git commit -m "feat(benchmark): contribute + consent-setting routes (409 when off)"
-```
+- [ ] **Step 4: Run — PASS.**
+- [ ] **Step 5: Commit** — `git commit -m "feat(benchmark): contribute + consent-setting routes (409 when off)"`
 
 ---
 
-## Task 9: Core — `contribute` warmable
+## Task 8: Core — `contribute` warmable (cheap, cache-aware)
 
-**Files:**
-- Modify: `src/warm/registry.ts`
-- Test: `src/warm/__tests__/contributeWarmable.test.ts`
+**Files:** Modify `src/warm/registry.ts`; Test `src/warm/__tests__/contributeWarmable.test.ts`.
 
-**Interfaces:**
-- Produces: a `Warmable` with `id: "contribute", cost: "llm", scope: "global"` that returns `"hit"` when the toggle is off and otherwise runs `contribute()`, returning `"warmed"` when any gem was ingested/updated, else `"hit"`.
-- Consumes: `benchmarkContribute` (Task 5), `contribute` (Task 7).
+Now **cheap** (no LLM judge). Cache-aware via the corpus token so it doesn't re-post unchanged data every tick (mirrors the `usage` warmable's `transcriptToken` short-circuit).
 
-- [ ] **Step 1: Write the failing test** (inject a fake `contribute` via a thin seam, or set the toggle file/env). Assert off → "hit" and no `contribute` call.
-
-```ts
-import { WARMABLES } from "../registry.js";
-it("contribute warmable no-ops when the toggle is off", async () => {
-  delete process.env.AGENTGEM_BENCHMARK_CONTRIBUTE;                 // ensure off
-  const w = WARMABLES.find((x) => x.id === "contribute")!;
-  expect(await w.warm(null, {})).toBe("hit");
-});
-```
-
-- [ ] **Step 2: Run — expect FAIL** (`id` union has no `"contribute"`, entry absent).
-
-Run: `pnpm vitest run src/warm/__tests__/contributeWarmable.test.ts`
-Expected: FAIL.
-
-- [ ] **Step 3: Add `"contribute"` to the `Warmable.id` union and append the entry** in `src/warm/registry.ts`.
-
-```ts
-export interface Warmable {
-  id: "observe" | "usage" | "scorecard" | "insights" | "analyze" | "distill" | "dream" | "recall" | "contribute";
-  // ...unchanged...
-}
-```
-
-Append to `WARMABLES` (import at top: `import { benchmarkContribute } from "../benchmark/config.js"; import { contribute } from "../benchmark/contributeCore.js";`):
+- [ ] **Step 1: Failing test** — the `contribute` warmable returns `"hit"` when the toggle is off (no contribute call).
+- [ ] **Step 2: Run — FAIL.** `pnpm vitest run src/warm/__tests__/contributeWarmable.test.ts`
+- [ ] **Step 3: Add `"contribute"` to `Warmable.id`** and append the entry (import `benchmarkContribute` + `contribute`; import `allClaudeTranscripts`/`transcriptToken` already in the file):
 
 ```ts
   {
-    // Global LLM warmable: when the producer has opted in, attest published gems.
-    // Naturally dormant in desktop client-mode (which forces AGENTGEM_WARM=off) and
-    // whenever the consent toggle is off.
-    id: "contribute", cost: "llm", scope: "global",
-    async warm(_root, _opts) {
+    id: "contribute", cost: "cheap", scope: "global",           // ingredients-only ⇒ cheap; naturally off in desktop (AGENTGEM_WARM=off)
+    async warm(_root, { dir, force }) {
       if (!benchmarkContribute()) return "hit";
+      const token = transcriptToken(allClaudeTranscripts(resolveDirs(dir).claudeDir));
+      if (!force && lastContributeToken === token) return "hit"; // ← cache-aware; store token in a warm-local file, NOT module state
       const r = await contribute();
-      return r.results.some((x) => x.status === "ingested" || x.status === "updated") ? "warmed" : "hit";
+      if (r.results.some((x) => x.status === "ingested" || x.status === "updated")) { writeContributeToken(token); return "warmed"; }
+      return "hit";
     },
   },
 ```
 
-- [ ] **Step 4: Run — expect PASS.** Also run the warm orchestrator tests to confirm no regression from the union change: `pnpm vitest run src/warm/__tests__`.
+The token store must **not** be module-scoped mutable state (repo rule). Persist it like the dream/benchmark config: a tiny `<home>/.agentgem/benchmark/last-token` file (`readContributeToken`/`writeContributeToken`), read fresh each call. Add `"contribute"` to the `Warmable.id` union in the same file.
 
-Run: `pnpm vitest run src/warm/__tests__/contributeWarmable.test.ts`
-Expected: PASS.
+- [ ] **Step 4: Run — PASS**, and `pnpm vitest run src/warm/__tests__` (no orchestrator regression from the union change).
+- [ ] **Step 5: Commit** — `git commit -m "feat(warm): cheap cache-aware contribute warmable, gated on the toggle"`
 
-- [ ] **Step 5: Commit**
-
-```bash
-git add src/warm/registry.ts src/warm/__tests__/contributeWarmable.test.ts
-git commit -m "feat(warm): contribute warmable, gated on the consent toggle"
-```
+**→ Open PR1 here (Tasks 1-8). Validate against a local aggregator before starting PR2.**
 
 ---
 
-## Task 10: Console — Benchmark tab toggle + "Contribute now"
+## Task 9 (PR2): Console — Benchmark tab toggle + "Contribute now"
 
-**Files:**
-- Modify/Create: `packages/console/src/panels/Benchmark/` (the Benchmark tab component + its API route helpers)
-- Modify: `packages/marketplace/src/styles.css`
-- Test: `packages/console/src/panels/Benchmark/*.test.tsx`
+**Files:** `packages/console/src/panels/Benchmark/*`, `packages/marketplace/src/styles.css`; Test `packages/console/src/panels/Benchmark/*.test.tsx`.
 
-**Interfaces:**
-- Consumes: `GET/POST /api/benchmark/contribute-setting`, `POST /api/benchmark/contribute` (Task 8), via the console's route-helper pattern (`grep -a "defineRoute" packages/console/src/api/routes.ts`).
-
-- [ ] **Step 1: Locate the Benchmark panel** (`grep -a "Benchmark" packages/console/src -rl`) and read a sibling panel (e.g. Deploy/Publish) for the fetch + button + state pattern.
-
-- [ ] **Step 2: Write the failing test** (jsdom): toggle reflects `contribute-setting`, and clicking "Contribute now" (when on) posts and renders per-gem result rows. Mock fetch like the existing panel tests do.
-
-```tsx
-it("shows contribution results after clicking Contribute now", async () => {
-  // mock GET contribute-setting -> {enabled:true}, POST contribute -> {results:[{gem:"demo",status:"ingested"}]}
-  render(<BenchmarkPanel apiBase="" />);
-  fireEvent.click(await screen.findByRole("button", { name: /contribute now/i }));
-  expect(await screen.findByText(/demo/)).toBeTruthy();
-  expect(await screen.findByText(/ingested/)).toBeTruthy();
-});
-```
-
-- [ ] **Step 3: Run — expect FAIL.**
-
-Run: `pnpm --filter @agentgem/console vitest run src/panels/Benchmark`
-Expected: FAIL.
-
-- [ ] **Step 4: Implement the UI.** Add a consent toggle bound to `contribute-setting` and a "Contribute now" button (disabled when off) that POSTs `/contribute` and lists `results` (`gem` + `status`). Every `ex-*` class used gets a rule in `styles.css`:
-
-```css
-/* Benchmark contribution surface — mirror .ex-account-provider / .ex-signin tokens */
-.ex-contribute { display: flex; flex-direction: column; gap: .5rem; padding: .75rem; border: 1px solid var(--surface-2); border-radius: 8px; }
-.ex-contribute-toggle { display: flex; align-items: center; gap: .5rem; color: var(--ink); }
-.ex-contribute-run { background: var(--grad-gem); color: #fff; border: 0; border-radius: 6px; padding: .4rem .8rem; }
-.ex-contribute-run:disabled { opacity: .5; }
-.ex-contribute-row { display: flex; justify-content: space-between; font-size: .85rem; color: var(--ink-2); }
-```
-
-After writing, verify each class is enforced: `for c in ex-contribute ex-contribute-toggle ex-contribute-run ex-contribute-row; do grep -c "$c" packages/marketplace/src/styles.css; done` (each > 0). Match token names to the file's actual tokens (`grep -a -- "--grad-gem\|--surface-2\|--ink-2" packages/marketplace/src/styles.css`); adjust to real ones.
-
-- [ ] **Step 5: Run — expect PASS.**
-
-Run: `pnpm --filter @agentgem/console vitest run src/panels/Benchmark`
-Expected: PASS.
-
-- [ ] **Step 6: Verify styled UI in a real browser** (jsdom never asserts appearance). Start the console, open the Benchmark tab, confirm the toggle + button render styled (not raw defaults), toggle on, click "Contribute now", see result rows. Screenshot for the PR.
-
-- [ ] **Step 7: Commit**
-
-```bash
-git add packages/console/src/panels/Benchmark packages/marketplace/src/styles.css
-git commit -m "feat(console): Benchmark tab consent toggle + Contribute now button"
-```
+- [ ] **Step 1:** Locate the Benchmark panel (`grep -a "Benchmark" packages/console/src -rl`); read a sibling (Deploy/Publish) for the fetch/button/state + route-helper pattern.
+- [ ] **Step 2: Failing jsdom test** — toggle reflects `contribute-setting`; clicking "Contribute now" (enabled only when on) POSTs `/contribute` and renders per-gem `{gem, status}` rows.
+- [ ] **Step 3: Run — FAIL.** `pnpm --filter @agentgem/console vitest run src/panels/Benchmark`
+- [ ] **Step 4: Implement** the toggle + button + results list. Consent copy states: anonymous ingredient/usage for your published gems, signed by your producer key, **no per-session content, no outcomes**; and that contribution requires a bound account and is server-side attributable. Add matching `styles.css` rules for every `ex-*` class (reuse `--ink`/`--surface`/`--brand`, `--grad-gem`); verify each: `for c in <classes>; do grep -c "$c" packages/marketplace/src/styles.css; done` (>0).
+- [ ] **Step 5: Run — PASS.**
+- [ ] **Step 6: Real-browser check** — open the Benchmark tab, confirm styled (not raw defaults), toggle on, click Contribute, see rows. Screenshot for the PR.
+- [ ] **Step 7: Commit** — `git commit -m "feat(console): Benchmark tab consent toggle + Contribute now"` **→ Open PR2.**
 
 ---
 
-## Final verification
+## Final verification (PR1)
 
-- [ ] `pnpm build` at the repo root (all packages compile; the `Warmable.id` union + insight/aggregator exports propagate).
-- [ ] `pnpm vitest run packages/insight src/aggregator src/benchmark src/gem src/warm` — new + existing unit tests green.
-- [ ] `pnpm --filter @agentgem/console vitest run` — console tests green (not in CI; run locally).
-- [ ] Manual end-to-end against a local aggregator: set `AGENTGEM_AGGREGATOR_URL=http://127.0.0.1:<port>`, publish a gem, enable the toggle, click Contribute, confirm a row lands in `attestations` + `model_outcomes` and the Benchmark read path shows `producers ≥ k` (seed extra producers or lower `k` for the check).
-- [ ] Open the PR off `feat/benchmark-producer-wiring`; CI gate is `test (24)`.
+- [ ] `pnpm build` at root; `pnpm vitest run packages/insight src/aggregator src/benchmark src/gem src/warm`.
+- [ ] Manual e2e vs a local aggregator: `AGENTGEM_AGGREGATOR_URL=http://127.0.0.1:<port>`, publish a gem, `AGENTGEM_BENCHMARK_CONTRIBUTE=1`, hit `POST /api/benchmark/contribute`, confirm a row in `attestations` + `usage_edges` (no `model_outcomes` — ingredients-only), and the benchmark read path shows `producers ≥ k` (seed producers or lower `k`).
+- [ ] Confirm resubmit does NOT move `ingested_at` (adoption series intact).
 
-## Self-review notes (author)
+## NOT in scope (deferred)
 
-- **Spec coverage:** ingest default (T3), no-attestation-on-publish → separate contribute (T5–T9), published-gems unit (T6/T7), anonymous attestation (T7 `account: null`), update-on-resubmit (T1), per-gem outcomes (T4 + T7), consent gate (T5/T8), warmable (T9), UI (T10). All spec sections map to a task.
-- **Known follow-ups (out of scope, noted at their task):** surfacing the aggregator `updated` flag back to the producer (T7 note); a `signalDigest` no-op short-circuit for identical resubmits (deliberately omitted for test simplicity — resubmit always re-projects).
-- **Verify-during-impl seams** (each has a `grep -a` next to it): `resolveSignedAccount` return shape (T2), `agentgemHome` import (T5), `sign` helper name (T6), `readWorkspace().gem` field + `gemDigestOf`/`contributionSalt`/`buildScanInventory` (T7), `AgentError` + empty-`@post` convention (T8), console route-helper + real token names (T10).
+- **Bulk per-model outcomes** — dropped; attribution from a background sweep is unsound and per-workspace provenance isn't stored. Outcomes come from the interactive `sign_and_publish` path. (Revisit only with a forward-only workspace-provenance capture.)
+- **Retroactive contribution for already-published gems** built before any provenance exists — n/a for ingredients (works today), out of scope for outcomes.
+- **Threading the aggregator `updated` flag back to the producer** (P3).
+- **De-dupe of shared-artifact ingredient counts across a producer's gems** in the aggregate `sum()`s (pre-existing modeling property, not introduced here) — flag as a separate aggregator TODO.
+- **Org-scoped admin view** — Spec 2.
+
+## What already exists (reused, not rebuilt)
+
+`buildAttestation`/`signAttestation`/`verifyAttestation`, k-anon rollups, `makeTestDb`, `listWorkspaces`/`readWorkspace`+`readGemArchive`, `computeLock`, `resolveSignedAccount`+`listCatalogGemsForOwner`, `gemStatusClient` (template for `myGemsClient`), `dream/config.ts` (template for the toggle), `transcriptToken`/`allClaudeTranscripts` (cache-awareness). The plan leans on all of these.
+
+## Failure modes (new codepaths)
+
+| Codepath | Realistic failure | Test? | Handled? | User sees |
+|---|---|---|---|---|
+| `contributeCore` per-gem | `postAttestation` network error | ✓ (T6) | ✓ isolated → `failed` | that gem `failed`, batch continues |
+| `contributeCore` enumerate | owned gem, no/mismatched local workspace | ✓ (T6) | ✓ `skipped` | `skipped: no local workspace` |
+| ingest resubmit | concurrent first-insert race | ⚠ add a concurrency test | ✓ (#8 catch→update) | success (idempotent) |
+| `my-gems` | unbound producer key | ✓ (T2) | ✓ `{ gems: [] }` | contributes nothing (see consent copy) |
+| warmable | corpus unchanged | ✓ (T8) | ✓ token short-circuit | no wasted re-post |
+
+No silent-failure critical gaps: every path is either tested + handled or surfaced as a per-gem `failed`/`skipped`.
+
+## Parallelization
+
+| Lane | Tasks | Modules | Depends on |
+|---|---|---|---|
+| A | T1, T2 | `packages/aggregator/`, `src/aggregator.controller.ts` | — |
+| B | T3 | `packages/insight/` | — |
+| C | T4, T5 | `src/benchmark/config.ts`, `src/gem/` | — |
+| D | T6, T7, T8 | `src/benchmark/`, `src/warm/` | A (my-gems client shape), B (ingest client), C |
+
+**Order:** launch A + B + C in parallel worktrees → merge → D sequential → PR1. Then T9 (PR2) after PR1 lands. No two parallel lanes share a module directory.
+
+## GSTACK REVIEW REPORT
+
+| Review | Trigger | Why | Runs | Status | Findings |
+|--------|---------|-----|------|--------|----------|
+| CEO Review | `/plan-ceo-review` | Scope & strategy | 0 | — | — |
+| Codex Review | `/codex review` | Independent 2nd opinion | 0 | — | — |
+| Eng Review | `/plan-eng-review` | Architecture & tests (required) | 1 | issues_found → all folded | 1 arch, 1 correctness, 12 test gaps, +9 outside-voice defects |
+| Design Review | `/plan-design-review` | UI/UX gaps | 0 | — | — |
+| DX Review | `/plan-devex-review` | Developer experience gaps | 0 | — | — |
+
+Scope: **SLICED** into PR1 (pipeline, T1-8) + PR2 (console UI, T9).
+
+Findings folded into this revision:
+- **Architecture (1):** contribute warmable ran an unbounded LLM judge every pass, unguarded under load → **mooted** by the ingredients-only decision (warmable is now cheap + cache-aware).
+- **Correctness (1):** `facetsForGem` `mcp_server`/`mcpServer` key mismatch → **removed** (facetsForGem dropped).
+- **Foundational (outside voice #2):** per-gem outcome attribution unsound (session outcome ≠ gem effectiveness; shared-artifact double-count; anti-inflation cap defeated) → **bulk contribution is now ingredients-only**; outcomes stay on the interactive path.
+- **Compile/run-breakers (outside voice #3, #7):** `readWorkspace().gem` (no such field) → `readGemArchive(...files)`; `CatalogRow.gemKey` not `.key`; `resolveSignedAccount` union narrowing; test `signedAt = Date.now()`.
+- **Data regression (#4):** `updateAttestation` preserves `ingested_at` (was collapsing the adoption series).
+- **Unspecified work (#5):** `gemDigestOf` → `computeLock(files).gemDigest`.
+- **Concurrency (#8):** manual + warm first-insert race → catch unique violation, fall back to update.
+- **Enumeration/privacy (#6, #9):** match owned gem→workspace by identity, not bare name; consent copy states contribution requires a bound account and is server-side attributable.
+
+**OUTSIDE VOICE:** Claude subagent (Codex not installed). Verified 3 load-bearing claims against source; all confirmed. Its two disqualifying findings (unsound attribution, `readWorkspace().gem`) drove the ingredients-only pivot and the compile fixes.
+
+**CROSS-MODEL:** the section review under-weighted attribution soundness; the outside voice caught it. Resolved in the user's favor via D5/D6 (ingredients-only).
+
+**VERDICT:** ENG CLEARED (revised) — every finding is folded into the plan or explicitly deferred in "NOT in scope". Ready to implement PR1.
+
+NO UNRESOLVED DECISIONS
