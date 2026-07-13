@@ -31,7 +31,7 @@ export function Analyze({ apiBase, onPick, initialPath }: { apiBase: string; onP
   // events to the normalized Handlers and closes over the current root.
   const openStream = useCallback(
     (fresh: boolean, params: Record<string, string>, h: Handlers<AnalyzeDone>) =>
-      openAnalyzeStream(apiBase, params.root, fresh, (e) => {
+      openAnalyzeStream(makeClient(apiBase), params.root, fresh, (e) => {
         if (e.type === "phase") h.phase(e.sessions != null ? `${e.phase} (${e.sessions} sessions)` : e.phase);
         else if (e.type === "delta") h.delta(e.text);
         else if (e.type === "done") h.done({ candidates: e.candidates, cached: e.cached });

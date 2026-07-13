@@ -20,6 +20,7 @@ import { computeInsights as realComputeInsights } from "./insightsCore.js";
 import { beginForeground, endForeground } from "./warm/orchestrator.js";
 import { ReportRegistry, REPORT_REGISTRY } from "./report/registry.js";
 import { trackerFor, insightsParamsKey } from "./report/track.js";
+import { pump } from "./sse/pump.js";
 import { InsightsStreamQuery, InsightsEvent } from "./insights.stream.schema.js";
 
 // Test seam: swap computeInsights so the route can be driven without the ACP /
@@ -28,45 +29,6 @@ type ComputeInsights = typeof realComputeInsights;
 let computeFn: ComputeInsights = realComputeInsights;
 export function setInsightsComputeForTests(fn: ComputeInsights | null): void {
   computeFn = fn ?? realComputeInsights;
-}
-
-/**
- * Adapt a push-style producer into the async iterable the framework pulls.
- * `run` emits items via `emit`; the generator yields them in order and ends
- * when `run` resolves. A `run` rejection surfaces after the queue drains.
- * Exported for unit testing the ordering / completion discipline.
- *
- * Contract for reuse: `run` should handle its own errors (this route wraps
- * compute in a try/catch that emits a terminal `failed` item and never
- * rethrows). If the consumer abandons the generator early (client disconnect →
- * the framework calls `iterator.return()`), the trailing `await finished` is
- * skipped, so a `run` that *rejects* would leave an unhandled rejection.
- */
-export async function* pump<T>(
-  run: (emit: (v: T) => void) => Promise<void>,
-): AsyncGenerator<T> {
-  const queue: T[] = [];
-  let wake: (() => void) | null = null;
-  let done = false;
-  const emit = (v: T) => {
-    queue.push(v);
-    wake?.();
-    wake = null;
-  };
-  const finished = run(emit).finally(() => {
-    done = true;
-    wake?.();
-    wake = null;
-  });
-  while (true) {
-    if (queue.length) {
-      yield queue.shift()!;
-      continue;
-    }
-    if (done) break;
-    await new Promise<void>((r) => (wake = r));
-  }
-  await finished; // surface a producer rejection to the framework, post-drain
 }
 
 @api({ basePath: "/api" })
