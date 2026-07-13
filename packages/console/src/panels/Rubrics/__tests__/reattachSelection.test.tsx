@@ -1,0 +1,94 @@
+// Copyright (c) 2026 NineMind, Inc.
+// SPDX-License-Identifier: MIT
+// packages/console/src/panels/Rubrics/__tests__/reattachSelection.test.tsx
+//
+// Regression test for the mount-race between the rubrics-list effect (defaults
+// to the first rubric returned by /api/rubrics) and the reattach-sync effect
+// (selects the rubric of a run reattached from /api/report/runs). Before the
+// claimedRef fix, the rubrics-list effect set `rubricId` unconditionally, so a
+// reattach that resolved FIRST (claiming a non-default rubric) still got
+// clobbered back to the first-in-list rubric once /api/rubrics resolved.
+//
+// The two fetches race on mount with no ordering guarantee, so this test pins
+// the order explicitly: it lets /api/report/runs (and therefore the reattach
+// claim) resolve and fully apply BEFORE releasing a held /api/rubrics response,
+// reproducing the exact "reattach resolves first" scenario from the finding.
+import { describe, it, expect, afterEach, beforeEach, vi } from "vitest";
+import { render, screen, waitFor, cleanup } from "@testing-library/react";
+import { Rubrics } from "../index.js";
+
+class FakeES {
+  static last: FakeES | null = null;
+  listeners = new Map<string, (e: MessageEvent) => void>();
+  constructor(public url: string) { FakeES.last = this; }
+  addEventListener(t: string, cb: (e: MessageEvent) => void) { this.listeners.set(t, cb); }
+  close() {}
+}
+
+afterEach(cleanup);
+
+beforeEach(() => {
+  (globalThis as any).EventSource = FakeES as unknown;
+  FakeES.last = null;
+});
+
+// The route client (@agentback/client) parses responses via `.text()`, not
+// `.json()` — mimic a real Response so route calls don't fail validation and
+// get silently swallowed by the panel's `.catch(() => setX([]))` fallbacks.
+function jsonResponse(body: unknown) {
+  const text = JSON.stringify(body);
+  return { ok: true, text: async () => text, json: async () => body } as any;
+}
+
+describe("Rubrics panel — reattach vs default-select race", () => {
+  it("keeps the reattached run's rubric selected once /api/rubrics resolves afterward", async () => {
+    let releaseRubrics: (() => void) | null = null;
+    const rubricsGate = new Promise<void>((resolve) => { releaseRubrics = resolve; });
+
+    vi.stubGlobal("fetch", vi.fn(async (u: string) => {
+      const url = String(u);
+      if (url.includes("/api/report/runs")) {
+        // A done run for "hygiene", which is NOT first in the rubrics list below.
+        return jsonResponse({
+          runs: [{
+            id: "r1", kind: "rubric", paramsKey: "hygiene:project:/proj:",
+            params: { rubric: "hygiene", scope: "project", root: "/proj" },
+            status: "done", phase: "done", startedAt: Date.now(),
+          }],
+        });
+      }
+      if (url.includes("/api/rubrics")) {
+        // Held open until the test explicitly releases it, so the reattach
+        // claim is guaranteed to land first.
+        await rubricsGate;
+        return jsonResponse({
+          rubrics: [
+            { id: "correctness", title: "Correctness", target: "session", factors: [{ factor: "f1" }] },
+            { id: "hygiene", title: "Hygiene", target: "session", factors: [{ factor: "f2" }] },
+          ],
+        });
+      }
+      if (url.includes("/api/testbed/projects")) return jsonResponse({ projects: [{ path: "/proj", flavor: "claude", name: "proj" }] });
+      if (url.includes("/api/testbed/recents")) return jsonResponse({ recents: [] });
+      return jsonResponse({});
+    }));
+
+    render(<Rubrics apiBase="http://x" />);
+
+    // The reattach path (useReportRun's mount fetch → openLive → openStream)
+    // opens an EventSource once it has fully applied — proof the reattach
+    // claim (rubricId="hygiene") landed before /api/rubrics is allowed to resolve.
+    await waitFor(() => expect(FakeES.last).not.toBeNull());
+
+    const select = (await screen.findByLabelText("Rubric")) as HTMLSelectElement;
+    // No options yet (the list is held), so select.value can't reflect the claimed
+    // rubricId here — the meaningful check is after the list resolves, below.
+
+    releaseRubrics!();
+    await waitFor(() => expect(select.options.length).toBe(2));
+    expect(select.options[0].value).toBe("correctness");   // the default this race would wrongly select
+
+    // The list resolving afterward must not clobber the reattached selection.
+    expect(select.value).toBe("hygiene");
+  });
+});
