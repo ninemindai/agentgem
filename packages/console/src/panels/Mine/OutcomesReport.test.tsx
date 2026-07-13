@@ -1,6 +1,6 @@
 import { describe, it, expect, afterEach } from "vitest";
 import { render, screen, cleanup, waitFor, act, fireEvent, within } from "@testing-library/react";
-import { InsightsReportCard } from "./index.js";
+import { InsightsReportCard } from "./OutcomesReport.js";
 import type { InsightsReportView } from "./insightsStream.js";
 
 afterEach(cleanup);

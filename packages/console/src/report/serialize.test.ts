@@ -49,7 +49,7 @@ describe("blocksToHtml", () => {
 });
 
 import { insightsToBlocks, analyzeToBlocks } from "./serialize.js";
-import type { InsightsReportView } from "../panels/Insights/insightsStream.js";
+import type { InsightsReportView } from "../panels/Mine/insightsStream.js";
 import type { AnalyzeCandidate } from "../panels/Curate/analyzeStream.js";
 
 const fullReport: InsightsReportView = {

@@ -25,37 +25,38 @@ function sseClient(items: unknown[], onUrl?: (url: string) => void): Client {
 }
 
 // openInsightsStream is fire-and-forget; resolve once a terminal event arrives.
-function run(client: Client, root: string, fresh = false): Promise<InsightsEvent[]> {
+function run(client: Client, root: string, opts?: { fresh?: boolean; cacheOnly?: boolean }): Promise<InsightsEvent[]> {
   return new Promise((resolve) => {
     const events: InsightsEvent[] = [];
     openInsightsStream(client, root, (e) => {
       events.push(e);
       if (e.type === "done" || e.type === "failed") resolve(events);
-    }, fresh);
+    }, opts);
   });
 }
 
 describe("openInsightsStream", () => {
-  it("forwards phase/delta/done and passes the report through", async () => {
+  it("forwards phase/delta/done, passes the report through, and carries cached", async () => {
     const events = await run(sseClient([
       { type: "phase", phase: "scanning" },
       { type: "phase", phase: "scanned", transcripts: 4, sessions: 2 },
       { type: "delta", text: "judging…" },
-      { type: "done", report: REPORT, degraded: false, scanned: 1467, updatedAt: 123 },
+      { type: "done", report: REPORT, degraded: false, cached: true, scanned: 1467, updatedAt: 123 },
     ]), "/home/me/proj");
 
     expect(events.map((e) => e.type)).toEqual(["phase", "phase", "delta", "done"]);
     expect(events[1]).toMatchObject({ type: "phase", phase: "scanned", transcripts: 4, sessions: 2 });
     const done = events[3];
-    expect(done).toMatchObject({ type: "done", degraded: false, scanned: 1467, updatedAt: 123 });
+    expect(done).toMatchObject({ type: "done", degraded: false, cached: true, scanned: 1467, updatedAt: 123 });
     if (done.type === "done") expect(done.report).toEqual(REPORT);
   });
 
-  it("puts the project root and fresh=1 on the request", async () => {
+  it("puts the project root, fresh=1, and cacheOnly on the request", async () => {
     let seen = "";
-    await run(sseClient([{ type: "done", report: REPORT, degraded: false, updatedAt: null }], (u) => { seen = u; }), "/home/me/proj", true);
+    await run(sseClient([{ type: "done", report: REPORT, degraded: false, cached: false, updatedAt: null }], (u) => { seen = u; }), "/home/me/proj", { fresh: true, cacheOnly: true });
     expect(seen).toContain("root=%2Fhome%2Fme%2Fproj");
     expect(seen).toContain("fresh=1");
+    expect(seen).toContain("cacheOnly=1");
   });
 
   it("forwards a failed event", async () => {
