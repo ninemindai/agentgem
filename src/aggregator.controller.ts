@@ -18,10 +18,10 @@ import { GitHubVerifier } from "@agentgem/aggregator";
 import { sweepQuarantine, sweepAdoptionQuarantine } from "@agentgem/aggregator";
 import { sweepStaleReviewRequests, STALE_REVIEW_TTL_MS } from "@agentgem/aggregator";
 import { issueKey, revokeKey, listKeys } from "@agentgem/aggregator";
-import { recordCatalogShare, upsertGemArchive, getGemArchive, catalogGemExists, latestGemVersion, archiveOnlyVersion, gemAccessInfo, upsertGemCover } from "@agentgem/aggregator";
+import { recordCatalogShare, upsertGemArchive, getGemArchive, catalogGemExists, latestGemVersion, archiveOnlyVersion, gemAccessInfo, upsertGemCover, listCatalogGemsForOwner } from "@agentgem/aggregator";
 import { parseImageDataUrl } from "./og/coverDataUrl.js";
 import { recordGamePlay, gamePlayCounts } from "@agentgem/aggregator";
-import { resolveSignedAccount, gemStatusFor, gemStatusSigningPayload, catalogSigningPayload, reviewActionPayload, reviewSubmitPayload, reviewResubmitPayload } from "@agentgem/aggregator";
+import { resolveSignedAccount, gemStatusFor, gemStatusSigningPayload, myGemsSigningPayload, catalogSigningPayload, reviewActionPayload, reviewSubmitPayload, reviewResubmitPayload } from "@agentgem/aggregator";
 import {
   submitReviewRequest, resubmitReviewRequest, listInbox, getReviewRequest, getReviewArchive,
   addReviewMessage, approveReviewRequest, requestChanges, withdrawReviewRequest, markSeen,
@@ -149,6 +149,8 @@ const CatalogBody = z.object({ manifest: CatalogManifestSchema, pubkey: z.string
 const CatalogResult = z.object({ shared: z.boolean(), publishedBy: z.string().optional(), gemKey: z.string().optional(), version: z.string().optional(), rejected: z.string().optional() });
 const GemStatusBody = z.object({ key: z.string(), pubkey: z.string(), signedAt: z.number(), signature: z.string() });
 const GemStatusResult = z.object({ exists: z.boolean(), ownedByMe: z.boolean(), latestVersion: z.string().nullable() });
+const MyGemsBody = z.object({ pubkey: z.string(), signedAt: z.number(), signature: z.string() });
+const MyGemsResult = z.object({ gems: z.array(z.object({ key: z.string(), version: z.string(), name: z.string() })) });
 const PublishGemBody = z.object({ manifest: CatalogManifestSchema, archiveBase64: z.string(), pubkey: z.string(), signedAt: z.number(), signature: z.string(), coverDataUrl: z.string().optional() });
 const GemArchiveQuery = z.object({ key: z.string(), version: z.string() });
 const GemArchiveResult = z.object({ archiveBase64: z.string() });
@@ -318,6 +320,20 @@ export class AggregatorController {
       pubkey: b.pubkey, payload: gemStatusSigningPayload(b.key, b.pubkey, b.signedAt), signedAt: b.signedAt, signature: b.signature,
     });
     return gemStatusFor(this.db, b.key, who.ok ? who.accountId : null);
+  }
+
+  // Lists the signed-in producer's own published gems, across all visibilities — for the local core to
+  // intersect with its workspaces. Signed like /gem-status; an unbound/unresolvable key owns nothing,
+  // so it returns an empty list rather than an error (fail-closed, same shape as gemStatus's ownedByMe).
+  @post("/my-gems", { body: MyGemsBody, response: MyGemsResult })
+  async myGems(input: { body: z.infer<typeof MyGemsBody> }): Promise<z.infer<typeof MyGemsResult>> {
+    const b = input.body;
+    const acct = await resolveSignedAccount(this.db, {
+      pubkey: b.pubkey, payload: myGemsSigningPayload(b.pubkey, b.signedAt), signedAt: b.signedAt, signature: b.signature,
+    });
+    if (!acct.ok) return { gems: [] };
+    const rows = await listCatalogGemsForOwner(this.db, acct.accountId);
+    return { gems: rows.map((g) => ({ key: g.gemKey, version: g.version, name: g.gemKey.split("/").slice(1).join("/") || g.gemKey })) };
   }
 
   // Installable publish: the signed catalog share PLUS the .gem archive bytes. Verifies the archive
