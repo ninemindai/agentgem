@@ -1,17 +1,6 @@
-import { describe, it, expect, vi, afterEach } from "vitest";
+import { describe, it, expect } from "vitest";
+import { createClient, type Client } from "@agentback/client";
 import { openInsightsStream, type InsightsEvent } from "./insightsStream.js";
-
-class FakeES {
-  static last: FakeES | null = null;
-  listeners: Record<string, ((e: unknown) => void)[]> = {};
-  closed = false;
-  constructor(public url: string) { FakeES.last = this; }
-  addEventListener(type: string, cb: (e: unknown) => void) { (this.listeners[type] ??= []).push(cb); }
-  close() { this.closed = true; }
-  emit(type: string, data: unknown) { for (const cb of this.listeners[type] ?? []) cb({ data: JSON.stringify(data) }); }
-}
-
-afterEach(() => { FakeES.last = null; });
 
 const REPORT = {
   totals: { sessions: 2, mostly: 1, partially: 1, not: 0 },
@@ -22,49 +11,55 @@ const REPORT = {
   publish_candidates: [{ sessionId: "a", goal: "ship auth", why: "Succeeded: merged" }],
 };
 
-describe("openInsightsStream", () => {
-  it("passes root and translates events, closing on done", () => {
-    vi.stubGlobal("EventSource", FakeES as unknown as typeof EventSource);
+// A client whose fetch replays `items` as a text/event-stream body — the wire
+// the server's streamOf route produces (anonymous `data:` frames). Lets us drive
+// the real route.stream() consumer (URL building, SSE parse, per-event validation)
+// without a live server.
+function sseClient(items: unknown[], onUrl?: (url: string) => void): Client {
+  const fetch = (async (url: string | URL | Request) => {
+    onUrl?.(String(url));
+    const body = items.map((i) => `data: ${JSON.stringify(i)}\n\n`).join("");
+    return new Response(body, { status: 200, headers: { "content-type": "text/event-stream" } });
+  }) as typeof globalThis.fetch;
+  return createClient({ baseURL: "http://console.test", fetch });
+}
+
+// openInsightsStream is fire-and-forget; resolve once a terminal event arrives.
+function run(client: Client, root: string, fresh = false): Promise<InsightsEvent[]> {
+  return new Promise((resolve) => {
     const events: InsightsEvent[] = [];
-    openInsightsStream("", "/home/me/proj", (e) => events.push(e));
-    const es = FakeES.last!;
-    expect(es.url).toContain("root=%2Fhome%2Fme%2Fproj");
+    openInsightsStream(client, root, (e) => {
+      events.push(e);
+      if (e.type === "done" || e.type === "failed") resolve(events);
+    }, fresh);
+  });
+}
 
-    es.emit("phase", { phase: "scanning" });
-    es.emit("phase", { phase: "scanned", transcripts: 4, sessions: 2 });
-    es.emit("delta", { text: "judging…" });
-    es.emit("done", { report: REPORT, degraded: false });
-
-    expect(events).toEqual([
-      { type: "phase", phase: "scanning", transcripts: undefined, sessions: undefined },
+describe("openInsightsStream", () => {
+  it("forwards phase/delta/done and passes the report through", async () => {
+    const events = await run(sseClient([
+      { type: "phase", phase: "scanning" },
       { type: "phase", phase: "scanned", transcripts: 4, sessions: 2 },
       { type: "delta", text: "judging…" },
-      { type: "done", report: REPORT, degraded: false, scanned: undefined, updatedAt: null },
-    ]);
-    expect(es.closed).toBe(true);
+      { type: "done", report: REPORT, degraded: false, scanned: 1467, updatedAt: 123 },
+    ]), "/home/me/proj");
+
+    expect(events.map((e) => e.type)).toEqual(["phase", "phase", "delta", "done"]);
+    expect(events[1]).toMatchObject({ type: "phase", phase: "scanned", transcripts: 4, sessions: 2 });
+    const done = events[3];
+    expect(done).toMatchObject({ type: "done", degraded: false, scanned: 1467, updatedAt: 123 });
+    if (done.type === "done") expect(done.report).toEqual(REPORT);
   });
 
-  it("surfaces how many sessions were scanned (for the judged-vs-scanned hint)", () => {
-    vi.stubGlobal("EventSource", FakeES as unknown as typeof EventSource);
-    let done: InsightsEvent | undefined;
-    openInsightsStream("", "/p", (e) => { if (e.type === "done") done = e; });
-    FakeES.last!.emit("done", { report: REPORT, degraded: false, signalSummary: { sessionsScanned: 1467 } });
-    expect(done).toMatchObject({ type: "done", scanned: 1467 });
+  it("puts the project root and fresh=1 on the request", async () => {
+    let seen = "";
+    await run(sseClient([{ type: "done", report: REPORT, degraded: false, updatedAt: null }], (u) => { seen = u; }), "/home/me/proj", true);
+    expect(seen).toContain("root=%2Fhome%2Fme%2Fproj");
+    expect(seen).toContain("fresh=1");
   });
 
-  it("adds fresh=1 to bypass the cache when requested", () => {
-    vi.stubGlobal("EventSource", FakeES as unknown as typeof EventSource);
-    openInsightsStream("", "/p", () => {}, true);
-    expect(FakeES.last!.url).toContain("fresh=1");
-  });
-
-  it("translates failed and closes", () => {
-    vi.stubGlobal("EventSource", FakeES as unknown as typeof EventSource);
-    const events: InsightsEvent[] = [];
-    openInsightsStream("", "/p", (e) => events.push(e));
-    const es = FakeES.last!;
-    es.emit("failed", { message: "boom" });
+  it("forwards a failed event", async () => {
+    const events = await run(sseClient([{ type: "failed", message: "boom" }]), "/p");
     expect(events).toEqual([{ type: "failed", message: "boom" }]);
-    expect(es.closed).toBe(true);
   });
 });
