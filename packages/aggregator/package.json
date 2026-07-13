@@ -13,6 +13,10 @@
     "./testing": {
       "types": "./dist/auth/testCookie.d.ts",
       "default": "./dist/auth/testCookie.js"
+    },
+    "./catalog": {
+      "types": "./dist/catalog.d.ts",
+      "default": "./dist/catalog.js"
     }
   },
   "files": [
