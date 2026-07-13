@@ -30,7 +30,9 @@ export function useReportRun<T>(apiBase: string, kind: string, openStream: OpenS
 
   const openLive = useCallback((fresh: boolean, params: Record<string, string>) => {
     closeRef.current?.();
-    setView({ ...IDLE, status: "running", phase: "starting", params });
+    // Empty initial phase so each panel's own `running ? "…"` badge placeholder shows
+    // until the first real phase event (attach/reattach uses "resuming…" below instead).
+    setView({ ...IDLE, status: "running", phase: "", params });
     closeRef.current = openStream(fresh, params, handlers());
   }, [openStream, handlers]);
 
