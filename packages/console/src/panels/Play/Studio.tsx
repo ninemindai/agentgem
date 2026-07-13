@@ -4,7 +4,7 @@ import { makeClient, playMiniappRoute, playSaveRoute, playPublishRoute, publishS
 import { AgentSelector, type PlayAgent } from "./AgentSelector.js";
 import { CapabilityStrip } from "./CapabilityStrip.js";
 import { RequestReviewModal } from "./RequestReviewModal.js";
-import { Runner } from "./Runner.js";
+import { Runner, type RunnerHandle } from "./Runner.js";
 import { openStudioStream } from "./studioStream.js";
 import { genre as genreOf, parseGateFailure, fixSealPrompt } from "./playMeta.js";
 import { useIdentity } from "../../identity/IdentityProvider.js";
@@ -17,6 +17,12 @@ import { resolvePublishAction, type PublishAction } from "./publishAction.js";
 import { parseTags } from "./parseTags.js";
 
 const j = (r: Response) => { if (!r.ok) throw new Error(String(r.status)); return r.json(); };
+
+// Mirrors the server's 512 KB binary cap (src/og/coverDataUrl.ts's COVER_MAX_BYTES) — checked against
+// the base64 data-URL *text* length (~700 KB of base64 ≈ 512 KB decoded), so an oversized cover is
+// rejected client-side and never round-trips to /api/publish-setup. Duplicated as a literal rather than
+// imported: that file lives in the root package, which @agentgem/console has no workspace dependency on.
+const COVER_MAX_DATA_URL_LEN = 700_000;
 
 // Structured chat log entries so we can render bubbles + tool chips instead of one rolling string.
 type Msg = { role: "user" | "agent"; text: string } | { role: "tool"; title: string; failed?: boolean };
@@ -55,6 +61,17 @@ export function Studio({
   const [pendingVersion, setPendingVersion] = useState<{ latestVersion: string; nextVersion: string; login: string } | null>(null);
   const [scope, setScope] = useState<"public" | "unlisted" | "private">("public");
   const [tags, setTags] = useState("");   // free-form publish tags (comma separated), parsed via parseTags
+  // The accepted coverDataUrl, threaded into publish. A ref, not state: it's never rendered, only
+  // read inside publishWorkspace — reading it as state there would close over the value as of the
+  // render that created the handler (e.g. Use this's onClick), which is stale by one setCover call.
+  const coverRef = useRef<string | null>(null);
+  // "confirm" = the banner is open, pausing the publish until the author picks a cover (or skips).
+  // We ALWAYS enter it once a capture attempt completes — even on failure/oversized — so Upload and
+  // Skip (the spec's manual-cover fallback) are reachable regardless of the capture outcome.
+  const [coverStage, setCoverStage] = useState<"idle" | "confirm">("idle");
+  const [coverPreview, setCoverPreview] = useState<string | null>(null); // an accepted-size capture, shown as the banner thumbnail
+  const [captureBusy, setCaptureBusy] = useState(false);
+  const [coverError, setCoverError] = useState<string | null>(null);   // oversized/failed capture note, shown in the banner
   const [pendingReview, setPendingReview] = useState(false);   // Request review clicked while unbound
   const [reviewOpen, setReviewOpen] = useState(false);
   const [reviewGroups, setReviewGroups] = useState<{ id: string; name: string; role: string }[] | null>(null);
@@ -62,6 +79,7 @@ export function Studio({
   const [reviewDescription, setReviewDescription] = useState("");   // optional note to reviewers, sent at submit
   const [reviewSubmitting, setReviewSubmitting] = useState(false);   // in-flight guard: save→publish-status→request chain
   const { status: identity } = useIdentity();
+  const runnerRef = useRef<RunnerHandle>(null);
   const closeRef = useRef<null | (() => void)>(null);
   const logRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
@@ -288,6 +306,7 @@ export function Studio({
       const pub = await publishSetupRoute.call(makeClient(apiBase), { body: {
         workspace: name, scope: login, name, version, provenance: "play", visibility,
         description: `${g.label} mini-game`, tags: ["game", meta?.genre ?? "project-fun", ...parseTags(tags)],
+        coverDataUrl: coverRef.current ?? undefined,
       } });
       // Link the gem's marketplace page (installable / playable), not just the OG teaser card.
       // Unlisted publishes aren't in Explore, so point straight at the playable /games/ link instead.
@@ -324,13 +343,85 @@ export function Studio({
     setStatus(""); setPendingVersion({ latestVersion: action.latestVersion, nextVersion: action.nextVersion, login });
   }
 
-  // Share to Explore (app.agentgem.ai): Save (creates the game-gem workspace + enforces
-  // the seal), then publish. Unbound → offer the inline connect and resume afterwards.
-  async function shareToExplore() {
-    setStatus("preparing…"); setShare(null); setPendingVersion(null);
-    if (!(await save())) return; // gate failure already surfaced as the banner
+  // Accept a captured/uploaded cover only if it's under the client-side cap mirroring the server's
+  // (COVER_MAX_BYTES in src/og/coverDataUrl.ts) — an oversized cover is rejected here rather than
+  // round-tripping all the way to /api/publish-setup before being rejected there.
+  function withinCoverCap(dataUrl: string): boolean {
+    if (dataUrl.length > COVER_MAX_DATA_URL_LEN) {
+      setCoverError("Cover image is too large (max ~512 KB) — try Re-capture or a smaller upload.");
+      return false;
+    }
+    setCoverError(null);
+    return true;
+  }
+
+  // Re-capture button in the confirm banner: same one-shot request as the initial capture, but
+  // user-triggered and shown busy while in flight. Keeps the banner open (never resumes publish);
+  // a within-cap result becomes the new thumbnail, a failed/oversized one clears it and leaves the
+  // failure/too-large note so Upload/Skip stay the way forward.
+  async function recaptureCover() {
+    setCaptureBusy(true);
+    const c = await runnerRef.current?.requestCapture();
+    setCaptureBusy(false);
+    if (c?.ok && c.dataUrl) {
+      if (withinCoverCap(c.dataUrl)) setCoverPreview(c.dataUrl);   // good → new thumbnail
+      else setCoverPreview(null);                                  // oversized → withinCoverCap set the too-large note
+    } else { setCoverPreview(null); setCoverError(null); }         // failed → neutral "couldn't capture" state
+  }
+
+  // Close the confirm banner and clear its transient state. Called by every terminal banner action
+  // (Use this / Upload / Skip) right before proceedToPublish resumes the paused publish.
+  function closeBanner() {
+    setCoverStage("idle"); setCoverPreview(null); setCoverError(null);
+  }
+
+  // Manual upload: FileReader.readAsDataURL, same as packages/marketplace/src/upload.ts's
+  // fileToBase64 — but keeps the FULL data URL (data:type;base64,...) rather than stripping the
+  // prefix, since the server (parseImageDataUrl) parses the whole thing. On a within-cap file it
+  // accepts the cover, closes the banner, and resumes the paused publish; an oversized file leaves
+  // the banner open with the "too large" note (withinCoverCap sets it) so the author can retry.
+  function onCoverFile(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    e.target.value = ""; // allow re-selecting the same file
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = () => {
+      const dataUrl = String(reader.result);
+      // Oversized → withinCoverCap sets the too-large note; leave the banner (and any prior capture
+      // thumbnail) in place so the author can pick a smaller file, re-capture, or skip.
+      if (withinCoverCap(dataUrl)) { coverRef.current = dataUrl; closeBanner(); void proceedToPublish(); }
+    };
+    reader.onerror = () => setCoverError("Could not read the file.");
+    reader.readAsDataURL(file);
+  }
+
+  // Resolves the identity gate and publishes. Shared by the confirm banner's Use this/Upload/Skip
+  // buttons (once the cover decision is made) — split out so the banner's pause doesn't need its own
+  // copy of this gate.
+  async function proceedToPublish() {
     if (!(identity?.bound && identity.login)) { setStatus(""); setPendingPublish(true); return; }
     await checkAndPublish(identity.login);
+  }
+
+  // Share to Explore (app.agentgem.ai): Save (creates the game-gem workspace + enforces the seal),
+  // then request a best-effort screenshot of the sealed preview for the OG card. Whatever the capture
+  // yields — a good thumbnail, an oversized frame, or an outright failure (timeout/no-frame/no-canvas)
+  // — we ALWAYS open the confirm banner and PAUSE here rather than publishing on the capture result.
+  // That keeps the manual Upload/Skip controls reachable in every case (the spec's fallback for a game
+  // that can't be auto-captured) and makes the too-large/failed note visible. The banner's buttons are
+  // what resume publishing (via proceedToPublish); capture never blocks publish because Skip is always
+  // one click away, and a failed capture never aborts the flow.
+  async function shareToExplore() {
+    setStatus("preparing…"); setShare(null); setPendingVersion(null); coverRef.current = null; setCoverPreview(null); setCoverError(null);
+    if (!(await save())) return; // gate failure already surfaced as the banner
+    setCaptureBusy(true);
+    const cap = await runnerRef.current?.requestCapture();
+    setCaptureBusy(false);
+    if (cap?.ok && cap.dataUrl) {
+      if (withinCoverCap(cap.dataUrl)) setCoverPreview(cap.dataUrl);   // good → thumbnail
+      else setCoverPreview(null);                                      // oversized → withinCoverCap set the too-large note
+    } else { setCoverPreview(null); setCoverError(null); }             // failed/timeout/no-frame → neutral "couldn't capture" banner
+    setCoverStage("confirm"); setStatus("");
   }
 
   // A latent resume flag that fires on some later, unrelated bind is worse than no
@@ -452,6 +543,29 @@ export function Studio({
           <button className="play-btn play-btn--ghost" onClick={() => { const p = pendingVersion; setPendingVersion(null); void publishWorkspace(p.login, p.latestVersion, scope); }}>Overwrite v{pendingVersion.latestVersion}</button>
         </div>
       )}
+      {coverStage === "confirm" && (
+        <div className="play-banner">
+          <span className="play-banner__ico">🖼️</span>
+          {coverPreview && (
+            <img src={coverPreview} alt="captured cover preview" style={{ width: 96, height: 60, objectFit: "cover", borderRadius: 6, border: "1px solid var(--line)" }} />
+          )}
+          <div className="play-banner__body">
+            <div className="play-banner__title">{coverPreview ? "Use this as the share card cover?" : "Add a share card cover?"}</div>
+            <div className="play-banner__detail">{coverPreview
+              ? (coverError ?? "Captured from the preview — swap it for your own image, or skip it for a plain card.")
+              : (coverError ?? "Couldn't capture a screenshot — upload an image or skip for a plain card.")}</div>
+          </div>
+          {coverPreview && (
+            <button className="play-btn play-btn--primary" onClick={() => { coverRef.current = coverPreview; closeBanner(); void proceedToPublish(); }}>Use this</button>
+          )}
+          <button className="play-btn play-btn--ghost" disabled={captureBusy} onClick={recaptureCover}>{captureBusy ? "Capturing…" : "Re-capture"}</button>
+          <label className="play-btn play-btn--ghost" style={{ cursor: "pointer" }}>
+            Upload
+            <input type="file" accept="image/png,image/jpeg,image/webp" style={{ display: "none" }} onChange={onCoverFile} />
+          </label>
+          <button className="play-btn play-btn--ghost" onClick={() => { coverRef.current = null; closeBanner(); void proceedToPublish(); }}>Skip</button>
+        </div>
+      )}
       {gate && (
         <div className="play-banner">
           <span className="play-banner__ico">🔒</span>
@@ -507,7 +621,7 @@ export function Studio({
         <div className="play-stage">
           <div className="play-cap-row"><span className="play-cap">Preview</span><span className="play-cap__rule" /></div>
           <div className="play-plate" ref={plateRef}>
-            {html ? <Runner html={html} name={name} apiBase={apiBase} needs={meta?.needs} maxHeight={plateMax} />
+            {html ? <Runner ref={runnerRef} html={html} name={name} apiBase={apiBase} needs={meta?.needs} maxHeight={plateMax} />
               : loadErr ? (
                 <div className="play-plate__state">
                   <b>Couldn't load the preview</b>

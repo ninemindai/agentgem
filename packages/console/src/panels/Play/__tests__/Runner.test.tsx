@@ -1,7 +1,8 @@
 // packages/console/src/panels/Play/__tests__/Runner.test.tsx
 import { describe, it, expect, afterEach, vi } from "vitest";
+import { createRef } from "react";
 import { render, cleanup, waitFor, screen, fireEvent } from "@testing-library/react";
-import { Runner } from "../Runner.js";
+import { Runner, type RunnerHandle } from "../Runner.js";
 import { playSessionDataRoute, inventoryRoute } from "../../../api/routes.js";
 import { getConsent } from "../consent.js";
 import * as watchStream from "../../Watch/watchStream.js";
@@ -351,5 +352,33 @@ describe("Runner — Replay yours picker", () => {
     fireEvent.keyDown(row, { key: "Enter" });
     await waitFor(() => expect(data).toHaveBeenCalled());
     expect(data.mock.calls[0][1]).toMatchObject({ query: { name: "dup", sessionId: "mine-1", agent: "codex" } });
+  });
+
+  // requestCapture posts agentgem:capture to the sealed frame and resolves on the one-shot
+  // agentgem:capture-result reply. StudioShare stubs the Runner, so this is the only place the
+  // real message-passing/timeout is exercised.
+  it("requestCapture resolves with the capture-result posted back on the dedicated channel", async () => {
+    const ref = createRef<RunnerHandle>();
+    const { container } = render(<Runner ref={ref} html="<canvas></canvas>" />);
+    const post = vi.spyOn((container.querySelector("iframe") as HTMLIFrameElement).contentWindow as Window, "postMessage").mockImplementation(() => {});
+
+    const p = ref.current!.requestCapture();
+    await waitFor(() => expect(post).toHaveBeenCalledWith({ type: "agentgem:capture" }, "*")); // the request reached the frame
+    window.dispatchEvent(new MessageEvent("message", { data: { type: "agentgem:capture-result", ok: true, dataUrl: "data:image/png;base64,AAAA" } }));
+    await expect(p).resolves.toEqual({ ok: true, dataUrl: "data:image/png;base64,AAAA", reason: undefined });
+  });
+
+  it("requestCapture times out to {ok:false} when the frame never replies", async () => {
+    vi.useFakeTimers();
+    try {
+      const ref = createRef<RunnerHandle>();
+      const { container } = render(<Runner ref={ref} html="<canvas></canvas>" />);
+      vi.spyOn((container.querySelector("iframe") as HTMLIFrameElement).contentWindow as Window, "postMessage").mockImplementation(() => {});
+      const p = ref.current!.requestCapture();
+      await vi.advanceTimersByTimeAsync(3000);
+      await expect(p).resolves.toEqual({ ok: false, reason: "timeout" });
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });

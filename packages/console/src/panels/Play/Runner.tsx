@@ -1,9 +1,18 @@
 // packages/console/src/panels/Play/Runner.tsx
-import { useEffect, useRef, useState, useCallback } from "react";
+import { forwardRef, useEffect, useImperativeHandle, useRef, useState, useCallback } from "react";
 import { sandboxDoc } from "../Watch/sandboxDoc.js";
 import { fetchSessions, type WatchSession } from "../Watch/watchStream.js";
 import { createUiHost, type UiHost } from "./mcpUiHost.js";
 import { CAP_LABEL, getConsent, setConsent } from "./consent.js";
+
+// Imperative handle exposed to Studio (via ref) so it can trigger an OG-cover screenshot
+// on demand. This is deliberately NOT routed through the MCP host: it posts on its own
+// one-shot channel (`agentgem:capture` / `agentgem:capture-result`, added by the capture
+// shim baked into sandboxDoc — Task 7) and tears its listener down on resolve or timeout,
+// so it never competes with or leaks into the persistent host listener above.
+export interface RunnerHandle {
+  requestCapture(): Promise<{ ok: boolean; dataUrl?: string; reason?: string }>;
+}
 
 // The sealed miniapp player: null-origin iframe (no allow-same-origin), strict CSP via sandboxDoc.
 // Miniapps are usually full-window apps (html,body{height:100%;overflow:hidden}), so a short fixed
@@ -21,8 +30,9 @@ import { CAP_LABEL, getConsent, setConsent } from "./consent.js";
 // session picker (host-initiated rebind via `host.feedSessionData`).
 // maxHeight: an inline height budget (px). Without it the inline game is sized by width alone, so on a
 // wide, short screen it grows tall enough to push the studio composer below the fold.
-export function Runner({ html, vw = 1200, vh = 780, interactive = true, name, apiBase, needs, maxHeight }:
-  { html: string; vw?: number; vh?: number; interactive?: boolean; name?: string; apiBase?: string; needs?: string[]; maxHeight?: number }) {
+export const Runner = forwardRef<RunnerHandle,
+  { html: string; vw?: number; vh?: number; interactive?: boolean; name?: string; apiBase?: string; needs?: string[]; maxHeight?: number }
+>(function Runner({ html, vw = 1200, vh = 780, interactive = true, name, apiBase, needs, maxHeight }, ref) {
   const boxRef = useRef<HTMLDivElement>(null);
   const iframeRef = useRef<HTMLIFrameElement>(null);
   const [scale, setScale] = useState(0.5);
@@ -31,6 +41,7 @@ export function Runner({ html, vw = 1200, vh = 780, interactive = true, name, ap
   const [pendingDetail, setPendingDetail] = useState<string | undefined>(undefined); // extra context for the prompt (e.g. open-link's URL)
   const [pickerOpen, setPickerOpen] = useState(false);
   const [sessions, setSessions] = useState<WatchSession[] | null>(null);
+  const mountedRef = useRef(true);                             // false after unmount — gates requestCapture's late resolve
   const hostRef = useRef<UiHost | null>(null);                 // the MCP Apps router — owns protocol + brokering
   const pendingResolve = useRef<((allow: boolean) => void) | null>(null); // resolves the open requestConsent()
   const rebindBtnRef = useRef<HTMLButtonElement>(null);        // the "Replay yours" trigger — focus returns here on close
@@ -165,6 +176,34 @@ export function Runner({ html, vw = 1200, vh = 780, interactive = true, name, ap
     setPendingDetail(undefined);
   };
 
+  // Track unmount so an in-flight capture can't drive a setState-after-unmount in the caller (Studio)
+  // if the user navigates away mid-request — see the mount guard in requestCapture below.
+  useEffect(() => () => { mountedRef.current = false; }, []);
+
+  // Post agentgem:capture to the sealed frame and await its one-shot agentgem:capture-result reply on a
+  // throwaway listener (removed on resolve or timeout) — deliberately separate from the host-wiring effect's
+  // persistent `onMsg` above, which never sees or reacts to capture-result. Best-effort: no frame, no reply
+  // within 3s, or a game that doesn't implement the capture shim all resolve to {ok:false} rather than hang
+  // or throw — capture must never block the publish flow that calls it. Both the listener and the timer
+  // ALWAYS tear down; the mountedRef guard suppresses only the late resolve (so the caller's post-await
+  // setState is skipped) when the component has since unmounted.
+  useImperativeHandle(ref, () => ({
+    requestCapture() {
+      const target = iframeRef.current?.contentWindow;
+      if (!target) return Promise.resolve({ ok: false, reason: "no-frame" });
+      return new Promise((resolve) => {
+        const onMsg = (e: MessageEvent) => {
+          if (!e.data || e.data.type !== "agentgem:capture-result") return;
+          window.removeEventListener("message", onMsg); clearTimeout(timer);
+          if (mountedRef.current) resolve({ ok: !!e.data.ok, dataUrl: e.data.dataUrl, reason: e.data.reason });
+        };
+        const timer = setTimeout(() => { window.removeEventListener("message", onMsg); if (mountedRef.current) resolve({ ok: false, reason: "timeout" }); }, 3000);
+        window.addEventListener("message", onMsg);
+        target.postMessage({ type: "agentgem:capture" }, "*");
+      });
+    },
+  }), []);
+
   // Inline only: fit the column width and any height budget, never upscale. Fullscreen needs no scale — the
   // iframe is sized to the overlay itself, so the miniapp lays out against the real screen instead of a
   // magnified vw×vh.
@@ -268,4 +307,4 @@ export function Runner({ html, vw = 1200, vh = 780, interactive = true, name, ap
       )}
     </div>
   );
-}
+});
