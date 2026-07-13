@@ -1,11 +1,14 @@
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { testbedRecentsRoute, testbedProjectsRoute, rubricsRoute, makeClient, type RecentEntry, type ProjectCandidate, type RubricSummary } from "../../api/routes.js";
 import { defineConsolePage } from "../../registry.js";
-import { openRubricStream, type RubricReportView, type RubricFactorView } from "./rubricStream.js";
+import { openRubricStream, type RubricReportView, type RubricFactorView, type RubricScopeParams } from "./rubricStream.js";
 import { HygieneLeaderboard } from "./HygieneLeaderboard.js";
 import { consumePendingRubric } from "../../pendingAnalyze.js";
 import { Loading } from "../../shell/Loading.js";
 import { timeAgo } from "../../util/timeAgo.js";
+import { useReportRun, type Handlers } from "../../report/useReportRun.js";
+
+type RubricDone = { report: RubricReportView; cached: boolean; updatedAt: number | null };
 
 function short(path: string): string {
   const parts = path.split("/").filter(Boolean);
@@ -85,14 +88,28 @@ export function Rubrics({ apiBase }: { apiBase: string }) {
   const [projects, setProjects] = useState<ProjectCandidate[] | null>(null);
   const [recents, setRecents] = useState<RecentEntry[] | null>(null);
   const [activePath, setActivePath] = useState<string | null>(null);
-  const [phase, setPhase] = useState("");
-  const [out, setOut] = useState("");
-  const [report, setReport] = useState<RubricReportView | null>(null);
-  const [updatedAt, setUpdatedAt] = useState<number | null>(null);
-  const [error, setError] = useState<string | null>(null);
   const [query, setQuery] = useState("");
-  const [running, setRunning] = useState(false);
-  const closeRef = useRef<(() => void) | null>(null);
+
+  // openStream adapter: the hook decides WHEN to open; this maps openRubricStream's
+  // events to the normalized Handlers and reconstructs RubricScopeParams from params.
+  const openStream = useCallback(
+    (fresh: boolean, params: Record<string, string>, h: Handlers<RubricDone>) => {
+      const scope: RubricScopeParams = {
+        rubric: params.rubric,
+        scope: params.scope as RubricScopeParams["scope"],
+        root: params.root,
+        sessionId: params.sessionId,
+      };
+      return openRubricStream(apiBase, scope, (e) => {
+        if (e.type === "start") h.phase("evaluating");
+        else if (e.type === "delta") h.delta(e.text);
+        else if (e.type === "done") h.done({ report: e.report, cached: e.cached, updatedAt: e.updatedAt });
+        else if (e.type === "failed") h.failed(e.message);
+      }, fresh);
+    },
+    [apiBase],
+  );
+  const { view, start } = useReportRun<RubricDone>(apiBase, "rubric", openStream);
 
   useEffect(() => {
     const client = makeClient(apiBase);
@@ -104,19 +121,24 @@ export function Rubrics({ apiBase }: { apiBase: string }) {
     testbedProjectsRoute.call(client).then((r) => setProjects(r.projects)).catch(() => setProjects([]));
     testbedRecentsRoute.call(client).then((r) => setRecents(r.recents)).catch(() => setRecents([]));
   }, [apiBase]);
-  useEffect(() => () => closeRef.current?.(), []);
+  // Reattached a run on mount → select its rubric + row.
+  useEffect(() => {
+    const p = view.params;
+    if (!p || activePath) return;
+    if (p.rubric) setRubricId(p.rubric);
+    if (p.scope === "all") setActivePath("*");
+    else if (p.root) setActivePath(p.root);
+  }, [view.params, activePath]);
 
   const run = (path: string, fresh = false) => {
     if (!rubricId) return;
-    closeRef.current?.();
-    setActivePath(path); setPhase(""); setOut(""); setReport(null); setUpdatedAt(null); setError(null); setRunning(true);
-    const scope = path === "*" ? { rubric: rubricId, scope: "all" as const } : { rubric: rubricId, scope: "project" as const, root: path };
-    closeRef.current = openRubricStream(apiBase, scope, (e) => {
-      if (e.type === "start") setPhase("evaluating");
-      else if (e.type === "delta") setOut((o) => o + e.text);
-      else if (e.type === "done") { setPhase("done"); setReport(e.report); setUpdatedAt(e.updatedAt); setRunning(false); }
-      else if (e.type === "failed") { setError(e.message); setRunning(false); }
-    }, fresh);
+    setActivePath(path);
+    const p: { rubric: string; scope: "all" | "project"; root?: string } =
+      path === "*" ? { rubric: rubricId, scope: "all" } : { rubric: rubricId, scope: "project", root: path };
+    const key = `${p.rubric}:${p.scope}:${p.root ?? ""}:`;
+    const params: Record<string, string> = { rubric: p.rubric, scope: p.scope };
+    if (p.root) params.root = p.root;
+    start(key, params, fresh);
   };
 
   const rows = (() => {
@@ -130,6 +152,13 @@ export function Rubrics({ apiBase }: { apiBase: string }) {
   })();
 
   const selected = rubrics?.find((r) => r.id === rubricId);
+
+  const running = view.status === "running";
+  const report = view.report?.report ?? null;
+  const updatedAt = view.report?.updatedAt ?? null;
+  const phase = view.phase;
+  const error = view.error;
+  const out = view.deltas;
 
   return (
     <section className="analyze">
