@@ -400,40 +400,45 @@ git commit -m "refactor(server): extract mountAggregator into serverAggregator.t
 - Create: `src/appCommon.ts`
 - Modify: `src/index.ts` (use `buildCommonApp`)
 
+**CRITICAL ordering constraint (do not collapse into one blob):** the current post-fix `index.ts` order is `mountAggregator` → **global** `app.expressMiddleware("middleware.originGuard", originGuard)` → `/healthz` → `SERVE_CONSOLE` console-serving → the raw **SSE routes** (`/api/warm/status`, `/api/workflow/analyze/stream`, `/api/gem/run/stream`, `/api/gem/verify/stream`, `/api/scorecard/stream`, `/api/insights/stream`, `/api/rubric/stream`, and any Watch-tab streams — each registered with `originGuard` as a **per-route** middleware arg). The global `originGuard` **MUST** register *after* the aggregator's `middleware.shareOriginSecret` + rate limiters (this is exactly the Task-4 fix; AgentBack orders same-group express middlewares by registration order). Therefore the shared surface is split into two functions so each entry can slot its aggregator/benchmark step *between* them.
+
 **Interfaces:**
-- Produces: `export async function buildCommonApp(port: number): Promise<{ app: RestApplication; server: Awaited<RestApplication["restServer"]> }>` — everything `createApp` does that is NOT the aggregator block: `new RestApplication`, body-parser config, `MCPComponent`/`GemTypesComponent`/`AgentSourcesComponent`, MCPServer config, the `GemController`/`RubricController`/`ReviewController`/`DreamController`/`ShareProxyController`/`SourcesController`/`PlayController` controllers, `GemTools`, the dispatch hooks (`playNoCache`/`gemNoCache`/`gameHtmlCache`), `installExplorer`, `installMcpHttp`, `await app.restServer`, trust-proxy, `/healthz`, `closeSharedIndex` onStop, `originGuard`, and the `SERVE_CONSOLE` console-serving block. Returns `{ app, server }` so entrypoints can mount more and start.
+- Produces:
+  - `export async function buildCommonApp(port: number): Promise<{ app: RestApplication; server: Awaited<RestApplication["restServer"]> }>` — the part that must run BEFORE the aggregator/benchmark step: `new RestApplication`, body-parser config, `MCPComponent`/`GemTypesComponent`/`AgentSourcesComponent`, MCPServer config, the `GemController`/`RubricController`/`ReviewController`/`DreamController`/`ShareProxyController`/`SourcesController`/`PlayController` controllers, `GemTools`, the dispatch hooks (`playNoCache`/`gemNoCache`/`gameHtmlCache`), `installExplorer`, `installMcpHttp`, `await app.restServer`, trust-proxy. Returns `{ app, server }`. Does **NOT** register the global `originGuard`, `/healthz`, console-serving, or the SSE routes.
+  - `export function finalizeCommonApp(app: RestApplication, server: Awaited<RestApplication["restServer"]>): void` — the part that must run AFTER: the global `app.expressMiddleware("middleware.originGuard", originGuard)`, `/healthz`, the `SERVE_CONSOLE` console-serving block, the raw SSE routes (each keeping its per-route `originGuard` arg), and the `closeSharedIndex` `app.onStop`. Preserves the exact order shown above.
 - Consumes: nothing new.
 
-- [ ] **Step 1: Create `buildCommonApp` and rewrite `index.ts`**
+- [ ] **Step 1: Create `appCommon.ts` (both functions) and rewrite `index.ts`**
 
-`src/appCommon.ts` = the shared body (move the corresponding imports too). `src/index.ts` becomes:
+Move the corresponding imports too. `src/index.ts` becomes:
 
 ```typescript
 // src/index.ts — SERVER entry (public api.agentgem.ai, private enterprise deployments, Fly).
-import { buildCommonApp } from "./appCommon.js";
+import { buildCommonApp, finalizeCommonApp } from "./appCommon.js";
 import { mountAggregator } from "./serverAggregator.js";
 export { migrateAccountsOrFail } from "./serverAggregator.js"; // preserve existing test import path
 
 export async function createApp(port: number): Promise<RestApplication> {
   const { app, server } = await buildCommonApp(port);
-  await mountAggregator(app, server, process.env);
+  await mountAggregator(app, server, process.env);   // registers shareOriginSecret + rate limiters FIRST
+  finalizeCommonApp(app, server);                    // then global originGuard + healthz + console + SSE
   return app;
 }
 // ... keep the existing run()/main bootstrap that calls createApp + installGracefulShutdown.
 ```
 
-Keep `createApp`'s exported name and signature identical (tests + `run()` depend on it).
+Keep `createApp`'s exported name and signature identical (tests + `run()` depend on it). The resulting registration order must be byte-for-byte the same as the current `index.ts` — verify with the full suite AND the `shareMiddlewareOrder` test (which asserts shareOriginSecret precedes originGuard).
 
-- [ ] **Step 2: Verify server unchanged**
+- [ ] **Step 2: Verify server unchanged (order-sensitive)**
 
-Run: `pnpm build && pnpm exec vitest run`
-Expected: PASS (full suite green; `createApp` still mounts the aggregator via `mountAggregator`).
+Run: `pnpm build && pnpm exec vitest run serverRoutes shareMiddlewareOrder`
+Expected: PASS — `shareMiddlewareOrder` proves the global `originGuard` still registers after the aggregator's `shareOriginSecret` (i.e. `finalizeCommonApp` runs after `mountAggregator`). Then run the full suite `pnpm exec vitest run` and confirm no NEW failures beyond the known concurrency flakes (visibility/stars/scan, which pass in isolation).
 
 - [ ] **Step 3: Commit**
 
 ```bash
 git add src/appCommon.ts src/index.ts
-git commit -m "refactor(server): extract buildCommonApp; index.ts = common + mountAggregator"
+git commit -m "refactor(server): extract buildCommonApp/finalizeCommonApp; index.ts = common + mountAggregator + finalize"
 ```
 
 ---
@@ -445,7 +450,7 @@ git commit -m "refactor(server): extract buildCommonApp; index.ts = common + mou
 - Test: `src/__tests__/clientEntry.test.ts`
 
 **Interfaces:**
-- Consumes: `buildCommonApp` (Task 5), `BenchmarkProxyController` (Task 2).
+- Consumes: `buildCommonApp` + `finalizeCommonApp` (Task 5), `BenchmarkProxyController` (Task 2).
 - Produces: `export async function createClientApp(port: number): Promise<RestApplication>` + a `run()`/main that boots it (mirror `index.ts`'s bootstrap, minus aggregator concerns).
 
 - [ ] **Step 1: Write the failing test**
@@ -481,18 +486,21 @@ Expected: FAIL — cannot find module `../client.js`.
 ```typescript
 // src/client.ts — DESKTOP entry: pure API client. No aggregator, no DB, no PGlite.
 import type { RestApplication } from "@agentback/rest";
-import { buildCommonApp } from "./appCommon.js";
+import { buildCommonApp, finalizeCommonApp } from "./appCommon.js";
 import { BenchmarkProxyController } from "./benchmark.proxy.controller.js";
 
 export async function createClientApp(port: number): Promise<RestApplication> {
-  const { app } = await buildCommonApp(port);
-  app.restController(BenchmarkProxyController);
+  const { app, server } = await buildCommonApp(port);
+  app.restController(BenchmarkProxyController);   // client-only proxy; slots where mountAggregator sits on the server
+  finalizeCommonApp(app, server);                // same global originGuard + healthz + console + SSE, after the controller step
   return app;
 }
 
 // Bootstrap: mirror index.ts's run()/installGracefulShutdown, calling createClientApp.
 // (Copy index.ts's main() shape; drop any aggregator-specific shutdown.)
 ```
+
+Note: `app.restController()` registers into the DI container and can run after `await app.restServer` (AgentBack resolves controllers lazily at dispatch), so registering `BenchmarkProxyController` here — after `buildCommonApp` already awaited `restServer` — is fine; the `clientEntry` test above proves `/api/benchmark` dispatches.
 
 Move the `app.restController(BenchmarkProxyController)` line added in Task 2 OUT of `index.ts` if it should be client-only. Decision: register `BenchmarkProxyController` in **both** entries is harmless (the server can proxy to itself), but cleaner is client-only. Register it in `client.ts` only; remove it from `index.ts`. Keep the server's own `/api/aggregator/benchmarks` (via `mountAggregator`) — different path, no collision.
 
