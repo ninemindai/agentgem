@@ -40,6 +40,7 @@ export function useReportRun<T>(apiBase: string, kind: string, openStream: OpenS
 
   // Poll /runs for one key until it leaves "running", then open the stream once (cache hit) to load the report.
   const attachAndPoll = useCallback((paramsKey: string, params: Record<string, string>) => {
+    if (pollRef.current) { clearTimeout(pollRef.current); pollRef.current = null; }
     setView({ ...IDLE, status: "running", phase: "resuming…", params });
     const tick = async () => {
       const runs = await fetchRuns();
@@ -57,6 +58,7 @@ export function useReportRun<T>(apiBase: string, kind: string, openStream: OpenS
     if (fresh) { openLive(true, params); return; }
     // Guard: if this key is already running, attach instead of opening a 2nd stream.
     void fetchRuns().then((runs) => {
+      if (!aliveRef.current) return;
       const rec = runs.find((x) => x.kind === kind && x.paramsKey === paramsKey);
       if (rec && rec.status === "running") attachAndPoll(paramsKey, params);
       else openLive(false, params);
