@@ -13,7 +13,7 @@
 // extraResources, and resolved at runtime by core.ts's packaged candidate.
 import { build } from "esbuild";
 import { execFileSync } from "node:child_process";
-import { cpSync, rmSync, mkdirSync, writeFileSync } from "node:fs";
+import { cpSync, rmSync, mkdirSync, writeFileSync, readFileSync as __rf } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -34,7 +34,7 @@ const banner =
   "const __dirname = __d(__filename);";
 
 await build({
-  entryPoints: [join(repo, "dist", "index.js")],
+  entryPoints: [join(repo, "dist", "client.js")],
   bundle: true,
   platform: "node",
   format: "esm",
@@ -71,3 +71,11 @@ execFileSync("npm", ["install", "--omit=dev", "--no-audit", "--no-fund"], {
 });
 
 console.log("core bundled →", out);
+
+const __bundle = __rf(join(out, "index.mjs"), "utf8");
+for (const forbidden of ["@electric-sql/pglite", "new PGlite(", "AggregatorController", "drizzle-orm/pglite"]) {
+  if (__bundle.includes(forbidden)) {
+    throw new Error(`desktop bundle must not contain "${forbidden}" — client entry leaked a server dep`);
+  }
+}
+console.log("bundle check: no aggregator/PGlite symbols ✓");
