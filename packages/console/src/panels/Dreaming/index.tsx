@@ -3,6 +3,7 @@ import { defineConsolePage } from "../../registry.js";
 import { timeAgo } from "../../util/timeAgo.js";
 import { setPendingAnalyze } from "../../pendingAnalyze.js";
 import { getStatus, getJourney, post, previewGuardrail, applyGuardrail, type DreamStatus, type JourneyEvent, type GuardrailPreview } from "./api.js";
+import { DreamProgress } from "./DreamProgress.js";
 
 const KINDS = ["all", "skill", "lesson", "opportunity", "guardrail", "pass", "verified"] as const;
 const PHASES = ["LIGHT", "DEEP", "REM"] as const;
@@ -102,9 +103,10 @@ export function Dreaming({ apiBase }: { apiBase: string }) {
   const [events, setEvents] = useState<JourneyEvent[]>([]);
   const [truncated, setTruncated] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [running, setRunning] = useState(false);
-  const [note, setNote] = useState<string | null>(null);
+  const [pending, setPending] = useState(false);
   const aliveRef = useRef(true);
+  const passAtClickRef = useRef<number | null>(null);
+  const lastSeenPassRef = useRef<number | null>(null);
   useEffect(() => () => { aliveRef.current = false; }, []);
 
   const refresh = useCallback(() => {
@@ -114,6 +116,31 @@ export function Dreaming({ apiBase }: { apiBase: string }) {
       .catch(() => setEvents([]));
   }, [apiBase, filter]);
   useEffect(() => { refresh(); }, [refresh]);
+
+  // Adaptive live poll: fast while a pass runs so the step tracker updates,
+  // slow when idle. Clears the optimistic `pending` flag once the server shows a
+  // running pass or a pass completes, and refreshes the timeline on completion.
+  useEffect(() => {
+    let timer: ReturnType<typeof setTimeout>;
+    const tick = async () => {
+      const s = await getStatus(apiBase).catch(() => null);
+      if (!aliveRef.current) return;
+      if (s) {
+        setStatus(s);
+        if (s.progress) setPending(false);
+        if (s.lastPassAtMs != null && s.lastPassAtMs !== passAtClickRef.current) setPending(false);
+        if (s.lastPassAtMs != null && s.lastPassAtMs !== lastSeenPassRef.current) {
+          lastSeenPassRef.current = s.lastPassAtMs;
+          getJourney(apiBase, filter === "all" ? undefined : filter)
+            .then((r) => { if (aliveRef.current) { setEvents(r.events); setTruncated(r.truncated); } })
+            .catch(() => {});
+        }
+      }
+      if (aliveRef.current) timer = setTimeout(tick, s?.progress || pending ? 1200 : 6000);
+    };
+    void tick();
+    return () => { clearTimeout(timer); };
+  }, [apiBase, filter, pending]);
 
   const act = (path: string, key: string) =>
     post(apiBase, path, { key }).then(() => { setError(null); refresh(); }).catch(() => setError("Action failed — try again."));
@@ -125,37 +152,21 @@ export function Dreaming({ apiBase }: { apiBase: string }) {
       window.location.hash = "#/curate";
     }).catch(() => setError("Could not open this opportunity."));
 
-  // "Dream now" is fire-and-forget server-side (POST /dream/run returns {started} and the
-  // pass runs in the background), so give immediate feedback (button → "Dreaming…") and
-  // poll `lastPassAtMs` until a new pass lands — instead of a blind refresh that showed nothing.
+  // Fire-and-forget on the server; give instant optimistic feedback, then let the
+  // adaptive poll reflect the real running pass and clear `pending` when the
+  // server confirms progress or a new pass lands.
   const runDream = useCallback(async () => {
     setError(null);
-    setNote(null);
-    setRunning(true);
-    const before = status?.lastPassAtMs ?? null;
+    passAtClickRef.current = status?.lastPassAtMs ?? null;
+    setPending(true);
     try {
       await post(apiBase, "run");
-      let landed = false;
-      for (let i = 0; i < 12 && !landed && aliveRef.current; i++) {
-        await new Promise((r) => setTimeout(r, 1500));
-        if (!aliveRef.current) return;
-        const s = await getStatus(apiBase).catch(() => null);
-        if (s && aliveRef.current) {
-          setStatus(s);
-          if (s.lastPassAtMs != null && s.lastPassAtMs !== before) landed = true;
-        }
-      }
-      if (!aliveRef.current) return;
-      getJourney(apiBase, filter === "all" ? undefined : filter)
-        .then((r) => { if (aliveRef.current) { setEvents(r.events); setTruncated(r.truncated); } })
-        .catch(() => {});
-      setNote(landed ? "Dream pass complete." : "Dream pass is running in the background — new drafts appear here as they're ready.");
+      const s = await getStatus(apiBase).catch(() => null);
+      if (s && aliveRef.current) setStatus(s);
     } catch {
-      if (aliveRef.current) setError("Dream run failed.");
-    } finally {
-      if (aliveRef.current) setRunning(false);
+      if (aliveRef.current) { setError("Dream run failed."); setPending(false); }
     }
-  }, [apiBase, status, filter]);
+  }, [apiBase, status]);
 
   const actionable = (e: JourneyEvent) => e.key && e.status === "queued";
 
@@ -172,11 +183,11 @@ export function Dreaming({ apiBase }: { apiBase: string }) {
 
       {status && (
         <section className="dream-scene">
-          <div className="phases">
-            {PHASES.map((p) => <span key={p} data-lit={status.phasesLit.includes(p)}>{p}</span>)}
-          </div>
+          {status.progress
+            ? <DreamProgress progress={status.progress} />
+            : <div className="phases">{PHASES.map((p) => <span key={p} data-lit={status.phasesLit.includes(p)}>{p}</span>)}</div>}
           <p className="dream-counts">{status.promoted} promoted · {status.queued} queued</p>
-          <button className="dream-btn" disabled={running} onClick={runDream}>{running ? "Dreaming…" : "Dream now"}</button>
+          <button className="dream-btn" disabled={pending || !!status.progress} onClick={runDream}>{pending || status.progress ? "Dreaming…" : "Dream now"}</button>
         </section>
       )}
 
@@ -187,7 +198,6 @@ export function Dreaming({ apiBase }: { apiBase: string }) {
       </nav>
 
       {error && <p className="ledger-error" role="alert">{error}</p>}
-      {note && <p className="dream-counts" role="status">{note}</p>}
 
       <ul className="dream-queue journey-timeline">
         {/* index tie-breaker: verified events can share kind+title+ts (same gem, several agents, same ms) */}
