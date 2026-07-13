@@ -34,4 +34,21 @@ describe("AggregatorController.myGems", () => {
     const r = await ctrl.myGems({ body: { pubkey: s.pubkey, signedAt: Date.now(), signature: "bogus" } });
     expect(r.gems).toEqual([]);
   });
+
+  it("my-gems dedups multiple published versions of the same gem into one entry", async () => {
+    const db = await makeTestDb();
+    const s = signer();
+    const accountId = crypto.randomUUID();
+    await db.insert(producers).values({ pubkey: s.pubkey });
+    await db.insert(accounts).values({ id: accountId, provider: "github", providerAccountId: "42", login: "octocat" });
+    await db.insert(accountBindings).values({ pubkey: s.pubkey, provider: "github", accountId: "42", accountLogin: "octocat" });
+    await db.insert(catalogGems).values({ gemKey: "@x/demo", version: "0.1.0", publishedBy: "octocat", createdAtMs: 1000, ownerAccountId: accountId });
+    await db.insert(catalogGems).values({ gemKey: "@x/demo", version: "0.2.0", publishedBy: "octocat", createdAtMs: 2000, ownerAccountId: accountId });
+    const now = Date.now(); // must be within the 5-min freshness window (controller uses Date.now())
+    const payload = myGemsSigningPayload(s.pubkey, now);
+    const ctrl = new AggregatorController(db);
+    const r = await ctrl.myGems({ body: { pubkey: s.pubkey, signedAt: now, signature: s.sign(payload) } });
+    expect(r.gems.filter((g) => g.name === "demo").length).toBe(1);
+    expect(r.gems.find((g) => g.name === "demo")?.version).toBe("0.2.0");
+  });
 });

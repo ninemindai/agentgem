@@ -333,7 +333,12 @@ export class AggregatorController {
     });
     if (!acct.ok) return { gems: [] };
     const rows = await listCatalogGemsForOwner(this.db, acct.accountId);
-    return { gems: rows.map((g) => ({ key: g.gemKey, version: g.version, name: g.gemKey.split("/").slice(1).join("/") || g.gemKey })) };
+    // rows are newest-first and PK'd (gemKey, version), so a gem with N published versions yields N
+    // rows here; dedup to one entry per gemKey (keeping the first = latest version) so callers that
+    // attest each returned gem (e.g. contributeCore) don't redundantly attest the same workspace N times.
+    const seen = new Set<string>();
+    const deduped = rows.filter((g) => (seen.has(g.gemKey) ? false : (seen.add(g.gemKey), true)));
+    return { gems: deduped.map((g) => ({ key: g.gemKey, version: g.version, name: g.gemKey.split("/").slice(1).join("/") || g.gemKey })) };
   }
 
   // Installable publish: the signed catalog share PLUS the .gem archive bytes. Verifies the archive
