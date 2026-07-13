@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { testbedRecentsRoute, testbedProjectsRoute, makeClient, type RecentEntry, type ProjectCandidate } from "../../api/routes.js";
 import { defineConsolePage } from "../../registry.js";
 import { openInsightsStream, type InsightsReportView } from "./insightsStream.js";
@@ -10,6 +10,7 @@ import { SortTh } from "../../shell/SortTh.js";
 import { timeAgo } from "../../util/timeAgo.js";
 import { ReportActions } from "../../report/ReportActions.js";
 import { insightsToBlocks, blocksToMarkdown, blocksToHtml } from "../../report/serialize.js";
+import { useReportRun, type Handlers } from "../../report/useReportRun.js";
 
 // Sortable columns for the "Worth publishing" table (unsorted = report order).
 type PublishCandidate = InsightsReportView["publish_candidates"][number];
@@ -17,6 +18,8 @@ const CANDIDATE_COLUMNS: SortColumn<PublishCandidate>[] = [
   { id: "goal", value: (c) => c.goal.toLowerCase() },
   { id: "why", value: (c) => c.why.toLowerCase() },
 ];
+
+type InsightsDone = { report: InsightsReportView; degraded: boolean; scanned?: number; updatedAt: number | null };
 
 function short(path: string): string {
   const parts = path.split("/").filter(Boolean);
@@ -30,34 +33,32 @@ export function Insights({ apiBase }: { apiBase: string }) {
   const [projects, setProjects] = useState<ProjectCandidate[] | null>(null);
   const [recents, setRecents] = useState<RecentEntry[] | null>(null);
   const [activePath, setActivePath] = useState<string | null>(null);
-  const [phase, setPhase] = useState("");
-  const [out, setOut] = useState("");
-  const [report, setReport] = useState<InsightsReportView | null>(null);
-  const [updatedAt, setUpdatedAt] = useState<number | null>(null);
-  const [scanned, setScanned] = useState<number | null>(null);
-  const [degraded, setDegraded] = useState(false);
-  const [error, setError] = useState<string | null>(null);
   const [query, setQuery] = useState("");
-  const [running, setRunning] = useState(false);
-  const closeRef = useRef<(() => void) | null>(null);
+
+  // openStream adapter: the hook decides WHEN to open; this maps openInsightsStream's
+  // events to the normalized Handlers and closes over the current root.
+  const openStream = useCallback(
+    (fresh: boolean, params: Record<string, string>, h: Handlers<InsightsDone>) =>
+      openInsightsStream(apiBase, params.root, (e) => {
+        if (e.type === "phase") h.phase(e.sessions != null ? `${e.phase} (${e.sessions} sessions)` : e.phase);
+        else if (e.type === "delta") h.delta(e.text);
+        else if (e.type === "done") h.done({ report: e.report, degraded: e.degraded, scanned: e.scanned, updatedAt: e.updatedAt });
+        else if (e.type === "failed") h.failed(e.message);
+      }, fresh),
+    [apiBase],
+  );
+  const { view, start } = useReportRun<InsightsDone>(apiBase, "insights", openStream);
 
   useEffect(() => {
     const client = makeClient(apiBase);
     testbedProjectsRoute.call(client).then((r) => setProjects(r.projects)).catch(() => setProjects([]));
     testbedRecentsRoute.call(client).then((r) => setRecents(r.recents)).catch(() => setRecents([]));
   }, [apiBase]);
-  useEffect(() => () => closeRef.current?.(), []);
 
-  const generate = (path: string, fresh = false) => {
-    closeRef.current?.();
-    setActivePath(path); setPhase(""); setOut(""); setReport(null); setUpdatedAt(null); setScanned(null); setDegraded(false); setError(null); setRunning(true);
-    closeRef.current = openInsightsStream(apiBase, path, (e) => {
-      if (e.type === "phase") setPhase(e.sessions != null ? `${e.phase} (${e.sessions} sessions)` : e.phase);
-      else if (e.type === "delta") setOut((o) => o + e.text);
-      else if (e.type === "done") { setPhase("done"); setReport(e.report); setUpdatedAt(e.updatedAt); setScanned(e.scanned ?? null); setDegraded(e.degraded); setRunning(false); }
-      else if (e.type === "failed") { setError(e.message); setRunning(false); }
-    }, fresh);
-  };
+  // Reattached a run on mount → select its row.
+  useEffect(() => { const root = view.params?.root; if (root && !activePath) setActivePath(root); }, [view.params, activePath]);
+
+  const generate = (path: string, fresh = false) => { setActivePath(path); start(path, { root: path }, fresh); };
 
   const rows = (() => {
     const seen = new Set<string>();
@@ -70,6 +71,15 @@ export function Insights({ apiBase }: { apiBase: string }) {
     // most-recent sessions everywhere.
     return [{ path: "*", flavor: "all", label: "All projects" }, ...matched.slice(0, 40)];
   })();
+
+  const running = view.status === "running";
+  const report = view.report?.report ?? null;
+  const updatedAt = view.report?.updatedAt ?? null;
+  const scanned = view.report?.scanned ?? null;
+  const degraded = view.report?.degraded ?? false;
+  const phase = view.phase;
+  const error = view.error;
+  const out = view.deltas;
 
   return (
     <section className="analyze">
