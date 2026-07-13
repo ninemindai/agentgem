@@ -63,4 +63,26 @@ describe("contributeCore", () => {
     const r = await contribute(d as any);
     expect(r.results[0]).toMatchObject({ gem: "demo", status: "failed" });
   });
+
+  it("surfaces a digestOf failure as failed instead of posting an empty digest", async () => {
+    const d = deps();
+    d.listOwned = vi.fn(async () => [
+      { key: "me/demo", version: "1", name: "demo" },
+      { key: "me/other", version: "1", name: "other" },
+    ]);
+    d.readGem = vi.fn(
+      (name: string) => ({ name, artifacts: [{ type: "skill", name: "qa" }] }) as any,
+    );
+    d.digestOf = vi.fn((gem: any) => {
+      if (gem.name === "demo") throw new Error("lock read failed");
+      return "sha256:other";
+    }) as any;
+    const r = await contribute(d as any);
+    expect(d.build).not.toHaveBeenCalledWith(expect.objectContaining({ gem: expect.objectContaining({ name: "demo" }) }));
+    expect(d.post).toHaveBeenCalledTimes(1); // only "other" reaches post
+    expect(r.results).toEqual([
+      { gem: "demo", status: "failed", reason: "lock read failed" },
+      { gem: "other", status: "ingested" },
+    ]);
+  });
 });
