@@ -62,4 +62,23 @@ describe("useReportRun", () => {
     expect(result.current.view.error).toBe("boom");
     expect(o.calls.length).toBe(0);
   });
+
+  it("unmounting after start() before its guard-fetch resolves does not open a stream or throw", async () => {
+    let resolveFetch: (v: any) => void = () => {};
+    const pending = new Promise((resolve) => { resolveFetch = resolve; });
+    vi.stubGlobal("fetch", vi.fn().mockReturnValue(pending));
+    const o = makeOpen();
+    const { result, unmount } = renderHook(() => useReportRun<{ n: number }>("http://x", "insights", o.open));
+
+    act(() => { result.current.start("/p", { root: "/p" }); });
+    expect(() => unmount()).not.toThrow();
+
+    await act(async () => {
+      resolveFetch({ ok: true, json: async () => ({ runs: [] }) });
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    expect(o.calls.length).toBe(0);   // guard-fetch continuation bailed out after unmount
+  });
 });
