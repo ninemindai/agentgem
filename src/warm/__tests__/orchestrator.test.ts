@@ -1,7 +1,7 @@
 // Copyright (c) 2026 NineMind, Inc.
 // SPDX-License-Identifier: MIT
 import { describe, it, expect, afterEach } from "vitest";
-import { runWarmPass, getWarmStatus, beginForeground, endForeground } from "../orchestrator.js";
+import { runWarmPass, getWarmStatus, beginForeground, endForeground, PHASE_OF } from "../orchestrator.js";
 import type { Warmable } from "../registry.js";
 
 function fakeRegistry(calls: string[]): Warmable[] {
@@ -127,5 +127,49 @@ describe("runWarmPass – AGENTGEM_WARM_TOPN env override", () => {
       now: () => 1, isBusy: () => false,
     });
     expect(calls.filter((c) => c.startsWith("insights:"))).toHaveLength(5);
+  });
+});
+
+describe("runWarmPass – live progress", () => {
+  it("PHASE_OF maps the phased warmables", () => {
+    expect(PHASE_OF.usage).toBe("LIGHT");
+    expect(PHASE_OF.scorecard).toBe("LIGHT");
+    expect(PHASE_OF.analyze).toBe("DEEP");
+    expect(PHASE_OF.insights).toBe("REM");
+  });
+
+  it("computes total steps and clears progress when the pass ends", async () => {
+    const reg: Warmable[] = [
+      { id: "usage", cost: "cheap", scope: "global", async warm() { return "warmed"; } },
+      { id: "insights", cost: "llm", scope: "per-root", async warm() { return "warmed"; } },
+    ];
+    await runWarmPass({ registry: reg, roots: ["/a", "/b"], topN: 2, now: () => 1, isBusy: () => false });
+    const st = getWarmStatus();
+    expect(st.progress).toBeNull();          // cleared at end
+    expect(st.last?.outcomes).toHaveLength(3); // 1 global + 1 per-root × 2 roots
+  });
+
+  it("exposes the running phase/root/counts mid-pass", async () => {
+    let release!: () => void;
+    const gate = new Promise<void>((r) => { release = r; });
+    const reg: Warmable[] = [
+      { id: "usage", cost: "cheap", scope: "global", async warm() { return "warmed"; } },   // LIGHT
+      { id: "analyze", cost: "llm", scope: "per-root", async warm() { await gate; return "warmed"; } }, // DEEP
+    ];
+    const pass = runWarmPass({ registry: reg, roots: ["/a", "/b"], topN: 2, now: () => 1, isBusy: () => false });
+    await new Promise((r) => setTimeout(r, 0));  // let the loop reach the gated analyze:/a
+    const mid = getWarmStatus();
+    expect(mid.running).toBe(true);
+    expect(mid.progress).not.toBeNull();
+    expect(mid.progress!.total).toBe(3);
+    expect(mid.progress!.rootCount).toBe(2);
+    expect(mid.progress!.done).toBe(1);            // usage completed
+    expect(mid.progress!.phase).toBe("DEEP");      // analyze is now running
+    expect(mid.progress!.currentRoot).toBe("a");   // basename of /a
+    expect(mid.progress!.rootIndex).toBe(1);
+    expect(mid.progress!.phasesLit).toContain("LIGHT");
+    release();
+    await pass;
+    expect(getWarmStatus().progress).toBeNull();
   });
 });
