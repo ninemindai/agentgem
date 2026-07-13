@@ -22,6 +22,16 @@ describe("parseImageDataUrl", () => {
     const big = Buffer.alloc(COVER_MAX_BYTES + 1).toString("base64");
     expect(parseImageDataUrl(`data:image/png;base64,${big}`)).toBeNull();
   });
+  it("rejects a grossly-oversized base64 string via the pre-decode guard (no full decode)", () => {
+    // ~2x the cap in base64 chars — must be rejected on length before any Buffer allocation.
+    const huge = "A".repeat(COVER_MAX_BYTES * 2);
+    expect(parseImageDataUrl(`data:image/png;base64,${huge}`)).toBeNull();
+  });
+  it("still accepts a payload right at the cap", () => {
+    const atCap = Buffer.alloc(COVER_MAX_BYTES).toString("base64");
+    const r = parseImageDataUrl(`data:image/png;base64,${atCap}`);
+    expect(r?.bytes.length).toBe(COVER_MAX_BYTES);
+  });
 });
 
 describe("toDataUrl", () => {
