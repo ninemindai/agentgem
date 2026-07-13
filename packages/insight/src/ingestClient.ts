@@ -9,10 +9,17 @@ const defaultHttp: IngestHttp = async (url, init) => {
   return { status: res.status, json: () => res.json() };
 };
 
+const DEFAULT_AGGREGATOR_URL = "https://api.agentgem.ai";
+function resolveIngestEndpoint(explicit?: string): string {
+  if (explicit !== undefined) return explicit; // incl. "" = disabled
+  if (process.env.AGENTGEM_INGEST_URL) return process.env.AGENTGEM_INGEST_URL; // full-URL override
+  return `${process.env.AGENTGEM_AGGREGATOR_URL || DEFAULT_AGGREGATOR_URL}/api/aggregator/ingest`;
+}
+
 export async function postAttestation(args: {
   attestation: UsageAttestation; endpoint?: string; token?: string; http?: IngestHttp;
 }): Promise<{ ingestId: string } | { skipped: true }> {
-  const endpoint = args.endpoint ?? process.env.AGENTGEM_INGEST_URL ?? "";
+  const endpoint = resolveIngestEndpoint(args.endpoint);
   if (!endpoint) return { skipped: true };
   const http = args.http ?? defaultHttp;
   const res = await http(endpoint, {
