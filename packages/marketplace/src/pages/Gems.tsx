@@ -64,6 +64,7 @@ export function Gems({ api, stars }: { api: ReturnType<typeof makeApi>; stars: S
               <a className="ex-gem-card" href={"/gems/" + encodeURIComponent(g.key)}>
                 <span className="ex-gem-head">
                   <span className="ex-gem-key">{g.key}</span>
+                  <span className="ex-gem-version">v{g.version}</span>
                   <CutBadge cut={g.cut} />
                   <StoneRating cut={g.cut} grade={g.grade} stars={starState.counts[g.key] ?? 0} installs={adoptions[g.key]?.installs ?? 0} verifiedInstalls={adoptions[g.key]?.verifiedInstalls ?? 0} />
                   <span className="ex-gem-kinds">{g.artifactKinds.map((k) => <span key={k} className="ex-chip">{kindLabel(k)}</span>)}</span>

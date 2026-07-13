@@ -18,6 +18,8 @@ export interface Gem {
   installable?: boolean;         // true for hosted-store gems whose archive was uploaded
   artifacts?: { name: string; type: string }[]; // per-artifact preview list (absent for browse-only gems)
   ingredients: GemIngredient[]; // bundled ingredients; ids match aggregator ids for cross-linking
+  createdAtMs?: number;          // first-published time (epoch ms); absent for curated static gems
+  updatedAtMs?: number;          // last-write time; equals createdAtMs until an overwrite-publish
 }
 
 export const STATIC_GEMS: Gem[] = [
@@ -156,7 +158,7 @@ function toGem(r: RegistryGem): Gem {
   // Dedupe artifactKinds into a kind summary (["skill","mcp"]). The publish path historically
   // stored one entry per artifact, so a 50-skill gem arrives as ["skill", ×50] — collapse it here
   // so both the gem list and detail render one chip per kind, matching the registry's own dedupe.
-  return { key: r.key, version: r.version, author: r.author, publishedBy: r.publishedBy, description: r.description ?? "", tags: r.tags ?? [], artifactKinds: [...new Set(r.artifactKinds ?? [])], cut: r.type, grade: r.grade, installable: r.installable, artifacts: r.artifacts, ingredients: [] };
+  return { key: r.key, version: r.version, author: r.author, publishedBy: r.publishedBy, description: r.description ?? "", tags: r.tags ?? [], artifactKinds: [...new Set(r.artifactKinds ?? [])], cut: r.type, grade: r.grade, installable: r.installable, artifacts: r.artifacts, ingredients: [], createdAtMs: r.createdAtMs, updatedAtMs: r.updatedAtMs };
 }
 
 /** Live registry gems, or the curated STATIC_GEMS when the registry is empty/unconfigured/errors. */
@@ -170,3 +172,8 @@ export async function loadGems(api: ReturnType<typeof makeApi>): Promise<Gem[]> 
 }
 
 export function findGem(gems: Gem[], key: string): Gem | undefined { return gems.find((g) => g.key === key); }
+
+/** Short human date (e.g. "Jul 13, 2026") for a gem timestamp; "" when absent (curated static gems). */
+export function gemDate(ms?: number): string {
+  return ms ? new Date(ms).toLocaleDateString(undefined, { year: "numeric", month: "short", day: "numeric" }) : "";
+}

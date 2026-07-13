@@ -38,6 +38,24 @@ describe("recordCatalogShare", () => {
     expect(rows[0]).toMatchObject({ publishedBy: "octocat", grade: 3 }); // 5 clamped to 3
   });
 
+  it("overwrite preserves created_at and bumps updated_at", async () => {
+    const db = await makeTestDb();
+    const s = signer();
+    const accountId = crypto.randomUUID();
+    await db.insert(producers).values({ pubkey: s.pubkey });
+    await db.insert(accounts).values({ id: accountId, provider: "github", providerAccountId: "42", login: "octocat" });
+    await db.insert(accountBindings).values({ pubkey: s.pubkey, provider: "github", accountId: "42", accountLogin: "octocat" });
+    const t1 = 1_000_000;
+    await recordCatalogShare(db, { manifest: M, pubkey: s.pubkey, signedAt: t1, signature: s.sign(catalogSigningPayload(M, s.pubkey, t1)) }, t1);
+    // Re-publish the SAME (key, version) later — the overwrite path.
+    const M2 = { ...M, description: "updated" };
+    const t2 = 2_000_000;
+    await recordCatalogShare(db, { manifest: M2, pubkey: s.pubkey, signedAt: t2, signature: s.sign(catalogSigningPayload(M2, s.pubkey, t2)) }, t2);
+    const rows = await listCatalogGems(db);
+    expect(rows).toHaveLength(1);
+    expect(rows[0]).toMatchObject({ createdAtMs: t1, updatedAtMs: t2, description: "updated" });
+  });
+
   it("rejects not-connected when bound but no accounts anchor row resolves (recordBinding's best-effort write can fail)", async () => {
     const db = await makeTestDb();
     const s = signer();

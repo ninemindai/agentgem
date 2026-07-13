@@ -297,6 +297,10 @@ export const catalogGems = pgTable("catalog_gems", {
   // publish path. Distinct from artifactKinds (the deduped kind summary).
   artifacts: jsonb("artifacts").$type<{ name: string; type: string }[]>(),
   createdAtMs: bigint("created_at_ms", { mode: "number" }).notNull(),
+  // Last-write time for this (key, version) row. An overwrite-publish preserves created_at_ms and
+  // bumps this; a new-version publish inserts a fresh row with both equal. Nullable for rows written
+  // before the column existed — readers coalesce a null back to created_at_ms.
+  updatedAtMs: bigint("updated_at_ms", { mode: "number" }),
   ownerAccountId: uuid("owner_account_id"),
   // Sharing scope. 'public' = listed in Explore; 'unlisted' = hidden from Explore but reachable by
   // its /games/<key> link; 'private' = owner-only (enforcement lands in PR 2b). Default public.
@@ -671,6 +675,8 @@ export async function ensureSchema(db: AppDb): Promise<void> {
   // Added post-creation (installable shared setups): the per-artifact preview list + the archive store.
   await db.execute(sql`alter table catalog_gems add column if not exists artifacts jsonb`);
   await db.execute(sql`alter table catalog_gems add column if not exists visibility text not null default 'public'`);
+  // Last-write time; nullable so existing rows (created_at_ms only) migrate without a backfill.
+  await db.execute(sql`alter table catalog_gems add column if not exists updated_at_ms bigint`);
   await db.execute(sql`create table if not exists gem_archives (gem_key text not null, version text not null, bytes bytea not null, size int not null, digest text not null, created_at_ms bigint not null, primary key (gem_key, version))`);
   await db.execute(sql`create table if not exists game_plays (id uuid primary key, gem_key text not null, version text not null, visitor_id text, played_at timestamptz not null default now())`);
   await db.execute(sql`create index if not exists game_plays_key_idx on game_plays (gem_key)`);

@@ -32,6 +32,15 @@ describe("Gem (detail)", () => {
     expect(screen.queryByText(/Contains/i)).toBeNull();
   });
 
+  it("shows created and updated dates when the gem carries timestamps", async () => {
+    const api = { getGems: () => Promise.resolve([{ key: "dated-gem", version: "1.0.0", description: "d", tags: [], artifactKinds: ["mcp"], createdAtMs: Date.UTC(2026, 0, 5), updatedAtMs: Date.UTC(2026, 0, 20) }]), gemAdoption: () => Promise.resolve({}) } as never;
+    const { container } = render(<Gem api={api} keyName="dated-gem" stars={stars} me={null} base="" />);
+    await screen.findByRole("heading", { name: /dated-gem/ });
+    const dates = container.querySelector(".ex-gem-dates");
+    expect(dates?.textContent).toMatch(/Created/);
+    expect(dates?.textContent).toMatch(/Updated/);
+  });
+
   it("copy-key writes the key to the clipboard", async () => {
     const writeText = vi.fn(() => Promise.resolve());
     vi.stubGlobal("navigator", { clipboard: { writeText } });

@@ -10,6 +10,8 @@ export interface RegistryGem {
   grade?: number;
   installable?: boolean;
   artifacts?: { name: string; type: string }[];
+  createdAtMs?: number;
+  updatedAtMs?: number;
 }
 
 export interface AggIngredient {

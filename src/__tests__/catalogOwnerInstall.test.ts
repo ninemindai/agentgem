@@ -133,6 +133,7 @@ describe("catalog owner install endpoints", () => {
       description: "a private game", tags: ["fun"], artifactKinds: ["game"],
       artifacts: [{ name: "g1", type: "game" }],
       grade: null, visibility: "private", installable: true,
+      createdAtMs: 1000, updatedAtMs: 1000,
     });
   });
 });

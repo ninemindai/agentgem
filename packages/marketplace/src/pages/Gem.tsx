@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import type { makeApi } from "../api";
 import type { Gem as GemT } from "../gems/catalog";
-import { loadGems, findGem } from "../gems/catalog";
+import { loadGems, findGem, gemDate } from "../gems/catalog";
 import { prettifyId, kindLabel } from "../data";
 import { StarButton } from "../StarButton";
 import { CutBadge } from "../CutBadge";
@@ -152,6 +152,14 @@ export function Gem({ api, keyName, stars, me, base }: { api: ReturnType<typeof 
       </p>
       <p className="ex-gem-desc">{gem.description}</p>
       <p className="ex-gem-tags">{gem.tags.map((t) => <span key={t} className="ex-tag">#{t}</span>)}</p>
+      {gem.createdAtMs && (
+        <p className="ex-gem-dates">
+          <span>Created <time dateTime={new Date(gem.createdAtMs).toISOString()}>{gemDate(gem.createdAtMs)}</time></span>
+          {gem.updatedAtMs && gem.updatedAtMs !== gem.createdAtMs && (
+            <span> · Updated <time dateTime={new Date(gem.updatedAtMs).toISOString()}>{gemDate(gem.updatedAtMs)}</time></span>
+          )}
+        </p>
+      )}
 
       {gem.artifactKinds.includes("game") && (
         <section className="ex-card ex-game-play">

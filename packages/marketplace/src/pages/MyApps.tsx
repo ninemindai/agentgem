@@ -97,6 +97,7 @@ export function MyApps({ api, me }: { api: ReturnType<typeof makeApi>; me: Me | 
                   <div className="ex-myapps-card__head">
                     <span className="ex-myapps-glyph" aria-hidden="true" />
                     <span className="ex-myapps-key">{g.key}</span>
+                    <span className="ex-gem-version">v{g.version}</span>
                     <VisibilityBadge visibility={g.visibility} />
                   </div>
                   {g.description && <p className="ex-myapps-card__desc">{g.description}</p>}
