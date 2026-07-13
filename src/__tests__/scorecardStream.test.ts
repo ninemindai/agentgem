@@ -39,6 +39,7 @@ describe("streamScorecard", () => {
       transcriptsFor: () => [],
       bucketTranscripts: () => new Map(),
       readCacheEntry: () => null,
+      readLatestCache: () => null,
       writeCache: vi.fn(),
     };
     const res = fakeRes();
@@ -69,11 +70,38 @@ describe("streamScorecard", () => {
       // written (the `start` frame) by the time it runs.
       bucketTranscripts: () => { chunksWhenBucketRan = res.chunks.length; return new Map(); },
       readCacheEntry: () => null,
+      readLatestCache: () => null,
       writeCache: vi.fn(),
     };
     await streamScorecard({ query: { projects: JSON.stringify(["/r/a"]) } }, res as never, deps);
     expect(chunksWhenBucketRan).toBeGreaterThan(0);              // something was flushed before bucketing
     expect(events(res.chunks)[0]).toMatchObject({ event: "start" }); // ...and it was `start`
+  });
+
+  it("stale-while-revalidate: emits `stale` (last-good) before any progress, then a fresh `done` supersedes it", async () => {
+    const STALE_SC = { breadth: 5, battleTested: 2, portable: 1, gaps: [], projects: [], generatedAtMs: 0, degraded: false };
+    const loadProject = vi.fn(() => mkLoad("fresh") as never);
+    const deps: ScorecardStreamDeps = {
+      discover: () => [],
+      loadProject,
+      transcriptsFor: () => [],
+      bucketTranscripts: () => new Map(),
+      readCacheEntry: () => null,                            // exact-token miss → a rescan is required
+      readLatestCache: () => ({ result: STALE_SC, ts: 777 }), // ...but a last-good result exists to paint now
+      writeCache: vi.fn(),
+    };
+    const res = fakeRes();
+    await streamScorecard({ query: { projects: JSON.stringify(["/r/a"]) } }, res as never, deps);
+    const ev = events(res.chunks);
+    const staleIdx = ev.findIndex((e) => e.event === "stale");
+    const firstProgressIdx = ev.findIndex((e) => e.event === "progress");
+    expect(staleIdx).toBeGreaterThan(-1);
+    expect(ev[staleIdx].data).toMatchObject({ scorecard: { breadth: 5 }, updatedAt: 777 });
+    expect(staleIdx).toBeLessThan(firstProgressIdx);        // painted BEFORE the rescan begins
+    expect(loadProject).toHaveBeenCalled();                 // the rescan actually ran
+    const done = ev.find((e) => e.event === "done");
+    expect(done?.data.cached).toBe(false);                  // and a fresh result supersedes the stale one
+    expect(done?.data.scorecard.breadth).toBe(1);
   });
 
   it("emits done immediately on cache hit (no progress)", async () => {
@@ -85,6 +113,7 @@ describe("streamScorecard", () => {
       transcriptsFor: () => [],
       bucketTranscripts: () => new Map(),
       readCacheEntry: () => ({ result: CACHED_SC, ts: 11111 }),
+      readLatestCache: () => null,
       writeCache: vi.fn(),
     };
     const res = fakeRes();
@@ -108,6 +137,7 @@ describe("streamScorecard", () => {
       transcriptsFor: () => [],
       bucketTranscripts: () => new Map(),
       readCacheEntry: () => ({ result: CACHED_SC, ts: 22222 }),
+      readLatestCache: () => null,
       writeCache: vi.fn(),
     };
     const res = fakeRes();

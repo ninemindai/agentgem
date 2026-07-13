@@ -44,6 +44,14 @@ export function readAnalysisCacheEntry(root: string, token: string): { result: u
   return e ? { result: e.result, ts: e.ts } : null;
 }
 
+/** Latest cached entry for `root` regardless of token — the stale-while-revalidate read. There is
+ *  at most one entry per root (writeAnalysisCache replaces it), so this returns that entry whatever
+ *  its token, letting a caller paint the last-good result before recomputing the current one. */
+export function readAnalysisCacheLatest(root: string): { result: unknown; ts: number } | null {
+  const e = readAll().find((x) => x.root === root);
+  return e ? { result: e.result, ts: e.ts } : null;
+}
+
 /** Store (root, token) → result, replacing any prior entry for root. Capped + best-effort. */
 export function writeAnalysisCache(root: string, token: string, result: unknown, nowMs: number): void {
   try {

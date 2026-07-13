@@ -14,6 +14,8 @@ export function Mine({ apiBase, openStream = openScorecardStream }: { apiBase: s
   const [scorecardUpdatedAt, setScorecardUpdatedAt] = useState<number | null>(null);
   const [progress, setProgress] = useState<Progress | null>(null);
   const [phase, setPhase] = useState<"loading" | "scanning" | "done" | "failed">("loading");
+  // SWR: true while the last-good scorecard is shown but a background rescan is still running.
+  const [revalidating, setRevalidating] = useState(false);
   const [filter, setFilter] = useState<WorkflowFilter>("all");
   const [building, setBuilding] = useState(false);
   const [buildResult, setBuildResult] = useState<{ name: string; skills: string[] } | null>(null);
@@ -24,12 +26,15 @@ export function Mine({ apiBase, openStream = openScorecardStream }: { apiBase: s
   const freshRef = useRef(false);
 
   useEffect(() => {
-    setScorecard(null); setScorecardUpdatedAt(null); setProgress(null); setPhase("loading"); setFilter("all");
+    setScorecard(null); setScorecardUpdatedAt(null); setProgress(null); setPhase("loading"); setFilter("all"); setRevalidating(false);
     const fresh = freshRef.current; freshRef.current = false;
     const close = openStream(apiBase, (e: ScorecardStreamEvent) => {
-      if (e.type === "start") setPhase("scanning");
-      else if (e.type === "progress") { setPhase("scanning"); setProgress({ done: e.done, total: e.total, label: e.label, partial: e.partial }); }
-      else if (e.type === "done") { setScorecard(e.scorecard); setScorecardUpdatedAt(e.updatedAt); setPhase("done"); }
+      // Once a scorecard is shown (via `stale`), keep showing it: don't let `start`/`progress`
+      // drop back to the scanning takeover — the "updating…" pill signals the background rescan.
+      if (e.type === "start") setPhase((p) => (p === "done" ? p : "scanning"));
+      else if (e.type === "stale") { setScorecard(e.scorecard); setScorecardUpdatedAt(e.updatedAt); setPhase("done"); setRevalidating(true); }
+      else if (e.type === "progress") { setProgress({ done: e.done, total: e.total, label: e.label, partial: e.partial }); setPhase((p) => (p === "done" ? p : "scanning")); }
+      else if (e.type === "done") { setScorecard(e.scorecard); setScorecardUpdatedAt(e.updatedAt); setPhase("done"); setRevalidating(false); }
       else if (e.type === "failed") setPhase("failed");
     }, fresh ? { refresh: true } : undefined);
     return close;
@@ -56,6 +61,12 @@ export function Mine({ apiBase, openStream = openScorecardStream }: { apiBase: s
     <div className="obs mine">
       {phase === "done" && scorecard
         ? <>
+            {revalidating && (
+              <span className="warming-pill" title="Rescanning your projects in the background — the scorecard refreshes automatically.">
+                <span className="warming-pill__spark" aria-hidden="true">✦</span>
+                updating…
+              </span>
+            )}
             <ScorecardHero data={scorecard} updatedAt={scorecardUpdatedAt} onRescan={onRescan} />
             <MineWorkflows data={scorecard} filter={filter} onFilter={setFilter} onBuild={onBuild} building={building} result={buildResult} error={buildError} apiBase={apiBase} />
           </>
