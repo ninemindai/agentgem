@@ -79,7 +79,11 @@ export async function streamScorecard(req: SseReq, res: SseRes, deps: ScorecardS
     // no-op and the panel shows the normal scanning progress.
     if (!fresh) {
       const latest = deps.readLatestCache(SCORECARD_CACHE_ROOT);
-      if (latest) send("stale", { scorecard: latest.result, updatedAt: latest.ts });
+      // Yield after the write so the socket actually flushes the frame BEFORE the seconds-long,
+      // synchronous root-discovery/bucket reads below pin the event loop. Without this the `stale`
+      // bytes sit in the send buffer until the loop next frees (~1s later), defeating the instant
+      // paint — writing a frame doesn't transmit it while the same tick keeps running.
+      if (latest) { send("stale", { scorecard: latest.result, updatedAt: latest.ts }); await yieldToLoop(); }
     }
 
     const roots = selectScorecardRoots(dir, projects, deps);
@@ -87,8 +91,10 @@ export async function streamScorecard(req: SseReq, res: SseRes, deps: ScorecardS
     // Emit `start` BEFORE bucketing the transcripts: the bucket read (and, on a hit, the cache
     // lookup that depends on its token) can take seconds on a large corpus, and doing it before the
     // first event left the panel on a blank loading skeleton the whole time. A cache hit still
-    // short-circuits to `done` right after.
+    // short-circuits to `done` right after. Yield so this frame flushes before the bucket read pins
+    // the loop (same reason as the `stale` yield above) — it's what shows "scanning" on a cold machine.
     send("start", { total: roots.length });
+    await yieldToLoop();
 
     const bucket = deps.bucketTranscripts(dir);
     const paths = scorecardTranscriptPaths(roots, bucket);
