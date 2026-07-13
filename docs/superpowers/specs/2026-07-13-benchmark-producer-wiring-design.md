@@ -190,18 +190,29 @@ that owned-gem list with local **workspaces** (`listWorkspaces()` /
 `readGemArchive` — so no `GemSelection` rebuild is needed). Owned gems with no local
 workspace are skipped (you can only attest what this machine can reproduce).
 
-**2. Per-gem outcome scoping.** `Gem.createdFrom` is a provenance *summary*, not a
-reusable project dir, so a background sweep has no per-gem `cwd`. Attaching one
-**global** judged outcome histogram to every gem would mis-attribute all outcomes and
-inflate effectiveness. Resolution (decided: *scope outcomes per gem*): run **one**
-global `scanWorkflow(..., { retainSequences: true })` + **one** `judgeSessions`, then
-scope outcomes per gem. The scan's accumulator already tracks a `Set<string>` of
-session ids per artifact but emits only its size (`sessionsUsedIn`); expose the set as
-`ArtifactUsage.sessionIds`. A new insight helper `facetsForGem(signal, gem, facets)`
-unions the gem's artifacts' `sessionIds` and filters the judged `SessionFacet[]` (each
-carries `sessionId`) to that set. `buildAttestation` is unchanged — the caller passes
-gem-scoped facets. Ingredient/usage counts are already per-gem (buildAttestation
-matches the gem's artifact names against the signal), so only outcomes needed scoping.
+**2. Outcomes: bulk contribution is ingredients-only (REVISED after eng review).**
+An earlier revision proposed scoping per-gem outcomes from one global scan+judge by
+filtering judged facets to the sessions where each gem's artifacts appeared. The
+`/plan-eng-review` outside voice showed that model is **unsound**: a `SessionFacet` is
+a whole-*session* task-achievement judgment, so crediting it to any gem whose artifact
+the session merely touched (a) mis-attributes incidental usage, (b) **double-counts**
+outcomes across a producer's gems that share an artifact (inflating the cross-model
+benchmark, which `sum()`s with no gem filter), and (c) **defeats the anti-inflation
+cap** — `buildAttestation` stamps the *global* `scan.sessions` on every per-gem
+attestation, so each scoped subset passes `outcomeTotal ≤ scan.sessions` independently
+while a producer with G gems can emit up to G × global outcomes network-wide. The
+correct model (scan each gem's *own* sessions, mirroring the interactive
+`sign_and_publish` path) is not feasible: `createWorkspace(name, gem)` persists only
+the built `Gem`, not the source project/cwd, and some workspaces come from *fetched*
+archives with no local sessions.
+
+**Decision:** background/bulk contribution carries **no outcome histogram** — it
+refreshes producer + ingredient/usage/co-occurrence data only (which already fixes
+`producers = 0` and fills most benchmark surfaces). Per-model **outcomes** land solely
+from the existing interactive `sign_and_publish` path, where `cwd` is known and the
+attribution is valid (one workspace = one gem = its own sessions). This drops the
+`facetsForGem` helper, the `ArtifactUsage.sessionIds` scan change, and the LLM judge
+from the bulk path entirely (so `contributeCore` and its warmable are cheap, not LLM).
 
 ## Files (anticipated)
 
