@@ -26,4 +26,11 @@ describe("WarmingPill", () => {
     await waitFor(() => expect(fetch).toHaveBeenCalled());
     expect(screen.queryByText("warming…")).toBeNull();
   });
+
+  it("appends the current phase when a pass reports progress", async () => {
+    vi.stubGlobal("fetch", vi.fn(async () => res({ running: true, progress: { phase: "DEEP" }, last: null })));
+    render(<WarmingPill apiBase="" />);
+    await waitFor(() => expect(screen.getByText("DEEP")).toBeTruthy());
+    expect(screen.getByText("warming…")).toBeTruthy();
+  });
 });

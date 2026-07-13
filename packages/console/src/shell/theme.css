@@ -163,6 +163,7 @@ body::before {
   animation: warming-shimmer 1.9s linear infinite;
 }
 .warming-pill__spark { font-size: 12px; line-height: 1; animation: warming-pulse 1.5s ease-in-out infinite; }
+.warming-pill__phase { margin-left: 5px; font: 600 9.5px/1 var(--font-mono); letter-spacing: .08em; opacity: .85; }
 @keyframes warming-shimmer { from { background-position: 220% 0, 0 0; } to { background-position: -120% 0, 0 0; } }
 @keyframes warming-pulse { 0%, 100% { opacity: .5; transform: scale(.85); } 50% { opacity: 1; transform: scale(1.1); } }
 @media (prefers-reduced-motion: reduce) {

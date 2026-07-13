@@ -2,10 +2,10 @@
 // SPDX-License-Identifier: MIT
 import { type ReactElement, useEffect, useState } from "react";
 
-interface WarmStatus { running: boolean; last: { finishedAt: number } | null }
+interface WarmStatus { running: boolean; progress: { phase: string | null } | null; last: { finishedAt: number } | null }
 
 export function WarmingPill({ apiBase }: { apiBase: string }): ReactElement | null {
-  const [running, setRunning] = useState(false);
+  const [state, setState] = useState<{ running: boolean; phase: string | null }>({ running: false, phase: null });
   useEffect(() => {
     let alive = true;
     const poll = async () => {
@@ -13,18 +13,18 @@ export function WarmingPill({ apiBase }: { apiBase: string }): ReactElement | nu
         const r = await fetch(`${apiBase}/api/warm/status`);
         if (!r.ok) return;
         const s = (await r.json()) as WarmStatus;
-        if (alive) setRunning(s.running);
+        if (alive) setState({ running: s.running, phase: s.progress?.phase ?? null });
       } catch { /* best-effort */ }
     };
     void poll();
     const h = setInterval(poll, 5000);
     return () => { alive = false; clearInterval(h); };
   }, [apiBase]);
-  if (!running) return null;
+  if (!state.running) return null;
   return (
     <span className="warming-pill" title="Precomputing insights in the background">
       <span className="warming-pill__spark" aria-hidden="true">✦</span>
-      warming…
+      warming…{state.phase ? <span className="warming-pill__phase">{state.phase}</span> : null}
     </span>
   );
 }
