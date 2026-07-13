@@ -250,8 +250,14 @@ describe("Journey panel", () => {
       if (url.includes("/api/journey")) return new Response(JSON.stringify({ events: [], truncated: false }));
       return new Response(JSON.stringify({ ok: true }));
     }));
-    render(<Dreaming apiBase="" />);
+    const { container } = render(<Dreaming apiBase="" />);
     await waitFor(() => expect(screen.getByText("my-app")).toBeTruthy());
-    await waitFor(() => expect(screen.getByText(/2 of 5/)).toBeTruthy());
+    expect(screen.getByText(/2 of 5/)).toBeTruthy();
+    // While a pass reports progress the live tracker REPLACES the static phase
+    // pills (mutual exclusivity), and the button reflects the running state.
+    expect(container.querySelector(".dream-progress")).toBeTruthy();
+    expect(container.querySelector(".phases")).toBeNull();
+    const btn = screen.getByRole("button", { name: /dreaming/i }) as HTMLButtonElement;
+    expect(btn.disabled).toBe(true);
   });
 });
