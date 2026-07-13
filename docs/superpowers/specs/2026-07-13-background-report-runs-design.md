@@ -1,7 +1,20 @@
 # Background report runs
 
 **Date:** 2026-07-13
-**Status:** Design approved, pending spec review
+**Status:** SUPERSEDED IN PART by the eng review (2026-07-13).
+
+> **Read this first.** The engineering review (`/plan-eng-review`) pivoted the
+> implementation away from the `ReportRunManager` + serial queue + new SSE-view
+> design described below to a **lightweight registry over the existing routes**.
+> Reasons: the serial queue was a concurrency *regression* (today the three report
+> kinds run concurrently) with a wedge-blocks-everything risk and no cancel, and the
+> new SSE-view route added nothing over polling on the status-only reattach path.
+> The existing SSE routes already continue-and-cache after disconnect, so goals 2
+> (notify) and 3 (visibility) need only a small in-flight registry the routes update.
+> **The authoritative build is `../plans/2026-07-13-background-report-runs.md`.**
+> The problem statement, goals, non-goals, and the concurrency/persistence/activity/
+> reattach *decisions* below still hold; the *mechanism* (manager/queue/SSE-view) does
+> not. Kept below for the reasoning trail.
 
 ## Problem
 
