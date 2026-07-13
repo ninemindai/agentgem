@@ -7,7 +7,7 @@ import { api, get, post } from "@agentback/openapi";
 import { writeDistilledDraft, writeDistilledLesson } from "@agentgem/capture";
 import type { DistilledSkill, Reflection, GuardrailDraft } from "@agentgem/insight";
 import { agentgemHome, InvalidInputError, resolveTarget, previewGuardrails, applyGuardrails } from "@agentgem/model";
-import { getWarmStatus, runWarmPass } from "./warm/orchestrator.js";
+import { getWarmStatus, runWarmPass, PHASE_OF } from "./warm/orchestrator.js";
 import { reflectionToLesson } from "@agentgem/insight";
 import { readQueue, setStatus, promotedCount, readDiary } from "./dream/store.js";
 import { dreamEnabled, setDreamEnabled } from "./dream/config.js";
@@ -38,12 +38,22 @@ const GuardrailPreviewSchema = z.object({
   seed: z.string(),
 });
 const EnableBody = z.object({ enabled: z.boolean() });
+const ProgressSchema = z.object({
+  phase: z.enum(["LIGHT", "DEEP", "REM"]).nullable(),
+  phasesLit: z.array(z.enum(["LIGHT", "DEEP", "REM"])),
+  currentRoot: z.string().nullable(),
+  rootIndex: z.number(),
+  rootCount: z.number(),
+  done: z.number(),
+  total: z.number(),
+}).nullable();
 const StatusSchema = z.object({
   enabled: z.boolean(),
   phasesLit: z.array(z.enum(["LIGHT", "DEEP", "REM"])),
   promoted: z.number(),
   queued: z.number(),
   lastPassAtMs: z.number().nullable(),
+  progress: ProgressSchema,
 });
 const QueueItemSchema = z.object({
   key: z.string(),
@@ -105,27 +115,29 @@ const LearnResultSchema = z.object({
   degraded: z.boolean(),
 });
 
-const PHASE_OF: Record<string, "LIGHT" | "DEEP" | "REM"> = {
-  usage: "LIGHT", scorecard: "LIGHT", analyze: "DEEP", insights: "REM",
-};
-
 @api({ basePath: "/api" })
 export class DreamController {
   private base = agentgemHome();
 
   @get("/dream/status", { response: StatusSchema })
   async status(): Promise<z.infer<typeof StatusSchema>> {
-    const last = getWarmStatus().last;
+    const st = getWarmStatus();
+    const last = st.last;
     const lit = new Set<"LIGHT" | "DEEP" | "REM">();
     for (const o of last?.outcomes ?? []) {
       if ((o.status === "warmed" || o.status === "hit") && PHASE_OF[o.id]) lit.add(PHASE_OF[o.id]);
     }
+    const p = st.progress;
     return {
       enabled: dreamEnabled(this.base),
       phasesLit: [...lit],
       promoted: promotedCount(this.base),
       queued: readQueue(this.base).filter((e) => e.status === "queued").length,
       lastPassAtMs: last?.finishedAt ?? null,
+      progress: p ? {
+        phase: p.phase, phasesLit: p.phasesLit, currentRoot: p.currentRoot,
+        rootIndex: p.rootIndex, rootCount: p.rootCount, done: p.done, total: p.total,
+      } : null,
     };
   }
 
