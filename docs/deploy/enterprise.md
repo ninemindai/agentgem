@@ -55,12 +55,17 @@ The desktop entry (`src/client.ts`) never receives a `DATABASE_URL` and does not
 
 Desktop bundles built from `src/client.ts` contain no `@agentgem/aggregator`, better-auth, `pg`, or PGlite symbols. The esbuild config (in `desktop/scripts/bundle-core.mjs`) uses the client entry to achieve this without explicit externals or dead-code directives: because the aggregator path is unreachable from `client.ts`, it is never imported, tree-shaken, and never enters the final bundle.
 
-Verification:
+Verification (this is exactly what `bundle-core.mjs` asserts on every build, so a normal
+`node desktop/scripts/bundle-core.mjs` already fails loudly if any of these leak):
 
 ```bash
-# After a desktop build, check the bundle contains no aggregator traces:
-grep -i "aggregator\|pglite" desktop/src/core/index.mjs
+# After a desktop build, the bundled client entry must contain none of the server-dep symbols:
+grep -nE "@electric-sql/pglite|new PGlite\(|AggregatorController|drizzle-orm/pglite" desktop/core-dist/index.mjs
 # Should output nothing (no matches)
 ```
+
+Note: don't grep the bare word `aggregator` — the client legitimately contains the string
+`/api/aggregator/benchmarks` (the URL the `BenchmarkProxyController` forwards to over HTTP);
+that is a request path, not the aggregator code.
 
 Server bundles built from `src/index.ts` include the full aggregator, as expected.
