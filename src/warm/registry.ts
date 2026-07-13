@@ -23,6 +23,8 @@ import { computeInsights } from "../insightsCore.js";
 import { computeWorkflowAnalysis } from "../workflowCore.js";
 import { computeDistill, DISTILL_BACKGROUND_TIMEOUT_MS } from "../distillCore.js";
 import { dreamRoot } from "../dream/dreamPass.js";
+import { benchmarkContribute, readContributeToken, writeContributeToken } from "../benchmark/config.js";
+import { contribute as runContribute } from "../benchmark/contributeCore.js";
 
 const log = createLogger("warm");
 
@@ -56,7 +58,7 @@ async function runScorecardWarm(input: ScorecardWarmInput): Promise<WarmStatusVa
 
 export type WarmStatusValue = "warmed" | "hit";
 export interface Warmable {
-  id: "observe" | "usage" | "scorecard" | "insights" | "analyze" | "distill" | "dream" | "recall";
+  id: "observe" | "usage" | "scorecard" | "insights" | "analyze" | "distill" | "dream" | "recall" | "contribute";
   cost: "cheap" | "llm";
   scope: "global" | "per-root";
   warm(root: string | null, opts: { dir?: string; force?: boolean }): Promise<WarmStatusValue>;
@@ -146,6 +148,24 @@ export const WARMABLES: Warmable[] = [
     id: "dream", cost: "llm", scope: "per-root",
     async warm(root, { dir }) {
       return dreamRoot(root as string, { dir });
+    },
+  },
+  {
+    // Ingredients-only ⇒ cheap; naturally off in desktop (AGENTGEM_WARM=off) and off
+    // by default everywhere else (the toggle gates on before any scan runs). The
+    // corpus token is persisted to a file (readContributeToken/writeContributeToken),
+    // NOT held in module state, so the cache-hit check survives process restarts.
+    id: "contribute", cost: "cheap", scope: "global",
+    async warm(_root, { dir, force }) {
+      if (!benchmarkContribute()) return "hit";
+      const token = transcriptToken(allClaudeTranscripts(resolveDirs(dir).claudeDir));
+      if (!force && readContributeToken() === token) return "hit";
+      const r = await runContribute();
+      if (r.results.some((x) => x.status === "ingested" || x.status === "updated")) {
+        writeContributeToken(token);
+        return "warmed";
+      }
+      return "hit";
     },
   },
 ];
