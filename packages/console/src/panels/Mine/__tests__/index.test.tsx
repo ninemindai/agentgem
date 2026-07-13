@@ -63,6 +63,29 @@ describe("Mine panel", () => {
     expect(screen.getByText(/pick workflows to distill into a gem/i)).toBeTruthy();
   });
 
+  it("SWR: a stale event shows the hero immediately with an 'updating…' pill", () => {
+    const stream = syncStream([
+      { type: "start", total: 3 },
+      { type: "stale", scorecard: FAKE_SCORECARD, updatedAt: 123 },
+    ]);
+    render(<Mine apiBase="http://localhost:0" openStream={stream} />);
+    expect(screen.getByText(/10 reusable workflows/i)).toBeTruthy(); // hero shown from last-good data
+    expect(screen.getByText("updating…")).toBeTruthy();               // ...with the revalidating pill
+  });
+
+  it("SWR: the fresh done supersedes the stale scorecard and clears the pill", () => {
+    const stream = syncStream([
+      { type: "start", total: 3 },
+      { type: "stale", scorecard: FAKE_SCORECARD, updatedAt: 123 },        // breadth 10
+      { type: "progress", done: 1, total: 3, label: "p", partial: { breadth: 1, battleTested: 0, portable: 0 } },
+      { type: "done", scorecard: SCORECARD_WITH_WORKFLOWS, cached: false, updatedAt: 456 }, // breadth 3
+    ]);
+    render(<Mine apiBase="http://localhost:0" openStream={stream} />);
+    expect(screen.getByText(/3 reusable workflows/i)).toBeTruthy();   // fresh result
+    expect(screen.queryByText(/10 reusable workflows/i)).toBeNull();  // stale replaced
+    expect(screen.queryByText("updating…")).toBeNull();               // pill cleared
+  });
+
   it("shows error state after failed event", () => {
     const stream = syncStream([{ type: "failed", message: "oops" }]);
     render(<Mine apiBase="http://localhost:0" openStream={stream} />);

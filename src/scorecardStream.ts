@@ -16,7 +16,7 @@ import {
   type ProjectLoad,
   type ScorecardDeps,
 } from "./gem/scorecard.js";
-import { transcriptToken, writeAnalysisCache, readAnalysisCacheEntry } from "@agentgem/insight";
+import { transcriptToken, writeAnalysisCache, readAnalysisCacheEntry, readAnalysisCacheLatest } from "@agentgem/insight";
 import { createLogger } from "@agentgem/base";
 
 const log = createLogger("scorecard");
@@ -32,12 +32,14 @@ interface SseRes {
 
 export interface ScorecardStreamDeps extends ScorecardDeps {
   readCacheEntry(root: string, token: string): { result: unknown; ts: number } | null;
+  readLatestCache(root: string): { result: unknown; ts: number } | null;
   writeCache(root: string, token: string, result: unknown, nowMs: number): void;
 }
 
 const realStreamDeps: ScorecardStreamDeps = {
   ...defaultScorecardDeps,
   readCacheEntry: readAnalysisCacheEntry,
+  readLatestCache: readAnalysisCacheLatest,
   writeCache: writeAnalysisCache,
 };
 
@@ -70,20 +72,31 @@ export async function streamScorecard(req: SseReq, res: SseRes, deps: ScorecardS
   };
 
   try {
+    // Stale-while-revalidate: paint the last-good scorecard FIRST — before any corpus read (root
+    // discovery, bucketing) — since it only needs the small on-disk cache. Token-INDEPENDENT, so it
+    // survives the token churn a live-updating corpus causes. The client shows it instantly with an
+    // "updating…" pill and swaps to the fresh `done` below. On a cold machine (no cache) this is a
+    // no-op and the panel shows the normal scanning progress.
+    if (!fresh) {
+      const latest = deps.readLatestCache(SCORECARD_CACHE_ROOT);
+      if (latest) send("stale", { scorecard: latest.result, updatedAt: latest.ts });
+    }
+
     const roots = selectScorecardRoots(dir, projects, deps);
 
     // Emit `start` BEFORE bucketing the transcripts: the bucket read (and, on a hit, the cache
     // lookup that depends on its token) can take seconds on a large corpus, and doing it before the
-    // first event left the panel on a blank loading skeleton the whole time. Start now → the UI
-    // shows "scanning" immediately. A cache hit still short-circuits to `done` right after.
+    // first event left the panel on a blank loading skeleton the whole time. A cache hit still
+    // short-circuits to `done` right after.
     send("start", { total: roots.length });
 
     const bucket = deps.bucketTranscripts(dir);
     const paths = scorecardTranscriptPaths(roots, bucket);
     const token = transcriptToken(paths);
 
-    // Cache hit (unless Re-scan): return the prior result instantly so the user
-    // can revisit the scorecard without re-scanning every project.
+    // Exact cache hit (unless Re-scan): the last-good result is current for this corpus, so finalize
+    // without re-scanning. (If we just sent `stale` with the same content, this `done` just clears
+    // the client's updating state.)
     if (!fresh) {
       const entry = deps.readCacheEntry(SCORECARD_CACHE_ROOT, token);
       if (entry) { send("done", { scorecard: entry.result, cached: true, updatedAt: entry.ts }); return; }

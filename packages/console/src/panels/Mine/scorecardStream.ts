@@ -4,6 +4,7 @@ import type { Scorecard } from "../../api/routes.js";
 
 export type ScorecardStreamEvent =
   | { type: "start"; total: number }
+  | { type: "stale"; scorecard: Scorecard; updatedAt: number | null }
   | { type: "progress"; done: number; total: number; label: string; partial: { breadth: number; battleTested: number; portable: number } }
   | { type: "done"; scorecard: Scorecard; cached: boolean; updatedAt: number | null }
   | { type: "failed"; message: string };
@@ -20,6 +21,10 @@ export function openScorecardStream(
   const data = (m: Event) => JSON.parse((m as MessageEvent).data);
 
   es.addEventListener("start", (m) => onEvent({ type: "start", total: data(m).total }));
+  es.addEventListener("stale", (m) => {
+    const d = data(m);
+    onEvent({ type: "stale", scorecard: d.scorecard, updatedAt: typeof d.updatedAt === "number" ? d.updatedAt : null });
+  });
   es.addEventListener("progress", (m) => {
     const d = data(m);
     onEvent({ type: "progress", done: d.done, total: d.total, label: d.label, partial: d.partial });
