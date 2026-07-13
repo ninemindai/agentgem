@@ -152,17 +152,17 @@ export function Dreaming({ apiBase }: { apiBase: string }) {
       window.location.hash = "#/curate";
     }).catch(() => setError("Could not open this opportunity."));
 
-  // Fire-and-forget on the server; give instant optimistic feedback, then let the
-  // adaptive poll reflect the real running pass and clear `pending` when the
-  // server confirms progress or a new pass lands.
+  // Fire-and-forget on the server; give instant optimistic feedback (`pending`),
+  // then let the adaptive poll reflect the real running pass and clear `pending`
+  // when the server confirms progress or a new pass lands. No explicit status
+  // fetch here: flipping `pending` re-runs the poll effect, which polls
+  // immediately and switches to the fast cadence — a second fetch would be redundant.
   const runDream = useCallback(async () => {
     setError(null);
     passAtClickRef.current = status?.lastPassAtMs ?? null;
     setPending(true);
     try {
       await post(apiBase, "run");
-      const s = await getStatus(apiBase).catch(() => null);
-      if (s && aliveRef.current) setStatus(s);
     } catch {
       if (aliveRef.current) { setError("Dream run failed."); setPending(false); }
     }
