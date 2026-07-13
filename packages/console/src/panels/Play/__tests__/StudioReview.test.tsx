@@ -54,6 +54,8 @@ it("Request review: a lapsed session (authenticated:false) routes to reconnect, 
   vi.spyOn(routes.reviewGroupsRoute, "call").mockResolvedValue({ authenticated: false, groups: [] } as never);
   mount();
   fireEvent.click(await screen.findByRole("button", { name: /request review/i }));
-  expect(await screen.findByText(/connect github to request review/i)).toBeTruthy();
+  // The connect step now lives inside the review modal itself (not a separate banner) — the
+  // GitHub connect control appears; the no-teams hint must NOT (this is an auth lapse, not 0 teams).
+  expect(await screen.findByRole("button", { name: /connect github to continue/i })).toBeTruthy();
   expect(screen.queryByText(/join or create a team/i)).toBeNull();
 });

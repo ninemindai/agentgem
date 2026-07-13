@@ -3,6 +3,7 @@ import { useEffect, useRef, useState } from "react";
 import { makeClient, playMiniappRoute, playSaveRoute, playPublishRoute, publishSetupRoute, publishStatusRoute, reviewGroupsRoute, reviewRequestRoute } from "../../api/routes.js";
 import { AgentSelector, type PlayAgent } from "./AgentSelector.js";
 import { CapabilityStrip } from "./CapabilityStrip.js";
+import { RequestReviewModal } from "./RequestReviewModal.js";
 import { Runner } from "./Runner.js";
 import { openStudioStream } from "./studioStream.js";
 import { genre as genreOf, parseGateFailure, fixSealPrompt } from "./playMeta.js";
@@ -59,6 +60,7 @@ export function Studio({
   const [reviewGroups, setReviewGroups] = useState<{ id: string; name: string; role: string }[] | null>(null);
   const [reviewGroupId, setReviewGroupId] = useState("");
   const [reviewDescription, setReviewDescription] = useState("");   // optional note to reviewers, sent at submit
+  const [reviewSubmitting, setReviewSubmitting] = useState(false);   // in-flight guard: save→publish-status→request chain
   const { status: identity } = useIdentity();
   const closeRef = useRef<null | (() => void)>(null);
   const logRef = useRef<HTMLDivElement>(null);
@@ -343,8 +345,15 @@ export function Studio({
   // picker, fetching the group list only once (cached in reviewGroups for the session).
   async function requestReview() {
     setStatus("");
+    setReviewOpen(true);   // the modal is the single surface — it shows the connect step when unbound
     if (!(identity?.bound && identity.login)) { setPendingReview(true); return; }
     await openReviewGroupPicker();
+  }
+
+  function closeReview() {
+    setReviewOpen(false);
+    setPendingReview(false);
+    bind.reset();   // clear any in-progress connect so reopening starts clean
   }
 
   async function openReviewGroupPicker() {
@@ -357,8 +366,7 @@ export function Studio({
       // the SAME reconnect flow as the unbound case instead of the "join or create a team"
       // hint, which would be misleading (this isn't a teams problem, it's an auth problem).
       if (!r.authenticated) {
-        setReviewOpen(false);
-        setPendingReview(true);
+        setPendingReview(true);   // lapsed session → swap the modal to the connect step, don't close it
         return;
       }
       setReviewGroups(r.groups);
@@ -370,6 +378,13 @@ export function Studio({
   // Submit: save (the archive request builds from the current workspace state), resolve
   // the version the same way publish does, then request review with the chosen group.
   async function submitReview() {
+    if (reviewSubmitting) return; // guard double-submit across the multi-step save→request chain
+    setReviewSubmitting(true);
+    try { await doSubmitReview(); }
+    finally { setReviewSubmitting(false); }
+  }
+
+  async function doSubmitReview() {
     if (!reviewGroupId || !(identity?.bound && identity.login)) return;
     if (!(await save())) return; // gate failure already surfaced as the banner
     let action: PublishAction;
@@ -447,49 +462,34 @@ export function Studio({
           <button className="play-btn play-btn--primary" disabled={busy} onClick={() => { const f = gate; setGate(null); send(fixSealPrompt(f)); }}>Fix with agent</button>
         </div>
       )}
-      {(pendingPublish || pendingReview) && (
+      {pendingPublish && (
         <div className="play-banner">
           <span className="play-banner__ico">🔑</span>
           <div className="play-banner__body">
-            <div className="play-banner__title">Connect GitHub to {pendingReview ? "request review" : "publish"}</div>
-            <ConnectGitHub bind={bind} idleHint={<p className="play-banner__detail">{pendingReview ? "The review request continues automatically once you authorize." : "Publishing continues automatically once you authorize."}</p>} />
+            <div className="play-banner__title">Connect GitHub to publish</div>
+            <ConnectGitHub bind={bind} idleHint={<p className="play-banner__detail">Publishing continues automatically once you authorize.</p>} />
           </div>
           <button className="play-btn play-btn--ghost" onClick={dismissConnect}>Dismiss</button>
         </div>
       )}
       {reviewOpen && (
-        <div className="play-banner">
-          <span className="play-banner__ico">🧑‍⚖️</span>
-          <div className="play-banner__body">
-            <div className="play-banner__title">Request review</div>
-            {reviewGroups === null ? (
-              <div className="play-banner__detail">loading groups…</div>
-            ) : reviewGroups.length === 0 ? (
-              <div className="play-banner__detail">Join or create a team to request review.</div>
-            ) : (
-              <>
-                <select aria-label="Review group" value={reviewGroupId} onChange={(e) => setReviewGroupId(e.target.value)}>
-                  <option value="">Select a group…</option>
-                  {reviewGroups.map((g) => <option key={g.id} value={g.id}>{g.name}</option>)}
-                </select>
-                <textarea
-                  aria-label="Note to reviewers"
-                  className="play-input"
-                  style={{ marginTop: 6, resize: "vertical" }}
-                  placeholder="Note to reviewers (optional) — what changed, what to look at"
-                  value={reviewDescription}
-                  maxLength={4000}
-                  rows={2}
-                  onChange={(e) => setReviewDescription(e.target.value)}
-                />
-              </>
-            )}
-          </div>
-          {reviewGroups && reviewGroups.length > 0 && (
-            <button className="play-btn play-btn--primary" disabled={!reviewGroupId} onClick={submitReview}>Submit for review</button>
-          )}
-          <button className="play-btn play-btn--ghost" onClick={() => setReviewOpen(false)}>Cancel</button>
-        </div>
+        <RequestReviewModal
+          connect={pendingReview ? (
+            <ConnectGitHub
+              bind={bind}
+              idleLabel="Connect GitHub to continue"
+              idleHint={<p className="review-modal__hint">The review request continues automatically once you authorize.</p>}
+            />
+          ) : undefined}
+          groups={reviewGroups}
+          groupId={reviewGroupId}
+          onGroupId={setReviewGroupId}
+          description={reviewDescription}
+          onDescription={setReviewDescription}
+          onSubmit={submitReview}
+          onClose={closeReview}
+          submitting={reviewSubmitting}
+        />
       )}
 
       <AgentSelector
