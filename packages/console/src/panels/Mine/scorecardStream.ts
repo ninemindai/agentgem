@@ -1,5 +1,10 @@
-// Scorecard scan stream (named SSE events: start/progress/done/failed), consumed
-// via native EventSource — same shape as analyzeStream.ts.
+// Scorecard scan stream (named events stale/start/progress/done/failed, modelled
+// as one discriminated union). Consumed via @agentback/client's typed
+// `route.stream()` over the server's `streamOf:` route — each event validated
+// against the same schema shape the server yields (the rich scorecard is an
+// opaque wire payload; this bridge casts it to Scorecard).
+import { z } from "zod";
+import { defineRoute, type Client } from "@agentback/client";
 import type { Scorecard } from "../../api/routes.js";
 
 export type ScorecardStreamEvent =
@@ -9,34 +14,40 @@ export type ScorecardStreamEvent =
   | { type: "done"; scorecard: Scorecard; cached: boolean; updatedAt: number | null }
   | { type: "failed"; message: string };
 
+const PartialScore = z.object({ breadth: z.number(), battleTested: z.number(), portable: z.number() });
+const ScorecardWireEvent = z.discriminatedUnion("type", [
+  z.object({ type: z.literal("stale"), scorecard: z.unknown(), updatedAt: z.number() }),
+  z.object({ type: z.literal("start"), total: z.number() }),
+  z.object({ type: z.literal("progress"), done: z.number(), total: z.number(), label: z.string(), partial: PartialScore }),
+  z.object({ type: z.literal("done"), scorecard: z.unknown(), cached: z.boolean(), updatedAt: z.number() }),
+  z.object({ type: z.literal("failed"), message: z.string() }),
+]);
+
+const scorecardStreamRoute = defineRoute("GET", "/api/scorecard/stream", {
+  query: z.object({ projects: z.string().optional(), refresh: z.string().optional() }),
+  streamOf: ScorecardWireEvent,
+});
+
+/** Open the scorecard scan stream; returns a close function (aborts the stream). */
 export function openScorecardStream(
-  apiBase: string,
+  client: Client,
   onEvent: (e: ScorecardStreamEvent) => void,
   opts?: { refresh?: boolean; projects?: string[] },
 ): () => void {
-  const params = new URLSearchParams();
-  if (opts?.refresh) params.set("refresh", "true");
-  if (opts?.projects?.length) params.set("projects", JSON.stringify(opts.projects));
-  const qs = params.toString();
-  const es = new EventSource(`${apiBase}/api/scorecard/stream${qs ? `?${qs}` : ""}`);
-  const data = (m: Event) => JSON.parse((m as MessageEvent).data);
-
-  es.addEventListener("start", (m) => onEvent({ type: "start", total: data(m).total }));
-  es.addEventListener("stale", (m) => {
-    const d = data(m);
-    onEvent({ type: "stale", scorecard: d.scorecard, updatedAt: typeof d.updatedAt === "number" ? d.updatedAt : null });
-  });
-  es.addEventListener("progress", (m) => {
-    const d = data(m);
-    onEvent({ type: "progress", done: d.done, total: d.total, label: d.label, partial: d.partial });
-  });
-  es.addEventListener("done", (m) => {
-    const d = data(m);
-    onEvent({ type: "done", scorecard: d.scorecard, cached: !!d.cached, updatedAt: typeof d.updatedAt === "number" ? d.updatedAt : null });
-    es.close();
-  });
-  es.addEventListener("failed", (m) => { onEvent({ type: "failed", message: data(m).message }); es.close(); });
-  es.addEventListener("error", () => { es.close(); onEvent({ type: "failed", message: "stream connection error" }); });
-
-  return () => es.close();
+  const ctrl = new AbortController();
+  const query: { projects?: string; refresh?: string } = {};
+  if (opts?.refresh) query.refresh = "true";
+  if (opts?.projects?.length) query.projects = JSON.stringify(opts.projects);
+  void (async () => {
+    try {
+      for await (const e of scorecardStreamRoute.stream(client, { query }, { signal: ctrl.signal })) {
+        if (e.type === "stale") onEvent({ type: "stale", scorecard: e.scorecard as Scorecard, updatedAt: e.updatedAt });
+        else if (e.type === "done") onEvent({ type: "done", scorecard: e.scorecard as Scorecard, cached: e.cached, updatedAt: e.updatedAt });
+        else onEvent(e);
+      }
+    } catch {
+      if (!ctrl.signal.aborted) onEvent({ type: "failed", message: "stream connection error" });
+    }
+  })();
+  return () => ctrl.abort();
 }

@@ -17,7 +17,7 @@
 import { parentPort, workerData } from "node:worker_threads";
 import { transcriptToken, readAnalysisCache, writeAnalysisCache } from "@agentgem/insight";
 import { collectScorecard, selectScorecardRoots, scorecardTranscriptPaths, defaultScorecardDeps } from "../gem/scorecard.js";
-import { SCORECARD_CACHE_ROOT } from "../scorecardStream.js";
+import { SCORECARD_CACHE_ROOT } from "../gem/scorecard.js";
 
 export interface ScorecardWarmInput { dir?: string; force?: boolean; nowMs: number }
 

@@ -1,27 +1,9 @@
-import { describe, it, expect, vi } from "vitest";
-import { streamScorecard, type ScorecardStreamDeps } from "../scorecardStream.js";
+// Copyright (c) 2026 NineMind, Inc.
+// SPDX-License-Identifier: MIT
+import { describe, it, expect, vi, afterEach } from "vitest";
+import { ScorecardController, setScorecardDepsForTests, type ScorecardStreamDeps } from "../scorecard.stream.controller.js";
 
-function fakeRes() {
-  const chunks: string[] = [];
-  return {
-    chunks,
-    writeHead: vi.fn(),
-    write: (c: string) => { chunks.push(c); },
-    end: vi.fn(),
-  };
-}
-
-function events(chunks: string[]) {
-  return chunks
-    .join("")
-    .split("\n\n")
-    .filter(Boolean)
-    .map((f) => {
-      const ev = /event: (.*)/.exec(f)?.[1];
-      const dt = /data: (.*)/.exec(f)?.[1];
-      return { event: ev, data: dt ? JSON.parse(dt) : null };
-    });
-}
+afterEach(() => setScorecardDepsForTests(null));
 
 // Each project gets its own unique key so breadth climbs 1→2→3 across calls.
 const mkLoad = (key = "k") => ({
@@ -29,148 +11,103 @@ const mkLoad = (key = "k") => ({
   candidates: [{ key, priorConfidence: "high" as const, sessions: 3, skeleton: { name: key, tools: ["WebFetch"] } }],
   reflections: [],
 });
+const baseDeps = (o: Partial<ScorecardStreamDeps>): ScorecardStreamDeps => ({
+  discover: () => [],
+  loadProject: () => mkLoad() as never,
+  transcriptsFor: () => [],
+  bucketTranscripts: () => new Map(),
+  readCacheEntry: () => null,
+  readLatestCache: () => null,
+  writeCache: vi.fn(),
+  ...o,
+});
 
-describe("streamScorecard", () => {
+type Ev = { type: string; [k: string]: unknown };
+// Drive the streamOf generator, collecting into `out` (passed in so deps can
+// snapshot what's been emitted so far — the timing tests need that).
+async function drive(query: Record<string, string>, out: Ev[] = []): Promise<Ev[]> {
+  for await (const e of new ScorecardController().stream({ query } as never)) out.push(e as Ev);
+  return out;
+}
+
+describe("ScorecardController.stream (streamOf route)", () => {
   it("emits start, climbing progress per project, then done", async () => {
     let callCount = 0;
-    const deps: ScorecardStreamDeps = {
-      discover: () => [],
-      loadProject: () => mkLoad(`k${callCount++}`) as never,
-      transcriptsFor: () => [],
-      bucketTranscripts: () => new Map(),
-      readCacheEntry: () => null,
-      readLatestCache: () => null,
-      writeCache: vi.fn(),
-    };
-    const res = fakeRes();
-    await streamScorecard(
-      { query: { projects: JSON.stringify(["/r/a", "/r/b", "/r/c"]) } },
-      res as never,
-      deps,
-    );
-    const ev = events(res.chunks);
-    expect(ev[0]).toMatchObject({ event: "start", data: { total: 3 } });
-    const progress = ev.filter((e) => e.event === "progress");
+    setScorecardDepsForTests(baseDeps({ loadProject: () => mkLoad(`k${callCount++}`) as never }));
+
+    const ev = await drive({ projects: JSON.stringify(["/r/a", "/r/b", "/r/c"]) });
+
+    expect(ev[0]).toMatchObject({ type: "start", total: 3 });
+    const progress = ev.filter((e) => e.type === "progress");
     expect(progress).toHaveLength(3);
-    expect(progress.map((p) => p.data.done)).toEqual([1, 2, 3]);
-    expect(progress.map((p) => p.data.partial.breadth)).toEqual([1, 2, 3]); // climbs
-    const done = ev.find((e) => e.event === "done");
-    expect(done?.data.scorecard.breadth).toBe(3);
-    expect(res.end).toHaveBeenCalled();
+    expect(progress.map((p) => p.done)).toEqual([1, 2, 3]);
+    expect(progress.map((p) => (p.partial as { breadth: number }).breadth)).toEqual([1, 2, 3]); // climbs
+    const done = ev.find((e) => e.type === "done");
+    expect((done?.scorecard as { breadth: number }).breadth).toBe(3);
   });
 
   it("emits start BEFORE bucketing transcripts (no dead-silence while the bucket read runs)", async () => {
-    const res = fakeRes();
-    let chunksWhenBucketRan = -1;
-    const deps: ScorecardStreamDeps = {
-      discover: () => [],
-      loadProject: () => mkLoad() as never,
-      transcriptsFor: () => [],
-      // The real bucket read can take seconds on a big corpus — record how much had already been
-      // written (the `start` frame) by the time it runs.
-      bucketTranscripts: () => { chunksWhenBucketRan = res.chunks.length; return new Map(); },
-      readCacheEntry: () => null,
-      readLatestCache: () => null,
-      writeCache: vi.fn(),
-    };
-    await streamScorecard({ query: { projects: JSON.stringify(["/r/a"]) } }, res as never, deps);
-    expect(chunksWhenBucketRan).toBeGreaterThan(0);              // something was flushed before bucketing
-    expect(events(res.chunks)[0]).toMatchObject({ event: "start" }); // ...and it was `start`
+    const out: Ev[] = [];
+    let typesAtBucket: string[] = [];
+    setScorecardDepsForTests(baseDeps({ bucketTranscripts: () => { typesAtBucket = out.map((e) => e.type); return new Map(); } }));
+
+    await drive({ projects: JSON.stringify(["/r/a"]) }, out);
+
+    expect(typesAtBucket).toContain("start"); // start was emitted before the bucket read ran
   });
 
-  it("yields after `stale` so it flushes before the blocking bucket read (deferred past a macrotask)", async () => {
+  it("emits `stale` before the blocking bucket read (SWR paints first)", async () => {
     const STALE_SC = { breadth: 5, battleTested: 2, portable: 1, gaps: [], projects: [], generatedAtMs: 0, degraded: false };
-    const res = fakeRes();
-    let bucketRanSynchronously = false;
-    const deps: ScorecardStreamDeps = {
-      discover: () => [],
-      loadProject: () => mkLoad() as never,
-      transcriptsFor: () => [],
-      bucketTranscripts: () => { bucketRanSynchronously = true; return new Map(); },
-      readCacheEntry: () => null,
+    const out: Ev[] = [];
+    let typesAtBucket: string[] = [];
+    setScorecardDepsForTests(baseDeps({
       readLatestCache: () => ({ result: STALE_SC, ts: 1 }),
-      writeCache: vi.fn(),
-    };
-    const p = streamScorecard({ query: { projects: JSON.stringify(["/r/a"]) } }, res as never, deps);
-    // Same tick as kicking it off: the `stale` frame is already written...
-    expect(res.chunks.join("")).toContain("event: stale");
-    // ...but the yield deferred the seconds-long bucket read to a later macrotask (so the frame flushes first).
-    expect(bucketRanSynchronously).toBe(false);
-    await p;
-    expect(bucketRanSynchronously).toBe(true); // it still runs, just after the flush
+      bucketTranscripts: () => { typesAtBucket = out.map((e) => e.type); return new Map(); },
+    }));
+
+    await drive({ projects: JSON.stringify(["/r/a"]) }, out);
+
+    expect(typesAtBucket[0]).toBe("stale"); // stale painted before the seconds-long bucket read
   });
 
   it("stale-while-revalidate: emits `stale` (last-good) before any progress, then a fresh `done` supersedes it", async () => {
     const STALE_SC = { breadth: 5, battleTested: 2, portable: 1, gaps: [], projects: [], generatedAtMs: 0, degraded: false };
     const loadProject = vi.fn(() => mkLoad("fresh") as never);
-    const deps: ScorecardStreamDeps = {
-      discover: () => [],
-      loadProject,
-      transcriptsFor: () => [],
-      bucketTranscripts: () => new Map(),
-      readCacheEntry: () => null,                            // exact-token miss → a rescan is required
-      readLatestCache: () => ({ result: STALE_SC, ts: 777 }), // ...but a last-good result exists to paint now
-      writeCache: vi.fn(),
-    };
-    const res = fakeRes();
-    await streamScorecard({ query: { projects: JSON.stringify(["/r/a"]) } }, res as never, deps);
-    const ev = events(res.chunks);
-    const staleIdx = ev.findIndex((e) => e.event === "stale");
-    const firstProgressIdx = ev.findIndex((e) => e.event === "progress");
+    setScorecardDepsForTests(baseDeps({ loadProject, readLatestCache: () => ({ result: STALE_SC, ts: 777 }) }));
+
+    const ev = await drive({ projects: JSON.stringify(["/r/a"]) });
+
+    const staleIdx = ev.findIndex((e) => e.type === "stale");
+    const firstProgressIdx = ev.findIndex((e) => e.type === "progress");
     expect(staleIdx).toBeGreaterThan(-1);
-    expect(ev[staleIdx].data).toMatchObject({ scorecard: { breadth: 5 }, updatedAt: 777 });
-    expect(staleIdx).toBeLessThan(firstProgressIdx);        // painted BEFORE the rescan begins
-    expect(loadProject).toHaveBeenCalled();                 // the rescan actually ran
-    const done = ev.find((e) => e.event === "done");
-    expect(done?.data.cached).toBe(false);                  // and a fresh result supersedes the stale one
-    expect(done?.data.scorecard.breadth).toBe(1);
+    expect(ev[staleIdx]).toMatchObject({ scorecard: { breadth: 5 }, updatedAt: 777 });
+    expect(staleIdx).toBeLessThan(firstProgressIdx); // painted BEFORE the rescan begins
+    expect(loadProject).toHaveBeenCalled();
+    const done = ev.find((e) => e.type === "done");
+    expect(done?.cached).toBe(false);
+    expect((done?.scorecard as { breadth: number }).breadth).toBe(1);
   });
 
   it("emits done immediately on cache hit (no progress)", async () => {
     const loadProject = vi.fn(() => mkLoad() as never);
     const CACHED_SC = { breadth: 9, battleTested: 0, portable: 0, gaps: [], projects: [], generatedAtMs: 0, degraded: false };
-    const deps: ScorecardStreamDeps = {
-      discover: () => [],
-      loadProject,
-      transcriptsFor: () => [],
-      bucketTranscripts: () => new Map(),
-      readCacheEntry: () => ({ result: CACHED_SC, ts: 11111 }),
-      readLatestCache: () => null,
-      writeCache: vi.fn(),
-    };
-    const res = fakeRes();
-    await streamScorecard(
-      { query: { projects: JSON.stringify(["/r/a"]) } },
-      res as never,
-      deps,
-    );
-    const ev = events(res.chunks);
-    expect(ev.some((e) => e.event === "progress")).toBe(false);
-    expect(ev.find((e) => e.event === "done")?.data).toMatchObject({ cached: true, scorecard: { breadth: 9 }, updatedAt: 11111 });
+    setScorecardDepsForTests(baseDeps({ loadProject, readCacheEntry: () => ({ result: CACHED_SC, ts: 11111 }) }));
+
+    const ev = await drive({ projects: JSON.stringify(["/r/a"]) });
+
+    expect(ev.some((e) => e.type === "progress")).toBe(false);
+    expect(ev.find((e) => e.type === "done")).toMatchObject({ cached: true, scorecard: { breadth: 9 }, updatedAt: 11111 });
     expect(loadProject).not.toHaveBeenCalled();
   });
 
   it("bypasses the cache and re-scans when refresh=true", async () => {
     const loadProject = vi.fn(() => mkLoad() as never);
     const CACHED_SC = { breadth: 9, battleTested: 0, portable: 0, gaps: [], projects: [], generatedAtMs: 0, degraded: false };
-    const deps: ScorecardStreamDeps = {
-      discover: () => [],
-      loadProject,
-      transcriptsFor: () => [],
-      bucketTranscripts: () => new Map(),
-      readCacheEntry: () => ({ result: CACHED_SC, ts: 22222 }),
-      readLatestCache: () => null,
-      writeCache: vi.fn(),
-    };
-    const res = fakeRes();
-    await streamScorecard(
-      { query: { projects: JSON.stringify(["/r/a"]), refresh: "true" } },
-      res as never,
-      deps,
-    );
-    const ev = events(res.chunks);
-    // refresh ignores the cached result: it actually scans (progress) and loads the project
-    expect(ev.some((e) => e.event === "progress")).toBe(true);
+    setScorecardDepsForTests(baseDeps({ loadProject, readCacheEntry: () => ({ result: CACHED_SC, ts: 22222 }) }));
+
+    const ev = await drive({ projects: JSON.stringify(["/r/a"]), refresh: "true" });
+
+    expect(ev.some((e) => e.type === "progress")).toBe(true);
     expect(loadProject).toHaveBeenCalled();
   });
 });
