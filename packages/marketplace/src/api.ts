@@ -1,5 +1,5 @@
 import type { AggIngredient, AggCoOccurrence, AggEffectiveness, AdoptionPoint, RegistryGem, Profile, OrgCatalog, OrgUsage, OrgUsageRange, OrgSettingsView,
-  CuratedSource, SourceDivision, SourceAgentRef, ImportedSkill, PopularSkill, PopularSkillGroup, OrgAppStatus, OrgSkill, OrgBenchmark } from "./types";
+  CuratedSource, SourceDivision, SourceAgentRef, ImportedSkill, PopularSkill, PopularSkillGroup, OrgAppStatus, OrgSkill, OrgBenchmark, OrgBenchmarkSettings } from "./types";
 
 /** The team-usage read is auth-gated: the caller distinguishes "sign in" from "not a member"
  *  from "member, but the GitHub-org capture aged out" (stale → offer a one-click refresh). */
@@ -22,6 +22,14 @@ export type OrgBenchmarkResult =
   | { status: "forbidden" }
   | { status: "forbidden-admin" }
   | { status: "stale" };
+
+// The governance write is admin+App-gated (src/orgs/benchmark.ts's benchmarkSettingsHandler): a
+// non-admin gets 403 (forbidden), a non-App org's self-reported admin gets 409 (app-required) —
+// its role isn't an enforceable roster, so a write here would be a promise the org can't keep.
+export type OrgBenchmarkSettingsResult =
+  | { status: "ok"; settings: OrgBenchmarkSettings }
+  | { status: "forbidden" }
+  | { status: "app-required" };
 
 export interface GameMeta { title: string; genre: "replay" | "skill-run" | "project-fun" | "session-heatmap"; version: string }
 
@@ -206,6 +214,19 @@ export function makeApi(base: string) {
       }
       if (!res.ok) throw new Error(`/api/orgs/:scope/benchmark -> ${res.status}`);
       return { status: "ok", benchmark: JSON.parse(await res.text()) as OrgBenchmark };
+    },
+    // Admin+App-gated governance write — partial patch, mirrors putOrgSettings: only the fields
+    // being changed are sent, so a second admin/tab's untouched setting survives.
+    setOrgBenchmarkSettings: async (scope: string, patch: { contributeAllowed?: boolean; benchmarkViewEnabled?: boolean }): Promise<OrgBenchmarkSettingsResult> => {
+      const res = await fetch(base + "/api/orgs/" + encodeURIComponent(scope) + "/benchmark/settings", {
+        method: "POST", credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(patch),
+      });
+      if (res.status === 403) return { status: "forbidden" };
+      if (res.status === 409) return { status: "app-required" };
+      if (!res.ok) throw new Error(`/api/orgs/:scope/benchmark/settings -> ${res.status}`);
+      return { status: "ok", settings: JSON.parse(await res.text()) as OrgBenchmarkSettings };
     },
     getOrgSettings: async (scope: string): Promise<OrgSettingsResult> => {
       const res = await fetch(base + "/api/usage/settings?scope=" + encodeURIComponent(scope), { credentials: "include" });

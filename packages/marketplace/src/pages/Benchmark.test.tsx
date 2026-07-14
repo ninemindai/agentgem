@@ -1,8 +1,8 @@
-import { describe, it, expect, afterEach } from "vitest";
-import { render, screen, cleanup } from "@testing-library/react";
+import { describe, it, expect, afterEach, vi } from "vitest";
+import { render, screen, cleanup, fireEvent, waitFor } from "@testing-library/react";
 import { Benchmark } from "./Benchmark";
 import type { OrgBenchmark } from "../types";
-import type { OrgBenchmarkResult } from "../api";
+import type { OrgBenchmarkResult, OrgBenchmarkSettingsResult } from "../api";
 
 afterEach(() => cleanup());
 
@@ -20,11 +20,14 @@ const benchmark = (over: Partial<OrgBenchmark> = {}): OrgBenchmark => ({
   members: [
     { login: "zheng", attestations: 12, gems: 3, mostly: 10, partially: 1, notAchieved: 1 },
   ],
+  settings: { contributeAllowed: true, benchmarkViewEnabled: true },
+  governanceAvailable: true,
   ...over,
 });
 
-const apiWith = (result: OrgBenchmarkResult) => ({
+const apiWith = (result: OrgBenchmarkResult, setOrgBenchmarkSettings?: (scope: string, patch: unknown) => Promise<OrgBenchmarkSettingsResult>) => ({
   getOrgBenchmark: () => Promise.resolve(result),
+  setOrgBenchmarkSettings: setOrgBenchmarkSettings ?? (() => Promise.reject(new Error("not stubbed"))),
 }) as never;
 
 describe("Benchmark page", () => {
@@ -53,5 +56,35 @@ describe("Benchmark page", () => {
   it("shows an empty state when no members have contributed yet", async () => {
     render(<Benchmark api={apiWith({ status: "ok", benchmark: benchmark({ modelBenchmark: [], effectiveness: [], members: [] }) })} scope="acme" stars={stars} />);
     expect(await screen.findByText(/no contributing members yet/i)).toBeTruthy();
+  });
+
+  it("governanceAvailable: renders toggles from settings and posts + reflects on toggle", async () => {
+    const setOrgBenchmarkSettings = vi.fn(() => Promise.resolve({ status: "ok", settings: { contributeAllowed: false, benchmarkViewEnabled: true } } as OrgBenchmarkSettingsResult));
+    render(<Benchmark api={apiWith({ status: "ok", benchmark: benchmark() }, setOrgBenchmarkSettings)} scope="acme" stars={stars} />);
+
+    const contribute = await screen.findByLabelText(/contribute to the public benchmark/i) as HTMLInputElement;
+    const showView = screen.getByLabelText(/show this benchmark view/i) as HTMLInputElement;
+    expect(contribute.checked).toBe(true);
+    expect(showView.checked).toBe(true);
+    expect(screen.getByText(/forbidding stops new contributions/i)).toBeTruthy();
+
+    fireEvent.click(contribute);
+    expect(setOrgBenchmarkSettings).toHaveBeenCalledWith("acme", { contributeAllowed: false });
+    await waitFor(() => expect(contribute.checked).toBe(false));
+  });
+
+  it("governanceAvailable:false shows an App-required note instead of toggles", async () => {
+    render(<Benchmark api={apiWith({ status: "ok", benchmark: benchmark({ governanceAvailable: false }) })} scope="acme" stars={stars} />);
+    expect(await screen.findByText(/connect the github app/i)).toBeTruthy();
+    expect(screen.queryByLabelText(/contribute to the public benchmark/i)).toBeNull();
+    expect(screen.queryByLabelText(/show this benchmark view/i)).toBeNull();
+  });
+
+  it("benchmarkViewEnabled:false replaces the panels with a hidden notice + the re-enable toggle", async () => {
+    render(<Benchmark api={apiWith({ status: "ok", benchmark: benchmark({ settings: { contributeAllowed: true, benchmarkViewEnabled: false } }) })} scope="acme" stars={stars} />);
+    expect(await screen.findByText(/hidden by an admin/i)).toBeTruthy();
+    const showView = screen.getByLabelText(/show this benchmark view/i) as HTMLInputElement;
+    expect(showView.checked).toBe(false);
+    expect(screen.queryByText("claude-fable-5")).toBeNull();
   });
 });

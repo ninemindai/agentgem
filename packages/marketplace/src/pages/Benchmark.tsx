@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import type { makeApi } from "../api";
-import type { OrgBenchmark, OrgModelBenchmarkRow, OrgMemberBenchmarkRow, AggEffectiveness } from "../types";
+import type { OrgBenchmark, OrgBenchmarkSettings, OrgModelBenchmarkRow, OrgMemberBenchmarkRow, AggEffectiveness } from "../types";
 import type { StarsCtx } from "../Router";
 
 type View =
@@ -71,8 +71,83 @@ export function Benchmark({ api, scope, stars }: { api: ReturnType<typeof makeAp
         </div>
       )}
 
-      {view.status === "ok" && <BenchmarkBody benchmark={view.benchmark} />}
+      {view.status === "ok" && (
+        <>
+          <GovernanceSection
+            api={api}
+            scope={scope}
+            settings={view.benchmark.settings}
+            governanceAvailable={view.benchmark.governanceAvailable}
+            onSettingsChange={(settings) =>
+              setView((v) => (v.status === "ok" ? { status: "ok", benchmark: { ...v.benchmark, settings } } : v))
+            }
+          />
+          {view.benchmark.settings.benchmarkViewEnabled ? (
+            <BenchmarkBody benchmark={view.benchmark} />
+          ) : (
+            <div className="ex-benchmark-gov-hidden">
+              <p>This benchmark view is hidden by an admin.</p>
+              <p className="ex-sub">Use &quot;Show this benchmark view&quot; above to bring it back.</p>
+            </div>
+          )}
+        </>
+      )}
     </div>
+  );
+}
+
+/** Admin governance controls for the org's benchmark — forbid-contribution + show/hide the view.
+ *  Both are forward-only: forbidding stops new/updated contributions, it never purges data already
+ *  sent (that's Spec B). Only enforceable for App-installed orgs — a non-App org's admin role is
+ *  self-reported (account_scopes), not a roster the server can gate, so it gets a note instead. */
+function GovernanceSection({
+  api, scope, settings, governanceAvailable, onSettingsChange,
+}: {
+  api: ReturnType<typeof makeApi>;
+  scope: string;
+  settings: OrgBenchmarkSettings;
+  governanceAvailable: boolean;
+  onSettingsChange: (settings: OrgBenchmarkSettings) => void;
+}) {
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  // Each toggle saves ONLY its own field (server merges) — a second admin/tab editing the other
+  // flag can't clobber this one.
+  const save = (patch: { contributeAllowed?: boolean; benchmarkViewEnabled?: boolean }) => {
+    setSaving(true); setError(null);
+    api.setOrgBenchmarkSettings(scope, patch)
+      .then((r) => {
+        if (r.status === "ok") onSettingsChange(r.settings);
+        else if (r.status === "app-required") setError("connect the GitHub App to govern this org");
+        else setError("org admins only");
+      })
+      .catch((e) => setError(String((e as Error)?.message ?? e)))
+      .finally(() => setSaving(false));
+  };
+
+  return (
+    <section className="ex-benchmark-gov" aria-label="governance">
+      <h2 className="ex-section-title">Governance</h2>
+      {governanceAvailable ? (
+        <>
+          <label className="ex-benchmark-gov-toggle">
+            <input type="checkbox" aria-label="contribute to the public benchmark" checked={settings.contributeAllowed} disabled={saving}
+              onChange={(e) => save({ contributeAllowed: e.target.checked })} />
+            Contribute to the public benchmark
+          </label>
+          <label className="ex-benchmark-gov-toggle">
+            <input type="checkbox" aria-label="show this benchmark view" checked={settings.benchmarkViewEnabled} disabled={saving}
+              onChange={(e) => save({ benchmarkViewEnabled: e.target.checked })} />
+            Show this benchmark view
+          </label>
+          <p className="ex-benchmark-gov-caveat ex-sub">Forbidding stops new contributions; it doesn&apos;t delete data already sent.</p>
+        </>
+      ) : (
+        <p className="ex-benchmark-gov-note ex-sub">Connect the GitHub App to govern this org.</p>
+      )}
+      {error && <span className="ex-error">{error}</span>}
+    </section>
   );
 }
 
