@@ -98,8 +98,10 @@ reusing the existing FTS + `recallFunnel` unchanged:
 | `start_ms` | `updatedAt` |
 | FTS `text` | `record.text` |
 
-- **Incremental:** a per-provider `lastPulledAt` cursor is stored in the recall
-  `meta` table (`INSERT OR REPLACE INTO meta`) and passed as `pull(cfg, since)`.
+- **Incremental:** a per-provider `lastPulledAt` cursor is stored in the memory
+  package's own state file (`~/.agentgem/memory-cursors.json`) and passed as
+  `pull(cfg, since)`. Kept out of the recall `meta` table (which is private to
+  `RecallIndex`) so the `@agentgem/recall` package needs no API change.
 - **Upsert:** re-pull upserts by `session_id` (= provider id), so edited memories
   update in place instead of duplicating.
 - **Provenance:** the `memory:*` agent prefix lets the UI filter/label by source.
