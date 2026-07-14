@@ -39,6 +39,7 @@ import { collectBehaviorFindings } from "./goldmine/behaviorFindings.js";
 import { RecallIndex } from "@agentgem/recall";
 import { defaultRecallDbPath, serverFunnelDeps } from "./goldmine/recall.js";
 import { registerRecallRoutes } from "./goldmine/recallRoutes.js";
+import { registerMemoryRoutes } from "./goldmine/memoryRoutes.js";
 import { ChatManager } from "@agentgem/run";
 import { miniappDir, studioBrief, checkpointMiniapp } from "@agentgem/play";
 import { availableAgents, adapterRuntimeCtx, resolveLaunch, npmAdapterInstaller, createLogger } from "@agentgem/base";
@@ -367,4 +368,6 @@ export function finalizeCommonApp(app: RestApplication, server: Awaited<RestAppl
       },
     }, originGuard as never);
   }
+  // Memory providers: /api/memory/* — local-core-only two-way sync bridge (pull into recall, consent-gated push out).
+  registerMemoryRoutes(server.expressApp as never, originGuard as never);
 }

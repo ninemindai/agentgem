@@ -88,6 +88,7 @@
     "@agentgem/deploy": "workspace:*",
     "@agentgem/distribute": "workspace:*",
     "@agentgem/insight": "workspace:*",
+    "@agentgem/memory": "workspace:*",
     "@agentgem/model": "workspace:*",
     "@agentgem/play": "workspace:*",
     "@agentgem/recall": "workspace:*",
