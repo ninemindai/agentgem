@@ -16,9 +16,9 @@ describe("signAndPublish + privacy", () => {
   it("signs, returns a verifiable lock digest, and skips ingest when unconfigured", async () => {
     const dir = mkdtempSync(join(tmpdir(), "ag-sp-"));
     const { attestation, gemPreview } = buildAttestationTool({ inventory, signal, selection: { mcpServers: ["secret"] }, salt: "S" });
-    const r = await signAndPublishTool({ gem: gemPreview, attestation, identityDir: dir });
+    const r = await signAndPublishTool({ gem: gemPreview, attestation, identityDir: dir }, { contributeEnabled: () => false });
     expect(r.signature).toBeTruthy();
-    expect(r.ingestId).toBeUndefined(); // no AGENTGEM_INGEST_URL
+    expect(r.ingestId).toBeUndefined(); // contribution disabled → ingest skipped
   });
   it("never leaks secrets, private paths, or home dirs into the attestation (aggregate-only, no tuples/salt)", () => {
     const { attestation } = buildAttestationTool({ inventory, signal, selection: { mcpServers: ["secret"] }, salt: "S" });
