@@ -53,7 +53,7 @@ export function outcomeCredit(o: Outcome): number {
 - **Test G2:** a write on one outcomes handle during a read on another does not throw.
 
 **[D5] Pin the store handle lifecycle (Task 6).**
-Open one artifact-outcomes store handle at app init next to `readIndex`; wrap it in the `ProvenUseLookup` adapter; register `close()` in the same `app.onStop` that closes `recallIndex` (`src/index.ts:484`). No per-request opens.
+Open one artifact-outcomes store handle at app init next to `readIndex`; wrap it in the `ProvenUseLookup` adapter; register `close()` in the same `app.onStop` that closes `recallIndex`. No per-request opens. _(Implemented in `src/appCommon.ts` — the recall wiring moved there in an `origin/main` refactor this branch rebased onto; the plan's earlier `src/index.ts` references predate that move.)_
 
 **[D6] `scoreForSessions` single GROUP BY (Task 3).**
 Replace the per-artifact SELECT loop with one grouped query. NOTE (outside-voice #7): this fixes the N+1 **shape**, not the full-history **scan** — a hot artifact still scans all its rows. Since recall no longer calls `scoreForSessions` (D7), it's off the hot path; a materialized per-artifact aggregate is deferred (NOT-in-scope) until the recommender consumer needs it.
