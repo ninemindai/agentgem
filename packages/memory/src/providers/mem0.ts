@@ -38,15 +38,21 @@ export const mem0Provider: MemoryProvider = {
   },
 
   async *pull(cfg, since) {
-    const res = await listMemories(cfg);
+    let res = await listMemories(cfg);
     if (!res.ok) throw new Error(`mem0 pull failed: ${res.status}`);
-    const body = (await res.json()) as { results?: Mem0Row[] };
-    for (const row of body.results ?? []) {
-      const text = row.memory ?? row.text ?? "";
-      const updatedAt = row.updated_at ? Date.parse(row.updated_at) : 0;
-      if (!text) continue;
-      if (since !== undefined && updatedAt <= since) continue;
-      yield { id: row.id, text, updatedAt, metadata: row.metadata } satisfies MemoryRecord;
+    let body = (await res.json()) as { results?: Mem0Row[]; next?: string | null };
+    for (;;) {
+      for (const row of body.results ?? []) {
+        const text = row.memory ?? row.text ?? "";
+        const updatedAt = row.updated_at ? Date.parse(row.updated_at) : 0;
+        if (!text) continue;
+        if (since !== undefined && updatedAt <= since) continue;
+        yield { id: row.id, text, updatedAt, metadata: row.metadata } satisfies MemoryRecord;
+      }
+      if (!body.next) break;
+      res = await fetch(body.next, { headers: headers(cfg) });
+      if (!res.ok) throw new Error(`mem0 pull failed: ${res.status}`);
+      body = (await res.json()) as { results?: Mem0Row[]; next?: string | null };
     }
   },
 
@@ -58,6 +64,8 @@ export const mem0Provider: MemoryProvider = {
     });
     if (!res.ok) throw new Error(`mem0 push failed: ${res.status}`);
     const body = (await res.json()) as { event_id?: string };
-    return { id: body.event_id ?? "" };
+    const id = body.event_id;
+    if (!id) throw new Error("mem0 push: no event_id in response");
+    return { id };
   },
 };
