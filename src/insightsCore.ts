@@ -14,7 +14,29 @@ import {
   runDetectors, summarizeFindings, loadRuleDetectors, DETECTORS,
   computeCached, type CacheHit,
   type DetectorFinding, type DetectorSummary,
+  openArtifactOutcomesStore, buildArtifactOutcomeRows,
+  type ArtifactOutcomesStore, type WorkflowSignal, type SessionFacet,
 } from "@agentgem/insight";
+
+/** Persist the {artifact, session, outcome} triples for a judged pass. Isolated
+ *  and exported so it is unit-testable without running the whole insights loop.
+ *  Does NOT swallow — the caller wraps it best-effort so a store error never
+ *  breaks insights. */
+export function persistOutcomes(
+  store: ArtifactOutcomesStore,
+  signal: WorkflowSignal,
+  facets: SessionFacet[],
+  project: string | null,
+): void {
+  const rows = buildArtifactOutcomeRows(signal, facets, { project, agent: null });
+  const bySession = new Map<string, typeof rows>();
+  for (const r of rows) {
+    const list = bySession.get(r.sessionId) ?? [];
+    list.push(r);
+    bySession.set(r.sessionId, list);
+  }
+  for (const [sessionId, sessionRows] of bySession) store.upsertSession(sessionId, sessionRows);
+}
 
 export interface InsightsPayload {
   report: ReturnType<typeof synthesizeInsights>;
@@ -36,6 +58,7 @@ export async function computeInsights(
     dir?: string; force?: boolean; cacheOnly?: boolean; progress?: InsightsProgress; now?: () => number;
     judge?: typeof judgeSessions;
     narrate?: typeof narrateInsights;
+    openOutcomesStore?: () => ArtifactOutcomesStore;
   } = {},
 ): Promise<InsightsResult> {
   const now = opts.now ?? Date.now;
@@ -74,6 +97,13 @@ export async function computeInsights(
 
       p?.onPhase?.("judging");
       const { facets, degraded: judgeDegraded } = await (opts.judge ?? judgeSessions)(signal, { onDelta: (chunk) => p?.onDelta?.(chunk) });
+
+      // Persist proven-use triples (best-effort — never break insights on a store error).
+      try {
+        const outcomesStore = (opts.openOutcomesStore ?? openArtifactOutcomesStore)();
+        try { persistOutcomes(outcomesStore, signal, facets, signal.sequences?.root ?? null); }
+        finally { outcomesStore.close(); }
+      } catch { /* outcomes are an enhancement, not a correctness dependency */ }
 
       p?.onPhase?.("synthesizing");
       const report = synthesizeInsights(facets);
