@@ -3,7 +3,7 @@ import { testbedRecentsRoute, testbedProjectsRoute, rubricsRoute, makeClient, ty
 import { defineConsolePage } from "../../registry.js";
 import { openRubricStream, type RubricReportView, type RubricFactorView, type RubricScopeParams } from "./rubricStream.js";
 import { HygieneLeaderboard } from "./HygieneLeaderboard.js";
-import { consumePendingRubric } from "../../pendingAnalyze.js";
+import { consumePendingRubricRun, type PendingRubricRun } from "../../pendingAnalyze.js";
 import { Loading } from "../../shell/Loading.js";
 import { timeAgo } from "../../util/timeAgo.js";
 import { useReportRun, type Handlers } from "../../report/useReportRun.js";
@@ -89,6 +89,11 @@ export function Rubrics({ apiBase }: { apiBase: string }) {
   const [recents, setRecents] = useState<RecentEntry[] | null>(null);
   const [activePath, setActivePath] = useState<string | null>(null);
   const [query, setQuery] = useState("");
+  // A session target injected by a shortcut deep-link (or a reattached session run).
+  // Sessions aren't in the project rows, so the target gets its own synthetic row;
+  // its path key is "session:<id>". Root is never held client-side — the stream
+  // route derives it from the session's own transcript.
+  const [sessionRow, setSessionRow] = useState<{ sessionId: string; label: string } | null>(null);
 
   // openStream adapter: the hook decides WHEN to open; this maps openRubricStream's
   // events to the normalized Handlers and reconstructs RubricScopeParams from params.
@@ -118,16 +123,42 @@ export function Rubrics({ apiBase }: { apiBase: string }) {
   // the effect was set up.
   const claimedRef = useRef(false);
 
+  // Open the stream for one (rubric, scope) — shared by row clicks and the
+  // shortcut deep-link, which must not depend on the async rubricId state.
+  const startRun = (rubric: string, path: string, scope: { scope: "all" | "project" | "session"; root?: string; sessionId?: string }, fresh = false) => {
+    setActivePath(path);
+    const key = `${rubric}:${scope.scope}:${scope.root ?? ""}:${scope.sessionId ?? ""}`;
+    const params: Record<string, string> = { rubric, scope: scope.scope };
+    if (scope.root) params.root = scope.root;
+    if (scope.sessionId) params.sessionId = scope.sessionId;
+    start(key, params, fresh);
+  };
+
+  // A shortcut deep-link (PendingRubricRun with autorun): inject the session row
+  // if needed, then start immediately with the pending rubric — rubricId state
+  // hasn't committed yet when this fires.
+  const autorunPending = (p: PendingRubricRun) => {
+    if (p.scope === "session" && p.sessionId) {
+      setSessionRow({ sessionId: p.sessionId, label: p.label ?? `session ${p.sessionId}` });
+      startRun(p.rubric, "session:" + p.sessionId, { scope: "session", sessionId: p.sessionId });
+    } else if (p.scope === "project" && p.root) {
+      startRun(p.rubric, p.root, { scope: "project", root: p.root });
+    } else if (p.scope === "all") {
+      startRun(p.rubric, "*", { scope: "all" });
+    }
+  };
+
   useEffect(() => {
     const client = makeClient(apiBase);
     rubricsRoute.call(client).then((r) => {
       setRubrics(r.rubrics);
-      const pending = consumePendingRubric();
+      const pending = consumePendingRubricRun();
       // Priority: an explicit deep-link (pending) claims the selection; otherwise the
       // default-first fallback applies ONLY if a reattach hasn't already claimed one.
-      if (pending && r.rubrics.some((x) => x.id === pending)) {
+      if (pending && r.rubrics.some((x) => x.id === pending.rubric)) {
         claimedRef.current = true;
-        setRubricId(pending);
+        setRubricId(pending.rubric);
+        if (pending.autorun) autorunPending(pending);
       } else if (!claimedRef.current) {
         setRubricId(r.rubrics[0]?.id ?? "");
       }
@@ -135,24 +166,29 @@ export function Rubrics({ apiBase }: { apiBase: string }) {
     testbedProjectsRoute.call(client).then((r) => setProjects(r.projects)).catch(() => setProjects([]));
     testbedRecentsRoute.call(client).then((r) => setRecents(r.recents)).catch(() => setRecents([]));
   }, [apiBase]);
-  // Reattached a run on mount → select its rubric + row.
+  // Reattached a run on mount → select its rubric + row (a session run injects
+  // its synthetic row so the output has a place to render).
   useEffect(() => {
     const p = view.params;
     if (!p || activePath) return;
     if (p.rubric && !claimedRef.current) { claimedRef.current = true; setRubricId(p.rubric); }
-    if (p.scope === "all") setActivePath("*");
+    const sid = p.sessionId;
+    if (p.scope === "session" && sid) {
+      setSessionRow((s) => s ?? { sessionId: sid, label: `session ${sid}` });
+      setActivePath("session:" + sid);
+    } else if (p.scope === "all") setActivePath("*");
     else if (p.root) setActivePath(p.root);
   }, [view.params, activePath]);
 
   const run = (path: string, fresh = false) => {
     if (!rubricId) return;
-    setActivePath(path);
-    const p: { rubric: string; scope: "all" | "project"; root?: string; sessionId?: string } =
-      path === "*" ? { rubric: rubricId, scope: "all" } : { rubric: rubricId, scope: "project", root: path };
-    const key = `${p.rubric}:${p.scope}:${p.root ?? ""}:${p.sessionId ?? ""}`;
-    const params: Record<string, string> = { rubric: p.rubric, scope: p.scope };
-    if (p.root) params.root = p.root;
-    start(key, params, fresh);
+    if (path.startsWith("session:")) {
+      startRun(rubricId, path, { scope: "session", sessionId: path.slice("session:".length) }, fresh);
+    } else if (path === "*") {
+      startRun(rubricId, path, { scope: "all" }, fresh);
+    } else {
+      startRun(rubricId, path, { scope: "project", root: path }, fresh);
+    }
   };
 
   const rows = (() => {
@@ -162,7 +198,12 @@ export function Rubrics({ apiBase }: { apiBase: string }) {
     for (const p of projects ?? []) { if (!seen.has(p.path)) { seen.add(p.path); acc.push({ path: p.path, flavor: p.flavor, label: short(p.path) }); } }
     const q = query.trim().toLowerCase();
     const matched = q ? acc.filter((r) => r.label.toLowerCase().includes(q) || r.path.toLowerCase().includes(q)) : acc;
-    return [{ path: "*", flavor: "all", label: "All projects" }, ...matched.slice(0, 40)];
+    return [
+      // The deep-linked session target leads the list — it's what the user clicked for.
+      ...(sessionRow ? [{ path: "session:" + sessionRow.sessionId, flavor: "session", label: sessionRow.label }] : []),
+      { path: "*", flavor: "all", label: "All projects" },
+      ...matched.slice(0, 40),
+    ];
   })();
 
   const selected = rubrics?.find((r) => r.id === rubricId);

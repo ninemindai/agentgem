@@ -2,6 +2,7 @@ import { useState } from "react";
 import type { ObservePayload } from "../../api/routes.js";
 import { fmtTokens, fmtDuration, flameLevel, utcDay } from "../Observe/data.js";
 import { SessionSummaryPopover, type SessionActivity } from "./SessionSummaryPopover.js";
+import { SESSION_HYGIENE_SHORTCUT, launchRubricRun } from "../../rubricShortcuts.js";
 
 type SortKey = "tokens" | "msgs" | "durationMs" | "endMs";
 
@@ -48,6 +49,7 @@ export function SessionsTable({ data, activity }: {
             <SortTh label="msgs" col="msgs" sort={sort} onSort={toggleSort} />
             <SortTh label="tokens" col="tokens" sort={sort} onSort={toggleSort} />
             <SortTh label="recency" col="endMs" sort={sort} onSort={toggleSort} />
+            <th aria-label="shortcuts" />
           </tr>
         </thead>
         <tbody>
@@ -84,6 +86,28 @@ export function SessionsTable({ data, activity }: {
                 <td>{s.msgs}</td>
                 <td>{fmtTokens(s.tokens)}</td>
                 <td className="obs-muted">{s.endMs ? utcDay(s.endMs) : "—"}</td>
+                <td>
+                  {/* Rubric shortcut — claude sessions only: the rubric engine reads claude transcripts. */}
+                  {s.agent === "claude" && (
+                    <button
+                      type="button"
+                      className="obs-sort-btn"
+                      title={SESSION_HYGIENE_SHORTCUT.title}
+                      onKeyDown={(e) => e.stopPropagation()} // keep Enter/Space off the row's open-transcript handler
+                      onClick={(e) => {
+                        e.stopPropagation(); // the row itself opens the transcript
+                        launchRubricRun({
+                          rubric: SESSION_HYGIENE_SHORTCUT.rubric,
+                          scope: "session",
+                          sessionId: s.sessionId,
+                          label: s.project ? `${s.project} · ${s.sessionId.slice(0, 8)}…` : s.sessionId,
+                        });
+                      }}
+                    >
+                      {SESSION_HYGIENE_SHORTCUT.label}
+                    </button>
+                  )}
+                </td>
               </tr>
             );
           })}

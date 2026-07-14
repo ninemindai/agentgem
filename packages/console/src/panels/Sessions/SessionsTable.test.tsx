@@ -3,8 +3,9 @@ import { render, screen, cleanup, fireEvent } from "@testing-library/react";
 import { SessionsTable } from "./SessionsTable.js";
 import type { SessionActivity } from "./SessionSummaryPopover.js";
 import type { ObservePayload } from "../../api/routes.js";
+import { consumePendingRubricRun } from "../../pendingAnalyze.js";
 
-afterEach(() => { cleanup(); window.location.hash = ""; });
+afterEach(() => { cleanup(); window.location.hash = ""; consumePendingRubricRun(); });
 
 const payload: ObservePayload = {
   pulse: { sessions: 2, msgs: 12, tokens: 1_200_000, activeMs: 2.1 * 3_600_000 },
@@ -91,6 +92,26 @@ describe("SessionsTable", () => {
   it("does not show N-of-M hint when pulse.sessions equals visible rows", () => {
     render(<SessionsTable data={{ ...payload, pulse: { ...payload.pulse, sessions: 1 } }} activity={activity} />);
     expect(screen.queryByText(/Showing \d+ of \d+ sessions/)).toBeNull();
+  });
+
+  it("the hygiene shortcut launches a pending session run without opening the transcript", () => {
+    window.location.hash = "";
+    render(<SessionsTable data={payload} activity={activity} />);
+    fireEvent.click(screen.getByTitle("Run the context-hygiene rubric on this session"));
+    // Navigates to the Rubrics panel, NOT the transcript (stopPropagation on the row).
+    expect(window.location.hash).toBe("#/rubrics");
+    expect(consumePendingRubricRun()).toMatchObject({
+      rubric: "context-hygiene", scope: "session", sessionId: "s1", autorun: true,
+    });
+  });
+
+  it("hides the hygiene shortcut for non-claude sessions", () => {
+    const codexPayload: ObservePayload = {
+      ...payload,
+      sessions: [{ ...payload.sessions[0]!, agent: "codex", sessionId: "c1" }],
+    };
+    render(<SessionsTable data={codexPayload} activity={emptyActivity} />);
+    expect(screen.queryByTitle("Run the context-hygiene rubric on this session")).toBeNull();
   });
 
   it("Escape dismisses the popover", () => {

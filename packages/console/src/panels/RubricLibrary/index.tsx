@@ -4,7 +4,7 @@ import {
   makeClient, type RubricSummary, type RubricValidation,
 } from "../../api/routes.js";
 import { defineConsolePage } from "../../registry.js";
-import { setPendingRubric } from "../../pendingAnalyze.js";
+import { setPendingRubricRun } from "../../pendingAnalyze.js";
 import { Loading } from "../../shell/Loading.js";
 import { useSplit } from "../../shell/useSplit.js";
 import { getKeys, setKeys } from "../../activeGem.js";
@@ -28,7 +28,7 @@ const TEMPLATE = JSON.stringify({
 }, null, 2);
 
 function runRubric(id: string): void {
-  setPendingRubric(id);
+  setPendingRubricRun({ rubric: id });
   window.location.hash = "#/rubrics";
 }
 
