@@ -25,7 +25,7 @@ import { DreamController } from "./dream.controller.js";
 import { GemTools } from "./gem.tools.js";
 import { WorkflowController } from "./workflow.controller.js";
 import { GemStreamController } from "./gem.stream.controller.js";
-import { streamScorecard } from "./scorecardStream.js";
+import { ScorecardController } from "./scorecard.stream.controller.js";
 import { InsightsController } from "./insights.controller.js";
 import { RubricController } from "./rubric.controller.js";
 import { streamWatch } from "./watchStream.js";
@@ -159,6 +159,7 @@ export async function buildCommonApp(port: number): Promise<{ app: RestApplicati
   app.restController(InsightsController);
   app.restController(WorkflowController);
   app.restController(GemStreamController);
+  app.restController(ScorecardController);
   app.service(GemTools);
   // The persistent transcript index (capture) is a separate, lazily-opened on-disk
   // PGlite — not the aggregator DB. Close it on graceful shutdown too, so SIGTERM
@@ -258,8 +259,8 @@ export function finalizeCommonApp(app: RestApplication, server: Awaited<RestAppl
   // decorator dispatch — see GemStreamController (run/verify), registered above.
   // The POST prepare steps stay in gem.controller.ts for the id handshake.
   // SSE scorecard scan: per-project progress with live-climbing counts, then the
-  // final aggregate scorecard. GET /api/scorecard/stream?projects=[...]&dir=...
-  server.expressApp.get("/api/scorecard/stream", originGuard, (req, res) => streamScorecard(req as never, res as never));
+  // The scorecard SSE scan is now a `streamOf:` route on the decorator dispatch —
+  // see ScorecardController, registered above.
   // SSE personal session-insights report (scan transcripts → judge each session
   // with the ACP agent → synthesize) is now a `streamOf:` route on the decorator
   // dispatch — see InsightsController, registered above. It keeps the foreground

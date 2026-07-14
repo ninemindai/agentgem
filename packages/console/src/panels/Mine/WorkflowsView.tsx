@@ -30,7 +30,7 @@ export function WorkflowsView({ apiBase, scope, openStream = openScorecardStream
     setScorecard(null); setScorecardUpdatedAt(null); setProgress(null); setPhase("loading"); setFilter("all"); setRevalidating(false);
     const fresh = freshRef.current; freshRef.current = false;
     const projects = scope === "*" ? undefined : [scope];
-    const close = openStream(apiBase, (e: ScorecardStreamEvent) => {
+    const close = openStream(makeClient(apiBase), (e: ScorecardStreamEvent) => {
       // Once a scorecard is shown (via `stale`), keep showing it: don't let `start`/`progress`
       // drop back to the scanning takeover — the "updating…" pill signals the background rescan.
       if (e.type === "start") setPhase((p) => (p === "done" ? p : "scanning"));

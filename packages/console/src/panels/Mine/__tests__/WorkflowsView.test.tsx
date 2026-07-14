@@ -26,11 +26,11 @@ const SCORECARD_WITH_WORKFLOWS: Scorecard = {
 };
 
 // openStream that emits nothing — panel stays in loading/skeleton state.
-const silentStream = (_apiBase: string, _onEvent: (e: ScorecardStreamEvent) => void) => () => {};
+const silentStream = (_client: unknown, _onEvent: (e: ScorecardStreamEvent) => void) => () => {};
 
 // openStream that synchronously fires a sequence of events.
 function syncStream(events: ScorecardStreamEvent[]) {
-  return (_apiBase: string, onEvent: (e: ScorecardStreamEvent) => void) => {
+  return (_client: unknown, onEvent: (e: ScorecardStreamEvent) => void) => {
     for (const e of events) onEvent(e);
     return () => {};
   };

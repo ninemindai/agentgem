@@ -1,89 +1,66 @@
-import { describe, it, expect, vi, afterEach } from "vitest";
+import { describe, it, expect } from "vitest";
+import { createClient, type Client } from "@agentback/client";
 import { openScorecardStream, type ScorecardStreamEvent } from "../scorecardStream.js";
 
-class FakeES {
-  static last: FakeES | null = null;
-  listeners: Record<string, ((e: unknown) => void)[]> = {};
-  closed = false;
-  constructor(public url: string) { FakeES.last = this; }
-  addEventListener(type: string, cb: (e: unknown) => void) { (this.listeners[type] ??= []).push(cb); }
-  close() { this.closed = true; }
-  emit(type: string, data: unknown) { for (const cb of this.listeners[type] ?? []) cb({ data: JSON.stringify(data) }); }
+// A client whose fetch replays `items` as a text/event-stream body and records the
+// requested URL — drives the real route.stream() consumer (URL build + SSE parse).
+function sseClient(items: unknown[], onUrl?: (url: string) => void): Client {
+  const fetch = (async (url: string | URL | Request) => {
+    onUrl?.(String(url));
+    const body = items.map((i) => `data: ${JSON.stringify(i)}\n\n`).join("");
+    return new Response(body, { status: 200, headers: { "content-type": "text/event-stream" } });
+  }) as typeof globalThis.fetch;
+  return createClient({ baseURL: "http://console.test", fetch });
 }
 
-afterEach(() => { FakeES.last = null; });
+function run(client: Client, opts?: { refresh?: boolean; projects?: string[] }): Promise<ScorecardStreamEvent[]> {
+  return new Promise((resolve) => {
+    const events: ScorecardStreamEvent[] = [];
+    openScorecardStream(client, (e) => {
+      events.push(e);
+      if (e.type === "done" || e.type === "failed") resolve(events);
+    }, opts);
+  });
+}
+const DONE = { type: "done", scorecard: { breadth: 1 }, cached: false, updatedAt: 5 };
 
 describe("openScorecardStream", () => {
-  it("builds the URL without query params when no opts given", () => {
-    vi.stubGlobal("EventSource", FakeES as unknown as typeof EventSource);
-    const events: ScorecardStreamEvent[] = [];
-    openScorecardStream("http://localhost:3000", (e) => events.push(e));
-    expect(FakeES.last!.url).toBe("http://localhost:3000/api/scorecard/stream");
+  it("requests the scan with no query params when no opts given", async () => {
+    let seen = "";
+    await run(sseClient([DONE], (u) => { seen = u; }));
+    expect(seen).toContain("/api/scorecard/stream");
+    expect(seen).not.toContain("refresh");
+    expect(seen).not.toContain("projects");
   });
 
-  it("appends refresh=true when opts.refresh is true", () => {
-    vi.stubGlobal("EventSource", FakeES as unknown as typeof EventSource);
-    openScorecardStream("", () => {}, { refresh: true });
-    expect(FakeES.last!.url).toContain("refresh=true");
+  it("appends refresh=true when opts.refresh is true", async () => {
+    let seen = "";
+    await run(sseClient([DONE], (u) => { seen = u; }), { refresh: true });
+    expect(seen).toContain("refresh=true");
   });
 
-  it("encodes a scoped project list into the query", () => {
-    vi.stubGlobal("EventSource", FakeES as unknown as typeof EventSource);
-    openScorecardStream("http://x", () => {}, { projects: ["/a", "/b"] });
-    expect(FakeES.last!.url).toBe(`http://x/api/scorecard/stream?projects=${encodeURIComponent(JSON.stringify(["/a", "/b"]))}`);
+  it("encodes a scoped project list into the query", async () => {
+    let seen = "";
+    await run(sseClient([DONE], (u) => { seen = u; }), { projects: ["/a", "/b"] });
+    expect(seen).toContain(`projects=${encodeURIComponent(JSON.stringify(["/a", "/b"]))}`);
   });
 
-  it("omits the projects param when scope is undefined", () => {
-    vi.stubGlobal("EventSource", FakeES as unknown as typeof EventSource);
-    openScorecardStream("http://x", () => {});
-    expect(FakeES.last!.url).toBe("http://x/api/scorecard/stream");
+  it("translates stale/start/progress/done events (scorecard passed through)", async () => {
+    const events = await run(sseClient([
+      { type: "stale", scorecard: { breadth: 5 }, updatedAt: 9 },
+      { type: "start", total: 2 },
+      { type: "progress", done: 1, total: 2, label: "a", partial: { breadth: 1, battleTested: 0, portable: 0 } },
+      { type: "done", scorecard: { breadth: 2 }, cached: false, updatedAt: 10 },
+    ]));
+
+    expect(events.map((e) => e.type)).toEqual(["stale", "start", "progress", "done"]);
+    expect(events[0]).toMatchObject({ type: "stale", scorecard: { breadth: 5 }, updatedAt: 9 });
+    expect(events[2]).toMatchObject({ type: "progress", done: 1, total: 2, label: "a", partial: { breadth: 1 } });
+    expect(events[3]).toMatchObject({ type: "done", cached: false, updatedAt: 10, scorecard: { breadth: 2 } });
   });
 
-  it("translates start/progress/done events and closes on done", () => {
-    vi.stubGlobal("EventSource", FakeES as unknown as typeof EventSource);
-    const events: ScorecardStreamEvent[] = [];
-    openScorecardStream("", (e) => events.push(e));
-    const es = FakeES.last!;
-
-    es.emit("start", { total: 5 });
-    es.emit("progress", { done: 2, total: 5, label: "proj-a", partial: { breadth: 7, battleTested: 3, portable: 1 } });
-    es.emit("done", { scorecard: { breadth: 10, battleTested: 5, portable: 3, gaps: [], projects: [], degraded: false }, cached: true });
-
-    expect(events[0]).toEqual({ type: "start", total: 5 });
-    expect(events[1]).toEqual({ type: "progress", done: 2, total: 5, label: "proj-a", partial: { breadth: 7, battleTested: 3, portable: 1 } });
-    expect(events[2]).toMatchObject({ type: "done", cached: true });
-    expect(es.closed).toBe(true);
-  });
-
-  it("emits failed and closes on failed event", () => {
-    vi.stubGlobal("EventSource", FakeES as unknown as typeof EventSource);
-    const events: ScorecardStreamEvent[] = [];
-    openScorecardStream("", (e) => events.push(e));
-    const es = FakeES.last!;
-
-    es.emit("failed", { message: "scan exploded" });
-
+  it("emits a failed event", async () => {
+    const events = await run(sseClient([{ type: "failed", message: "scan exploded" }]));
     expect(events).toEqual([{ type: "failed", message: "scan exploded" }]);
-    expect(es.closed).toBe(true);
-  });
-
-  it("emits failed on EventSource error event", () => {
-    vi.stubGlobal("EventSource", FakeES as unknown as typeof EventSource);
-    const events: ScorecardStreamEvent[] = [];
-    openScorecardStream("", (e) => events.push(e));
-    const es = FakeES.last!;
-
-    for (const cb of es.listeners["error"] ?? []) cb({});
-
-    expect(events).toEqual([{ type: "failed", message: "stream connection error" }]);
-    expect(es.closed).toBe(true);
-  });
-
-  it("close function returned by openScorecardStream closes the EventSource", () => {
-    vi.stubGlobal("EventSource", FakeES as unknown as typeof EventSource);
-    const close = openScorecardStream("", () => {});
-    expect(FakeES.last!.closed).toBe(false);
-    close();
-    expect(FakeES.last!.closed).toBe(true);
   });
 });

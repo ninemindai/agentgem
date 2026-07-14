@@ -130,6 +130,9 @@ export interface ScorecardDeps {
 // Namespaced so it can't collide with the analyze pipeline, which caches a DIFFERENT
 // (LLM-derived) payload under the bare <root> key.
 export const SCORECARD_PROJECT_PREFIX = "scorecard:";
+// Cache key for the aggregate scorecard (distinct from per-project keys). Shared by
+// the SSE route (scorecard.stream.controller.ts) and the warm worker.
+export const SCORECARD_CACHE_ROOT = "__scorecard__";
 type CachedProjectLoad = { label: string; candidates: ProcedureCandidate[]; reflections: Reflection[] };
 
 /** Load one project's deterministic candidates, cache-first when deps expose a cache.
