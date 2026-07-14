@@ -59,6 +59,7 @@ export function OrgCatalog({ api, scope }: { api: ReturnType<typeof makeApi>; sc
         <h2 className="ex-orgcat-title">@{c.scope}</h2>
         <span className="ex-orgcat-counts">{c.gemCount} gems · {c.ownerCount} owners</span>
         <a className="ex-orgcat-usage-link" href={`/orgs/${encodeURIComponent(c.scope)}/usage`}>Team Pulse (members) →</a>
+        <a className="ex-orgcat-usage-link" href={`/orgs/${encodeURIComponent(c.scope)}/benchmark`}>Benchmark (admins) →</a>
       </header>
       {appStatus && !appStatus.installed && (
         <p className="ex-orgcat-appcta">

@@ -1,5 +1,5 @@
 import type { AggIngredient, AggCoOccurrence, AggEffectiveness, AdoptionPoint, RegistryGem, Profile, OrgCatalog, OrgUsage, OrgUsageRange, OrgSettingsView,
-  CuratedSource, SourceDivision, SourceAgentRef, ImportedSkill, PopularSkill, PopularSkillGroup, OrgAppStatus, OrgSkill } from "./types";
+  CuratedSource, SourceDivision, SourceAgentRef, ImportedSkill, PopularSkill, PopularSkillGroup, OrgAppStatus, OrgSkill, OrgBenchmark } from "./types";
 
 /** The team-usage read is auth-gated: the caller distinguishes "sign in" from "not a member"
  *  from "member, but the GitHub-org capture aged out" (stale → offer a one-click refresh). */
@@ -13,6 +13,15 @@ export type OrgUsageResult =
 export type OrgSettingsResult =
   | { status: "ok"; settings: OrgSettingsView }
   | { status: "denied" };
+
+/** The org benchmark read is admin-gated — stricter than getOrgUsage's member gate, so a
+ *  plain member gets a distinct "forbidden-admin" (not the member-facing "forbidden"). */
+export type OrgBenchmarkResult =
+  | { status: "ok"; benchmark: OrgBenchmark }
+  | { status: "unauthenticated" }
+  | { status: "forbidden" }
+  | { status: "forbidden-admin" }
+  | { status: "stale" };
 
 export interface GameMeta { title: string; genre: "replay" | "skill-run" | "project-fun" | "session-heatmap"; version: string }
 
@@ -183,6 +192,20 @@ export function makeApi(base: string) {
       }
       if (!res.ok) throw new Error(`/api/usage/org -> ${res.status}`);
       return { status: "ok", usage: JSON.parse(await res.text()) as OrgUsage };
+    },
+    getOrgBenchmark: async (scope: string): Promise<OrgBenchmarkResult> => {
+      // credentialed: admin-only, gated by the web session cookie (stricter than getOrgUsage's
+      // member gate — see resolveOrgAccess's role check in src/orgs/benchmark.ts).
+      const res = await fetch(base + "/api/orgs/" + encodeURIComponent(scope) + "/benchmark", { credentials: "include" });
+      if (res.status === 401) return { status: "unauthenticated" };
+      if (res.status === 403) {
+        const body = await res.json().catch(() => ({})) as { reason?: string };
+        if (body.reason === "stale") return { status: "stale" };
+        if (body.reason === "not-admin") return { status: "forbidden-admin" };
+        return { status: "forbidden" };
+      }
+      if (!res.ok) throw new Error(`/api/orgs/:scope/benchmark -> ${res.status}`);
+      return { status: "ok", benchmark: JSON.parse(await res.text()) as OrgBenchmark };
     },
     getOrgSettings: async (scope: string): Promise<OrgSettingsResult> => {
       const res = await fetch(base + "/api/usage/settings?scope=" + encodeURIComponent(scope), { credentials: "include" });

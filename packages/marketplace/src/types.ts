@@ -159,3 +159,14 @@ export interface OrgSettingsView { scope: string; retentionDays: number | null; 
 // GitHub App install status + org-internal skills (gated on App install + membership).
 export interface OrgAppStatus { installed: boolean; isMember: boolean; role: "self" | "admin" | "member" | null }
 export interface OrgSkill { sourceId: string; path: string; division: string; name: string; repo: string; description: string | null }
+
+// Org-scoped benchmark (/orgs/:scope/benchmark) — admin-only. Mirrors the aggregator's
+// orgModelBenchmark/orgEffectiveness/orgMemberBreakdown payload (packages/aggregator/src/orgBenchmark.ts).
+export interface OrgModelBenchmarkRow { model: string; mostly: number; partially: number; notAchieved: number; producers: number; successRate: number }
+export interface OrgMemberBenchmarkRow { login: string; attestations: number; gems: number; mostly: number; partially: number; notAchieved: number }
+export interface OrgBenchmark {
+  scope: string;
+  modelBenchmark: OrgModelBenchmarkRow[];
+  effectiveness: AggEffectiveness[]; // same shape as the public effectiveness aggregate
+  members: OrgMemberBenchmarkRow[];
+}
