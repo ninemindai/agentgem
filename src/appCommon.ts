@@ -357,33 +357,48 @@ export function finalizeCommonApp(app: RestApplication, server: Awaited<RestAppl
   // capped ask_session fan-out (search/run/stream/cancel/status). One read-handle RecallIndex
   // per server process; the `recall` warmable (src/warm) is the sole writer, so this handle
   // only ever reads. Closed on graceful shutdown, symmetric with closeSharedIndex above.
+  // Both handles open sqlite under ~/.agentgem; on a hosted deploy with a
+  // read-only/absent home dir that throws. Guard the whole block so recall being
+  // unavailable degrades to "recall disabled" instead of failing server start —
+  // and close any handle opened before a mid-block throw so we never leak one.
   {
-    const recallIndex = new RecallIndex(defaultRecallDbPath());
-    // Proven-use boost (validation instrument #1). One long-lived store handle,
-    // opened here and closed in the same onStop as recallIndex (D5). The adapter
-    // maps each judged session's own outcome to a [0,1] boost via the shared
-    // outcomeCredit — the only place recall's per-session signal is assembled.
-    const outcomesStore = openArtifactOutcomesStore();
-    const provenUse = {
-      boostForSessions: (ids: string[]) => {
-        const out = new Map<string, number>();
-        for (const [id, outcome] of outcomesStore.outcomeForSessions(ids)) out.set(id, outcomeCredit(outcome));
-        return out;
-      },
-    };
-    app.onStop(() => {
-      try { recallIndex.close(); } catch { /* ignore */ }
-      try { outcomesStore.close(); } catch { /* ignore */ }
-    });
-    registerRecallRoutes(server.expressApp as never, {
-      readIndex: recallIndex,
-      provenUse,
-      funnelDeps: serverFunnelDeps(),
-      indexStatus: () => {
-        const n = recallIndex.indexedSessions().size;
-        return { ready: true, indexed: n, total: n, facets: recallIndex.facets() };
-      },
-    }, originGuard as never);
+    let recallIndex: RecallIndex | undefined;
+    let outcomesStore: ReturnType<typeof openArtifactOutcomesStore> | undefined;
+    try {
+      recallIndex = new RecallIndex(defaultRecallDbPath());
+      // Proven-use boost (validation instrument #1). One long-lived store handle,
+      // opened here and closed in the same onStop as recallIndex (D5). The adapter
+      // maps each judged session's own outcome to a [0,1] boost via the shared
+      // outcomeCredit — the only place recall's per-session signal is assembled.
+      outcomesStore = openArtifactOutcomesStore();
+      const idx = recallIndex, store = outcomesStore;
+      const provenUse = {
+        boostForSessions: (ids: string[]) => {
+          const out = new Map<string, number>();
+          for (const [id, outcome] of store.outcomeForSessions(ids)) out.set(id, outcomeCredit(outcome));
+          return out;
+        },
+      };
+      registerRecallRoutes(server.expressApp as never, {
+        readIndex: idx,
+        provenUse,
+        funnelDeps: serverFunnelDeps(),
+        indexStatus: () => {
+          const n = idx.indexedSessions().size;
+          return { ready: true, indexed: n, total: n, facets: idx.facets() };
+        },
+      }, originGuard as never);
+      // Registered only after routes succeed, so a mid-block throw can't leave a
+      // half-wired close handler (the catch below handles cleanup instead).
+      app.onStop(() => {
+        try { idx.close(); } catch { /* ignore */ }
+        try { store.close(); } catch { /* ignore */ }
+      });
+    } catch (e) {
+      serverLog.warn("recall routes disabled (store open failed): %s", e);
+      try { recallIndex?.close(); } catch { /* ignore */ }
+      try { outcomesStore?.close(); } catch { /* ignore */ }
+    }
   }
   // Memory providers: /api/memory/* — LOCAL-only two-way sync bridge (pull into recall, consent-gated
   // push out). Unlike the read-only recall routes above, these WRITE provider API keys to
