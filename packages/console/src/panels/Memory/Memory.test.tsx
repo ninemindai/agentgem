@@ -80,7 +80,7 @@ describe("Memory panel", () => {
     await waitFor(() => {
       const posted = fetchMock.mock.calls.find(([u, i]: any[]) => String(u).endsWith("/api/memory/providers") && i?.method === "POST");
       expect(posted).toBeTruthy();
-      expect(String(posted![1].body)).toContain('"enabled":true');
+      expect(String(posted?.[1]?.body ?? "")).toContain('"enabled":true');
     });
   });
 
