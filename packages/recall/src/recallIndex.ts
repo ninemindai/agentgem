@@ -41,7 +41,7 @@ export class RecallIndex {
   private db: DatabaseSync;
   private opened = true;
 
-  constructor(dbPath: string, private readonly provenUse?: ProvenUseLookup) {
+  constructor(dbPath: string) {
     mkdirSync(dirname(dbPath), { recursive: true });
     this.db = new DatabaseSync(dbPath);
     this.db.exec("PRAGMA journal_mode = WAL");
@@ -124,7 +124,7 @@ export class RecallIndex {
     return query.replace(/['"]/g, "").split(/\s+/).filter((w) => w.length > 2).map((w) => `"${w}"*`).join(" OR ");
   }
 
-  search(query: string, filters: RecallFilters, limit: number): MomentHit[] {
+  search(query: string, filters: RecallFilters, limit: number, provenUse?: ProvenUseLookup): MomentHit[] {
     const expr = this.matchExpr(query);
     if (!expr) return [];
     let rows: ChunkRow[];
@@ -160,8 +160,8 @@ export class RecallIndex {
       }
     }
     const hits = [...bySession.values()];
-    if (this.provenUse && hits.length) {
-      const boosts = this.provenUse.boostForSessions(hits.map((h) => h.sessionId));
+    if (provenUse && hits.length) {
+      const boosts = provenUse.boostForSessions(hits.map((h) => h.sessionId));
       for (const h of hits) {
         const b = boosts.get(h.sessionId) ?? 0;   // unknown/unjudged session → no boost
         // FTS5 bm25() is NEGATIVE (more negative = better match), sorted ascending.

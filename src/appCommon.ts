@@ -44,7 +44,8 @@ import { ChatManager } from "@agentgem/run";
 import { miniappDir, studioBrief, checkpointMiniapp } from "@agentgem/play";
 import { availableAgents, adapterRuntimeCtx, resolveLaunch, npmAdapterInstaller, createLogger } from "@agentgem/base";
 import { collectScorecard, defaultScorecardDeps } from "./gem/scorecard.js";
-import { buildGoldmineBrief, type GoldmineBriefInput } from "@agentgem/insight";
+import { buildGoldmineBrief, type GoldmineBriefInput,
+  openArtifactOutcomesStore, outcomeCredit } from "@agentgem/insight";
 import { agentgemHome } from "@agentgem/model";
 import { join as pathJoin } from "node:path";
 import { mkdirSync } from "node:fs";
@@ -358,9 +359,25 @@ export function finalizeCommonApp(app: RestApplication, server: Awaited<RestAppl
   // only ever reads. Closed on graceful shutdown, symmetric with closeSharedIndex above.
   {
     const recallIndex = new RecallIndex(defaultRecallDbPath());
-    app.onStop(() => { try { recallIndex.close(); } catch { /* ignore */ } });
+    // Proven-use boost (validation instrument #1). One long-lived store handle,
+    // opened here and closed in the same onStop as recallIndex (D5). The adapter
+    // maps each judged session's own outcome to a [0,1] boost via the shared
+    // outcomeCredit — the only place recall's per-session signal is assembled.
+    const outcomesStore = openArtifactOutcomesStore();
+    const provenUse = {
+      boostForSessions: (ids: string[]) => {
+        const out = new Map<string, number>();
+        for (const [id, outcome] of outcomesStore.outcomeForSessions(ids)) out.set(id, outcomeCredit(outcome));
+        return out;
+      },
+    };
+    app.onStop(() => {
+      try { recallIndex.close(); } catch { /* ignore */ }
+      try { outcomesStore.close(); } catch { /* ignore */ }
+    });
     registerRecallRoutes(server.expressApp as never, {
       readIndex: recallIndex,
+      provenUse,
       funnelDeps: serverFunnelDeps(),
       indexStatus: () => {
         const n = recallIndex.indexedSessions().size;

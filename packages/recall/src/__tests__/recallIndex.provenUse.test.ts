@@ -33,23 +33,20 @@ describe("RecallIndex proven-use boost", () => {
     const lookup: ProvenUseLookup = {
       boostForSessions: (ids) => new Map(ids.map((id) => [id, id === "HI" ? 1.0 : 0.0])),
     };
-    const index = new RecallIndex(join(dir, "i2.db"), lookup);
+    const index = new RecallIndex(join(dir, "i2.db"));
     seed(index);
-    const hits = index.search("aggregator schema", {}, 10);
+    const hits = index.search("aggregator schema", {}, 10, lookup);
     expect(hits[0].sessionId).toBe("HI"); // succeeded session wins the tie
     index.close();
   });
 
   it("G4: a lookup returning nothing (cold store) leaves order == pure BM25", () => {
     const cold: ProvenUseLookup = { boostForSessions: () => new Map() };
-    const boosted = new RecallIndex(join(dir, "i3.db"), cold);
-    seed(boosted);
-    const plain = new RecallIndex(join(dir, "i4.db"));
-    seed(plain);
-    const a = boosted.search("aggregator schema", {}, 10).map((h) => h.sessionId).sort();
-    const b = plain.search("aggregator schema", {}, 10).map((h) => h.sessionId).sort();
+    const index = new RecallIndex(join(dir, "i3.db"));
+    seed(index);
+    const a = index.search("aggregator schema", {}, 10, cold).map((h) => h.sessionId).sort();
+    const b = index.search("aggregator schema", {}, 10).map((h) => h.sessionId).sort();
     expect(a).toEqual(b);
-    boosted.close();
-    plain.close();
+    index.close();
   });
 });
