@@ -76,9 +76,10 @@ Because every operation is decorator-defined, the build **must** compile with
 
 ## The Gem core (`@agentgem/*` packages)
 
-The kernel is decomposed into 14 acyclic `@agentgem/*` workspace packages (pnpm workspaces +
-TypeScript project references); the server layer in `src/` stays thin and consumes them via
-`@agentgem/*`. They are framework-agnostic — no HTTP, no decorators, just functions over plain
+The kernel is decomposed into 17 acyclic `@agentgem/*` workspace packages (pnpm workspaces +
+TypeScript project references) — 15 framework-agnostic kernel packages (below) plus the
+`@agentgem/console` and `@agentgem/marketplace` UI SPAs. The server layer in `src/` stays thin
+and consumes them via `@agentgem/*`. They are framework-agnostic — no HTTP, no decorators, just functions over plain
 data — which is what lets the same code back a web request, an MCP tool call, and a test. The
 pipeline is in [The build pipeline](pipeline.md); the on-disk result in
 [Archive format](archive-format.md); the trust boundary in [Redaction](redaction.md); the full
@@ -92,13 +93,14 @@ dependency graph + rationale in [the decomposition proposal](proposals/backend-d
 | `@agentgem/build` | `buildGem` — select artifacts by name → a `Gem` (+ checks, `requiredSecrets`); behavioral + external (`skillspector`) check scaffolding |
 | `@agentgem/archive` | Lay a Gem out as `gem.json` (manifest) + `gem.lock` and verify integrity; serialize to a directory or a deterministic `.tar.gz` |
 | `@agentgem/insight` | Analyze: transcript scan → `WorkflowSignal`, default-deny `scrub`, distill draft skills, ACP recommender, attestation + ingest; **context-hygiene** detectors + bloat curve + deterministic `boundarySegments` (cut-here), rubrics |
-| `@agentgem/recall` | Cross-session transcript search: a BM25/FTS5 index (`node:sqlite`) over scrubbed turns → ranked cross-session moments |
+| `@agentgem/recall` | Cross-session transcript search: a BM25/FTS5 index (`node:sqlite`) over scrubbed turns → ranked cross-session moments, **proven-use aware** (a separate outcomes store boosts artifacts with good downstream results) |
+| `@agentgem/memory` | Two-way sync bridge to external AI memory providers (**mem0**, **supermemory**): pull their memories into recall, push scrubbed, consent-gated candidates out through a review outbox |
 | `@agentgem/play` | Mini-games as `game` Gems: the git-backed `~/.agentgem/miniapps/` registry, scaffolds, the save-time seal + portability gates |
 | `@agentgem/distribute` | Registry (GitHub-backed index + per-version archives), share/search, SSRF-guarded fetch |
 | `@agentgem/run` | Run/verify a Gem; local OS sandbox + ACP run; deploy a materialized project to Vercel/Cloudflare |
 | `@agentgem/testbed` | Install a Gem into a local `.claude`/`.codex`/`.hermes` testbed; flavor detection |
 | `@agentgem/deploy` | Deploy backends — Anthropic Managed Agents + AWS Bedrock AgentCore — each with an undeploy record |
-| `@agentgem/aggregator` | Hosted data-moat: Postgres/pglite schema, k-anon aggregates, ingest, detection, API keys |
+| `@agentgem/aggregator` | Hosted data-moat: Postgres (Neon) schema, better-auth accounts (GitHub/Google/passkeys), k-anon aggregates, ingest + **benchmark contribution loop**, **org benchmark governance**, detection, API keys |
 | `@agentgem/transfer` | NATS store-and-forward Gem transfer: seal, ticket, mint, object store |
 
 The conceptual pipeline `introspect → redact → buildGem → archive` therefore spans
@@ -170,13 +172,14 @@ tarball is self-contained (the in-repo build + Docker deploy use loose `dist/` +
 
 ```
 src/                  # the thin server layer — consumes @agentgem/* via workspace deps
-  index.ts            # AgentBack wiring: REST + MCP + Explorer on one app
+  index.ts            # AgentBack wiring: REST + MCP + Explorer on one app (server entry)
+  client.ts           # desktop client-mode entry — no aggregator/auth/DB, benchmark proxy
   cli.ts              # `agentgem` bin — starts the server
   gem.controller.ts   # REST surface (@api) — /api/*
   gem.tools.ts        # MCP-over-HTTP surface (@mcpServer) — /mcp
   aggregator.controller.ts · share.controller.ts   # hosted aggregator + share surfaces
   schemas.ts          # Zod schemas shared across surfaces
-  *Stream.ts          # SSE handlers (workflow analyze, gem run, scorecard)
+  *.stream.schema.ts · sse/pump.ts   # SSE via agentback streamOf routes (insights, workflow, rubric, scorecard, gem run/verify)
   distill/mcpServer.ts # `agentgem-distill` bin — stdio MCP (MCPApplication + @tool)
   goldmine/           # session intelligence — recall search, chat, and the
     mcpServer.ts      #   `agentgem-goldmine` bin (aggregates-only MCP over past sessions)
@@ -184,9 +187,10 @@ src/                  # the thin server layer — consumes @agentgem/* via works
   warm/               # `agentgem warm` precompute daemon + launchd/systemd service + hygiene nudge
   play.controller.ts  # Play miniapps REST surface — /api/play/*
   bind/               # `agentgem bind` device-flow auth
-packages/             # the Gem core — 14 @agentgem/* workspace packages (see table above)
+packages/             # the Gem core — 17 @agentgem/* workspace packages (see table above)
   console/ · marketplace/   # the React console + public marketplace SPAs
-desktop/              # Electron host — embeds the server (tray + auto-update)
+  memory/               # two-way memory-provider sync (mem0, supermemory)
+desktop/              # Electron host — forks a client-mode core (tray + auto-update)
 docs/
   diagrams/           # .svg (for docs), .png (fallback), .html (interactive export)
 ```

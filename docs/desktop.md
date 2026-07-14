@@ -6,9 +6,13 @@ AgentGem server for you and opens it in its own window, so there's no terminal a
 no `localhost` URL to manage.
 
 Under the hood it's a thin [Electron](https://www.electronjs.org/) host: the app's
-main process starts the normal AgentGem server on a private `127.0.0.1` port and
-points a window at it. Every REST endpoint, the MCP surface, and the web UI work
-exactly as they do over `npx` — secrets still never leave your machine.
+main process forks a local AgentGem core on a private `127.0.0.1` port and points a
+window at it. That core runs in **client mode** — it serves the console and every
+local feature (introspect, build, recall, deploy) but bundles no aggregator, no
+auth stack, and no database; anything hosted (the shared benchmark) is reached over
+the network through a same-origin proxy to the hosted aggregator. Every local REST
+endpoint, the MCP surface, and the web UI work exactly as they do over `npx` —
+secrets still never leave your machine.
 
 ## Download
 
@@ -80,9 +84,17 @@ build is unsigned.
 
 The packaged app can't ship the loose server `dist/` — it's an ES module with its
 own dependency tree — so the build **bundles the core** into a single
-self-contained file (with its runtime peers alongside) that the Electron main
-process loads on startup. The window then loads the local server's URL. This means
-the desktop app is never a fork of the web UI: it's the same server, hosted.
+self-contained file (with its runtime peers alongside). The bundle is built from
+the **client entry** (`src/client.ts`), which pulls in no `@agentgem/aggregator`,
+no better-auth, and no PGlite/`pg`, so it stays lean; the build even fails if any of
+those symbols leak in.
+
+The Electron main process **forks** that core as an out-of-process child (not an
+in-process `import()` — a blocking core once froze the window and stalled every
+request), waits for it to report the port it bound, then points the window at the
+local URL. The window loads the same console you get over `npx`; hosted data (the
+benchmark) is proxied to the aggregator. So the desktop app is never a fork of the
+web UI — it's the same core, run locally in client mode.
 
 ## Troubleshooting
 

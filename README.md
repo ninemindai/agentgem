@@ -54,15 +54,22 @@ call exactly the same thing.
   straight into a Gem.
 - **Cross-session recall** — [Recall](docs/recall.md) searches across every past session
   by what happened inside it (an instant, local, secret-scrubbed index), then lets you
-  chat with or extract across the ones that matter. The same intelligence is the
+  chat with or extract across the ones that matter. Ranking is **proven-use aware** —
+  artifacts with good downstream outcomes are boosted. The same intelligence is the
   **`agentgem-goldmine`** MCP server, so any coding agent can query your history.
+- **Memory-provider sync** — the console's **Memory panel** bridges your recall index to
+  external AI memory providers (**mem0**, **supermemory**): pull their memories in, and
+  push scrubbed, consent-gated candidates out through a review outbox — nothing leaves
+  without your approval.
 - **Context-hygiene detection** — [context hygiene](docs/context-hygiene.md) grades each
   session for context bloat with LLM-free detectors, marks a deterministic "cut here at
   turn N", and — via `agentgem warm --watch --nudge` — raises a live OS notification when
   a running session's context gets heavy.
 - **Chat, and Play** — [Chat](docs/chat.md) with a local coding agent from inside the
   console and distill the conversation into a Gem; [Play](docs/play.md) builds
-  AI-generated mini-games, sealed to run anywhere and versioned as first-class `game` Gems.
+  AI-generated mini-games, sealed to run anywhere and versioned as first-class `game`
+  Gems — publish them to the arcade, where they're **installable, offline-playable PWAs**
+  searchable by genre and tag.
 - **Deploy targets** — Eve and OpenAI Sandbox (code-gen), Flue (materialize, deployable to
   Cloudflare), and Bedrock AgentCore (managed backend); code-gen targets share a common
   `compose` step.
@@ -71,16 +78,25 @@ call exactly the same thing.
 - **A native desktop app** — a [macOS/Windows/Linux build](docs/desktop.md) alongside the
   `npx` CLI, hosting the same local server in its own window.
 - **A GitHub-backed registry + public marketplace** — publish, resolve, merge, and
-  install composable Gems over the same archive format, and browse published Gems and
-  curated skills at [app.agentgem.ai](https://app.agentgem.ai) — star, review, preview,
-  and copy an install command. Every shareable link — a game, gem, profile, or curated
-  skill — [unfurls with a branded preview card](docs/sharing.md#branded-link-previews)
-  when pasted into Slack, X, or iMessage. The hosted marketplace is an **early testbed**:
-  treat it as a preview, and expect accounts, stars, and reviews to be reset occasionally.
-- **Registry-free sharing & identity** — [`agentgem get`](docs/sharing.md) installs a
+  install composable Gems over the same archive format, and browse them at
+  [app.agentgem.ai](https://app.agentgem.ai). Publish a Gem **Public, Unlisted, or
+  Private**, cut a **new version** or overwrite the current one, and gate a release
+  behind **group review** (request review → a member installs it to test → an approval
+  publishes). **Rubrics** are a first-class Gem type. Mini-apps are **installable PWAs**
+  that **play offline** and are searchable by genre and tag. Every shareable link — a
+  game, gem, `@handle` profile, or curated skill —
+  [unfurls with a branded preview card](docs/sharing.md#branded-link-previews) in Slack,
+  X, or iMessage. The hosted marketplace is an **early testbed**: treat it as a preview,
+  and expect accounts, stars, and reviews to be reset occasionally.
+- **Identity, profiles, and teams** — sign in with **GitHub, Google, or a passkey**
+  ([better-auth](https://better-auth.com) under the hood); each account gets a tabbed
+  **`/@handle` profile hub** (apps, reviews, orgs, groups). Create or join a **group** to
+  share a private Gem with teammates or run peer review, and an org gets a scorecard,
+  team-usage dashboard, and **benchmark governance**.
+- **Registry-free sharing & signing** — [`agentgem get`](docs/sharing.md) installs a
   published Gem with one command; `agentgem send` / `receive` pass one directly over an
-  encrypted, one-time hand-off; `agentgem bind` ties a GitHub identity to this machine's
-  signing key; `agentgem verify` checks a Gem runs across your local agents.
+  encrypted, one-time hand-off; `agentgem verify` checks a Gem runs across your local
+  agents.
 - **An agent-native path** — every operation is also an MCP tool, so your local agent can
   build Gems over `/mcp` with no browser involved.
 
@@ -175,11 +191,12 @@ See [CONTRIBUTING.md](CONTRIBUTING.md) for the full workflow.
 Prefer a double-click app over the CLI? AgentGem ships a native **desktop build**
 for macOS, Windows, and Linux — download it from
 [Releases](https://github.com/ninemindai/agentgem/releases) (a `desktop-v*` build).
-It hosts the same local server in its own window, adds a native folder picker, app
-menu, and system tray, and never sends secrets off your machine.
+It runs the same core locally (in client mode) in its own window, adds a native
+folder picker, app menu, and system tray, and never sends secrets off your machine.
 
-> The builds are currently **unsigned**: on macOS right-click → **Open**, on Windows
-> choose **More info → Run anyway** the first time.
+> **macOS builds are signed and notarized** — Gatekeeper opens them normally.
+> **Windows and Linux builds are still unsigned**: on Windows choose **More info →
+> Run anyway** the first time.
 
 To run or package it from source, see the [desktop guide](docs/desktop.md) — in
 short, `pnpm -C desktop dev` to run, `pnpm -C desktop dist` to build installers.
