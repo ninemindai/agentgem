@@ -24,15 +24,35 @@ describe("supermemory adapter", () => {
     expect(r.ok).toBe(false); expect(r.detail).toContain("401");
   });
 
-  it("pull() maps title+summary and early-stops on the desc-sorted cursor", async () => {
-    globalThis.fetch = mockFetch({ memories: [
+  it("pull() maps title+summary, early-stops on the desc-sorted cursor, and posts the expected list request", async () => {
+    const f = mockFetch({ memories: [
       { id: "m2", title: "T2", summary: "prefers vitest", updatedAt: "2026-07-12T00:00:00Z" },
       { id: "m1", title: "T1", summary: "likes dark mode", updatedAt: "2026-07-10T00:00:00Z" },
     ] });
+    globalThis.fetch = f;
     const out = [];
     for await (const rec of supermemoryProvider.pull(cfg, Date.parse("2026-07-11T00:00:00Z"))) out.push(rec);
     expect(out.map((r) => r.id)).toEqual(["m2"]); // m1 is <= since, desc-sorted → stop
     expect(out[0].text).toContain("prefers vitest");
+    expect(f).toHaveBeenCalledWith(
+      expect.stringContaining("/v3/documents/list"),
+      expect.objectContaining({
+        method: "POST",
+        headers: expect.objectContaining({ Authorization: "Bearer sk" }),
+        body: JSON.stringify({ limit: 200, sort: "updatedAt", order: "desc", containerTags: ["u1"] }),
+      }),
+    );
+  });
+
+  it("pull() skips a mid-list record with no title and no summary without stopping early", async () => {
+    globalThis.fetch = mockFetch({ memories: [
+      { id: "m3", title: "T3", summary: "newest", updatedAt: "2026-07-13T00:00:00Z" },
+      { id: "m-empty", updatedAt: "2026-07-12T00:00:00Z" }, // no title, no summary → text === "" → continue
+      { id: "m2", title: "T2", summary: "prefers vitest", updatedAt: "2026-07-11T00:00:00Z" },
+    ] });
+    const out = [];
+    for await (const rec of supermemoryProvider.pull(cfg, Date.parse("2026-07-10T00:00:00Z"))) out.push(rec);
+    expect(out.map((r) => r.id)).toEqual(["m3", "m2"]); // empty record skipped, loop continues past it
   });
 
   it("push() posts content to /v3/documents and returns the id", async () => {
