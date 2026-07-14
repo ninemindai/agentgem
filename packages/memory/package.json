@@ -1,0 +1,19 @@
+{
+  "name": "@agentgem/memory",
+  "version": "0.1.0",
+  "description": "Two-way sync bridge to external AI memory providers (mem0 first): pull into recall, push consent-gated candidates out.",
+  "license": "MIT",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": { "types": "./dist/index.d.ts", "default": "./dist/index.js" }
+  },
+  "files": ["dist"],
+  "scripts": { "build": "tsc -b", "test": "vitest run" },
+  "dependencies": {
+    "@agentgem/base": "workspace:*",
+    "@agentgem/model": "workspace:*",
+    "@agentgem/recall": "workspace:*",
+    "@agentgem/insight": "workspace:*"
+  }
+}

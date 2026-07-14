@@ -414,6 +414,21 @@ importers:
         specifier: ^7.4.1
         version: 7.4.1
 
+  packages/memory:
+    dependencies:
+      '@agentgem/base':
+        specifier: workspace:*
+        version: link:../base
+      '@agentgem/insight':
+        specifier: workspace:*
+        version: link:../insight
+      '@agentgem/model':
+        specifier: workspace:*
+        version: link:../model
+      '@agentgem/recall':
+        specifier: workspace:*
+        version: link:../recall
+
   packages/model:
     dependencies:
       yaml:
