@@ -5,7 +5,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { sql } from "drizzle-orm";
 import { makeTestDb } from "@agentgem/aggregator";
-import { ingestAttestation } from "@agentgem/aggregator";
+import { ingestAttestation, replaceOrgMembers, patchOrgSettings } from "@agentgem/aggregator";
 import { buildAttestation, signAttestation } from "@agentgem/insight";
 import { loadOrCreateIdentity } from "@agentgem/model";
 
@@ -65,5 +65,20 @@ describe("ingestAttestation", () => {
     const after = (await db.execute<{ t: string }>(sql`select ingested_at::text t from attestations`)).rows[0].t;
     expect(after).toBe(before); // #4: ingested_at preserved
     expect((await db.execute<{ c: number }>(sql`select invocations c from usage_edges where invocations = 9`)).rows.length).toBe(1);
+  });
+
+  it("rejects ingest from a producer whose org forbids contribution (forward-only)", async () => {
+    const db = await makeTestDb();
+    const a = make("sha256:fb");
+    await db.execute(sql`insert into producers (pubkey) values (${a.producer.publicKey})`); // account_bindings.pubkey FKs to producers
+    await db.execute(sql`insert into account_bindings (pubkey, provider, account_id, account_login) values (${a.producer.publicKey}, 'github', '1', 'U1')`); // note: original casing
+    await replaceOrgMembers(db, "acme", [{ login: "u1", role: "member" }]);
+    await patchOrgSettings(db, "acme", { contributeAllowed: false }, "admin1");
+    expect(await ingestAttestation(db, a)).toEqual({ accepted: false, rejected: "org-forbidden" });
+    expect((await db.execute<{ c: number }>(sql`select count(*)::int c from attestations`)).rows[0].c).toBe(0);
+  });
+  it("accepts an allowed/unbound producer", async () => {
+    const db = await makeTestDb();
+    expect(await ingestAttestation(db, make("sha256:ok"))).toMatchObject({ accepted: true });
   });
 });

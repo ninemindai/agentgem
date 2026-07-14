@@ -32,16 +32,32 @@ export function verifyAttestation(att: UsageAttestation): VerifyResult {
 
 export type IngestResult =
   | { accepted: true; id: string; publicIngredients: number; privateCount: number; idempotent: boolean; updated: boolean }
-  | { accepted: false; rejected: "bad-signature" | "inconsistent" };
+  | { accepted: false; rejected: "bad-signature" | "inconsistent" | "org-forbidden" };
 
 async function priorId(db: AppDb, att: UsageAttestation): Promise<string | null> {
   const r = await db.execute<{ id: string }>(sql`select id from attestations where gem_digest = ${att.gem.digest} and producer_pubkey = ${att.producer.publicKey}`);
   return r.rows[0]?.id ?? null;
 }
 
+/** True when the producer's bound account_login belongs to ANY org that opted out
+ *  (org_settings.contribute_allowed = false). Most-restrictive-wins; unbound → false. */
+export async function producerForbidden(db: AppDb, pubkey: string): Promise<boolean> {
+  const r = await db.execute<{ forbidden: boolean }>(sql`
+    select exists(
+      select 1 from account_bindings ab
+      join org_members om on om.gh_login = lower(ab.account_login)
+      join org_settings os on os.scope = om.org_scope
+      where ab.pubkey = ${pubkey} and os.contribute_allowed = false
+    ) as forbidden`);
+  return r.rows[0]?.forbidden ?? false;
+}
+
 export async function ingestAttestation(db: AppDb, att: UsageAttestation): Promise<IngestResult> {
   const v = verifyAttestation(att);
   if (!v.ok) return { accepted: false, rejected: v.reason };
+  // Forward-only: a forbidden producer's existing row is neither refreshed nor removed here
+  // (that's Spec B). Existing rows already ingested before the org opted out stay as-is.
+  if (await producerForbidden(db, att.producer.publicKey)) return { accepted: false, rejected: "org-forbidden" };
   // Idempotency is per (gem_digest, producer_pubkey): the SAME producer re-submitting the same gem
   // refreshes the existing row in place (usage may have changed since the last submission), but a
   // DIFFERENT producer of the same gem binary gets their own attestation (previously the gem_digest-global
