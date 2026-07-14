@@ -14,7 +14,23 @@
 // (sessionIds/prompt/mode + a fresh AbortController); /stream drives recallFunnel
 // against it and evicts the job when the stream ends; DELETE cancels + evicts early.
 import { recallFunnel } from "@agentgem/recall";
-import type { RecallIndex, FunnelDeps, FunnelEvent, FunnelMode, SessionRef } from "@agentgem/recall";
+import type { RecallIndex, FunnelDeps, FunnelEvent, FunnelMode, SessionRef,
+  MomentHit, RecallFilters, ProvenUseLookup } from "@agentgem/recall";
+
+/** A/B recall (validation instrument #1). Baseline (pure BM25) is always
+ *  returned; the boosted (proven-use) ordering is returned only when `ab` is set
+ *  AND a lookup is configured. One index handle serves both arms — the lookup is
+ *  passed per-call, so the default path stays pure BM25 (the kill switch). Lets
+ *  the operator eyeball both orderings on their own transcripts. */
+export function abSearch(
+  index: Pick<RecallIndex, "search">,
+  lookup: ProvenUseLookup | undefined,
+  q: string, filters: RecallFilters, limit: number, ab: boolean,
+): { moments: MomentHit[]; momentsBoosted?: MomentHit[] } {
+  const moments = index.search(q, filters, limit);
+  if (!ab || !lookup) return { moments };
+  return { moments, momentsBoosted: index.search(q, filters, limit, lookup) };
+}
 
 // Duck-typed Express request/response so this file carries no @types/express dependency
 // (mirrors chatRoutes.ts:26-45). `on` is optional — only /stream's disconnect-abort uses it.
@@ -44,6 +60,10 @@ export interface RecallRouteDeps {
   readIndex: RecallIndex;
   funnelDeps: FunnelDeps;
   indexStatus: () => { ready: boolean; indexed: number; total: number; facets: { projects: string[]; agents: string[] } };
+  /** Optional proven-use boost (validation instrument #1). When present, a
+   *  `?ab=1` search returns both the baseline and boosted orderings. Absent =
+   *  the route is pure BM25 (kill switch). */
+  provenUse?: ProvenUseLookup;
 }
 
 // No-op guard used when no CSRF/origin middleware is supplied (e.g. tests that
@@ -89,7 +109,8 @@ export function registerRecallRoutes(app: App, deps: RecallRouteDeps, guard: Mid
     const since = Number.isFinite(sinceNum) ? sinceNum : undefined;
     const limitNum = req.query.limit !== undefined ? Number(req.query.limit) : 12;
     const limit = Number.isFinite(limitNum) ? Math.min(50, Math.max(1, Math.floor(limitNum))) : 12;
-    res.json({ moments: deps.readIndex.search(q, { project, agent, since }, limit) });
+    const ab = req.query.ab === "1";
+    res.json(abSearch(deps.readIndex, deps.provenUse, q, { project, agent, since }, limit, ab));
   });
 
   // GET /api/recall/status — index freshness for the Recall panel's header.
