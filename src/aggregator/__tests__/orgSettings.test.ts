@@ -43,3 +43,24 @@ describe("patchOrgSettings", () => {
     expect(s.retentionDays === 60 && s.dashboardEnabled === false).toBe(false); // one write was lost
   });
 });
+
+describe("org governance flags (contributeAllowed, benchmarkViewEnabled)", () => {
+  it("default to true when never configured", async () => {
+    const db = await makeTestDb();
+    const s = await getOrgSettings(db, "acme");
+    expect(s.contributeAllowed).toBe(true);
+    expect(s.benchmarkViewEnabled).toBe(true);
+  });
+
+  it("patchOrgSettings applies a partial patch without clobbering the other flag or unrelated fields", async () => {
+    const db = await makeTestDb();
+    await patchOrgSettings(db, "acme", { retentionDays: 30, dashboardEnabled: true, contributeAllowed: true, benchmarkViewEnabled: true }, "init");
+    await patchOrgSettings(db, "acme", { contributeAllowed: false }, "editor"); // flip only one flag
+    const s = await getOrgSettings(db, "acme");
+    expect(s.contributeAllowed).toBe(false);      // changed
+    expect(s.benchmarkViewEnabled).toBe(true);    // untouched, not clobbered by the partial patch
+    expect(s.retentionDays).toBe(30);             // untouched
+    expect(s.dashboardEnabled).toBe(true);        // untouched
+    expect(s.updatedBy).toBe("editor");
+  });
+});

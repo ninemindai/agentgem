@@ -7,7 +7,7 @@ import { and, eq, inArray, lt, sql } from "drizzle-orm";
 import type { AppDb } from "./schema.js";
 import { orgSettings, usageDays, usageDayModels, accountScopes } from "./schema.js";
 
-export interface OrgSettings { scope: string; retentionDays: number | null; dashboardEnabled: boolean; updatedBy: string | null; updatedAt: string | null }
+export interface OrgSettings { scope: string; retentionDays: number | null; dashboardEnabled: boolean; contributeAllowed: boolean; benchmarkViewEnabled: boolean; updatedBy: string | null; updatedAt: string | null }
 
 const MIN_RETENTION_DAYS = 7;
 const MAX_RETENTION_DAYS = 730;
@@ -16,8 +16,8 @@ const MAX_RETENTION_DAYS = 730;
 export async function getOrgSettings(db: AppDb, scope: string): Promise<OrgSettings> {
   const rows = await db.select().from(orgSettings).where(eq(orgSettings.scope, scope.toLowerCase())).limit(1);
   const r = rows[0];
-  if (!r) return { scope: scope.toLowerCase(), retentionDays: null, dashboardEnabled: true, updatedBy: null, updatedAt: null };
-  return { scope: r.scope, retentionDays: r.retentionDays ?? null, dashboardEnabled: r.dashboardEnabled, updatedBy: r.updatedBy, updatedAt: r.updatedAt.toISOString() };
+  if (!r) return { scope: scope.toLowerCase(), retentionDays: null, dashboardEnabled: true, contributeAllowed: true, benchmarkViewEnabled: true, updatedBy: null, updatedAt: null };
+  return { scope: r.scope, retentionDays: r.retentionDays ?? null, dashboardEnabled: r.dashboardEnabled, contributeAllowed: r.contributeAllowed, benchmarkViewEnabled: r.benchmarkViewEnabled, updatedBy: r.updatedBy, updatedAt: r.updatedAt.toISOString() };
 }
 
 /** Validate a retention value: null = keep forever; otherwise clamp into [7, 730] whole days. */
@@ -47,7 +47,7 @@ export async function putOrgSettings(db: AppDb, scope: string, values: { retenti
 export async function patchOrgSettings(
   db: AppDb,
   scope: string,
-  patch: { retentionDays?: number | null; dashboardEnabled?: boolean },
+  patch: { retentionDays?: number | null; dashboardEnabled?: boolean; contributeAllowed?: boolean; benchmarkViewEnabled?: boolean },
   updatedBy: string,
   nowMs: number = Date.now(),
 ): Promise<OrgSettings> {
@@ -56,9 +56,11 @@ export async function patchOrgSettings(
     const cur = (await tx.select().from(orgSettings).where(eq(orgSettings.scope, scopeLc)).for("update").limit(1))[0];
     const nextRetention = "retentionDays" in patch ? patch.retentionDays! : (cur?.retentionDays ?? null);
     const nextDashboard = "dashboardEnabled" in patch ? patch.dashboardEnabled! : (cur?.dashboardEnabled ?? true);
+    const nextContribute = "contributeAllowed" in patch ? patch.contributeAllowed! : (cur?.contributeAllowed ?? true);
+    const nextBenchmarkView = "benchmarkViewEnabled" in patch ? patch.benchmarkViewEnabled! : (cur?.benchmarkViewEnabled ?? true);
     await tx.insert(orgSettings)
-      .values({ scope: scopeLc, retentionDays: nextRetention, dashboardEnabled: nextDashboard, updatedBy })
-      .onConflictDoUpdate({ target: [orgSettings.scope], set: { retentionDays: nextRetention, dashboardEnabled: nextDashboard, updatedBy, updatedAt: new Date(nowMs) } });
+      .values({ scope: scopeLc, retentionDays: nextRetention, dashboardEnabled: nextDashboard, contributeAllowed: nextContribute, benchmarkViewEnabled: nextBenchmarkView, updatedBy })
+      .onConflictDoUpdate({ target: [orgSettings.scope], set: { retentionDays: nextRetention, dashboardEnabled: nextDashboard, contributeAllowed: nextContribute, benchmarkViewEnabled: nextBenchmarkView, updatedBy, updatedAt: new Date(nowMs) } });
     return nextRetention;
   });
   await applyRetention(db, scopeLc, retentionDays, nowMs);
