@@ -101,6 +101,21 @@ by name.
 | POST | `/registry/install` | Resolve + merge + apply (materialize or workspace) |
 | POST | `/registry/publish` | Publish a workspace Gem to the registry (needs `GITHUB_TOKEN`) |
 
+### Hosted marketplace, benchmark, memory & cards
+
+Beyond the local Gem-building surface above, the server (and the hosted aggregator it
+proxies) exposes several endpoint families. These are documented in full by the generated
+OpenAPI document at `/explorer`; the groups are:
+
+| Group | Where | What it covers |
+| --- | --- | --- |
+| **Publish & catalog** | aggregator | Publish with a **visibility scope** (Public/Unlisted/Private) + **versioning** pre-flight (`/api/publish-status`), Explore/browse, resolve, install, stars, reviews |
+| **Review-gated publishing & groups** | aggregator | Review requests inbox (list/detail/approve/request-changes/comment/withdraw), groups (create/join/members/invites), group-shared private gems |
+| **Identity** | aggregator | better-auth sign-in (GitHub/Google/passkeys), account linking, `/@handle` profiles, orgs + org **benchmark governance** |
+| **Benchmark contribution** | aggregator + `/api/benchmark` proxy | Consent-gated ingest of ingredients-only attestations, signed `POST /my-gems`, k-anon benchmark read-back |
+| **Memory sync** | local core | Provider config, pull provider memories into recall, consent-gated push outbox (`/api/memory/*`, local-only — gated on `SERVE_CONSOLE`) |
+| **OG cards** | any host | `GET /og/card.png?type=&key=` — branded/screenshot link-preview cards (see [Sharing](sharing.md#branded-link-previews)) |
+
 ### Misc
 
 | Method | Path | Purpose |
@@ -108,6 +123,10 @@ by name.
 | GET | `/pick-folder` | Pop an OS-native folder picker on the server machine |
 
 ## Notes
+
+- **Streaming.** Long-running analyses (insights, workflow analyze, rubric evaluation,
+  scorecard scan, gem run/verify) stream over agentback **`streamOf` routes** sharing a
+  common pump (`src/sse/pump.ts`) rather than ad-hoc SSE handlers.
 
 - **Directory override.** Inventory-style operations accept `?dir=` (and `projects`) to point
   at a non-default config home — used for testing and non-default setups.

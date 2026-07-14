@@ -28,8 +28,13 @@ reviews) may be reset as the platform evolves. A catalog today, a live, callable
 
 ## The operations
 
-- **Publish** — push a built Gem to the registry under a name and version. Because the Gem
-  is already secret-safe, publishing never leaks credentials.
+- **Publish** — push a built Gem to the registry under a name and version. Choose a
+  **visibility** — **Public** (listed in Explore), **Unlisted** (link-only), or **Private**
+  (owner-only) — and, when the key already exists, whether to **overwrite** the current
+  version or **cut a new one** (a signed pre-flight tells you which). A publish can also be
+  **gated behind group review**: request review from a group, a member installs the staged
+  Gem to test it, and an approval publishes atomically. Because the Gem is already
+  secret-safe, publishing never leaks credentials.
 - **Resolve** — look up a Gem reference and fetch its archive (manifest + lock).
 - **Merge** — combine multiple Gems into one. Manifests are reconciled and a single lock
   is re-resolved, so the result is a coherent, reproducible Gem rather than a pile of
