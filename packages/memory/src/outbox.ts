@@ -44,6 +44,14 @@ function writePushedKeys(keys: Set<string>): void {
   writeJson("memory-pushed-keys.json", [...keys]);
 }
 
+/** The set of candidate content-hashes that have been pushed to AT LEAST ONE provider.
+ *  Derived from the pair-form pushed-keys (providerId:key) by stripping the providerId.
+ *  Used by candidate generation to avoid re-queueing an already-delivered memory;
+ *  per-provider dedup at push time is handled separately by approveAndPush's pair guard. */
+export function readPushedKeyHashes(): Set<string> {
+  return new Set([...readPushedKeys()].map((p) => p.slice(p.indexOf(":") + 1)));
+}
+
 /** Push the approved candidates to every enabled provider, guarding re-pushes on
  *  a per-(providerId, key) pair rather than per-key: with multiple providers, a
  *  candidate can be fully sent to one provider but not another. Each successful

@@ -2,7 +2,7 @@ import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import { mkdtempSync, rmSync, mkdirSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { writeOutbox, readOutbox, approveAndPush, readPushedKeys } from "../outbox.js";
+import { writeOutbox, readOutbox, approveAndPush, readPushedKeys, readPushedKeyHashes } from "../outbox.js";
 import * as registry from "../registry.js";
 import * as config from "../config.js";
 import type { ProviderConfig, PushCandidate } from "../types.js";
@@ -112,6 +112,20 @@ describe("outbox + push", () => {
     expect(pk.has("mem0:k1")).toBe(true);
     expect(pk.has("supermemory:k1")).toBe(true);
     expect(readOutbox()).toHaveLength(0);
+  });
+
+  it("derives bare content-hashes from pair-form pushed-keys", () => {
+    const dir = join(process.env.AGENTGEM_HOME!, ".agentgem");
+    mkdirSync(dir, { recursive: true });
+    writeFileSync(join(dir, "memory-pushed-keys.json"), JSON.stringify(["mem0:abc", "supermemory:def"]));
+    expect(readPushedKeyHashes()).toEqual(new Set(["abc", "def"]));
+  });
+
+  it("strips the provider prefix for a legacy bare entry migrated to pair form", () => {
+    const dir = join(process.env.AGENTGEM_HOME!, ".agentgem");
+    mkdirSync(dir, { recursive: true });
+    writeFileSync(join(dir, "memory-pushed-keys.json"), JSON.stringify(["oldhash"]));
+    expect(readPushedKeyHashes().has("oldhash")).toBe(true);
   });
 
   it("does not re-push to a provider a pair was already sent to, but does push a newly-enabled provider", async () => {

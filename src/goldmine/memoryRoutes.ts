@@ -8,7 +8,7 @@ import {
   getProvider, listProviderIds, IMPLEMENTED,
   loadProviderConfigs, saveProviderConfig,
   pullIntoRecall, readOutbox, approveAndPush,
-  buildPushCandidates, writeOutbox, readPushedKeys,
+  buildPushCandidates, writeOutbox, readPushedKeyHashes,
   type ProviderId, type ProviderConfig, type RawSignal,
 } from "@agentgem/memory";
 import { RecallIndex } from "@agentgem/recall";
@@ -66,7 +66,7 @@ export function registerMemoryRoutes(app: App, guard: Middleware = noopGuard): v
 
   app.post("/api/memory/outbox/refresh", guard, async (_req, res) => {
     const signals: RawSignal[] = await collectSignals();
-    const candidates = buildPushCandidates(signals, readPushedKeys());
+    const candidates = buildPushCandidates(signals, readPushedKeyHashes());
     writeOutbox(candidates);
     res.json({ candidates });
   });
