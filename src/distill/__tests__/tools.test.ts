@@ -82,6 +82,7 @@ describe("distill tools", () => {
     const deps = {
       loadContext: () => ({ inventory, signal }), salt: "S",
       judge: async () => ({ facets, degraded: false }),
+      contributeEnabled: () => false,
       publish: async (_g: unknown, files: Record<string, string>) => { published = JSON.parse(files["attestation.json"]); return { ref: "r" }; },
     };
     await dispatchTool("sign_and_publish", { selection: { mcpServers: ["gh"] } }, deps); // no flag → default on
@@ -94,6 +95,7 @@ describe("distill tools", () => {
     const deps = {
       loadContext: () => ({ inventory, signal }), salt: "S",
       judge: async () => { throw new Error("should not judge when opted out"); },
+      contributeEnabled: () => false,
       publish: async (_g: unknown, files: Record<string, string>) => { published = JSON.parse(files["attestation.json"]); return { ref: "r" }; },
     };
     await dispatchTool("sign_and_publish", { selection: { mcpServers: ["gh"] }, includeOutcomes: false }, deps);
@@ -104,6 +106,7 @@ describe("distill tools", () => {
     const deps = {
       loadContext: () => ({ inventory, signal }),
       salt: "S",
+      contributeEnabled: () => false,
       publish: async (_gem: unknown, files: Record<string, string>) => {
         publishedAttestation = JSON.parse(files["attestation.json"]);
         return { ref: "test-ref" };
