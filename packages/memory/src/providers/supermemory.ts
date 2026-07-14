@@ -35,6 +35,11 @@ export const supermemoryProvider: MemoryProvider = {
   },
 
   async *pull(cfg, since) {
+    // v1 limitation: fetches only the newest page (limit 200), does NOT follow
+    // `pagination.totalPages`. For an incremental pull the desc sort + early-break
+    // on `since` makes 200 sufficient unless >200 memories changed between syncs; a
+    // FIRST pull (since undefined) of a >200 container silently indexes only the 200
+    // newest. Follow-up: paginate when a second/first full backfill matters.
     const res = await fetch(`${base(cfg)}/v3/documents/list`, {
       method: "POST", headers: headers(cfg),
       body: JSON.stringify({ limit: 200, sort: "updatedAt", order: "desc", containerTags: containerTags(cfg) }),
