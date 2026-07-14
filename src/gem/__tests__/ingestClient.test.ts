@@ -1,11 +1,21 @@
 import { describe, it, expect } from "vitest";
-import { postAttestation } from "@agentgem/insight";
+import { postAttestation, hostedIngestEndpoint } from "@agentgem/insight";
 
 const att = { formatVersion: 1 } as never;
 
 describe("postAttestation", () => {
   it("skips when no endpoint configured", async () => {
     expect(await postAttestation({ attestation: att, endpoint: "" })).toEqual({ skipped: true });
+  });
+  it("skips (never phones home) when no endpoint arg and no AGENTGEM_INGEST_URL", async () => {
+    const prev = process.env.AGENTGEM_INGEST_URL;
+    delete process.env.AGENTGEM_INGEST_URL;
+    const http = async () => { throw new Error("must not make a request when unconfigured"); };
+    try {
+      expect(await postAttestation({ attestation: att, http })).toEqual({ skipped: true });
+    } finally {
+      if (prev !== undefined) process.env.AGENTGEM_INGEST_URL = prev;
+    }
   });
   it("POSTs and returns ingestId on 200", async () => {
     let seen = "";
@@ -24,5 +34,20 @@ describe("postAttestation", () => {
   it("throws when 200 response is missing ingestId", async () => {
     const http = async () => ({ status: 200, json: async () => ({}) });
     await expect(postAttestation({ attestation: att, endpoint: "https://x/ingest", token: "T", http })).rejects.toThrow(/missing ingestId/);
+  });
+});
+
+describe("hostedIngestEndpoint", () => {
+  it("resolves the default hosted aggregator ingest path", () => {
+    const prevIngest = process.env.AGENTGEM_INGEST_URL;
+    const prevAgg = process.env.AGENTGEM_AGGREGATOR_URL;
+    delete process.env.AGENTGEM_INGEST_URL;
+    delete process.env.AGENTGEM_AGGREGATOR_URL;
+    try {
+      expect(hostedIngestEndpoint()).toBe("https://api.agentgem.ai/api/aggregator/ingest");
+    } finally {
+      if (prevIngest !== undefined) process.env.AGENTGEM_INGEST_URL = prevIngest;
+      if (prevAgg !== undefined) process.env.AGENTGEM_AGGREGATOR_URL = prevAgg;
+    }
   });
 });
