@@ -168,6 +168,7 @@ export function TeamUsage({ api, scope, stars }: { api: ReturnType<typeof makeAp
         </h1>
         <p className="ex-sub">Agent usage across the team — each member&apos;s local agentgem reports it on a schedule. Members only. Counts only work in <strong>{scope}</strong>-owned repos; personal and other-org sessions stay out.</p>
         {member && <p className="ex-usage-backlink"><a href={usageHref(scope, { agent, model })}>← Full team</a></p>}
+        <p className="ex-usage-backlink"><a href={`/orgs/${encodeURIComponent(scope)}/benchmark`}>Benchmark (admins) →</a></p>
       </header>
       <div className="ex-usage-controls">
         <div className="ex-tabs" role="tablist" aria-label="time range">

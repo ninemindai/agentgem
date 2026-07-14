@@ -17,6 +17,7 @@ import { MyApps } from "./pages/MyApps";
 import { MyAppDetail } from "./pages/MyAppDetail";
 import { OrgCatalog } from "./pages/OrgCatalog";
 import { TeamUsage } from "./pages/TeamUsage";
+import { Benchmark } from "./pages/Benchmark";
 import { Sources } from "./pages/Sources";
 import { Offline } from "./pages/Offline";
 import { Groups } from "./pages/Groups";
@@ -76,6 +77,8 @@ export const ROUTES: RouteDef[] = [
   { id: "profile", kind: "profile", match: (p) => p.match(/^\/@([^/]+)$/), render: (m, c) => <Profile api={c.api} login={decodeURIComponent((m as RegExpMatchArray)[1])} me={c.me} base={defaultApiBase()} /> },
   // Member-only team dashboard — must match before the public /orgs/:scope catalog.
   { id: "org-usage", kind: "collection", collection: "orgs", match: (p) => p.match(/^\/orgs\/([^/]+)\/usage$/), render: (m, c) => <TeamUsage api={c.api} scope={decodeURIComponent((m as RegExpMatchArray)[1])} stars={c.stars} /> },
+  // Admin-only benchmark dashboard — same match-before-catalog ordering as org-usage above.
+  { id: "org-benchmark", kind: "collection", collection: "orgs", match: (p) => p.match(/^\/orgs\/([^/]+)\/benchmark$/), render: (m, c) => <Benchmark api={c.api} scope={decodeURIComponent((m as RegExpMatchArray)[1])} stars={c.stars} /> },
   { id: "org", kind: "collection", collection: "orgs", match: (p) => p.match(/^\/orgs\/([^/]+)$/), render: (m, c) => <OrgCatalog api={c.api} scope={decodeURIComponent((m as RegExpMatchArray)[1])} /> },
 ];
 

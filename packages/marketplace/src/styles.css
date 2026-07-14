@@ -963,6 +963,40 @@ a.ex-skillcard-rating:hover { text-decoration: underline; }
 }
 .ex-usage-cards-filtered { grid-template-columns: repeat(2, 1fr); }
 
+/* ── Benchmark (/orgs/:scope/benchmark) — admin-only model/gem/member benchmark ────────── */
+.ex-benchmark { max-width: var(--content); margin: 0 auto; }
+.ex-benchmark-head h1 { font-size: 1.35rem; margin: 0 0 2px; }
+.ex-benchmark-scope { color: var(--brand-strong); text-decoration: none; }
+.ex-benchmark-scope:hover { text-decoration: underline; }
+.ex-benchmark .ex-sub { color: var(--muted); font-size: 0.86rem; margin: 0 0 14px; }
+.ex-benchmark section { margin-top: 26px; }
+
+.ex-benchmark-empty {
+  background: var(--surface); border: 1px solid var(--line); border-radius: var(--r-lg);
+  box-shadow: var(--shadow); padding: 26px 22px; text-align: center; margin-top: 10px;
+}
+
+.ex-benchmark-cols {
+  display: grid; gap: 10px; margin: 0 2px 6px;
+  font-size: 0.68rem; letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted);
+}
+.ex-benchmark-cols span:nth-child(n+2) { text-align: right; }
+.ex-benchmark-cols-model, .ex-benchmark-row-model { grid-template-columns: 1fr 90px 130px 220px; }
+.ex-benchmark-cols-gem, .ex-benchmark-row-gem { grid-template-columns: 1fr 90px 130px 120px; }
+.ex-benchmark-cols-member, .ex-benchmark-row-member { grid-template-columns: 1fr 70px 100px 260px; }
+
+.ex-benchmark-name { color: var(--ink); font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+a.ex-benchmark-name, a.ex-benchmark-gem-link { text-decoration: none; }
+a.ex-benchmark-name:hover, a.ex-benchmark-gem-link:hover { color: var(--brand-strong); }
+.ex-benchmark-producers { text-align: right; font-variant-numeric: tabular-nums; color: var(--ink-2); font-size: 0.9rem; }
+.ex-benchmark-outcomes { text-align: right; color: var(--muted); font-size: 0.78rem; }
+
+@media (max-width: 640px) {
+  .ex-benchmark-cols { display: none; }
+  .ex-benchmark-row-model, .ex-benchmark-row-gem, .ex-benchmark-row-member { grid-template-columns: 1fr 90px; }
+  .ex-benchmark-outcomes { display: none; }
+}
+
 /* ── Minigames arcade ── */
 .mg { max-width: 1080px; margin: 0 auto; }
 .mg-h { font-family: var(--display); font-size: 22px; margin: 0 0 4px; color: var(--ink); }
