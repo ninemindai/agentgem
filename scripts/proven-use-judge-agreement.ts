@@ -9,8 +9,11 @@
 // judge improves. A MEASUREMENT, not a benchmark. Reads only artifact-outcomes.db.
 //   pnpm tsx scripts/proven-use-judge-agreement.ts
 import { DatabaseSync } from "node:sqlite";
-import { defaultArtifactOutcomesDbPath } from "@agentgem/insight";
+import { defaultArtifactOutcomesDbPath, openArtifactOutcomesStore } from "@agentgem/insight";
 
+// Ensure the file + schema exist (canonical opener) before the raw read below —
+// on a machine that has never judged a session the table would otherwise be absent.
+openArtifactOutcomesStore().close();
 const db = new DatabaseSync(defaultArtifactOutcomesDbPath());
 // outcome/mission_hint/at_ms are per-session (duplicated across a session's
 // artifact rows); DISTINCT collapses to one row per judged session, oldest first.
