@@ -42,7 +42,7 @@ export function Run({ apiBase, selection, name }: { apiBase: string; selection: 
         setAgentOrder(prep.agents);
         setBlocks(Object.fromEntries(prep.agents.map((a) => [a, { output: "", tools: [], status: "pending" as const }])));
         setStatus("running");
-        closeRef.current = openVerifyStream(apiBase, prep.verifyId, (e) => {
+        closeRef.current = openVerifyStream(client, prep.verifyId, (e) => {
           if (e.type === "agent-start") patchBlock(e.agent, (b) => ({ ...b, status: "running" }));
           else if (e.type === "delta") patchBlock(e.agent, (b) => ({ ...b, output: b.output + e.text }));
           else if (e.type === "tool") patchBlock(e.agent, (b) => ({ ...b, tools: [...b.tools, e.label] }));
@@ -53,7 +53,7 @@ export function Run({ apiBase, selection, name }: { apiBase: string; selection: 
       } else {
         const { runId } = await prepareRunRoute.call(client, { body: { selection, name, agent } });
         setStatus("running");
-        closeRef.current = openRunStream(apiBase, runId, task, (e) => {
+        closeRef.current = openRunStream(client, runId, task, (e) => {
           if (e.type === "phase") setPhase(e.phase);
           else if (e.type === "delta") setOutput((o) => o + e.text);
           else if (e.type === "tool") setTools((t) => [...t, e.label]);

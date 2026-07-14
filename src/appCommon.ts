@@ -24,8 +24,7 @@ import { ReviewController } from "./review.controller.js";
 import { DreamController } from "./dream.controller.js";
 import { GemTools } from "./gem.tools.js";
 import { WorkflowController } from "./workflow.controller.js";
-import { streamGemRun } from "./gemRunStream.js";
-import { streamGemVerify } from "./gemVerifyStream.js";
+import { GemStreamController } from "./gem.stream.controller.js";
 import { streamScorecard } from "./scorecardStream.js";
 import { InsightsController } from "./insights.controller.js";
 import { RubricController } from "./rubric.controller.js";
@@ -159,6 +158,7 @@ export async function buildCommonApp(port: number): Promise<{ app: RestApplicati
   app.restController(PlayController);
   app.restController(InsightsController);
   app.restController(WorkflowController);
+  app.restController(GemStreamController);
   app.service(GemTools);
   // The persistent transcript index (capture) is a separate, lazily-opened on-disk
   // PGlite — not the aggregator DB. Close it on graceful shutdown too, so SIGTERM
@@ -254,10 +254,9 @@ export function finalizeCommonApp(app: RestApplication, server: Awaited<RestAppl
   // reattach are unchanged.
   // SSE progress stream for running a Gem with a local ACP agent (materialize →
   // run → tool/token deltas → done). POST /api/gem/run stays for programmatic callers.
-  server.expressApp.get("/api/gem/run/stream", originGuard, streamGemRun);
-  // SSE streaming matrix: per-agent progress for a prepared cross-agent verify.
-  // POST /api/gem/verify stays for programmatic callers.
-  server.expressApp.get("/api/gem/verify/stream", originGuard, streamGemVerify);
+  // The gem run + cross-agent verify SSE reports are now `streamOf:` routes on the
+  // decorator dispatch — see GemStreamController (run/verify), registered above.
+  // The POST prepare steps stay in gem.controller.ts for the id handshake.
   // SSE scorecard scan: per-project progress with live-climbing counts, then the
   // final aggregate scorecard. GET /api/scorecard/stream?projects=[...]&dir=...
   server.expressApp.get("/api/scorecard/stream", originGuard, (req, res) => streamScorecard(req as never, res as never));

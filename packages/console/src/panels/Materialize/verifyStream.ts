@@ -1,13 +1,18 @@
-// Streaming cross-agent verify: named SSE events tagged per agent, consumed via
-// native EventSource — the same pattern as runStream.ts, one stream for N agents.
+// Streaming cross-agent verify: named events tagged per agent (one stream for N
+// agents), modelled as one discriminated union and consumed via @agentback/client's
+// typed `route.stream()`. The wire nests the arbitrary tool/verdict payloads under
+// a key (z.unknown()); this bridge extracts the bits the panel shows.
+import { z } from "zod";
+import { defineRoute, type Client } from "@agentback/client";
 
 export type VerifyStatus = "passed" | "failed" | "unavailable";
+export type VerifyVerdict = { agent: string; status: VerifyStatus; detail?: string };
 export type VerifyEvent =
   | { type: "agent-start"; agent: string }
   | { type: "tool"; agent: string; label: string }
   | { type: "delta"; agent: string; text: string }
   | { type: "verdict"; agent: string; status: VerifyStatus; detail?: string }
-  | { type: "done"; verdicts: { agent: string; status: VerifyStatus; detail?: string }[] }
+  | { type: "done"; verdicts: VerifyVerdict[] }
   | { type: "failed"; message: string };
 
 function toolLabel(tool: unknown): string {
@@ -19,22 +24,40 @@ function toolLabel(tool: unknown): string {
   return "tool";
 }
 
-/** Open the verify SSE stream; returns a close function. */
+const VerifyWireEvent = z.discriminatedUnion("type", [
+  z.object({ type: z.literal("agent-start"), agent: z.string() }),
+  z.object({ type: z.literal("tool"), agent: z.string(), tool: z.unknown() }),
+  z.object({ type: z.literal("delta"), agent: z.string(), text: z.string() }),
+  z.object({ type: z.literal("verdict"), verdict: z.unknown() }),
+  z.object({ type: z.literal("done"), verdicts: z.unknown(), gemName: z.string().optional(), gemDigest: z.string().optional() }),
+  z.object({ type: z.literal("failed"), message: z.string() }),
+]);
+
+const verifyStreamRoute = defineRoute("GET", "/api/gem/verify/stream", {
+  query: z.object({ verifyId: z.string() }),
+  streamOf: VerifyWireEvent,
+});
+
+/** Open the verify SSE stream; returns a close function (aborts the stream). */
 export function openVerifyStream(
-  apiBase: string,
+  client: Client,
   verifyId: string,
   onEvent: (e: VerifyEvent) => void,
 ): () => void {
-  const es = new EventSource(`${apiBase}/api/gem/verify/stream?${new URLSearchParams({ verifyId })}`);
-  const data = (m: Event) => JSON.parse((m as MessageEvent).data);
-
-  es.addEventListener("agent-start", (m) => onEvent({ type: "agent-start", agent: data(m).agent }));
-  es.addEventListener("tool", (m) => { const d = data(m); onEvent({ type: "tool", agent: d.agent, label: toolLabel(d) }); });
-  es.addEventListener("delta", (m) => { const d = data(m); onEvent({ type: "delta", agent: d.agent, text: d.text }); });
-  es.addEventListener("verdict", (m) => { const d = data(m); onEvent({ type: "verdict", agent: d.agent, status: d.status, detail: d.detail }); });
-  es.addEventListener("done", (m) => { onEvent({ type: "done", verdicts: data(m).verdicts }); es.close(); });
-  es.addEventListener("failed", (m) => { onEvent({ type: "failed", message: data(m).message }); es.close(); });
-  es.addEventListener("error", () => { onEvent({ type: "failed", message: "stream connection error" }); es.close(); });
-
-  return () => es.close();
+  const ctrl = new AbortController();
+  void (async () => {
+    try {
+      for await (const e of verifyStreamRoute.stream(client, { query: { verifyId } }, { signal: ctrl.signal })) {
+        if (e.type === "agent-start") onEvent({ type: "agent-start", agent: e.agent });
+        else if (e.type === "tool") onEvent({ type: "tool", agent: e.agent, label: toolLabel(e.tool) });
+        else if (e.type === "delta") onEvent({ type: "delta", agent: e.agent, text: e.text });
+        else if (e.type === "verdict") { const v = e.verdict as VerifyVerdict; onEvent({ type: "verdict", agent: v.agent, status: v.status, detail: v.detail }); }
+        else if (e.type === "done") onEvent({ type: "done", verdicts: e.verdicts as VerifyVerdict[] });
+        else onEvent({ type: "failed", message: e.message });
+      }
+    } catch {
+      if (!ctrl.signal.aborted) onEvent({ type: "failed", message: "stream connection error" });
+    }
+  })();
+  return () => ctrl.abort();
 }
