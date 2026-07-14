@@ -29,12 +29,27 @@ export function ProviderItem({ apiBase, row, onChanged }: { apiBase: string; row
   };
 
   const pullNow = async () => {
-    setBusy(true); setNote(null);
+    setBusy(true); setNote("pulling…");
     try {
       const r = await pull(apiBase, row.id);
       setNote(`pulled ${r.pulled}`);
     } catch {
       setNote("pull failed");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const toggleEnabled = async (next: boolean) => {
+    setEnabled(next);
+    setBusy(true); setNote(next ? "enabling…" : "disabling…");
+    try {
+      const r = await saveProvider(apiBase, row.id, { enabled: next, apiKey });
+      setNote(r.ok ? (next ? "enabled" : "disabled") : (r.detail ?? "failed"));
+      onChanged();
+    } catch {
+      setEnabled(!next); // revert optimistic toggle
+      setNote("failed — try again");
     } finally {
       setBusy(false);
     }
@@ -59,7 +74,7 @@ export function ProviderItem({ apiBase, row, onChanged }: { apiBase: string; row
           onChange={(e) => setApiKey(e.target.value)}
         />
         <label className="ledger-usedonly">
-          <input type="checkbox" checked={enabled} disabled={disabled} onChange={(e) => setEnabled(e.target.checked)} /> Enabled
+          <input type="checkbox" checked={enabled} disabled={disabled || busy} onChange={(e) => void toggleEnabled(e.target.checked)} /> Enabled
         </label>
         <button type="button" className="ledger-sort" disabled={disabled || busy} onClick={() => void save()}>Save &amp; test</button>
         <button type="button" className="ledger-sort" disabled={disabled || !row.enabled || busy} onClick={() => void pullNow()}>Pull now</button>

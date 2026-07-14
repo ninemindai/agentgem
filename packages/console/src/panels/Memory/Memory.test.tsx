@@ -62,4 +62,39 @@ describe("Memory panel", () => {
       (c) => String(c[0]).endsWith("/api/memory/push") && (c[1] as RequestInit | undefined)?.method === "POST",
     )).toBe(true));
   });
+
+  it("persists the enable toggle by POSTing to /providers on change", async () => {
+    const fetchMock = vi.fn(async (url: string, init?: RequestInit) => {
+      if (String(url).endsWith("/api/memory/providers") && init?.method === "POST")
+        return new Response(JSON.stringify({ ok: true }));
+      if (String(url).endsWith("/api/memory/providers"))
+        return new Response(JSON.stringify({ providers: [{ id: "mem0", implemented: true, enabled: false, connected: true }] }));
+      if (String(url).endsWith("/api/memory/outbox")) return new Response(JSON.stringify({ candidates: [] }));
+      return new Response(JSON.stringify({ ok: true }));
+    });
+    vi.stubGlobal("fetch", fetchMock);
+    render(<Memory apiBase="" />);
+    await waitFor(() => screen.getByText(/mem0/i));
+    const checkbox = screen.getByRole("checkbox", { name: /enabled/i });
+    fireEvent.click(checkbox);
+    await waitFor(() => {
+      const posted = fetchMock.mock.calls.find(([u, i]: any[]) => String(u).endsWith("/api/memory/providers") && i?.method === "POST");
+      expect(posted).toBeTruthy();
+      expect(String(posted![1].body)).toContain('"enabled":true');
+    });
+  });
+
+  it("shows a pulling… state then the pulled count", async () => {
+    const fetchMock = vi.fn(async (url: string) => {
+      if (String(url).endsWith("/api/memory/providers")) return new Response(JSON.stringify({ providers: [{ id: "mem0", implemented: true, enabled: true, connected: true }] }));
+      if (String(url).endsWith("/api/memory/outbox")) return new Response(JSON.stringify({ candidates: [] }));
+      if (String(url).endsWith("/api/memory/pull")) return new Response(JSON.stringify({ pulled: 3 }));
+      return new Response(JSON.stringify({ ok: true }));
+    });
+    vi.stubGlobal("fetch", fetchMock);
+    render(<Memory apiBase="" />);
+    await waitFor(() => screen.getByText(/mem0/i));
+    fireEvent.click(screen.getByRole("button", { name: /pull now/i }));
+    await waitFor(() => screen.getByText(/pulled 3/i));
+  });
 });
