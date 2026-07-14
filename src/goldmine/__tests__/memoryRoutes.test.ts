@@ -41,4 +41,38 @@ describe("memory routes", () => {
     await routes.get("GET /api/memory/outbox")!({ query: {}, params: {} }, r);
     expect(r._out.body).toEqual({ candidates: [] });
   });
+
+  it("POST /providers with a blank apiKey preserves the previously-stored key", async () => {
+    const { app, routes } = makeApp();
+    registerMemoryRoutes(app as any);
+    // seed an existing config with a real key + userId
+    const seed = res();
+    await routes.get("POST /api/memory/providers")!(
+      { body: { id: "mem0", config: { enabled: false, apiKey: "sk-real", userId: "u1" } }, query: {}, params: {} }, seed);
+    // now enable with a BLANK key (what the UI sends — the key field is empty)
+    const r = res();
+    await routes.get("POST /api/memory/providers")!(
+      { body: { id: "mem0", config: { enabled: true, apiKey: "" } }, query: {}, params: {} }, r);
+    const { loadProviderConfigs } = await import("@agentgem/memory");
+    const saved = loadProviderConfigs().mem0!;
+    expect(saved.apiKey).toBe("sk-real"); // key preserved, not wiped
+    expect(saved.enabled).toBe(true);     // enabled applied
+    expect(saved.userId).toBe("u1");      // untouched field preserved
+  });
+
+  it("POST /providers with a NEW non-empty apiKey replaces the stored key", async () => {
+    const { app, routes } = makeApp();
+    registerMemoryRoutes(app as any);
+    const seed = res();
+    await routes.get("POST /api/memory/providers")!(
+      { body: { id: "mem0", config: { enabled: false, apiKey: "sk-old", userId: "u1" } }, query: {}, params: {} }, seed);
+    const r = res();
+    await routes.get("POST /api/memory/providers")!(
+      { body: { id: "mem0", config: { enabled: true, apiKey: "sk-new" } }, query: {}, params: {} }, r);
+    const { loadProviderConfigs } = await import("@agentgem/memory");
+    const saved = loadProviderConfigs().mem0!;
+    expect(saved.apiKey).toBe("sk-new"); // rotated key applied
+    expect(saved.enabled).toBe(true);
+    expect(saved.userId).toBe("u1");
+  });
 });

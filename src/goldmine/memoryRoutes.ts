@@ -40,8 +40,17 @@ export function registerMemoryRoutes(app: App, guard: Middleware = noopGuard): v
 
   app.post("/api/memory/providers", guard, async (req, res) => {
     const id = req.body?.id as ProviderId;
-    const config = req.body?.config as ProviderConfig;
-    if (!id || !config) { res.status(400).json({ error: "id and config required" }); return; }
+    const incoming = req.body?.config as ProviderConfig;
+    if (!id || !incoming) { res.status(400).json({ error: "id and config required" }); return; }
+    const existing = loadProviderConfigs()[id];
+    // The UI never re-populates the key field (it's write-only for security), so a save from an
+    // already-connected provider arrives with a blank apiKey. Merge over the stored config: keep the
+    // existing key (and any baseUrl/userId the client didn't send) unless the client provides a new value.
+    const config: ProviderConfig = {
+      ...existing,
+      ...incoming,
+      apiKey: incoming.apiKey || existing?.apiKey || "",
+    };
     saveProviderConfig(id, config);
     try {
       const r = IMPLEMENTED.has(id) ? await getProvider(id).test(config) : { ok: false, detail: "not implemented yet" };
