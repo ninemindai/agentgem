@@ -29,8 +29,8 @@ describe("pages registry", () => {
     ]);
   });
 
-  it("puts only Settings in the footer", () => {
-    expect(footerPages(pages).map((p) => p.id)).toEqual(["settings"]);
+  it("puts only Settings and Memory in the footer", () => {
+    expect(footerPages(pages).map((p) => p.id)).toEqual(["settings", "memory"]);
   });
 
   it("has no page that is both phased and footer, or neither (guard passes)", () => {
