@@ -4,9 +4,15 @@ import { existsSync, readFileSync } from "node:fs";
 import { autoUpdater } from "electron-updater";
 import type { Tray } from "electron";
 import { startEmbeddedServer, type EmbeddedServer, type ForkCore } from "./server.js";
-import { PICK_FOLDER, UPDATE_EVENT, NOTIFY, pickFolderResult, notifyPayload } from "./ipc.js";
+import { PICK_FOLDER, NOTIFY, pickFolderResult, notifyPayload } from "./ipc.js";
 import { buildMenuTemplate, buildContextMenuTemplate } from "./menu.js";
-import { configureUpdater, updaterFeed, repoUrlFromPackageJson } from "./updater.js";
+import {
+  createUpdateController,
+  updaterFeed,
+  repoUrlFromPackageJson,
+  type UpdateController,
+  type UpdateSurface,
+} from "./updater.js";
 import { createTray } from "./tray.js";
 import { DESKTOP_NAME } from "./version.js";
 import { deepLinkHash, deepLinkInstall, argvDeepLink, DEEP_LINK_SCHEME } from "./deeplink.js";
@@ -30,6 +36,7 @@ function resolveIconPath(): string {
 let win: BrowserWindow | null = null;
 let tray: Tray | null = null;
 let server: EmbeddedServer | null = null;
+let updateController: UpdateController | null = null;
 let quitting = false;
 
 function showWindow(): void {
@@ -110,8 +117,57 @@ async function createWindow(url: string): Promise<void> {
   await win.loadURL(`${url}/`);
 }
 
-function setupUpdates(): void {
-  const notify = (status: string) => win?.webContents.send(UPDATE_EVENT, { status });
+// Native dialogs for the update lifecycle. The renderer is intentionally not involved:
+// these must be visible even before the console has loaded (a startup check can finish
+// a download first), and a main-process dialog is guaranteed to show.
+function makeUpdateSurface(): UpdateSurface {
+  const box = (opts: Parameters<typeof dialog.showMessageBox>[0]) =>
+    void dialog.showMessageBox({ title: DESKTOP_NAME, ...opts }).catch(() => {});
+  return {
+    upToDate: (version) =>
+      box({
+        type: "info",
+        buttons: ["OK"],
+        message: "You're up to date.",
+        detail: `${DESKTOP_NAME} ${version || app.getVersion()} is the latest version.`,
+      }),
+    downloading: (version) =>
+      box({
+        type: "info",
+        buttons: ["OK"],
+        message: "An update is available.",
+        detail: `Downloading ${DESKTOP_NAME} ${version}… you'll be prompted to restart when it's ready.`,
+      }),
+    ready: (version) => {
+      void dialog
+        .showMessageBox({
+          type: "question",
+          buttons: ["Later", "Restart now"],
+          defaultId: 1,
+          cancelId: 0,
+          title: DESKTOP_NAME,
+          message: "Update ready to install.",
+          detail: `${DESKTOP_NAME} ${version} has been downloaded. Restart to apply it now?`,
+        })
+        .then(({ response }) => {
+          if (response !== 1) return; // Later: the update installs on the next quit
+          // Drain the core, then let electron-updater run the normal quit → swap → relaunch.
+          // quitAndInstall() calls app.quit(); `quitting` lets before-quit pass through instead
+          // of force-exiting via app.exit(), which would skip the install-on-quit hook.
+          quitting = true;
+          tray?.destroy();
+          const relaunch = () => autoUpdater.quitAndInstall();
+          if (server) void server.stop().then(relaunch, relaunch);
+          else relaunch();
+        })
+        .catch(() => {});
+    },
+    failed: (err) =>
+      box({ type: "error", buttons: ["OK"], message: "Update check failed.", detail: err?.message ?? String(err) }),
+  };
+}
+
+function setupUpdates(): UpdateController {
   // Set the update feed explicitly from package.json's repository field. If that
   // fails (missing/odd repository), fall back to the publish config baked into
   // app-update.yml by electron-builder at package time.
@@ -121,15 +177,7 @@ function setupUpdates(): void {
   } catch {
     /* keep the baked-in app-update.yml feed */
   }
-  configureUpdater(autoUpdater, {
-    onAvailable: () => notify("available"),
-    onDownloaded: () => notify("downloaded"),
-    onError: (err) => {
-      // Never surface an update-check failure as a dialog: the app works fine without it.
-      console.error("[updater] check failed:", err?.message ?? err);
-      notify("error");
-    },
-  });
+  return createUpdateController(autoUpdater, makeUpdateSurface());
 }
 
 // The core runs in a utility process, not on main's event loop. stdio must be "pipe"
@@ -192,15 +240,31 @@ async function boot(): Promise<void> {
   pendingDeepLink = null;
   if (initialLink) handleDeepLink(initialLink);
 
+  updateController = setupUpdates();
+
   Menu.setApplicationMenu(
     Menu.buildFromTemplate(
       buildMenuTemplate({
         platform: process.platform,
         isDev,
         appName: DESKTOP_NAME,
-        // Rejection is reported by the "error" listener setupUpdates() registers; swallow it
-        // here so a failed check can't become an unhandled rejection in the main process.
-        onCheckUpdates: () => void autoUpdater.checkForUpdatesAndNotify().catch(() => {}),
+        onCheckUpdates: () => {
+          // electron-updater can't update an unpackaged build (dev run) — a manual check would
+          // just error with "not packed". Say so plainly instead of a confusing failure dialog.
+          if (!app.isPackaged) {
+            void dialog
+              .showMessageBox({
+                type: "info",
+                buttons: ["OK"],
+                title: DESKTOP_NAME,
+                message: "Updates are disabled in development.",
+                detail: "Run a packaged build to test auto-update.",
+              })
+              .catch(() => {});
+            return;
+          }
+          updateController?.check({ manual: true });
+        },
       }),
     ),
   );
@@ -208,7 +272,9 @@ async function boot(): Promise<void> {
   const iconPath = resolveIconPath();
   tray = createTray({ onOpen: showWindow, onQuit: () => app.quit(), iconPath });
 
-  if (!isDev) setupUpdates();
+  // Silent startup check: a found update downloads in the background and prompts to restart
+  // when ready. Skipped in dev, where the app is unpackaged and can't self-update.
+  if (!isDev) updateController.check();
 }
 
 // Single-instance: a second launch focuses the existing window.
