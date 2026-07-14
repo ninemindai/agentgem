@@ -1,7 +1,7 @@
 // Copyright (c) 2026 NineMind, Inc.
 // SPDX-License-Identifier: MIT
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
-import { postAttestation, type IngestHttp } from "../ingestClient.js";
+import { postAttestation, hostedIngestEndpoint, type IngestHttp } from "../ingestClient.js";
 import type { UsageAttestation } from "../attestation.js";
 
 const attestation = {} as UsageAttestation;
@@ -28,23 +28,11 @@ function fakeHttp(status = 200, ingestId = "ing_1"): IngestHttp {
 }
 
 describe("postAttestation — ingest endpoint resolution", () => {
-  it("defaults to the hosted aggregator when both env vars are unset", async () => {
+  it("skips (never phones home) when unconfigured — no endpoint arg, no AGENTGEM_INGEST_URL", async () => {
     const http = fakeHttp();
-    await postAttestation({ attestation, http });
-    expect(http).toHaveBeenCalledWith(
-      "https://api.agentgem.ai/api/aggregator/ingest",
-      expect.anything(),
-    );
-  });
-
-  it("derives the endpoint from AGENTGEM_AGGREGATOR_URL when set", async () => {
-    process.env.AGENTGEM_AGGREGATOR_URL = "http://127.0.0.1:9999";
-    const http = fakeHttp();
-    await postAttestation({ attestation, http });
-    expect(http).toHaveBeenCalledWith(
-      "http://127.0.0.1:9999/api/aggregator/ingest",
-      expect.anything(),
-    );
+    const result = await postAttestation({ attestation, http });
+    expect(result).toEqual({ skipped: true });
+    expect(http).not.toHaveBeenCalled();
   });
 
   it("prefers a full-URL AGENTGEM_INGEST_URL override over the aggregator default", async () => {
@@ -60,6 +48,17 @@ describe("postAttestation — ingest endpoint resolution", () => {
     const result = await postAttestation({ attestation, endpoint: "", http });
     expect(result).toEqual({ skipped: true });
     expect(http).not.toHaveBeenCalled();
+  });
+});
+
+describe("hostedIngestEndpoint", () => {
+  it("resolves the default hosted aggregator ingest path when both env vars are unset", () => {
+    expect(hostedIngestEndpoint()).toBe("https://api.agentgem.ai/api/aggregator/ingest");
+  });
+
+  it("derives the endpoint from AGENTGEM_AGGREGATOR_URL when set", () => {
+    process.env.AGENTGEM_AGGREGATOR_URL = "http://127.0.0.1:9999";
+    expect(hostedIngestEndpoint()).toBe("http://127.0.0.1:9999/api/aggregator/ingest");
   });
 });
 
