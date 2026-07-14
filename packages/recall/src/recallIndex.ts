@@ -25,11 +25,23 @@ export interface SessionMeta { sessionId: string; agent: string; project: string
 
 interface ChunkRow { session_id: string; agent: string; turn: number; project: string | null; branch: string | null; start_ms: number; score: number; snip: string }
 
+// Proven-use ranking (D7). ALPHA caps the boost so relevance (BM25) stays
+// primary; a session whose own run fully succeeded improves its effective rank by
+// at most ALPHA. Injected, so recall keeps its own sqlite and no query-time
+// insight dependency; absent = the kill switch (exactly today's BM25 ordering).
+export const ALPHA = 0.3;
+export interface ProvenUseLookup {
+  /** Per-session boost in [0,1] from that session's OWN judged outcome (already
+   *  mapped via outcomeCredit by the adapter). Sessions absent from the map get
+   *  no boost — a cold/empty store degrades to pure BM25. */
+  boostForSessions(sessionIds: string[]): Map<string, number>;
+}
+
 export class RecallIndex {
   private db: DatabaseSync;
   private opened = true;
 
-  constructor(dbPath: string) {
+  constructor(dbPath: string, private readonly provenUse?: ProvenUseLookup) {
     mkdirSync(dirname(dbPath), { recursive: true });
     this.db = new DatabaseSync(dbPath);
     this.db.exec("PRAGMA journal_mode = WAL");
@@ -147,7 +159,18 @@ export class RecallIndex {
         if (r.score < existing.score) { existing.score = r.score; existing.turn = r.turn; existing.snippet = r.snip; }
       }
     }
-    return [...bySession.values()].sort((a, b) => a.score - b.score).slice(0, limit);
+    const hits = [...bySession.values()];
+    if (this.provenUse && hits.length) {
+      const boosts = this.provenUse.boostForSessions(hits.map((h) => h.sessionId));
+      for (const h of hits) {
+        const b = boosts.get(h.sessionId) ?? 0;   // unknown/unjudged session → no boost
+        // FTS5 bm25() is NEGATIVE (more negative = better match), sorted ascending.
+        // Amplifying the magnitude pulls a proven session toward the top; b=0 is a
+        // no-op. (Multiply, not divide — dividing would demote good matches.)
+        h.score = h.score * (1 + ALPHA * b);
+      }
+    }
+    return hits.sort((a, b) => a.score - b.score).slice(0, limit);
   }
 
   clear(): void {
