@@ -35,7 +35,8 @@ export async function postAttestation(args: {
     body: canonicalJSON(args.attestation),
   });
   if (res.status < 200 || res.status >= 300) throw new Error(`ingest ${res.status}`);
-  const body = (await res.json()) as { ingestId?: string };
+  const body = (await res.json()) as { ingestId?: string; accepted?: boolean };
+  if (body.accepted === false) return { skipped: true }; // policy reject (e.g. org-forbidden) — nothing to do
   if (!body.ingestId) throw new Error("ingest: response missing ingestId");
   return { ingestId: body.ingestId };
 }

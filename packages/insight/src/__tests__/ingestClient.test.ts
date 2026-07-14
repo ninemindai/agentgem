@@ -62,3 +62,28 @@ describe("postAttestation — ingest endpoint resolution", () => {
     expect(http).not.toHaveBeenCalled();
   });
 });
+
+describe("postAttestation — aggregator response handling", () => {
+  it("returns the ingestId on a 200 with an accepted body", async () => {
+    const http = fakeHttp();
+    const result = await postAttestation({ attestation, endpoint: "https://x/ingest", http });
+    expect(result).toEqual({ ingestId: "ing_1" });
+  });
+
+  it("throws on a non-2xx status", async () => {
+    const http: IngestHttp = vi.fn(async () => ({ status: 500, json: async () => ({}) }));
+    await expect(
+      postAttestation({ attestation, endpoint: "https://x/ingest", http }),
+    ).rejects.toThrow("ingest 500");
+  });
+
+  it("skips (not throws) when the aggregator rejects the attestation (accepted:false)", async () => {
+    const http: IngestHttp = async () => ({
+      status: 200,
+      json: async () => ({ accepted: false, rejected: "org-forbidden" }),
+    });
+    expect(await postAttestation({ attestation, endpoint: "https://x/ingest", http })).toEqual({
+      skipped: true,
+    });
+  });
+});
