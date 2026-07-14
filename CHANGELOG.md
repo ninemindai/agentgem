@@ -7,6 +7,69 @@ All notable changes to AgentGem are documented here. The format follows
 The npm core (`@ninemind/agentgem`) and the desktop app share a version number but
 are tagged separately: core releases are tagged `v*`, desktop releases `desktop-v*`.
 
+## [0.6.0] — `@ninemind/agentgem` (npm core) — 2026-07-13
+
+A follow-up release focused on the benchmark data loop, report durability, and
+richer share cards. A local core can now contribute anonymized attestations to the
+hosted benchmark (opt-in), long-running reports survive navigation, mini-app share
+cards carry a real screenshot, and Insights folds into the Mine tab. Most of the
+per-feature SSE endpoints move onto agentback `streamOf` routes. 84 commits since
+0.5.0.
+
+### Added
+
+- **Contribute to the hosted benchmark from a local core.** A consent toggle in the
+  Benchmark tab (off by default) opts a producer into posting *ingredients-only*
+  attestations over its published gems to the hosted aggregator, plus a **Contribute
+  now** action and a cache-aware `contribute` warmable. A signed `POST /my-gems`
+  lists the producer's owned gems (deduped by gem key so multi-version gems attest
+  once), and interactive publish ingests only when the toggle is on.
+- **Reports survive navigation.** An in-memory `ReportRegistry` and a `useReportRun`
+  hook let Insights, Curate, and Rubric evaluation reattach to a running report after
+  you leave and return to the tab, guarding against duplicate runs and unmount races.
+  A report-done notification and an activity menu surface finished runs.
+- **Mini-app share cards carry a real screenshot.** Publishing a game in Studio
+  captures a screenshot from the sealed preview (via a capture shim and a
+  capture-confirm step), stores it in a new `gem_covers` table, and composites it into
+  a screenshot-hero variant of `/og/card.png`.
+- **Live Dreaming progress in the Journey scene.** The warm pass publishes incremental
+  step progress (LIGHT / DEEP / REM and the current project) to `/api/dream/status`,
+  rendered as a live step tracker, with the current phase shown on the warming pill.
+- **Per-gem dates and version on catalog grids**, and a Request-review modal with a
+  folded-in GitHub connect step.
+
+### Changed
+
+- **Per-feature SSE endpoints move onto agentback `streamOf` routes.** Insights,
+  workflow analysis, rubric evaluation, scorecard scan, and gem run + verify all
+  migrate off raw-Express SSE onto native agentback streaming routes sharing a common
+  pump.
+- **Insights folds into the Mine tab** as a second view (Workflows + Outcomes) behind a
+  shared project dropdown, with a `cacheOnly` peek on the insights route.
+- **The desktop app runs as a pure API client.** A `src/client.ts` entry ships common
+  plus a benchmark proxy with no bundled aggregator, reading the hosted benchmark
+  read-only (and degrading to an empty list when anonymous).
+
+### Fixed
+
+- Benchmark digest failures surface as per-gem `failed` instead of posting an empty
+  digest, and `postAttestation` stays opt-in with the hosted endpoint passed
+  explicitly.
+- Public browse shows the *latest* gem version rather than the oldest.
+- A finished report run is no longer re-registered on reattach, and a Rubrics reattach
+  is no longer clobbered by the default-select race.
+- The `shareOriginSecret`-before-`originGuard` registration order is preserved.
+
+## [desktop-v0.6.0] — desktop app — 2026-07-13
+
+### Changed
+
+- **The desktop host runs as a pure API client** — no bundled aggregator or PGlite; it
+  reads the hosted benchmark through a proxy.
+- Everything in npm core 0.6.0 above, since the desktop app embeds the same console and
+  server: benchmark contribution, durable reports, screenshot share cards, live
+  Dreaming progress, and the Insights-into-Mine merge.
+
 ## [0.5.0] — `@ninemind/agentgem` (npm core) — 2026-07-12
 
 A large release. Identity moved onto [better-auth](https://better-auth.com), gems
