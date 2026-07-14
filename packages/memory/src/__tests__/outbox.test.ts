@@ -5,6 +5,7 @@ import { join } from "node:path";
 import { writeOutbox, readOutbox, approveAndPush, readPushedKeys } from "../outbox.js";
 import * as registry from "../registry.js";
 import * as config from "../config.js";
+import type { ProviderConfig, PushCandidate } from "../types.js";
 
 let home: string;
 beforeEach(() => { home = mkdtempSync(join(tmpdir(), "agm-out-")); process.env.AGENTGEM_HOME = home; });
@@ -61,5 +62,31 @@ describe("outbox + push", () => {
     const remaining = readOutbox().map((c) => c.key);
     expect(remaining).not.toContain("k1");
     expect(remaining).toContain("k2");
+  });
+
+  it("does not re-push a key that is already recorded as pushed, even if it re-enters the outbox", async () => {
+    config.saveProviderConfig("mem0", { enabled: true, apiKey: "sk", userId: "u" });
+    const push = vi.fn(async (_cfg: ProviderConfig, _cand: PushCandidate) => ({ id: "remote" }));
+    vi.spyOn(registry, "getProvider").mockReturnValue({ id: "mem0", test: vi.fn(), pull: vi.fn(), push } as never);
+
+    // First push: k1 goes out, gets recorded in pushed-keys, and is removed from the outbox.
+    writeOutbox([{ key: "k1", text: "k1 text", kind: "preference", source: "s" }]);
+    await approveAndPush(["k1"]);
+    expect(readPushedKeys().has("k1")).toBe(true);
+    push.mockClear();
+
+    // Simulate a bad re-queue: k1 re-enters the outbox alongside a fresh k3.
+    writeOutbox([
+      { key: "k1", text: "k1 text", kind: "preference", source: "s" },
+      { key: "k3", text: "k3 text", kind: "preference", source: "s" },
+    ]);
+
+    const res = await approveAndPush(["k1", "k3"]);
+
+    expect(res.pushed).toBe(1);
+    expect(push).toHaveBeenCalledOnce();
+    // Only k3's text was ever sent — k1 was not re-pushed.
+    expect(push.mock.calls[0][1]).toMatchObject({ key: "k3" });
+    expect(push.mock.calls.some((call) => call[1].key === "k1")).toBe(false);
   });
 });
