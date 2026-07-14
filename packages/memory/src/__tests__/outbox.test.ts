@@ -42,4 +42,24 @@ describe("outbox + push", () => {
     expect(res.pushed).toBe(0);
     expect(push).not.toHaveBeenCalled();
   });
+
+  it("persists earlier successes durably when a later candidate's push throws mid-batch", async () => {
+    writeOutbox([
+      { key: "k1", text: "raymond uses pnpm", kind: "preference", source: "s" },
+      { key: "k2", text: "raymond uses vitest", kind: "preference", source: "s" },
+    ]);
+    config.saveProviderConfig("mem0", { enabled: true, apiKey: "sk", userId: "u" });
+    const push = vi.fn()
+      .mockResolvedValueOnce({ id: "remote-1" })
+      .mockRejectedValueOnce(new Error("network blip"));
+    vi.spyOn(registry, "getProvider").mockReturnValue({ id: "mem0", test: vi.fn(), pull: vi.fn(), push } as never);
+
+    await expect(approveAndPush(["k1", "k2"])).rejects.toThrow("network blip");
+
+    // k1's success survived the k2 failure: recorded as pushed and removed from the outbox.
+    expect(readPushedKeys().has("k1")).toBe(true);
+    const remaining = readOutbox().map((c) => c.key);
+    expect(remaining).not.toContain("k1");
+    expect(remaining).toContain("k2");
+  });
 });
