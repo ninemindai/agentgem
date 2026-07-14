@@ -8,3 +8,4 @@ export * from "./pull.js";
 export * from "./candidates.js";
 export * from "./outbox.js";
 export { mem0Provider } from "./providers/mem0.js";
+export { supermemoryProvider } from "./providers/supermemory.js";

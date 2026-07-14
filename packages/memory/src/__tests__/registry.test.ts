@@ -10,6 +10,10 @@ describe("provider registry", () => {
     expect(IMPLEMENTED.has("mem0")).toBe(true);
     expect(getProvider("mem0").id).toBe("mem0");
   });
+  it("supermemory is implemented", () => {
+    expect(IMPLEMENTED.has("supermemory")).toBe(true);
+    expect(getProvider("supermemory").id).toBe("supermemory");
+  });
   it("stub providers reject with NotImplementedError", async () => {
     const zep = getProvider("zep");
     await expect(zep.test({ enabled: true, apiKey: "x" })).rejects.toBeInstanceOf(NotImplementedError);
