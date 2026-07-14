@@ -31,6 +31,7 @@ import { installHandles } from "./handles/install.js";
 import { installAccount } from "./account/install.js";
 import { installConnect } from "./account/connect.js";
 import { installUsage } from "./usage/install.js";
+import { installOrgBenchmark } from "./orgs/benchmark.js";
 import { installRegistryUploadPublish } from "./registry/uploadPublish.js";
 import { registryConfigFromEnv, githubRegistrySource, githubRegistryPublisher, defaultHttp } from "@agentgem/distribute";
 import { defaultGemTypeRegistry } from "./gem/gemTypeRegistry.js";
@@ -156,6 +157,7 @@ export async function mountAggregator(
     installGroups(server.expressApp as never, { db: aggDb, auth, webOrigins });
     installGemShares(server.expressApp as never, { db: aggDb, auth, webOrigins });
     installUsage(server.expressApp as never, { db: aggDb, auth, webOrigins });
+    installOrgBenchmark(server.expressApp as never, { db: aggDb, auth, webOrigins });
     installHandles(server.expressApp as never, { db: aggDb, auth, webOrigins });
     installAccount(server.expressApp as never, { db: aggDb, auth, webOrigins });
   }
