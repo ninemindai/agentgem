@@ -164,9 +164,16 @@ export interface OrgSkill { sourceId: string; path: string; division: string; na
 // orgModelBenchmark/orgEffectiveness/orgMemberBreakdown payload (packages/aggregator/src/orgBenchmark.ts).
 export interface OrgModelBenchmarkRow { model: string; mostly: number; partially: number; notAchieved: number; producers: number; successRate: number }
 export interface OrgMemberBenchmarkRow { login: string; attestations: number; gems: number; mostly: number; partially: number; notAchieved: number }
+// The two governance flags an org admin can toggle — mirrors packages/aggregator's org_settings
+// columns (contribute_allowed, benchmark_view_enabled).
+export interface OrgBenchmarkSettings { contributeAllowed: boolean; benchmarkViewEnabled: boolean }
 export interface OrgBenchmark {
   scope: string;
   modelBenchmark: OrgModelBenchmarkRow[];
   effectiveness: AggEffectiveness[]; // same shape as the public effectiveness aggregate
   members: OrgMemberBenchmarkRow[];
+  settings: OrgBenchmarkSettings;
+  // Governance is only enforceable for App-installed orgs (resolveOrgAccess's via==="app") — a
+  // non-App org's admin role is self-reported (account_scopes), not a roster the server can gate.
+  governanceAvailable: boolean;
 }

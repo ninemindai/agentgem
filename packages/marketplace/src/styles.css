@@ -997,6 +997,20 @@ a.ex-benchmark-name:hover, a.ex-benchmark-gem-link:hover { color: var(--brand-st
   .ex-benchmark-outcomes { display: none; }
 }
 
+/* ── Benchmark governance — admin toggles for forbid-contribute / show-view ────────────── */
+.ex-benchmark-gov {
+  display: flex; flex-direction: column; gap: 8px; margin-top: 0;
+  background: var(--surface); border: 1px solid var(--line); border-radius: var(--r-lg);
+  box-shadow: var(--shadow); padding: 16px 18px;
+}
+.ex-benchmark-gov-toggle { display: inline-flex; align-items: center; gap: 7px; color: var(--ink-2); font-size: 0.88rem; }
+.ex-benchmark-gov-caveat { margin: 2px 0 0; }
+.ex-benchmark-gov-note { margin: 0; }
+.ex-benchmark-gov-hidden {
+  background: var(--surface); border: 1px solid var(--line); border-radius: var(--r-lg);
+  box-shadow: var(--shadow); padding: 26px 22px; text-align: center; margin-top: 26px;
+}
+
 /* ── Minigames arcade ── */
 .mg { max-width: 1080px; margin: 0 auto; }
 .mg-h { font-family: var(--display); font-size: 22px; margin: 0 0 4px; color: var(--ink); }
