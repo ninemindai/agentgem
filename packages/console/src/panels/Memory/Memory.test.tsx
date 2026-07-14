@@ -95,6 +95,7 @@ describe("Memory panel", () => {
     render(<Memory apiBase="" />);
     await waitFor(() => screen.getByText(/mem0/i));
     fireEvent.click(screen.getByRole("button", { name: /pull now/i }));
+    expect(screen.getByText(/pulling/i)).toBeTruthy();
     await waitFor(() => screen.getByText(/pulled 3/i));
   });
 });
