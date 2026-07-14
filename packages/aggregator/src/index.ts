@@ -3,6 +3,7 @@
 // @agentgem/aggregator — Postgres/pglite data-moat: schema, aggregates, ingest, detection, account binding.
 export * from "./schema.js";
 export * from "./aggregates.js";
+export * from "./orgBenchmark.js";
 export * from "./detection.js";
 export * from "./ingest.js";
 export * from "./project.js";
