@@ -368,6 +368,13 @@ export function finalizeCommonApp(app: RestApplication, server: Awaited<RestAppl
       },
     }, originGuard as never);
   }
-  // Memory providers: /api/memory/* — local-core-only two-way sync bridge (pull into recall, consent-gated push out).
-  registerMemoryRoutes(server.expressApp as never, originGuard as never);
+  // Memory providers: /api/memory/* — LOCAL-only two-way sync bridge (pull into recall, consent-gated
+  // push out). Unlike the read-only recall routes above, these WRITE provider API keys to
+  // ~/.agentgem/memory-providers.json and make outbound calls to provider APIs, so they must never
+  // exist on the hosted public deployment (api.agentgem.ai). Gated on the same SERVE_CONSOLE signal
+  // as the console UI itself (the hosted deploy sets SERVE_CONSOLE=false): the memory panel is a
+  // console-only feature, so its backend rides the console's local-only lifetime exactly.
+  if (process.env.SERVE_CONSOLE !== "false") {
+    registerMemoryRoutes(server.expressApp as never, originGuard as never);
+  }
 }
