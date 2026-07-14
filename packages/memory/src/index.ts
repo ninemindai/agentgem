@@ -3,3 +3,5 @@
 export * from "./types.js";
 export * from "./config.js";
 export * from "./cursors.js";
+export * from "./registry.js";
+export { mem0Provider } from "./providers/mem0.js";
