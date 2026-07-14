@@ -5,6 +5,7 @@
 // producer's bound account_login. Admin-gated at the route; de-anonymized within the org.
 import { sql } from "drizzle-orm";
 import type { AppDb } from "./schema.js";
+import { effectivenessScore, type EffectivenessRow } from "./aggregates.js";
 
 /** Producer-membership predicate: attestations whose producer's bound account_login is a
  *  member of `scope` (App-synced org_members roster). Shared by the org-scoped aggregates. */
@@ -43,4 +44,48 @@ export async function orgModelBenchmark(
     const denom = x.mostly + x.partially + x.notAchieved;
     return { ...x, successRate: denom > 0 ? x.mostly / denom : 0 };
   });
+}
+
+/** Per-gem effectiveness scoped to one org's members: same shape as `effectiveness`,
+ *  reusing its pure `effectivenessScore` math, but filtered to the org's roster
+ *  (via `memberPubkeys`) and with NO k-anonymity floor — same trust-boundary
+ *  reasoning as `orgModelBenchmark`. Every row's producer is bound to a member
+ *  account, so `verifiedProducers` is just `producers` here. */
+export async function orgEffectiveness(db: AppDb, scope: string): Promise<EffectivenessRow[]> {
+  const r = await db.execute<{ gemName: string; mostly: number; partially: number; notAchieved: number; producers: number }>(sql`
+    select a.gem_name as "gemName",
+           sum(mo.mostly)::int as mostly, sum(mo.partially)::int as partially, sum(mo.not_achieved)::int as "notAchieved",
+           count(distinct a.producer_pubkey)::int as producers
+    from model_outcomes mo
+    join attestations a on a.id = mo.attestation_id and not a.quarantined
+    where ${memberPubkeys(scope)}
+    group by a.gem_name
+  `);
+  return (r.rows as { gemName: string; mostly: number; partially: number; notAchieved: number; producers: number }[])
+    .map((row) => ({ ...row, verifiedProducers: row.producers, ...effectivenessScore(row) }))
+    .sort((a, b) => b.score - a.score || b.producers - a.producers || a.gemName.localeCompare(b.gemName));
+}
+
+/** Per-member breakdown: one row per org member with a bound producer account that
+ *  has produced at least one non-quarantined attestation, counting distinct
+ *  attestations/gems and summing outcomes across all of them. */
+export async function orgMemberBreakdown(
+  db: AppDb, scope: string,
+): Promise<{ login: string; attestations: number; gems: number; mostly: number; partially: number; notAchieved: number }[]> {
+  const r = await db.execute<{ login: string; attestations: number; gems: number; mostly: number; partially: number; notAchieved: number }>(sql`
+    select lower(ab.account_login) as login,
+           count(distinct a.id)::int as attestations,
+           count(distinct a.gem_name)::int as gems,
+           coalesce(sum(mo.mostly),0)::int as mostly,
+           coalesce(sum(mo.partially),0)::int as partially,
+           coalesce(sum(mo.not_achieved),0)::int as "notAchieved"
+    from attestations a
+    join account_bindings ab on ab.pubkey = a.producer_pubkey
+    join org_members om on lower(om.gh_login) = lower(ab.account_login) and lower(om.org_scope) = lower(${scope})
+    left join model_outcomes mo on mo.attestation_id = a.id
+    where not a.quarantined
+    group by lower(ab.account_login)
+    order by attestations desc, login
+  `);
+  return r.rows as { login: string; attestations: number; gems: number; mostly: number; partially: number; notAchieved: number }[];
 }

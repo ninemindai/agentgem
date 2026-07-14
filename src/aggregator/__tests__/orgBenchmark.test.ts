@@ -1,11 +1,11 @@
 // src/aggregator/__tests__/orgBenchmark.test.ts
 import { describe, it, expect } from "vitest";
-import { makeTestDb, projectAttestation, replaceOrgMembers, orgModelBenchmark, orgMemberLogins, accountBindings } from "@agentgem/aggregator";
+import { makeTestDb, projectAttestation, replaceOrgMembers, orgModelBenchmark, orgMemberLogins, orgEffectiveness, orgMemberBreakdown, accountBindings } from "@agentgem/aggregator";
 import type { AppDb } from "@agentgem/aggregator";
 
 // A formatVersion-2 attestation carrying a per-model outcome histogram (mirrors modelBenchmark.test.ts's attV2).
-function att(pubkey: string, gemDigest: string, model: string, hist: { mostly?: number; partially?: number; not?: number }) {
-  return { formatVersion: 2, canonicalizerVersion: 3, gem: { name: "g", digest: gemDigest },
+function att(pubkey: string, gemDigest: string, model: string, hist: { mostly?: number; partially?: number; not?: number }, gemName = "g") {
+  return { formatVersion: 2, canonicalizerVersion: 3, gem: { name: gemName, digest: gemDigest },
     producer: { publicKey: pubkey, account: null },
     source: { harness: { id: "claude-code" }, models: [model], scan: { sessions: 10, spanDays: 1, firstMs: 0, lastMs: 0 },
       outcomeHistogram: [{ model, mostly: hist.mostly ?? 0, partially: hist.partially ?? 0, not: hist.not ?? 0 }] },
@@ -51,5 +51,27 @@ describe("orgBenchmark", () => {
     const { sql } = await import("drizzle-orm");
     await db.execute(sql`update attestations set quarantined = true`);
     expect(await orgModelBenchmark(db, "acme")).toEqual([]);
+  });
+
+  it("orgEffectiveness scores the scope's gems only, no k-floor", async () => {
+    const db = await makeTestDb();
+    await projectAttestation(db, att("ed25519:m1", "d1", "m", { mostly: 3 }, "gemA"));
+    await projectAttestation(db, att("ed25519:x1", "d2", "m", { mostly: 9 }, "gemZ")); // non-member
+    await bind(db, "ed25519:m1", "u1"); await bind(db, "ed25519:x1", "u9");
+    await replaceOrgMembers(db, "acme", [{ login: "u1", role: "admin" }]);
+    const rows = await orgEffectiveness(db, "acme");
+    expect(rows.map((r) => r.gemName)).toEqual(["gemA"]);      // gemZ (non-member) excluded
+    expect(rows[0].judged).toBe(3);
+  });
+
+  it("orgMemberBreakdown groups by member login", async () => {
+    const db = await makeTestDb();
+    await projectAttestation(db, att("ed25519:m1", "d1", "m", { mostly: 1 }, "gemA"));
+    await projectAttestation(db, att("ed25519:m2", "d2", "m", { not: 1 }, "gemB"));
+    await bind(db, "ed25519:m1", "u1"); await bind(db, "ed25519:m2", "u2");
+    await replaceOrgMembers(db, "acme", [{ login: "u1", role: "admin" }, { login: "u2", role: "member" }]);
+    const rows = await orgMemberBreakdown(db, "acme");
+    expect(rows.map((r) => r.login).sort()).toEqual(["u1", "u2"]);
+    expect(rows.find((r) => r.login === "u1")).toMatchObject({ attestations: 1, gems: 1, mostly: 1 });
   });
 });
