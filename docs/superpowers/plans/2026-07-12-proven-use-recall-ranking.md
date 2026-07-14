@@ -34,7 +34,7 @@ Outside voice showed max-over-artifacts of cross-session Wilson is near-uniform 
 - Recall's `ProvenUseLookup` returns a per-session boost from that session's own `facet.outcome` via the shared `outcomeCredit()` (below): mostly=1.0, partial=0.5, not=0.0. An **unjudged** session (no row) → no boost (pure BM25).
 - Store gains `outcomeForSessions(sessionIds: string[]): Map<string, Outcome>` = `SELECT DISTINCT session_id, outcome FROM artifact_outcomes WHERE session_id IN (...)`. Recall uses THIS, not `scoreForSessions`.
 - `scoreForSessions` (artifact-global Wilson) + `outcomeScore`/Wilson (Task 1) stay as **foundation for the future recommender consumer** — unit-tested, but NOT on recall's path in v1.
-- Task 5 boost shape unchanged: `final = bm25 / (1 + ALPHA * boost)`, where `boost = outcomeCredit(sessionOutcome)`. At α=0.3 a `mostly` session (boost 1.0) sorts above a `not` session (boost 0.0) at equal BM25 — a real, visible reorder (this is why the A/B instrument can now actually fire).
+- Task 5 boost (CORRECTED during impl): `final = bm25 * (1 + ALPHA * boost)`, where `boost = outcomeCredit(sessionOutcome)`. FTS5 `bm25()` is **negative** (more negative = better, sorted ascending), so we **multiply** to amplify magnitude — dividing (as an earlier draft said) would demote good matches. The boost-direction test caught this. At α=0.3 a `mostly` session (boost 1.0) sorts above a `not` session (boost 0.0) at equal BM25 — a real, visible reorder (this is why the A/B instrument can now actually fire).
 
 **[shared] Extract `outcomeCredit()` (Task 1) — DRY across both consumers.**
 ```ts
