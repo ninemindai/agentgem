@@ -197,6 +197,10 @@ export const orgSettings = pgTable("org_settings", {
   scope: text("scope").primaryKey(),
   retentionDays: integer("retention_days"),
   dashboardEnabled: boolean("dashboard_enabled").notNull().default(true),
+  // Governance knobs (v2): contributeAllowed gates member attestation upload to the aggregator;
+  // benchmarkViewEnabled gates the org-scoped benchmark view. Both default true (opt-out, not opt-in).
+  contributeAllowed: boolean("contribute_allowed").notNull().default(true),
+  benchmarkViewEnabled: boolean("benchmark_view_enabled").notNull().default(true),
   updatedBy: text("updated_by").notNull(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
 });
@@ -669,8 +673,10 @@ export async function ensureSchema(db: AppDb): Promise<void> {
   await db.execute(sql`create index if not exists usage_days_date_idx on usage_days (date)`);
   await db.execute(sql`create table if not exists usage_day_models (account_id uuid not null references accounts(id), machine text not null default 'default', scope text not null default '', date text not null, agent text not null default '', model text not null default '', sessions int not null default 0, tokens bigint not null default 0, reported_at timestamptz not null default now(), primary key (account_id, machine, scope, date, agent, model))`);
   await db.execute(sql`create index if not exists usage_day_models_date_idx on usage_day_models (date)`);
-  await db.execute(sql`create table if not exists org_settings (scope text primary key, retention_days int, dashboard_enabled boolean not null default true, updated_by text not null, updated_at timestamptz not null default now())`);
+  await db.execute(sql`create table if not exists org_settings (scope text primary key, retention_days int, dashboard_enabled boolean not null default true, contribute_allowed boolean not null default true, benchmark_view_enabled boolean not null default true, updated_by text not null, updated_at timestamptz not null default now())`);
   await db.execute(sql`alter table org_settings add column if not exists dashboard_enabled boolean not null default true`);
+  await db.execute(sql`alter table org_settings add column if not exists contribute_allowed boolean not null default true`);
+  await db.execute(sql`alter table org_settings add column if not exists benchmark_view_enabled boolean not null default true`);
   await db.execute(sql`create table if not exists catalog_gems (gem_key text not null, version text not null, published_by text not null, author text, description text, tags jsonb, artifact_kinds jsonb, type text, grade integer, created_at_ms bigint not null, primary key (gem_key, version))`);
   // Added post-creation (installable shared setups): the per-artifact preview list + the archive store.
   await db.execute(sql`alter table catalog_gems add column if not exists artifacts jsonb`);
