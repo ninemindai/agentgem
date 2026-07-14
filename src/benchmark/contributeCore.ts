@@ -22,6 +22,7 @@ import {
   buildAttestation,
   signAttestation,
   postAttestation,
+  hostedIngestEndpoint,
   claudeTranscriptsForCwd,
   type WorkflowSignal,
 } from "@agentgem/insight";
@@ -86,7 +87,10 @@ export function defaultDeps(): ContributeDeps {
     digestOf: (gem) => computeLock(readWorkspace(gem.name).files).gemDigest,
     build: buildAttestation,
     sign: (att) => signAttestation(att, identity, Date.now()),
-    post: (att) => postAttestation({ attestation: att }),
+    // The contribute flow is consent-gated (deps.enabled), so it deliberately posts to
+    // the hosted aggregator — pass the endpoint explicitly rather than relying on a
+    // default (postAttestation skips when unconfigured, to keep other callers opt-in).
+    post: (att) => postAttestation({ attestation: att, endpoint: hostedIngestEndpoint() }),
   };
 }
 

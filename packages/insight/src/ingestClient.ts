@@ -10,8 +10,13 @@ const defaultHttp: IngestHttp = async (url, init) => {
 };
 
 const DEFAULT_AGGREGATOR_URL = "https://api.agentgem.ai";
-function resolveIngestEndpoint(explicit?: string): string {
-  if (explicit !== undefined) return explicit; // incl. "" = disabled
+
+// The hosted-aggregator ingest endpoint, for callers that DELIBERATELY contribute to
+// the public benchmark (the consent-gated producer flow). Kept separate from the
+// opt-in default in postAttestation so an unconfigured caller never phones home
+// implicitly — pass this explicitly as `endpoint` when you mean to reach the hosted
+// aggregator.
+export function hostedIngestEndpoint(): string {
   if (process.env.AGENTGEM_INGEST_URL) return process.env.AGENTGEM_INGEST_URL; // full-URL override
   return `${process.env.AGENTGEM_AGGREGATOR_URL || DEFAULT_AGGREGATOR_URL}/api/aggregator/ingest`;
 }
@@ -19,7 +24,9 @@ function resolveIngestEndpoint(explicit?: string): string {
 export async function postAttestation(args: {
   attestation: UsageAttestation; endpoint?: string; token?: string; http?: IngestHttp;
 }): Promise<{ ingestId: string } | { skipped: true }> {
-  const endpoint = resolveIngestEndpoint(args.endpoint);
+  // Opt-in: unconfigured (no explicit endpoint, no AGENTGEM_INGEST_URL) ⇒ skip, never
+  // phone home. Callers that mean to reach the hosted aggregator pass hostedIngestEndpoint().
+  const endpoint = args.endpoint ?? process.env.AGENTGEM_INGEST_URL ?? "";
   if (!endpoint) return { skipped: true };
   const http = args.http ?? defaultHttp;
   const res = await http(endpoint, {
