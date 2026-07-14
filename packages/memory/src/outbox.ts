@@ -43,13 +43,13 @@ function writePushedKeys(keys: Set<string>): void {
  *  and a retry will not re-send them to the provider. */
 export async function approveAndPush(keys: string[]): Promise<{ pushed: number; skipped: number }> {
   let outbox = readOutbox();
-  const approved = outbox.filter((c) => keys.includes(c.key));
+  const pushedKeys = readPushedKeys();
+  const approved = outbox.filter((c) => keys.includes(c.key) && !pushedKeys.has(c.key));
   const cfgs = loadProviderConfigs();
   const enabled = listProviderIds().filter((id: ProviderId) => cfgs[id]?.enabled);
 
   let pushed = 0;
   let skipped = 0;
-  const pushedKeys = readPushedKeys();
 
   for (const cand of approved) {
     if (enabled.length === 0) { skipped++; continue; }
