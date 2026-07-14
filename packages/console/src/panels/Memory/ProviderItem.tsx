@@ -44,7 +44,10 @@ export function ProviderItem({ apiBase, row, onChanged }: { apiBase: string; row
     setEnabled(next);
     setBusy(true); setNote(next ? "enabling…" : "disabling…");
     try {
-      const r = await saveProvider(apiBase, row.id, { enabled: next, apiKey });
+      // Toggle ONLY changes `enabled` — send a blank key so the backend preserves the stored one.
+      // A key is set/rotated exclusively via the explicit "Save & test" button, so flipping the
+      // toggle can never accidentally commit (and clobber the stored key with) an unsaved field value.
+      const r = await saveProvider(apiBase, row.id, { enabled: next, apiKey: "" });
       setNote(r.ok ? (next ? "enabled" : "disabled") : (r.detail ?? "failed"));
       onChanged();
     } catch {
