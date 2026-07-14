@@ -1614,6 +1614,10 @@ button.scorecard-intent { line-height: 1.4; }
 /* Mine tab — shared project-scope dropdown. Its own `mine-scope-*` classes (not
    the shared `.scope-menu` used by Optimize/Setup) so its styling is independent. */
 .mine-scope { position: relative; margin: 0 0 14px; }
+/* Scope row: the dropdown plus the rubric-shortcut button, on one line. The bar
+   owns the bottom gap so the two stay vertically centered. */
+.mine-scope-bar { display: flex; align-items: center; gap: 10px; margin: 0 0 14px; }
+.mine-scope-bar .mine-scope { margin: 0; }
 .mine-scope-trigger {
   display: inline-flex; align-items: center; gap: 8px;
   padding: 7px 12px 7px 15px; border-radius: 999px;

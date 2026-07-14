@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: MIT
 // src/__tests__/rubric.controller.test.ts
 import { describe, it, expect, beforeAll, afterAll, afterEach } from "vitest";
-import { mkdtempSync, rmSync } from "node:fs";
+import { mkdtempSync, mkdirSync, writeFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import supertest from "supertest";
@@ -139,6 +139,48 @@ describe("RubricController.stream (streamOf route)", () => {
     setRubricComputeForTests(fakeCompute([]));
     const events = await drain(new RubricController().stream({ query: { rubric: "hygiene", scope: "project" } }));
     expect(events).toEqual([{ type: "failed", message: "project scope requires ?root=" }]);
+  });
+
+  it("yields a failed event when session scope is missing ?sessionId=", async () => {
+    setRubricComputeForTests(fakeCompute([]));
+    const events = await drain(new RubricController().stream({ query: { rubric: "hygiene", scope: "session" } }));
+    expect(events).toEqual([{ type: "failed", message: "session scope requires ?sessionId=" }]);
+  });
+
+  it("derives the session root from the transcript when ?root= is omitted", async () => {
+    // A claude-dir fixture holding one session transcript whose first record carries the cwd.
+    const claudeFixture = mkdtempSync(join(tmpdir(), "rubric-claude-"));
+    try {
+      mkdirSync(join(claudeFixture, "projects", "p1"), { recursive: true });
+      writeFileSync(join(claudeFixture, "projects", "p1", "sess-derive.jsonl"), JSON.stringify({ cwd: "/my/project" }) + "\n");
+      let seen: unknown = null;
+      setRubricComputeForTests((async (_rubric: unknown, scope: unknown) => {
+        seen = scope;
+        return { payload: { rubricId: "hygiene", target: "process", scope: "session", factors: [] }, cached: false, updatedAt: 0 } as unknown as RubricResult;
+      }) as unknown as Parameters<typeof setRubricComputeForTests>[0]);
+
+      const events = await drain(new RubricController().stream({
+        query: { rubric: "hygiene", scope: "session", sessionId: "sess-derive", dir: claudeFixture },
+      }));
+
+      expect(events.map((e) => (e as { type: string }).type)).toEqual(["start", "done"]);
+      expect(seen).toMatchObject({ kind: "session", root: "/my/project", sessionId: "sess-derive" });
+    } finally {
+      rmSync(claudeFixture, { recursive: true, force: true });
+    }
+  });
+
+  it("yields a failed event when the rootless session can't be resolved", async () => {
+    const claudeFixture = mkdtempSync(join(tmpdir(), "rubric-claude-"));
+    try {
+      setRubricComputeForTests(fakeCompute([]));
+      const events = await drain(new RubricController().stream({
+        query: { rubric: "hygiene", scope: "session", sessionId: "no-such-session", dir: claudeFixture },
+      }));
+      expect(events).toEqual([{ type: "failed", message: "session not found: no-such-session" }]);
+    } finally {
+      rmSync(claudeFixture, { recursive: true, force: true });
+    }
   });
 
   it("records the run under kind 'rubric' in an injected ReportRegistry", async () => {

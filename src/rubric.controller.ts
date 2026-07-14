@@ -16,7 +16,8 @@ import { z } from "zod";
 import { api, get, post } from "@agentback/openapi";
 import { inject } from "@agentback/core";
 import { listRubricsWithMeta, validateRubricInput, saveRubric, deleteRubric, computeRubric as realComputeRubric, resolveRubric } from "./rubricCore.js";
-import { scopeAllowed, type RubricScope } from "@agentgem/insight";
+import { scopeAllowed, resolveClaudeSession, type RubricScope } from "@agentgem/insight";
+import { resolveDir } from "@agentgem/model";
 import { beginForeground, endForeground } from "./warm/orchestrator.js";
 import { ReportRegistry, REPORT_REGISTRY } from "./report/registry.js";
 import { trackerFor, rubricParamsKey, queryParams } from "./report/track.js";
@@ -87,8 +88,11 @@ function parseScope(q: { scope?: string; root?: string; sessionId?: string }): R
     return { kind: "project", root: q.root };
   }
   const sessionId = str(q.sessionId);
-  if (!q.root || !sessionId) return { error: "session scope requires ?root= and ?sessionId=" };
-  return { kind: "session", root: q.root, sessionId };
+  if (!sessionId) return { error: "session scope requires ?sessionId=" };
+  // `root` may be omitted: the stream route derives it from the session's own
+  // transcript (resolveClaudeSession) so shortcut callers — which know only the
+  // sessionId — never have to learn the raw project path. "" = derive.
+  return { kind: "session", root: q.root ?? "", sessionId };
 }
 
 @api({ basePath: "/api" })
@@ -122,6 +126,17 @@ export class RubricController {
         if (!rubric) { const m = `unknown rubric: ${id}`; emit({ type: "failed", message: m }); track?.failed(m); return; }
         const scope = parseScope(input.query);
         if ("error" in scope) { emit({ type: "failed", message: scope.error }); track?.failed(scope.error); return; }
+        // Session scope without a root: derive it server-side from the session's
+        // transcript. Same claude-dir base computeRubric uses (resolveDirs(dir)),
+        // and the raw cwd never crosses to the client (see dehomeDistilled's rationale).
+        if (scope.kind === "session" && !scope.root) {
+          const found = await resolveClaudeSession(scope.sessionId, { claudeDir: resolveDir(dir) });
+          if (!found?.cwd) {
+            const m = `session not found: ${scope.sessionId}`;
+            emit({ type: "failed", message: m }); track?.failed(m); return;
+          }
+          scope.root = found.cwd;
+        }
         // Hard rule: an aggregate-only rubric can't run at session scope.
         if (!scopeAllowed(rubric, scope.kind)) {
           const m = `rubric "${rubric.id}" is aggregate-only and cannot run at scope "${scope.kind}"`;
