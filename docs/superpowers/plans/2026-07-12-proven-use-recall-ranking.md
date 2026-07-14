@@ -25,6 +25,55 @@
 
 ---
 
+## Review Amendments (plan-eng-review, 2026-07-13)
+
+These **override the task bodies where they conflict** — apply them as you implement. From a 4-section review + outside-voice challenge. Decision IDs in brackets.
+
+**[D7] Recall boosts by the session's OWN outcome, not artifact-global Wilson — rewrites Task 5's signal.**
+Outside voice showed max-over-artifacts of cross-session Wilson is near-uniform (ubiquitous skills — brainstorming, TDD, commit — pin every session to one floor) and relatively demotes novel work. For recall, the session's own judged outcome is the direct, stronger signal.
+- Recall's `ProvenUseLookup` returns a per-session boost from that session's own `facet.outcome` via the shared `outcomeCredit()` (below): mostly=1.0, partial=0.5, not=0.0. An **unjudged** session (no row) → no boost (pure BM25).
+- Store gains `outcomeForSessions(sessionIds: string[]): Map<string, Outcome>` = `SELECT DISTINCT session_id, outcome FROM artifact_outcomes WHERE session_id IN (...)`. Recall uses THIS, not `scoreForSessions`.
+- `scoreForSessions` (artifact-global Wilson) + `outcomeScore`/Wilson (Task 1) stay as **foundation for the future recommender consumer** — unit-tested, but NOT on recall's path in v1.
+- Task 5 boost shape unchanged: `final = bm25 / (1 + ALPHA * boost)`, where `boost = outcomeCredit(sessionOutcome)`. At α=0.3 a `mostly` session (boost 1.0) sorts above a `not` session (boost 0.0) at equal BM25 — a real, visible reorder (this is why the A/B instrument can now actually fire).
+
+**[shared] Extract `outcomeCredit()` (Task 1) — DRY across both consumers.**
+```ts
+export function outcomeCredit(o: Outcome): number {
+  return o === "mostly_achieved" ? 1 : o === "partially_achieved" ? PARTIAL_CREDIT : 0;
+}
+```
+`outcomeScore` sums it over an artifact's trials; recall maps a single session's outcome through it. One definition.
+
+**[D3] Filter `origin === "llm"` before persisting (Task 2).**
+`deterministicFacets` emits `origin:"heuristic"` with a placeholder `partially_achieved` when the judge degrades (`facets.ts:44-49`); persisting those writes 0.5-credit non-judgments that pull every score toward the mean. Add `if (facet.origin !== "llm") continue;` in `buildArtifactOutcomeRows`. **Test G1:** a heuristic-origin facet produces zero rows.
+
+**[D4, widened] SQLite concurrency (Task 3 + Task 6).**
+- In `openArtifactOutcomesStore`, right after open: `db.exec("PRAGMA journal_mode=WAL; PRAGMA busy_timeout=5000;")`.
+- Outside-voice #6: Task 6 otherwise adds a SECOND long-lived `RecallIndex` connection to `recall-index.db` (baseline `readIndex` + `boostedIndex`). **Prefer sharing ONE `RecallIndex` handle** and passing the lookup only on the `ab=1` branch, rather than opening a second connection. If a second connection is unavoidable, open recall-index WAL too.
+- **Test G2:** a write on one outcomes handle during a read on another does not throw.
+
+**[D5] Pin the store handle lifecycle (Task 6).**
+Open one artifact-outcomes store handle at app init next to `readIndex`; wrap it in the `ProvenUseLookup` adapter; register `close()` in the same `app.onStop` that closes `recallIndex` (`src/index.ts:484`). No per-request opens.
+
+**[D6] `scoreForSessions` single GROUP BY (Task 3).**
+Replace the per-artifact SELECT loop with one grouped query. NOTE (outside-voice #7): this fixes the N+1 **shape**, not the full-history **scan** — a hot artifact still scans all its rows. Since recall no longer calls `scoreForSessions` (D7), it's off the hot path; a materialized per-artifact aggregate is deferred (NOT-in-scope) until the recommender consumer needs it.
+
+**[D8] Document sparse coverage (Global + NOT-in-scope).**
+Recall boost covers only **judged** sessions (those with a facet). Judging is expensive + capped (`DEFAULT_MAX_JUDGE`). A full-corpus dogfood needs a judge backfill with real LLM cost — **flagged, NOT auto-run in v1.** Expect the A/B to move only already-judged sessions; a flat result on an unjudged corpus is a coverage artifact, not a signal verdict.
+
+**Test gaps to add:** G1 (heuristic→zero rows), G2 (concurrent write+read no throw), **G4** (cold/empty store → recall order == pure BM25 — the graceful-degradation guarantee), **G5** (a throwing store doesn't break `persistOutcomes`).
+
+**Folded, no separate task:**
+- Outside-voice #8: `project` guard = `signal.sequences.root`; before relying on the project filter for future lift, verify it shares a namespace with recall's `SessionMeta.project`. `agent` stays `null` in v1 (documented half-limit of the guard columns — future harness-controlled lift still needs a re-scan).
+- Outside-voice #9: no centrality/repetition weighting — a 10× firing (often a struggle signal) and a 1× firing count equally. NOT-in-scope; note in code.
+- Minor: give `ProvenUseLookup` a single **shared exported type** so recall and the store adapter can't drift on structural typing alone.
+
+**NOT in scope (v1):** artifact-global proven-use as a *recall* signal (foundation only) · lift-over-baseline / selection-bias correction (the only causal fix — deferred) · materialized per-artifact aggregate · judge backfill of historical sessions · centrality/repetition weighting · mcp_server/hook coverage · gem-verification objective signal · cross-user outcomes · recency decay.
+
+**What already exists (reused, not rebuilt):** `eventSeries`, `SessionFacet`, the `insightsCore` compute pass, `RecallIndex`, the LLM judge. Genuinely new: the store, the join, `outcomeCredit`/Wilson, the per-session boost.
+
+---
+
 ### Task 1: `outcomeScore` + `wilsonLowerBound` (pure module)
 
 **Files:**
@@ -902,3 +951,27 @@ git commit -m "feat: A/B recall flag + offline judge-agreement probe (validation
 - **`RecallIndex` write API is confirmed** (`recallIndex.ts:77`): `upsertSession(meta, chunks, stamp)`, `Chunk = { turn, text }`, constructor `(dbPath: string)`. Task 5's test uses these directly.
 - **`agent` guard column is `null` in v1** (harness attribution per session is not on `SessionSequence`); the column exists for later lift analysis. Do not invent a value.
 - **Do not touch** `transcript-index.db`, `evidenceLedger.ts`, the aggregator, or any scrub path. Outcomes live only in `artifact-outcomes.db`.
+
+## GSTACK REVIEW REPORT
+
+| Review | Trigger | Why | Runs | Status | Findings |
+|--------|---------|-----|------|--------|----------|
+| Eng Review | `/plan-eng-review` | Architecture & tests (required) | 1 | issues_open → resolved | 6 findings + 4 test gaps, all folded; 1 signal reframe (D7) |
+| Outside Voice | Claude subagent | Independent 2nd opinion | 1 | issues_found | Caught the D7 grain error the 4-section review missed |
+
+**Completion summary**
+- Step 0 (scope): 9 files tripped the 8-file smell → reviewed, proceeded as-is (D2). Not overbuilt; files small + single-purpose.
+- Architecture: 2 findings — D3 (heuristic facets pollute score, P1) · D4 (SQLite concurrency, P2). Both folded.
+- Code Quality: 1 finding — D5 (store handle lifecycle under-specified). Folded. DRY overlap (schema-version boilerplate) considered, declined (lifecycle divergence justifies it).
+- Test: coverage diagram, 4 gaps added — G1 (heuristic→0 rows, critical) · G2 (concurrent write+read) · G4 (cold store → pure BM25) · G5 (store error swallowed).
+- Performance: 1 finding — D6 (N+1 → GROUP BY). Folded; noted it's a shape fix not a scale fix.
+- Outside voice: ran (Claude subagent). Surfaced the load-bearing reframe.
+- Cross-model tensions resolved: **D7** — recall boosts by session's OWN outcome, not artifact-global max (artifact-global is near-uniform + demotes novel work). **D8** — accept sparse judged-session coverage; flag judge-backfill cost, don't auto-run.
+- Failure modes: judge-degraded placeholder writes → caught (D3 filter + G1 test); cold store → visible BM25 fallback (G4). No remaining critical gaps.
+- NOT-in-scope: written (see Review Amendments).
+- Parallelization: **Lane A** Tasks 1→2→3 (sequential, shared `packages/insight`). **Lane B** none until Task 3 lands (Tasks 4,5,6 all depend on the store). Effectively sequential — the store is the spine. No worktree parallelism worth the setup.
+
+**VERDICT:** ENG CLEARED (findings folded) — ready to implement. The store is a sound foundation bet; per D7 the reference consumer (recall) now uses per-session outcome, which is what v1 actually validates. Artifact-global Wilson ships as tested foundation for the later recommender consumer, not as a v1 claim.
+
+**UNRESOLVED DECISIONS:**
+- D4 sub-choice (share one `RecallIndex` handle vs. open a second WAL connection) is left to implementation — flagged, not blocking.
