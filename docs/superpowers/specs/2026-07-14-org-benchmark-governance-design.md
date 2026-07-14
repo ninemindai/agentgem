@@ -14,9 +14,20 @@ of contributing, or to hide the view. The producer contribution toggle is purely
 ## Goal
 
 Admin-only governance over the org's benchmark participation: **forbid** contribution
-(server-enforced — the org's members' attestations stop entering the benchmark) and
-**show/hide** the org Benchmark view. Extends the existing admin-gated `org_settings`
-surface.
+(server-enforced — **no new or updated** attestations from the org's members enter the
+benchmark *going forward*) and **show/hide** the org Benchmark view. Extends the
+existing admin-gated `org_settings` surface.
+
+**Forbid is forward-only.** It blocks new/refreshed ingests; it does NOT remove data
+already ingested (including data a member contributed *before* they bound their key or
+before the org forbade). Erasing existing data is **Spec B (purge)**. Say this plainly
+in the UI so admins don't read "forbid" as "delete."
+
+**Enforcement requires the GitHub App.** Forbid is enforced by joining a producer's
+bound login to the App-synced `org_members` roster; a non-App org has no roster, so the
+setting would silently do nothing. Therefore the settings **write is gated to
+App-installed orgs** (`resolveOrgAccess` `via === "app"`) — the write surface equals the
+enforcement surface. Non-App orgs get a "connect the GitHub App to govern" state.
 
 ## Non-goals
 
@@ -50,19 +61,24 @@ column if not exists`, per the column-drift rule):
 - `benchmark_view_enabled boolean not null default true` — `false` ⇒ hide the org
   Benchmark tab.
 
-`getOrgSettings`/`putOrgSettings` (`orgSettings.ts`) extend to read/write the two new
-fields (defaults preserved when never configured).
+`getOrgSettings` + `patchOrgSettings` (`orgSettings.ts`) extend to read/write the two new
+fields (defaults preserved when never configured). Use `patchOrgSettings` (the row-locked
+PARTIAL merge), NOT `putOrgSettings` (whose fields are required and would clobber). The
+patch must handle each new field in all three spots — the `cur` read-merge, `.values()`,
+and `onConflictDoUpdate.set()` — exactly like `dashboardEnabled`.
 
 ### Route — admin settings in the benchmark family
 
-- `POST /api/orgs/:scope/benchmark/settings` (admin-gated, mirrors the
-  `/api/usage/settings` POST gate exactly) — body `{ contributeAllowed,
-  benchmarkViewEnabled }` → persists via `putOrgSettings` → returns the new settings.
-  Registered in `installOrgBenchmark` (`src/orgs/benchmark.ts`) beside the GET.
+- `POST /api/orgs/:scope/benchmark/settings` — admin-gated **and App-installation-gated**
+  (`resolveOrgAccess` must return `via === "app"`; else 409 `{ reason: "app-required" }`,
+  so a non-App org can't set a control that wouldn't enforce). Body `{ contributeAllowed?,
+  benchmarkViewEnabled? }` → persists via `patchOrgSettings` → returns the new settings.
+  Registered in `installOrgBenchmark` beside the GET.
 - `GET /api/orgs/:scope/benchmark` gains `settings: { contributeAllowed,
-  benchmarkViewEnabled }` in its response. When `benchmarkViewEnabled === false`, the
-  GET returns `{ scope, disabled: true, settings }` instead of the three panels (the
-  admin still sees the governance toggles to re-enable).
+  benchmarkViewEnabled }` in its response — **same response shape always** (no breaking
+  `disabled` variant). When `benchmarkViewEnabled === false` the GET returns empty panel
+  arrays + `settings` (and skips computing the aggregates); the **UI** decides to show the
+  "view hidden" notice from `settings.benchmarkViewEnabled`.
 
 ### Enforcement
 
