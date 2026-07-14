@@ -97,6 +97,12 @@ catalog `key`, never a free-form `?title=`, so it only ever draws entities that 
 exist. A missing or private entity falls back to a generic branded placeholder, never a
 404 image.
 
+For a **mini-game**, the card can carry a **real screenshot**. When you publish from
+[Play → Studio](play.md#publish), a capture step grabs a frame of the running game from the
+sealed preview; the aggregator stores it (a `gem_covers` row) and `/og/card.png` composites
+it into a screenshot-hero variant of the card. Games without a stored cover fall back to the
+plain branded frame.
+
 The whole path is **deployment-agnostic** and **fails open**. The logic is a
 runtime-neutral core wired onto the aggregator, so any Node host serves correct cards with
 no Cloudflare primitive required — the marketplace's Cloudflare Worker is now only an
@@ -109,11 +115,18 @@ If metadata lookup or rasterization ever throws, the request falls through to th
 default to `https://app.agentgem.ai` and are overridable, so a different deployment works
 with no code change.
 
-## GitHub identity
+## Identity
 
-Publishing and sharing are tied to a **GitHub identity** so the network can tell one
-real author from a hundred throwaway accounts. Bind this machine's signing key to your
-GitHub account once:
+Publishing and sharing are tied to a real account so the network can tell one author
+from a hundred throwaway ones. Identity has two layers:
+
+- **Web accounts** on [app.agentgem.ai](https://app.agentgem.ai) run on
+  [better-auth](https://better-auth.com): sign in with **GitHub, Google, or a passkey**,
+  and link more than one provider to the same account. Each account is keyed on a stable id
+  with an optional **`@handle`**, and gets a tabbed profile hub at
+  [`/@handle`](https://app.agentgem.ai) (apps, reviews, orgs, groups).
+- **This machine's signing key** is bound to a GitHub account from the CLI, which is what
+  anti-sybil producer identity rests on. Bind it once:
 
 ```bash
 agentgem bind
