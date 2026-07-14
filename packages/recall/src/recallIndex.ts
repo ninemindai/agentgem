@@ -25,10 +25,12 @@ export interface SessionMeta { sessionId: string; agent: string; project: string
 
 interface ChunkRow { session_id: string; agent: string; turn: number; project: string | null; branch: string | null; start_ms: number; score: number; snip: string }
 
-// Proven-use ranking (D7). ALPHA caps the boost so relevance (BM25) stays
-// primary; a session whose own run fully succeeded improves its effective rank by
-// at most ALPHA. Injected, so recall keeps its own sqlite and no query-time
-// insight dependency; absent = the kill switch (exactly today's BM25 ordering).
+// Proven-use ranking (D7). ALPHA scales the boost so relevance (BM25) stays
+// primary: search() multiplies a proven session's bm25 magnitude by up to
+// (1 + ALPHA), so among comparably-relevant results the proven one is preferred,
+// while a weakly-relevant match is nudged only in proportion to its relevance —
+// it is never yanked to the top. Injected, so recall keeps its own sqlite and no
+// query-time insight dependency; absent = the kill switch (today's BM25 ordering).
 export const ALPHA = 0.3;
 export interface ProvenUseLookup {
   /** Per-session boost in [0,1] from that session's OWN judged outcome (already
