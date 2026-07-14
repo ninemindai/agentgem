@@ -15,7 +15,8 @@ import { buildAttestation, signAttestation, canonicalJSON, type UsageAttestation
 import { writeGemArchive, computeLock } from "@agentgem/archive";
 import { writeAttestedArchive } from "@agentgem/insight";
 import { loadOrCreateIdentity } from "@agentgem/model";
-import { postAttestation } from "@agentgem/insight";
+import { postAttestation, hostedIngestEndpoint } from "@agentgem/insight";
+import { benchmarkContribute } from "../benchmark/config.js";
 
 // ---- pure handlers (unit-tested) ----
 export function inspectIngredientsTool(input: { inventory: ConfigInventory; signal: WorkflowSignal; salt: string }) {
@@ -58,6 +59,9 @@ export interface ToolDeps {
   // Returns degraded:true when the agent fell back to neutral heuristics — those
   // outcomes must NOT be published, or they pollute the network benchmark.
   judge?: (signal: WorkflowSignal) => Promise<{ facets: SessionFacet[]; degraded: boolean }>;
+  // Consent gate for the interactive publish path: it contributes to the hosted benchmark
+  // ONLY when the producer opted in (benchmarkContribute). Injected as () => false in tests.
+  contributeEnabled?: () => boolean;
 }
 
 // The scan resolves a Skill/mcp__ invocation against BOTH project-local and
@@ -130,7 +134,7 @@ export async function dispatchTool(name: string, args: Record<string, unknown>, 
       // Rebuild the attestation server-side from the real scan + the reviewed selection.
       // The caller does NOT author counts; any caller-supplied args.attestation is ignored.
       const { attestation, gemPreview } = buildAttestationTool({ inventory, signal, selection: args.selection as GemSelection, salt, account: (args.account as { provider: string; login: string } | null) ?? null, facets });
-      return signAndPublishTool({ gem: gemPreview, attestation, token: deps.token }, { publish: deps.publish ? (files) => deps.publish!(gemPreview, files) : undefined });
+      return signAndPublishTool({ gem: gemPreview, attestation, token: deps.token }, { publish: deps.publish ? (files) => deps.publish!(gemPreview, files) : undefined, contributeEnabled: deps.contributeEnabled });
     }
     default:
       throw new Error(`unknown tool ${name}`);
@@ -184,14 +188,18 @@ export async function main(): Promise<void> {
 // sign_and_publish is environment-touching; export it for integration tests with injected deps.
 export async function signAndPublishTool(
   input: { gem: Gem; attestation: UsageAttestation; identityDir?: string; token?: string },
-  deps: { publish?: (files: Record<string, string>) => Promise<{ ref: string }>; ingestHttp?: Parameters<typeof postAttestation>[0]["http"] } = {},
+  deps: { publish?: (files: Record<string, string>) => Promise<{ ref: string }>; ingestHttp?: Parameters<typeof postAttestation>[0]["http"]; contributeEnabled?: () => boolean } = {},
 ): Promise<{ publishedRef?: string; gemDigest: string; signature: string; ingestId?: string }> {
   const identity = loadOrCreateIdentity(input.identityDir);
   const signed = signAttestation(input.attestation, identity, Date.now());
   const { files } = writeAttestedArchive(input.gem, signed, identity);
   const lock = JSON.parse(files["gem.lock"]) as { gemDigest: string; signature: string };
   const published = deps.publish ? await deps.publish(files) : undefined;
-  const ingest = await postAttestation({ attestation: signed, token: input.token, http: deps.ingestHttp });
+  // Consent gate: the interactive publish path contributes anonymized usage to the hosted
+  // benchmark ONLY when the producer opted in (same toggle as bulk). Pass the hosted endpoint
+  // explicitly when consented; "" keeps postAttestation's opt-in skip (no accidental phone-home).
+  const endpoint = (deps.contributeEnabled ?? benchmarkContribute)() ? hostedIngestEndpoint() : "";
+  const ingest = await postAttestation({ attestation: signed, endpoint, token: input.token, http: deps.ingestHttp });
   return { publishedRef: published?.ref, gemDigest: lock.gemDigest, signature: lock.signature, ingestId: "ingestId" in ingest ? ingest.ingestId : undefined };
 }
 
