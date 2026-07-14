@@ -154,6 +154,11 @@ describe("POST /api/orgs/:scope/benchmark/settings", () => {
     await benchmarkSettingsHandler(deps)(posted(betaAdminToken, "beta", { contributeAllowed: false }) as any, res);
     expect(res._status).toBe(409);
     expect(res._body).toMatchObject({ reason: "app-required" });
+
+    // the blocked POST must not have persisted anything
+    const check = mockRes();
+    await orgBenchmarkHandler(deps)(authed(betaAdminToken, "beta") as any, check);
+    expect((check._body as { settings: unknown }).settings).toEqual({ contributeAllowed: true, benchmarkViewEnabled: true });
   });
 
   it("401 unauthenticated; 403 not-member for a stranger", async () => {
