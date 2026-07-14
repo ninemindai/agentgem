@@ -36,10 +36,13 @@ function writePushedKeys(keys: Set<string>): void {
   writeJson("memory-pushed-keys.json", [...keys]);
 }
 
-/** Push the approved candidates to every enabled provider, then remove them from
- *  the outbox and record their keys so they are never re-queued or re-sent. */
+/** Push the approved candidates to every enabled provider. Each candidate's
+ *  bookkeeping (pushed-keys + outbox removal) is persisted as soon as ITS pushes
+ *  succeed, before moving on to the next candidate. This way, if a later
+ *  candidate's push() throws, the earlier successes are already durable on disk
+ *  and a retry will not re-send them to the provider. */
 export async function approveAndPush(keys: string[]): Promise<{ pushed: number; skipped: number }> {
-  const outbox = readOutbox();
+  let outbox = readOutbox();
   const approved = outbox.filter((c) => keys.includes(c.key));
   const cfgs = loadProviderConfigs();
   const enabled = listProviderIds().filter((id: ProviderId) => cfgs[id]?.enabled);
@@ -55,9 +58,10 @@ export async function approveAndPush(keys: string[]): Promise<{ pushed: number; 
       pushed++;
     }
     pushedKeys.add(cand.key);
+    writePushedKeys(pushedKeys);
+    outbox = outbox.filter((c) => c.key !== cand.key);
+    writeOutbox(outbox);
   }
 
-  writePushedKeys(pushedKeys);
-  writeOutbox(outbox.filter((c) => !pushedKeys.has(c.key)));
   return { pushed, skipped };
 }
