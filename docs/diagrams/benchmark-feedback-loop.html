@@ -55,7 +55,7 @@
           <button class="toolbar-toggle" onclick="this.parentElement.classList.toggle('expanded')" title="Export options" aria-label="Export options">⋯</button>
         </div>
       </div>
-      <p class="subtitle">producers publish outcomes → hosted aggregator k-anonymises → consumers read the roll-up back. Two links are broken today.</p>
+      <p class="subtitle">producers contribute outcomes (consent-gated) → hosted aggregator gates + k-anonymises → public roll-up and org-scoped view read back. Loop closed; admins govern participation.</p>
     </div>
 
     <div class="diagram-container">
@@ -66,161 +66,181 @@
           <marker id="ah-r" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto"><polygon points="0 0, 10 3.5, 0 7" fill="#fb7185" /></marker>
           <marker id="ah-c" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto"><polygon points="0 0, 10 3.5, 0 7" fill="#22d3ee" /></marker>
           <marker id="ah-v" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto"><polygon points="0 0, 10 3.5, 0 7" fill="#a78bfa" /></marker>
+          <marker id="ah-a" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto"><polygon points="0 0, 10 3.5, 0 7" fill="#fbbf24" /></marker>
           <pattern id="grid" width="40" height="40" patternUnits="userSpaceOnUse"><path d="M 40 0 L 0 0 0 40" fill="none" stroke="#1e293b" stroke-width="0.5"/></pattern>
         </defs>
 
         <rect width="100%" height="100%" fill="url(#grid)" />
 
         <!-- Hosted region boundary -->
-        <rect x="300" y="95" width="448" height="470" rx="12" fill="rgba(251, 191, 36, 0.05)" stroke="#fbbf24" stroke-width="1" stroke-dasharray="8,4"/>
+        <rect x="300" y="95" width="448" height="500" rx="12" fill="rgba(251, 191, 36, 0.05)" stroke="#fbbf24" stroke-width="1" stroke-dasharray="8,4"/>
         <text x="314" y="117" fill="#fbbf24" font-size="10" font-weight="600">api.agentgem.ai — Fly (iad)</text>
         <text x="314" y="131" fill="#b45309" font-size="8">hosted aggregator + Neon Postgres · the ONLY DB with real data</text>
 
         <!-- ================= ARROWS (drawn first, behind boxes) ================= -->
-        <!-- (1) producer -> ingest : BROKEN -->
-        <path d="M255,262 L328,192" fill="none" stroke="#fb7185" stroke-width="1.6" stroke-dasharray="5,5" marker-end="url(#ah-r)"/>
+        <!-- (1) producer -> ingest : NOW WIRED (consent-gated) -->
+        <path d="M255,270 L328,196" fill="none" stroke="#34d399" stroke-width="1.6" marker-end="url(#ah-g)"/>
+        <text x="270" y="222" fill="#6ee7b7" font-size="8" transform="rotate(-45 270 222)" text-anchor="middle">POST /ingest ✓</text>
         <!-- ingest -> postgres write -->
-        <line x1="510" y1="180" x2="551" y2="180" stroke="#34d399" stroke-width="1.6" marker-end="url(#ah-g)"/>
-        <text x="530" y="173" fill="#94a3b8" font-size="8" text-anchor="middle">write</text>
-        <!-- trust gates apply to ingest -->
-        <line x1="420" y1="236" x2="420" y2="212" stroke="#fb7185" stroke-width="1.4" stroke-dasharray="4,4" marker-end="url(#ah-r)"/>
-        <!-- postgres -> reads (k-anon) -->
-        <path d="M598,320 L598,360 Q598,392 566,392 L512,392" fill="none" stroke="#a78bfa" stroke-width="1.6" marker-end="url(#ah-v)"/>
-        <text x="612" y="356" fill="#a78bfa" font-size="8">k-anon read</text>
-        <!-- reads -> proxy (the fix response) -->
-        <path d="M510,384 C660,384 700,184 786,184" fill="none" stroke="#34d399" stroke-width="1.6" marker-end="url(#ah-g)"/>
-        <text x="648" y="250" fill="#34d399" font-size="8" text-anchor="middle">GET /benchmarks · /effectiveness (anon)</text>
-        <!-- reads -> marketplace -->
-        <path d="M510,406 C640,406 700,408 786,408" fill="none" stroke="#34d399" stroke-width="1.4" marker-end="url(#ah-g)"/>
-        <text x="650" y="424" fill="#94a3b8" font-size="8" text-anchor="middle">/effectiveness</text>
+        <line x1="515" y1="180" x2="551" y2="180" stroke="#34d399" stroke-width="1.6" marker-end="url(#ah-g)"/>
+        <text x="533" y="173" fill="#94a3b8" font-size="8" text-anchor="middle">write</text>
+        <!-- trust + governance gates apply to ingest -->
+        <line x1="420" y1="240" x2="420" y2="214" stroke="#fbbf24" stroke-width="1.4" stroke-dasharray="4,4" marker-end="url(#ah-a)"/>
+        <!-- postgres -> public reads (k-anon) -->
+        <path d="M600,326 L600,352 Q600,384 566,384 L515,384" fill="none" stroke="#a78bfa" stroke-width="1.6" marker-end="url(#ah-v)"/>
+        <text x="614" y="352" fill="#a78bfa" font-size="8">k-anon read</text>
+        <!-- postgres -> org reads (roster, no k-floor) -->
+        <path d="M660,326 L660,452 Q660,478 626,478 L515,478" fill="none" stroke="#22d3ee" stroke-width="1.5" marker-end="url(#ah-c)"/>
+        <text x="674" y="452" fill="#67e8f9" font-size="8">roster read</text>
+        <!-- public reads -> proxy -->
+        <path d="M515,378 C662,378 700,184 786,184" fill="none" stroke="#34d399" stroke-width="1.6" marker-end="url(#ah-g)"/>
+        <!-- public reads -> marketplace -->
+        <path d="M515,398 C640,398 700,342 786,318" fill="none" stroke="#34d399" stroke-width="1.4" marker-end="url(#ah-g)"/>
+        <!-- org reads -> marketplace org hub -->
+        <path d="M515,478 C650,478 700,436 786,430" fill="none" stroke="#22d3ee" stroke-width="1.5" marker-end="url(#ah-c)"/>
+        <text x="656" y="500" fill="#67e8f9" font-size="8" text-anchor="middle">admin-only · org-internal</text>
         <!-- proxy -> desktop tab -->
-        <line x1="895" y1="218" x2="895" y2="268" stroke="#34d399" stroke-width="1.6" marker-end="url(#ah-g)"/>
-        <text x="905" y="247" fill="#94a3b8" font-size="8">same-origin</text>
-        <!-- (2) desktop tab -> old local pglite : BROKEN -->
-        <path d="M788,318 L680,600" fill="none" stroke="#fb7185" stroke-width="1.6" stroke-dasharray="5,5" marker-end="url(#ah-r)"/>
-        <text x="742" y="470" fill="#fb7185" font-size="8" transform="rotate(69 742 470)" text-anchor="middle">was: local read → 500</text>
+        <line x1="895" y1="218" x2="895" y2="264" stroke="#34d399" stroke-width="1.6" marker-end="url(#ah-g)"/>
+        <text x="905" y="245" fill="#94a3b8" font-size="8">same-origin</text>
+        <!-- governance -> gates (contribute_allowed drives the forbid) -->
+        <path d="M786,556 C560,556 545,330 512,300" fill="none" stroke="#fb7185" stroke-width="1.5" stroke-dasharray="5,4" marker-end="url(#ah-r)"/>
+        <text x="560" y="420" fill="#fb7185" font-size="8" text-anchor="middle">contribute_allowed → forbid gate</text>
         <!-- feedback loop (dashed cyan) -->
-        <path d="M895,336 L895,694 Q895,704 885,704 L152,704 Q142,704 142,694 L142,306" fill="none" stroke="#22d3ee" stroke-width="1.4" stroke-dasharray="2,4" marker-end="url(#ah-c)"/>
-        <text x="518" y="698" fill="#22d3ee" font-size="9" text-anchor="middle">feedback loop · the aggregate informs "which model / which gem should I use?"</text>
+        <path d="M895,340 L895,700 Q895,710 885,710 L152,710 Q142,710 142,700 L142,320" fill="none" stroke="#22d3ee" stroke-width="1.4" stroke-dasharray="2,4" marker-end="url(#ah-c)"/>
+        <text x="518" y="704" fill="#22d3ee" font-size="9" text-anchor="middle">feedback loop · the aggregate informs "which model / which gem should I use?"</text>
 
         <!-- ================= COMPONENT BOXES ================= -->
         <!-- Producer container -->
-        <rect x="30" y="112" width="225" height="222" rx="8" fill="#0f172a"/>
-        <rect x="30" y="112" width="225" height="222" rx="8" fill="rgba(8, 51, 68, 0.4)" stroke="#22d3ee" stroke-width="1.5"/>
+        <rect x="30" y="112" width="225" height="230" rx="8" fill="#0f172a"/>
+        <rect x="30" y="112" width="225" height="230" rx="8" fill="rgba(8, 51, 68, 0.4)" stroke="#22d3ee" stroke-width="1.5"/>
         <text x="142" y="136" fill="white" font-size="12" font-weight="600" text-anchor="middle">AgentGem Desktop</text>
-        <text x="142" y="151" fill="#94a3b8" font-size="8" text-anchor="middle">PRODUCER · sign_and_publish</text>
-        <text x="46" y="180" fill="#94a3b8" font-size="9">• scan .claude transcripts</text>
-        <text x="46" y="202" fill="#94a3b8" font-size="9">• judge outcomes (ACP · opt-in)</text>
-        <text x="46" y="224" fill="#94a3b8" font-size="9">• sign attestation (ed25519)</text>
-        <rect x="46" y="246" width="193" height="72" rx="6" fill="rgba(136, 19, 55, 0.4)" stroke="#fb7185" stroke-width="1.3"/>
-        <text x="142" y="268" fill="white" font-size="9" font-weight="600" text-anchor="middle">POST /api/aggregator/ingest</text>
-        <text x="142" y="284" fill="#fb7185" font-size="8" text-anchor="middle">endpoint = AGENTGEM_INGEST_URL</text>
-        <text x="142" y="300" fill="#fda4af" font-size="8" text-anchor="middle">⚠ unset in shipped app</text>
-        <text x="142" y="312" fill="#fda4af" font-size="8" text-anchor="middle">→ publish is skipped</text>
+        <text x="142" y="151" fill="#94a3b8" font-size="8" text-anchor="middle">PRODUCER · consent-gated</text>
+        <text x="46" y="178" fill="#94a3b8" font-size="9">• scan .claude transcripts</text>
+        <text x="46" y="198" fill="#94a3b8" font-size="9">• judge outcomes (ACP · opt-in)</text>
+        <text x="46" y="218" fill="#94a3b8" font-size="9">• sign attestation (ed25519)</text>
+        <rect x="46" y="234" width="193" height="96" rx="6" fill="rgba(6, 78, 59, 0.4)" stroke="#34d399" stroke-width="1.3"/>
+        <text x="142" y="253" fill="white" font-size="9" font-weight="600" text-anchor="middle">POST /api/aggregator/ingest</text>
+        <text x="142" y="270" fill="#6ee7b7" font-size="8" text-anchor="middle">sign_and_publish → per-model outcomes</text>
+        <text x="142" y="285" fill="#6ee7b7" font-size="8" text-anchor="middle">bulk contribute → ingredients-only</text>
+        <text x="142" y="304" fill="#cbd5e1" font-size="8" text-anchor="middle">gate: benchmarkContribute()</text>
+        <text x="142" y="318" fill="#cbd5e1" font-size="8" text-anchor="middle">→ hostedIngestEndpoint()</text>
 
         <!-- Ingest -->
-        <rect x="330" y="150" width="180" height="60" rx="6" fill="#0f172a"/>
-        <rect x="330" y="150" width="180" height="60" rx="6" fill="rgba(6, 78, 59, 0.4)" stroke="#34d399" stroke-width="1.5"/>
-        <text x="420" y="176" fill="white" font-size="11" font-weight="600" text-anchor="middle">Aggregator · /ingest</text>
-        <text x="420" y="193" fill="#94a3b8" font-size="9" text-anchor="middle">verify → project</text>
+        <rect x="330" y="152" width="185" height="60" rx="6" fill="#0f172a"/>
+        <rect x="330" y="152" width="185" height="60" rx="6" fill="rgba(6, 78, 59, 0.4)" stroke="#34d399" stroke-width="1.5"/>
+        <text x="422" y="178" fill="white" font-size="11" font-weight="600" text-anchor="middle">Aggregator · /ingest</text>
+        <text x="422" y="195" fill="#94a3b8" font-size="9" text-anchor="middle">verify → gate → project</text>
 
-        <!-- Trust gates -->
-        <rect x="330" y="236" width="180" height="82" rx="8" fill="transparent" stroke="#fb7185" stroke-width="1.1" stroke-dasharray="4,4"/>
-        <text x="340" y="251" fill="#fb7185" font-size="8">trust gates</text>
-        <text x="420" y="271" fill="#cbd5e1" font-size="9" text-anchor="middle">signature · anti-inflation</text>
-        <text x="420" y="288" fill="#cbd5e1" font-size="9" text-anchor="middle">quarantine · trust score</text>
-        <text x="420" y="308" fill="#fbbf24" font-size="9" text-anchor="middle">k-anon: ≥ k distinct producers</text>
+        <!-- Trust + governance gates -->
+        <rect x="330" y="240" width="185" height="98" rx="8" fill="transparent" stroke="#fbbf24" stroke-width="1.1" stroke-dasharray="4,4"/>
+        <text x="340" y="255" fill="#fbbf24" font-size="8">trust + governance gates</text>
+        <text x="422" y="274" fill="#cbd5e1" font-size="9" text-anchor="middle">signature · anti-inflation</text>
+        <text x="422" y="290" fill="#cbd5e1" font-size="9" text-anchor="middle">quarantine · trust score</text>
+        <text x="422" y="306" fill="#fbbf24" font-size="9" text-anchor="middle">k-anon: ≥ k distinct producers</text>
+        <text x="422" y="325" fill="#fb7185" font-size="9" text-anchor="middle">org forbid → org-forbidden</text>
 
         <!-- Postgres -->
-        <rect x="553" y="150" width="175" height="168" rx="6" fill="#0f172a"/>
-        <rect x="553" y="150" width="175" height="168" rx="6" fill="rgba(76, 29, 149, 0.4)" stroke="#a78bfa" stroke-width="1.5"/>
-        <text x="640" y="175" fill="white" font-size="11" font-weight="600" text-anchor="middle">Neon Postgres</text>
-        <text x="640" y="197" fill="#c4b5fd" font-size="9" text-anchor="middle">attestations</text>
-        <text x="640" y="213" fill="#c4b5fd" font-size="9" text-anchor="middle">model_outcomes</text>
-        <text x="640" y="229" fill="#c4b5fd" font-size="9" text-anchor="middle">account_bindings</text>
-        <rect x="565" y="246" width="150" height="58" rx="5" fill="rgba(136, 19, 55, 0.4)" stroke="#fb7185" stroke-width="1.2"/>
-        <text x="640" y="267" fill="#fecdd3" font-size="9" font-weight="600" text-anchor="middle">LIVE: producers = 0</text>
-        <text x="640" y="283" fill="#fb7185" font-size="8" text-anchor="middle">benchmarks = []</text>
-        <text x="640" y="296" fill="#fb7185" font-size="8" text-anchor="middle">verified 2026-07-12</text>
+        <rect x="553" y="152" width="180" height="174" rx="6" fill="#0f172a"/>
+        <rect x="553" y="152" width="180" height="174" rx="6" fill="rgba(76, 29, 149, 0.4)" stroke="#a78bfa" stroke-width="1.5"/>
+        <text x="643" y="176" fill="white" font-size="11" font-weight="600" text-anchor="middle">Neon Postgres</text>
+        <text x="643" y="196" fill="#c4b5fd" font-size="9" text-anchor="middle">attestations · model_outcomes</text>
+        <text x="643" y="211" fill="#c4b5fd" font-size="9" text-anchor="middle">account_bindings</text>
+        <text x="643" y="226" fill="#c4b5fd" font-size="9" text-anchor="middle">org_members · org_settings</text>
+        <rect x="565" y="242" width="156" height="72" rx="5" fill="rgba(6, 78, 59, 0.4)" stroke="#34d399" stroke-width="1.2"/>
+        <text x="643" y="263" fill="#d1fae5" font-size="9" font-weight="600" text-anchor="middle">LIVE: producers accruing</text>
+        <text x="643" y="279" fill="#6ee7b7" font-size="8" text-anchor="middle">consent-gated ingest</text>
+        <text x="643" y="293" fill="#6ee7b7" font-size="8" text-anchor="middle">forbid = server-enforced,</text>
+        <text x="643" y="305" fill="#6ee7b7" font-size="8" text-anchor="middle">forward-only (no delete)</text>
 
-        <!-- Reads -->
-        <rect x="330" y="358" width="180" height="66" rx="6" fill="#0f172a"/>
-        <rect x="330" y="358" width="180" height="66" rx="6" fill="rgba(6, 78, 59, 0.4)" stroke="#34d399" stroke-width="1.5"/>
-        <text x="420" y="382" fill="white" font-size="10" font-weight="600" text-anchor="middle">/benchmarks · /effectiveness</text>
-        <text x="420" y="399" fill="#94a3b8" font-size="9" text-anchor="middle">k-anon roll-up</text>
-        <text x="420" y="414" fill="#6ee7b7" font-size="8" text-anchor="middle">public read · no auth</text>
+        <!-- Public reads -->
+        <rect x="330" y="354" width="185" height="60" rx="6" fill="#0f172a"/>
+        <rect x="330" y="354" width="185" height="60" rx="6" fill="rgba(76, 29, 149, 0.4)" stroke="#a78bfa" stroke-width="1.5"/>
+        <text x="422" y="376" fill="white" font-size="10" font-weight="600" text-anchor="middle">/benchmarks · /effectiveness</text>
+        <text x="422" y="392" fill="#c4b5fd" font-size="9" text-anchor="middle">k-anon roll-up</text>
+        <text x="422" y="406" fill="#ddd6fe" font-size="8" text-anchor="middle">public read · no auth</text>
 
-        <!-- Proxy (FIX) -->
-        <rect x="788" y="150" width="214" height="68" rx="6" fill="#0f172a"/>
-        <rect x="788" y="150" width="214" height="68" rx="6" fill="rgba(6, 78, 59, 0.6)" stroke="#34d399" stroke-width="2"/>
-        <rect x="960" y="157" width="34" height="14" rx="3" fill="#34d399"/>
-        <text x="977" y="167" fill="#022c22" font-size="8" font-weight="700" text-anchor="middle">NEW</text>
-        <text x="890" y="174" fill="white" font-size="10.5" font-weight="600" text-anchor="middle">BenchmarkProxyController</text>
-        <text x="895" y="191" fill="#cbd5e1" font-size="9" text-anchor="middle">/api/benchmark</text>
-        <text x="895" y="206" fill="#6ee7b7" font-size="8" text-anchor="middle">anon server-side GET → hosted</text>
+        <!-- Org-scoped reads -->
+        <rect x="330" y="448" width="185" height="62" rx="6" fill="#0f172a"/>
+        <rect x="330" y="448" width="185" height="62" rx="6" fill="rgba(8, 51, 68, 0.4)" stroke="#22d3ee" stroke-width="1.5"/>
+        <text x="422" y="470" fill="white" font-size="10" font-weight="600" text-anchor="middle">/api/orgs/:scope/benchmark</text>
+        <text x="422" y="486" fill="#94a3b8" font-size="8" text-anchor="middle">admin-only · org_members roster</text>
+        <text x="422" y="500" fill="#67e8f9" font-size="8" text-anchor="middle">NO k-floor · org-internal</text>
+
+        <!-- Proxy -->
+        <rect x="788" y="152" width="214" height="68" rx="6" fill="#0f172a"/>
+        <rect x="788" y="152" width="214" height="68" rx="6" fill="rgba(6, 78, 59, 0.6)" stroke="#34d399" stroke-width="2"/>
+        <text x="895" y="176" fill="white" font-size="10.5" font-weight="600" text-anchor="middle">BenchmarkProxyController</text>
+        <text x="895" y="193" fill="#cbd5e1" font-size="9" text-anchor="middle">/api/benchmark</text>
+        <text x="895" y="208" fill="#6ee7b7" font-size="8" text-anchor="middle">anon server-side GET → hosted</text>
 
         <!-- Desktop tab -->
-        <rect x="788" y="270" width="214" height="66" rx="6" fill="#0f172a"/>
-        <rect x="788" y="270" width="214" height="66" rx="6" fill="rgba(8, 51, 68, 0.4)" stroke="#22d3ee" stroke-width="1.5"/>
-        <text x="895" y="294" fill="white" font-size="11" font-weight="600" text-anchor="middle">Desktop · Benchmark tab</text>
-        <text x="895" y="311" fill="#94a3b8" font-size="9" text-anchor="middle">console panel (observe)</text>
-        <text x="895" y="326" fill="#67e8f9" font-size="8" text-anchor="middle">reads via proxy ✓ (was: local)</text>
+        <rect x="788" y="266" width="214" height="60" rx="6" fill="#0f172a"/>
+        <rect x="788" y="266" width="214" height="60" rx="6" fill="rgba(8, 51, 68, 0.4)" stroke="#22d3ee" stroke-width="1.5"/>
+        <text x="895" y="290" fill="white" font-size="11" font-weight="600" text-anchor="middle">Desktop · Benchmark tab</text>
+        <text x="895" y="308" fill="#67e8f9" font-size="8" text-anchor="middle">reads via proxy ✓ (client-mode)</text>
 
-        <!-- Marketplace -->
-        <rect x="788" y="380" width="214" height="58" rx="6" fill="#0f172a"/>
-        <rect x="788" y="380" width="214" height="58" rx="6" fill="rgba(8, 51, 68, 0.4)" stroke="#22d3ee" stroke-width="1.5"/>
-        <text x="895" y="404" fill="white" font-size="11" font-weight="600" text-anchor="middle">Marketplace SPA</text>
-        <text x="895" y="421" fill="#94a3b8" font-size="8" text-anchor="middle">app.agentgem.ai · /effectiveness only</text>
+        <!-- Marketplace public -->
+        <rect x="788" y="356" width="214" height="56" rx="6" fill="#0f172a"/>
+        <rect x="788" y="356" width="214" height="56" rx="6" fill="rgba(8, 51, 68, 0.4)" stroke="#22d3ee" stroke-width="1.5"/>
+        <text x="895" y="380" fill="white" font-size="11" font-weight="600" text-anchor="middle">Marketplace SPA</text>
+        <text x="895" y="398" fill="#94a3b8" font-size="8" text-anchor="middle">app.agentgem.ai · /effectiveness</text>
 
-        <!-- Old local pglite (the bug) -->
-        <rect x="560" y="592" width="200" height="60" rx="6" fill="#0f172a"/>
-        <rect x="560" y="592" width="200" height="60" rx="6" fill="rgba(136, 19, 55, 0.4)" stroke="#fb7185" stroke-width="1.5" stroke-dasharray="4,4"/>
-        <text x="660" y="614" fill="white" font-size="10" font-weight="600" text-anchor="middle">local PGlite aggregator</text>
-        <text x="660" y="630" fill="#fb7185" font-size="8.5" text-anchor="middle">empty · 500 — missing</text>
-        <text x="660" y="643" fill="#fb7185" font-size="8.5" text-anchor="middle">pglite.wasm / .data (the reported bug)</text>
+        <!-- Marketplace org hub -->
+        <rect x="788" y="418" width="214" height="60" rx="6" fill="#0f172a"/>
+        <rect x="788" y="418" width="214" height="60" rx="6" fill="rgba(8, 51, 68, 0.4)" stroke="#22d3ee" stroke-width="1.5"/>
+        <rect x="960" y="425" width="34" height="14" rx="3" fill="#22d3ee"/>
+        <text x="977" y="435" fill="#042f2e" font-size="8" font-weight="700" text-anchor="middle">NEW</text>
+        <text x="884" y="442" fill="white" font-size="10.5" font-weight="600" text-anchor="middle">Marketplace · /orgs/:scope</text>
+        <text x="895" y="459" fill="#cbd5e1" font-size="9" text-anchor="middle">Benchmark tab (org-internal)</text>
+        <text x="895" y="472" fill="#67e8f9" font-size="8" text-anchor="middle">beside Team Pulse usage</text>
 
-        <!-- Break badges -->
-        <circle cx="292" cy="227" r="10" fill="#fb7185"/><text x="292" y="231" fill="#450a0a" font-size="11" font-weight="700" text-anchor="middle">1</text>
-        <circle cx="716" cy="470" r="10" fill="#fb7185"/><text x="716" y="474" fill="#450a0a" font-size="11" font-weight="700" text-anchor="middle">2</text>
+        <!-- Governance (admin) -->
+        <rect x="788" y="512" width="214" height="72" rx="6" fill="#0f172a"/>
+        <rect x="788" y="512" width="214" height="72" rx="6" fill="rgba(136, 19, 55, 0.3)" stroke="#fb7185" stroke-width="1.5"/>
+        <rect x="960" y="519" width="34" height="14" rx="3" fill="#fb7185"/>
+        <text x="977" y="529" fill="#450a0a" font-size="8" font-weight="700" text-anchor="middle">NEW</text>
+        <text x="884" y="536" fill="white" font-size="10.5" font-weight="600" text-anchor="middle">Admin · Governance</text>
+        <text x="895" y="553" fill="#fecdd3" font-size="8.5" text-anchor="middle">POST /benchmark/settings (App-gated)</text>
+        <text x="895" y="567" fill="#fda4af" font-size="8" text-anchor="middle">contribute_allowed · view_enabled</text>
+        <text x="895" y="579" fill="#fda4af" font-size="8" text-anchor="middle">most-restrictive-org-wins</text>
 
         <!-- Legend -->
-        <text x="40" y="732" fill="white" font-size="9" font-weight="600">Legend</text>
-        <rect x="92" y="724" width="14" height="9" rx="2" fill="rgba(8,51,68,0.4)" stroke="#22d3ee"/><text x="111" y="732" fill="#94a3b8" font-size="8">client</text>
-        <rect x="158" y="724" width="14" height="9" rx="2" fill="rgba(6,78,59,0.4)" stroke="#34d399"/><text x="177" y="732" fill="#94a3b8" font-size="8">hosted API / fix</text>
-        <rect x="272" y="724" width="14" height="9" rx="2" fill="rgba(76,29,149,0.4)" stroke="#a78bfa"/><text x="291" y="732" fill="#94a3b8" font-size="8">Postgres</text>
-        <rect x="360" y="724" width="14" height="9" rx="2" fill="rgba(136,19,55,0.4)" stroke="#fb7185"/><text x="379" y="732" fill="#94a3b8" font-size="8">broken / current</text>
-        <line x1="470" y1="729" x2="486" y2="729" stroke="#fb7185" stroke-width="1.4" stroke-dasharray="4,4"/><text x="492" y="732" fill="#94a3b8" font-size="8">trust / CSRF gate</text>
-        <line x1="600" y1="729" x2="616" y2="729" stroke="#22d3ee" stroke-width="1.4" stroke-dasharray="2,4"/><text x="622" y="732" fill="#94a3b8" font-size="8">feedback</text>
+        <text x="40" y="742" fill="white" font-size="9" font-weight="600">Legend</text>
+        <rect x="92" y="734" width="14" height="9" rx="2" fill="rgba(8,51,68,0.4)" stroke="#22d3ee"/><text x="111" y="742" fill="#94a3b8" font-size="8">client / org view</text>
+        <rect x="196" y="734" width="14" height="9" rx="2" fill="rgba(6,78,59,0.4)" stroke="#34d399"/><text x="215" y="742" fill="#94a3b8" font-size="8">hosted API</text>
+        <rect x="288" y="734" width="14" height="9" rx="2" fill="rgba(76,29,149,0.4)" stroke="#a78bfa"/><text x="307" y="742" fill="#94a3b8" font-size="8">Postgres / k-anon</text>
+        <rect x="410" y="734" width="14" height="9" rx="2" fill="rgba(136,19,55,0.3)" stroke="#fb7185"/><text x="429" y="742" fill="#94a3b8" font-size="8">governance / forbid</text>
+        <line x1="536" y1="739" x2="552" y2="739" stroke="#22d3ee" stroke-width="1.4" stroke-dasharray="2,4"/><text x="558" y="742" fill="#94a3b8" font-size="8">feedback</text>
       </svg>
     </div>
 
     <div class="cards">
       <div class="card">
-        <div class="card-header"><div class="card-dot rose"></div><h3>Two breaks in the loop</h3></div>
+        <div class="card-header"><div class="card-dot emerald"></div><h3>Loop closed (both breaks fixed)</h3></div>
         <ul>
-          <li><b>①  Producer → prod (source).</b> <code>AGENTGEM_INGEST_URL</code> is unset in the shipped app, so <code>sign_and_publish</code> skips ingest. Prod is empty (0 producers).</li>
-          <li><b>②  Consumer → local (sink).</b> The desktop tab reads its own in-memory PGlite, which can't boot (<code>pglite.wasm/.data</code> never shipped) → the reported 500.</li>
+          <li><b>Producer → prod.</b> Publishing now ingests when <code>benchmarkContribute()</code> is on: the interactive path uses <code>hostedIngestEndpoint()</code>; bulk contribute refreshes producer + <b>ingredients-only</b> usage. Opt-in, anonymous attestations.</li>
+          <li><b>Consumer → read.</b> <code>BenchmarkProxyController</code> serves an anonymous server-side GET → hosted; the desktop tab reads via the proxy (client-mode, no local PGlite).</li>
         </ul>
       </div>
       <div class="card">
-        <div class="card-header"><div class="card-dot emerald"></div><h3>The read-fix (this spec)</h3></div>
+        <div class="card-header"><div class="card-dot cyan"></div><h3>Org-scoped view</h3></div>
         <ul>
-          <li>New <code>BenchmarkProxyController</code> at <code>/api/benchmark</code>; server-side <b>anonymous</b> GET → hosted.</li>
-          <li>Passes originGuard (no <code>Origin</code>/<code>Sec-Fetch</code>) &amp; needs no API key → <b>no CORS / PUBLIC_READ_PATHS / prod change.</b></li>
-          <li>Turns the 500 into an honest empty-state; shows real numbers the moment prod fills.</li>
+          <li>Admin-only <code>/api/orgs/:scope/benchmark</code> — a Benchmark tab on the marketplace org hub, beside Team Pulse.</li>
+          <li>Org-filtered aggregates: producer's bound <code>account_login</code> ∈ the App-synced <code>org_members</code> roster, <b>no k-floor</b> (de-anonymised within the org).</li>
+          <li>Non-App orgs (membership via <code>account_scopes</code> only) show empty — deferred.</li>
         </ul>
       </div>
       <div class="card">
-        <div class="card-header"><div class="card-dot amber"></div><h3>What makes data appear</h3></div>
+        <div class="card-header"><div class="card-dot rose"></div><h3>Governance (admin)</h3></div>
         <ul>
-          <li>Wire <code>AGENTGEM_INGEST_URL</code> on installs so publishing actually ingests.</li>
-          <li>Run a <b>non-degraded</b> outcome judge on publish (degraded outcomes are dropped by design).</li>
-          <li>Reach <b>k distinct producers</b> — a model/gem row is hidden until k-anon is met.</li>
+          <li>Two <code>org_settings</code> flags: <code>contribute_allowed</code> (server-enforced forbid) + <code>benchmark_view_enabled</code>.</li>
+          <li>Forbid is enforced at ingest via <code>producerForbidden</code> (<b>most-restrictive-org-wins</b>) and is <b>forward-only</b> — it stops new contributions, it does <b>not</b> delete data already sent (purge = Spec B).</li>
+          <li>The settings <b>write is App-gated</b> (<code>via === "app"</code>, else 409) so the write surface equals the enforcement surface.</li>
         </ul>
       </div>
     </div>
 
-    <p class="footer">AgentGem benchmark feedback loop · consumer read-fix = narrow &amp; safe · producer wiring = the real gap · prod verified empty 2026-07-12</p>
+    <p class="footer">AgentGem benchmark feedback loop · loop closed (producer wiring + read-fix) · org-scoped view + admin governance shipped · #396/#398/#404/#406 · #411/#412 · #413/#414</p>
   </div>
 
   <script>
