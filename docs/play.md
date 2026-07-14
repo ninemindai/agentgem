@@ -99,10 +99,18 @@ Studio's three actions are distinct:
 - **Push to git** — `git push` of the whole miniapps registry to its remote, so your
   games are backed up and portable across machines.
 - **Share** — publishes the game to the public marketplace at
-  [app.agentgem.ai](https://app.agentgem.ai), tagged `game` plus its genre. Sharing
-  requires a bound GitHub identity (see [Sharing & identity](sharing.md)); if you're
-  signed out, Studio connects you inline and then **resumes the publish you
-  started** — no second click. On success it links your marketplace gem page.
+  [app.agentgem.ai](https://app.agentgem.ai), tagged `game` plus its genre. A
+  **capture step** first grabs a screenshot of the running game so its link-preview
+  and marketplace card show the real thing (see [OG cards](sharing.md#branded-link-previews)).
+  You choose a **visibility** (Public / Unlisted / Private) and, for an existing key,
+  whether to **overwrite or cut a new version**. Publishing requires an account (see
+  [Identity](sharing.md#identity)); if you're signed out, Studio connects you inline and
+  then **resumes the publish you started** — no second click. On success it links your
+  marketplace gem page.
+
+Once published, a game lives in the marketplace **arcade** (`app.agentgem.ai/`), where
+it's searchable by genre and tag, counts plays, and is an **installable, offline-playable
+PWA** — visitors can pin it and play with no network.
 
 ## On the desktop app
 

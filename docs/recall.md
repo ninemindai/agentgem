@@ -22,6 +22,13 @@ no external database, no server round-trip to anyone else. The index lives at
 `~/.agentgem/.agentgem/recall-index.db` and builds in the background; a
 "indexing *N* of *M*" hint shows while it catches up.
 
+Ranking is **proven-use aware**. On top of the text score, sessions that used an
+artifact which went on to produce a *good outcome* get a boost: the insights judge
+pass records per-session outcomes into a separate `artifact-outcomes.db`, and a
+Wilson-shrunk outcome score (shrunk so one lucky session can't outrank a track
+record) nudges the proven work up the list. It's additive — a query still matches on
+text first; proven use only breaks ties toward what actually worked.
+
 Three filters narrow the field:
 
 - **Project** — scope to one repo.

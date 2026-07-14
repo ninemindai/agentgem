@@ -29,8 +29,12 @@ The console is more than a Gem builder — it reads, searches, and grades your s
 history, and turns it into things you can play and share.
 
 - **[Recall](recall.md)** — search across every past session by what happened inside
-  it, then chat with or extract across the ones that matter. Its intelligence is also
-  the **`agentgem-goldmine`** MCP server, so any coding agent can query your history.
+  it, then chat with or extract across the ones that matter. Ranking is **proven-use
+  aware** (artifacts with good outcomes are boosted). Its intelligence is also the
+  **`agentgem-goldmine`** MCP server, so any coding agent can query your history.
+- **[Memory sync](recall.md)** — the **Memory panel** bridges recall to external AI
+  memory providers (**mem0**, **supermemory**): pull their memories in, and push
+  scrubbed, consent-gated candidates out through a review outbox.
 - **[Chat](chat.md)** — drive a local coding agent (Claude, Codex) from inside the
   console, grounded in your transcripts, and distill the conversation into a Gem.
 - **[Context hygiene](context-hygiene.md)** — LLM-free detection of context bloat: a
@@ -57,14 +61,17 @@ history, and turns it into things you can play and share.
   Bedrock AgentCore) and the publish / undeploy lifecycle.
 - **[A2A](a2a.md)** — export a Gem as an A2A Agent Card or a runnable agent-to-agent
   server so other agents can discover and call it.
-- **[Registry](registry.md)** — the GitHub-backed Gem registry: publish, resolve, merge,
-  and install composable Gems. Its hosted face is the **public marketplace at
-  [app.agentgem.ai](https://app.agentgem.ai)** — browse, star, review, and install
-  (early testbed: hosted data may be reset).
+- **[Registry](registry.md)** — the GitHub-backed Gem registry: publish (Public /
+  Unlisted / Private, versioned, optionally group-reviewed), resolve, merge, and install
+  composable Gems. Its hosted face is the **public marketplace at
+  [app.agentgem.ai](https://app.agentgem.ai)** — browse, star, review, install, and play
+  installable/offline mini-apps (early testbed: hosted data may be reset).
 - **[Sharing & identity](sharing.md)** — install a published Gem with one command
   (`agentgem get`), pass one directly over an encrypted one-time hand-off
-  (`agentgem send` / `receive`), bind a GitHub identity (`agentgem bind`), and verify a
-  Gem runs across agents (`agentgem verify`).
+  (`agentgem send` / `receive`), and verify a Gem runs across agents (`agentgem verify`).
+  Web accounts use **better-auth** (sign in with GitHub, Google, or a passkey) with a
+  **`/@handle`** profile hub; the CLI `agentgem bind` ties this machine's signing key to a
+  GitHub account for anti-sybil producer identity.
 - **[Testbed & run](testbed-and-run.md)** — install a Gem into a local testbed; run or
   deploy a materialized target locally, to Vercel, or to Cloudflare.
 
