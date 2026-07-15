@@ -143,6 +143,43 @@ describe("mcpUiHost — streaming + generation + dispose", () => {
     expect(open).toHaveBeenCalled();  // guard was released, retry subscribed
   });
 
+  it("rebindHygiene closes ONLY the current hygiene stream and opens one on the picked file", async () => {
+    vi.spyOn(watchStream, "fetchSessions").mockResolvedValue([sess("/auto.jsonl")]);
+    const opened: string[] = [];
+    const closed: string[] = [];
+    let emit: (e: unknown) => void = () => {};
+    vi.spyOn(hygieneStream, "openHygieneStream").mockImplementation((_a, file, cb) => {
+      opened.push(file); emit = cb as (e: unknown) => void;
+      return () => { closed.push(file); };
+    });
+    const { host, target } = mkHost({ needs: ["context-hygiene"] });
+    host.handleMessage(msg(target, { method: "tools/call", id: 31, params: { name: "agentgem_subscribe_hygiene", arguments: {} } }));
+    await tick();
+    expect(opened).toEqual(["/auto.jsonl"]);   // auto-subscribe = most-recent session
+
+    host.rebindHygiene("/picked.jsonl");
+    await tick();
+    expect(closed).toEqual(["/auto.jsonl"]);   // old stream closed, nothing else
+    expect(opened).toEqual(["/auto.jsonl", "/picked.jsonl"]);
+
+    // events from the rebound stream flow over the SAME notification channel the game already consumes
+    const evt = { type: "hygiene", verdict: "bounded" };
+    emit(evt);
+    expect(posted(target)).toHaveBeenCalledWith(
+      expect.objectContaining({
+        method: "ui/notifications/tool-result",
+        params: { content: [], structuredContent: evt, _meta: { "ai.agentgem/stream": { toolName: "agentgem_subscribe_hygiene" } } },
+      }), "*");
+  });
+
+  it("rebindHygiene is a no-op for a game that never declared context-hygiene", async () => {
+    const open = vi.spyOn(hygieneStream, "openHygieneStream").mockImplementation(() => () => {});
+    const { host } = mkHost({ needs: ["session-data"] });
+    host.rebindHygiene("/f.jsonl");
+    await tick();
+    expect(open).not.toHaveBeenCalled();
+  });
+
   it("invoke-agent opens a neutral chat (no miniapp field) and streams deltas back", async () => {
     let chatBody: string | undefined;
     vi.stubGlobal("fetch", vi.fn(async (url: string, init?: RequestInit) => {

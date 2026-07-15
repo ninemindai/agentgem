@@ -36,6 +36,7 @@ export interface UiHost {
   dispose(): void;
   bumpGeneration(): void;
   feedSessionData(sessionId: string, agent: string): void; // host-initiated "Replay yours" rebind
+  rebindHygiene(file: string): void;                        // host-initiated hygiene-stream rebind (session picker)
   pushHostContext(partial: Record<string, unknown>): void;  // host-initiated host-context-changed push (fullscreen toggle)
 }
 
@@ -50,6 +51,7 @@ export function createUiHost(deps: UiHostDeps): UiHost {
   // Single-flight guards — the exact set Runner.serve() kept as refs.
   let liveOpen = false;                              // one live-session-events stream
   let hygieneOpen = false;                            // one context-hygiene stream
+  let hygieneHandle: StreamHandle | null = null;      // that stream's handle — rebindHygiene closes JUST this one
   let invoking = false;                              // one invoke-agent turn at a time
   let chatId: string | null = null;                  // reused neutral chat session
   let chatPromise: Promise<string> | null = null;    // in-flight chat-open (serialize concurrent invokes)
@@ -117,6 +119,7 @@ export function createUiHost(deps: UiHostDeps): UiHost {
           if (stale(gen)) { if (r.status === "subscribed") { try { r.handle.close(); } catch { /* ignore */ } } hygieneOpen = false; return; }
           if (r.status === "idle") { hygieneOpen = false; reply(id, { status: "idle" }); return; } // release so a later retry can succeed
           register(gen, r.handle);
+          hygieneHandle = r.handle;
           reply(id, { status: "subscribed" });
         } catch (e) { hygieneOpen = false; throw e; }                            // release the guard so a retry can succeed
         return;
@@ -250,6 +253,26 @@ export function createUiHost(deps: UiHostDeps): UiHost {
       .finally(() => { feeding = false; });
   }
 
+  // Host-initiated hygiene rebind (the Runner's session picker): the sealed miniapp can't choose which
+  // session feeds its context-hygiene stream (execute() ignores miniapp-supplied args for the cap), so the
+  // HOST calls this with a viewer-picked transcript file. Closes ONLY the current hygiene stream and opens
+  // one on the chosen file; events flow over the same notification channel, so the game just re-renders.
+  // The click on a specific session IS the viewer's consent — same posture as feedSessionData.
+  function rebindHygiene(file: string): void {
+    if (!deps.needs.includes("context-hygiene")) return;
+    const gen = generation;
+    if (hygieneHandle) { try { hygieneHandle.close(); } catch { /* ignore */ } handles.delete(hygieneHandle); hygieneHandle = null; }
+    hygieneOpen = true;
+    subscribeHygiene(deps.apiBase, (ev) => { if (!stale(gen)) notify(CAP_TOOL["context-hygiene"], ev); }, file)
+      .then((r) => {
+        if (r.status !== "subscribed") { hygieneOpen = false; return; }           // unreachable with an explicit file, but keep the guard honest
+        if (stale(gen)) { try { r.handle.close(); } catch { /* ignore */ } hygieneOpen = false; return; }
+        register(gen, r.handle);
+        hygieneHandle = r.handle;
+      })
+      .catch(() => { hygieneOpen = false; });                                     // release so a later subscribe/rebind can succeed
+  }
+
   function dispose(): void {
     for (const h of handles) { try { h.close(); } catch { /* ignore */ } }
     handles.clear();
@@ -261,11 +284,13 @@ export function createUiHost(deps: UiHostDeps): UiHost {
     generation++;
     dispose();
     liveOpen = false;
+    hygieneOpen = false;
+    hygieneHandle = null;
     invoking = false;
     chatId = null;
     chatPromise = null;
     feeding = false;
   }
 
-  return { handleMessage, dispose, bumpGeneration, feedSessionData, pushHostContext };
+  return { handleMessage, dispose, bumpGeneration, feedSessionData, rebindHygiene, pushHostContext };
 }

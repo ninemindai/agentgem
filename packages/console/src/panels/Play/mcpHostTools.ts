@@ -74,17 +74,18 @@ export async function subscribeSessions(
   return { status: "subscribed", handle: { close } };
 }
 
-// subscribeHygiene: the "context-hygiene" cap — the most-recent session is "live"; opens the same
-// server-computed context-hygiene SSE the Watch tab consumes. Idle when no session exists yet (the caller
-// releases its guard so a later retry can succeed, mirroring subscribeSessions).
+// subscribeHygiene: the "context-hygiene" cap — by default the most-recent session is "live"; opens the
+// same server-computed context-hygiene SSE the Watch tab consumes. Idle when no session exists yet (the
+// caller releases its guard so a later retry can succeed, mirroring subscribeSessions). An explicit `file`
+// (the host-initiated session-picker rebind — NEVER miniapp-supplied) skips the most-recent lookup.
 export async function subscribeHygiene(
   apiBase: string,
   onEvent: (e: HygieneMsg) => void,
+  file?: string,
 ): Promise<{ status: "subscribed"; handle: StreamHandle } | { status: "idle" }> {
-  const sessions = await fetchSessions(apiBase);
-  const file = sessions[0]?.file;
-  if (!file) return { status: "idle" };
-  const close = openHygieneStream(apiBase, file, onEvent);
+  const resolved = file ?? (await fetchSessions(apiBase))[0]?.file;
+  if (!resolved) return { status: "idle" };
+  const close = openHygieneStream(apiBase, resolved, onEvent);
   return { status: "subscribed", handle: { close } };
 }
 

@@ -141,13 +141,23 @@ export const Runner = forwardRef<RunnerHandle,
   const closePicker = useCallback(() => { setPickerOpen(false); rebindBtnRef.current?.focus(); }, []);
 
   // Feed a viewer-picked session into the sealed iframe (host-initiated rebind — the sealed game can't pick
-  // an arbitrary session itself). The router fetches + pushes it over the session-data notification channel.
-  const feedSession = useCallback((sessionId: string, agent: string) => {
-    hostRef.current?.feedSessionData(sessionId, agent);
+  // an arbitrary session itself). session-data games get the compacted transcript pushed over the
+  // notification channel; context-hygiene games get their live SSE re-pointed at the picked transcript.
+  // A game declaring both gets both, from the one pick.
+  const feedSession = useCallback((s: WatchSession) => {
+    if (needs?.includes("session-data")) hostRef.current?.feedSessionData(s.id, s.agent);
+    if (needs?.includes("context-hygiene")) hostRef.current?.rebindHygiene(s.file);
     closePicker();
-  }, [closePicker]);
+  }, [closePicker, needs]);
 
-  const canRebind = interactive && !!needs?.includes("session-data");
+  const rebindsData = !!needs?.includes("session-data");
+  const rebindsHygiene = !!needs?.includes("context-hygiene");
+  const canRebind = interactive && (rebindsData || rebindsHygiene);
+  // Hygiene is claude-only server-side (the bloat curve needs per-turn usage) — a non-claude pick would
+  // just stream `unsupported`, so a hygiene-only picker hides those rows rather than offering dead ends.
+  const pickable = (sessions ?? []).filter((s) => rebindsData || s.agent === "claude");
+  const rebindLabel = rebindsData ? "↺ Replay yours" : "🔥 Pick session";
+  const rebindTitle = rebindsData ? "Replay one of your own sessions" : "Watch a specific session's context health";
   function openPicker() {
     setPickerOpen(true);
     if (sessions == null && apiBase != null) fetchSessions(apiBase).then(setSessions).catch(() => setSessions([]));
@@ -255,26 +265,26 @@ export const Runner = forwardRef<RunnerHandle,
         >{fs ? "✕" : "⛶"}</button>
       )}
       {canRebind && (
-        <button ref={rebindBtnRef} onClick={openPicker} title="Replay one of your own sessions" aria-label="Replay yours"
+        <button ref={rebindBtnRef} onClick={openPicker} title={rebindTitle} aria-label={rebindLabel}
           style={{ position: fs ? "fixed" : "absolute", top: 8, left: 8, zIndex: 1001, height: 30, padding: "0 10px",
             borderRadius: 8, border: "1px solid rgba(255,255,255,.25)", background: "rgba(20,22,28,.7)", color: "#fff",
             cursor: "pointer", font: "600 12px system-ui" }}>
-          ↺ Replay yours
+          {rebindLabel}
         </button>
       )}
       {pickerOpen && !pending && (
-        <div ref={pickerRef} tabIndex={-1} className="play-consent" role="dialog" aria-modal="true" aria-label="Pick a session to replay"
+        <div ref={pickerRef} tabIndex={-1} className="play-consent" role="dialog" aria-modal="true" aria-label="Pick a session"
           onKeyDown={(e) => { if (e.key === "Escape") { e.stopPropagation(); closePicker(); } }}>
           <div className="play-consent__box">
-            <div className="play-consent__title">Replay one of your sessions</div>
+            <div className="play-consent__title">{rebindsData ? "Replay one of your sessions" : "Watch one of your sessions"}</div>
             {sessions == null ? <div className="play-consent__sub">Loading your sessions…</div>
-              : sessions.length === 0 ? <div className="play-consent__sub">No local sessions yet.</div>
+              : pickable.length === 0 ? <div className="play-consent__sub">{rebindsData ? "No local sessions yet." : "No local claude sessions yet."}</div>
               : (
                 <ul className="play-src" style={{ maxHeight: 260, overflow: "auto" }}>
-                  {sessions.map((s) => (
+                  {pickable.map((s) => (
                     <li key={`${s.agent}:${s.id}`} className="play-src-row" role="button" tabIndex={0}
-                      onClick={() => feedSession(s.id, s.agent)}
-                      onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); feedSession(s.id, s.agent); } }}>
+                      onClick={() => feedSession(s)}
+                      onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); feedSession(s); } }}>
                       <span className="play-src-row__main">{s.project ?? "session"}</span>
                       <span className="play-src-row__meta">{s.agent} · {s.msgs} msgs</span>
                     </li>
