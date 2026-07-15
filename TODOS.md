@@ -57,3 +57,26 @@ framework-native path breaks the flat `{error:"..."}` envelope). So this Bearer 
 now a standalone fix, not blocked on any migration.
 
 **Depends on / blocked by:** Nothing. Its own small PR.
+
+## Author a console DESIGN.md (design-system doc)
+
+**What:** Write DESIGN.md for `packages/console` documenting the theme.css token
+system (`--ink`/`--paper`/`--accent`/`--line`), the `play-*` component vocabulary,
+and surface rules (e.g. one terracotta primary per surface; segmented control for
+single-choice groups; visible labels, placeholder is a format hint only).
+`/design-consultation` can drive it.
+
+**Why:** The 2026-07-15 Studio toolbar design review had to reverse-engineer the
+design system from theme.css. A DESIGN.md lets future design reviews calibrate
+against stated rules instead of inference.
+
+**Pros:** Faster, more consistent design reviews; "one primary per surface" becomes
+written law instead of oral tradition; onboarding aid.
+
+**Cons:** ~an hour of documentation; risks staleness if not maintained.
+
+**Context:** Flagged during /plan-design-review of
+`docs/superpowers/specs/2026-07-15-studio-toolbar-declutter-design.md`. The token
+system already behaves like a design system; it's just undocumented.
+
+**Depends on / blocked by:** Nothing.
