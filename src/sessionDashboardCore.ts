@@ -97,6 +97,45 @@ export function blastFacts(rep: BlastReport): Record<string, unknown> {
   };
 }
 
+// ── Recommended actions ──────────────────────────────────────────────────────
+// The report's payoff and the console's feedback loop: deterministic findings
+// (process-quality detectors + hygiene factors + the boundary cut) folded into
+// one deduped action list. The console pairs this with the distill pipeline so
+// a finding can become an installable gem (skill / lesson / guardrail).
+export interface RecommendedAction {
+  id: string;
+  title: string;
+  advice: string;
+  severity: "info" | "warn";
+  occurrences: number;
+}
+interface FindingLike { id: string; title: string; advice: string; severity: "info" | "warn"; count: number }
+interface BoundaryLike { segments: { fromTurn: number; toTurn: number }[]; cutTurn: number | null }
+
+export function recommendedActions(
+  findings: FindingLike[],
+  boundary?: BoundaryLike,
+): RecommendedAction[] {
+  const out: RecommendedAction[] = [];
+  const seen = new Set<string>();
+  for (const f of findings) {
+    if (f.count <= 0 || seen.has(f.id)) continue;   // fired findings only, deduped across sources
+    seen.add(f.id);
+    out.push({ id: f.id, title: f.title, advice: f.advice, severity: f.severity, occurrences: f.count });
+  }
+  if (boundary && boundary.cutTurn !== null && boundary.segments.length >= 2) {
+    out.push({
+      id: "session-split",
+      title: "Split long sessions at task boundaries",
+      advice: `This run looked like ${boundary.segments.length} task areas — a clean break around turn ${boundary.cutTurn} keeps each context window lean.`,
+      severity: "info",
+      occurrences: 1,
+    });
+  }
+  // warn first, then by how often it fired — the report and the strip read top-down.
+  return out.sort((a, b) => (a.severity === b.severity ? b.occurrences - a.occurrences : a.severity === "warn" ? -1 : 1));
+}
+
 /** Downsample a hygiene curve to at most `max` points, always keeping the last. */
 export function downsampleCurve<T>(curve: T[], max = CURVE_POINTS): T[] {
   if (curve.length <= max) return curve;

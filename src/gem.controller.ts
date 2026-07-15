@@ -120,10 +120,17 @@ const SessionDashboardQuerySchema = z.object({
   // "report" = the long-form editorial readout (renderReport / agentgem-report).
   kind: z.enum(["summary", "report"]).optional(),
 });
+const RecommendedActionSchema = z.object({
+  id: z.string(), title: z.string(), advice: z.string(),
+  severity: z.enum(["info", "warn"]), occurrences: z.number(),
+});
 const SessionDashboardEventSchema = z.discriminatedUnion("type", [
   z.object({ type: z.literal("start"), cached: z.boolean(), events: z.number() }),
   z.object({ type: z.literal("delta"), text: z.string() }),
-  z.object({ type: z.literal("done"), html: z.string(), cached: z.boolean(), updatedAt: z.number() }),
+  // `actions` rides the report kind's done event: deterministic findings the
+  // console pairs with the distill pipeline (finding → gem). Recomputed on
+  // every request — the cache stores only the expensive html.
+  z.object({ type: z.literal("done"), html: z.string(), cached: z.boolean(), updatedAt: z.number(), actions: z.array(RecommendedActionSchema).optional() }),
   z.object({ type: z.literal("failed"), message: z.string() }),
 ]);
 const TokenBreakdownSchema = z.object({ in: z.number(), out: z.number(), cache: z.number() });
@@ -333,7 +340,7 @@ import { computeWorkflowAnalysis } from "./workflowCore.js";
 import { computeDistill, DISTILL_BACKGROUND_TIMEOUT_MS } from "./distillCore.js";
 import { sessionHygiene, HygieneInputError, type HygieneReport } from "./sessionHygieneCore.js";
 import { sessionBlast, BlastInputError } from "./sessionBlastCore.js";
-import { resolveSessionDashboardInput, DashboardInputError, blastFacts, downsampleCurve } from "./sessionDashboardCore.js";
+import { resolveSessionDashboardInput, DashboardInputError, blastFacts, downsampleCurve, recommendedActions } from "./sessionDashboardCore.js";
 import { renderDashboard, renderReport, readDashboardCacheEntry, writeDashboardCache } from "@agentgem/insight";
 import { pump } from "./sse/pump.js";
 import { beginForeground, endForeground } from "./warm/orchestrator.js";
@@ -599,20 +606,35 @@ export class GemController {
       beginForeground();
       try {
         const inp = await resolveSessionDashboardInput(id, agent);
+        // Report actions are deterministic and cheap — recompute on EVERY request
+        // (cache hits included) so the console's act-on-it strip never goes stale;
+        // only the expensive agent-rendered html is cached.
+        const reportSources = kind === "report"
+          ? {
+              blast: await sessionBlast(id, agent),
+              hygiene: agent === "claude" ? await sessionHygiene(id, agent) : undefined,
+              process: agent === "claude" ? await summarizeSession(id, agent).catch(() => null) : null,
+            }
+          : null;
+        const actions = reportSources
+          ? recommendedActions(
+              [...(reportSources.process?.findings ?? []), ...(reportSources.hygiene?.factors ?? [])],
+              reportSources.hygiene?.boundary,
+            )
+          : undefined;
         const cached = readDashboardCacheEntry(id, inp.token, kind);
         if (cached && !fresh) {
           emit({ type: "start", cached: true, events: inp.events.length });
-          emit({ type: "done", html: cached.html, cached: true, updatedAt: cached.ts });
+          emit({ type: "done", html: cached.html, cached: true, updatedAt: cached.ts, ...(actions ? { actions } : {}) });
           return;
         }
         emit({ type: "start", cached: false, events: inp.events.length });
         let r: { html: string; ok: boolean };
-        if (kind === "report") {
+        if (kind === "report" && reportSources) {
           // Long-form editorial readout from DETERMINISTIC facts (session basics
           // + blast summary + the hygiene readout, Claude only) — same engine and
           // authoring contract as the rubric reports.
-          const blast = await sessionBlast(id, agent);
-          const hygiene = agent === "claude" ? await sessionHygiene(id, agent) : undefined;
+          const { blast, hygiene } = reportSources;
           const facts = {
             session: {
               sessionId: id, agent, project: inp.project,
@@ -628,6 +650,10 @@ export class GemController {
                 ...(hygiene.boundary ? { boundary: hygiene.boundary } : {}),
               },
             } : {}),
+            // The report's closing section: concrete next steps, ranked. The
+            // console mirrors these as an act-on-it strip wired to the distill
+            // pipeline (finding → skill/lesson gem).
+            ...(actions && actions.length ? { recommendedActions: actions } : {}),
           };
           r = await renderReport({
             facts,
@@ -645,7 +671,7 @@ export class GemController {
         if (!r.ok) { emit({ type: "failed", message: `${kind} rendering failed — is the local coding agent available?` }); return; }
         const now = Date.now();
         writeDashboardCache(id, inp.token, r.html, now, kind);
-        emit({ type: "done", html: r.html, cached: false, updatedAt: now });
+        emit({ type: "done", html: r.html, cached: false, updatedAt: now, ...(actions ? { actions } : {}) });
       } catch (err) {
         // Only tagged guard failures echo their message — an unexpected fault's
         // text could carry a filesystem path (same boundary as the hygiene route).

@@ -1462,6 +1462,16 @@ button.scorecard-intent { line-height: 1.4; }
 /* the long-form report is a document, not a panel — give it a page's height */
 .sd-frame.is-report { height: min(1100px, 78vh); }
 .sd-kind { flex: none; }
+/* act-on-it strip under the report: deterministic findings + the distill CTA */
+.sd-actions {
+  border: 1px solid var(--line); border-radius: var(--radius); background: var(--raised);
+  box-shadow: var(--shadow-sm); padding: 12px 14px; display: flex; flex-direction: column; gap: 8px;
+}
+.sd-action-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 8px; }
+.sd-action { font-size: 12.5px; color: var(--ink-soft); border-left: 3px solid var(--line); padding-left: 10px; }
+.sd-action.is-warn { border-left-color: var(--gold); }
+.sd-action b { font-weight: 600; color: var(--ink); }
+.sd-act-cta { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
 
 /* worst-first cross-session hygiene leaderboard (Rubrics panel) */
 .hyg-lb-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 0; }
