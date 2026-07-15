@@ -2,7 +2,7 @@ import type { HygieneReport } from "../../api/routes.js";
 import { type ToolCategory } from "./toolCategory.js";
 
 export interface Marker { x: number; kind: "skill" | "agent"; name: string }
-export interface Jump { turn: number; delta: number; ctx: number; cause: string; category: ToolCategory }
+export interface Jump { turn: number; msgIndex: number; delta: number; ctx: number; cause: string; category: ToolCategory }
 export interface TimelineModel {
   n: number; ymax: number;
   points: { x: number; ctx: number; out: number }[];
@@ -50,8 +50,22 @@ export function buildTimeline(curve: HygieneReport["curve"], events: HygieneRepo
     else if (e?.kind === "agent") { cause = `subagent ${e.name} folded back`; category = "agent"; }
     else if (curve[i].cacheCreation > 8000) { cause = `context injection (+${Math.round(curve[i].cacheCreation / 1000)}k new)`; category = "other"; }
     else { cause = "model output"; category = "other"; }
-    rows.push({ turn: curve[i].turn, delta, ctx: curve[i].ctxTokens, cause, category });
+    rows.push({ turn: curve[i].turn, msgIndex: curve[i].msgIndex, delta, ctx: curve[i].ctxTokens, cause, category });
   }
   rows.sort((a, b) => b.delta - a.delta);
   return { n, ymax, points, markers, jumps: rows.slice(0, 4) };
+}
+
+/** Map a hygiene-curve msgIndex (raw JSONL line) onto the transcript's turn
+ *  list: the last turn at or before that line — i.e. the turn whose record
+ *  produced the usage snapshot. Returns null when turns carry no msgIndex
+ *  (codex, or a server predating the join). */
+export function turnIndexForMsg(turns: { msgIndex?: number }[], msgIndex: number): number | null {
+  let best: number | null = null;
+  for (let i = 0; i < turns.length; i++) {
+    const mi = turns[i].msgIndex;
+    if (mi === undefined || mi > msgIndex) continue;
+    if (best === null || mi >= (turns[best].msgIndex ?? -1)) best = i;
+  }
+  return best;
 }

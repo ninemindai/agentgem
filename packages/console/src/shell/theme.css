@@ -1381,6 +1381,10 @@ button.scorecard-intent { line-height: 1.4; }
 .ct-facs b { font-weight: 600; }
 .jump { display: flex; align-items: baseline; gap: 8px; padding: 4px 0; border-bottom: 1px solid var(--line-soft); }
 .jump:last-child { border-bottom: none; }
+/* clickable jump rows (spike → transcript turn deep-link) */
+.jump-btn { width: 100%; text-align: left; background: none; border: none; border-bottom: 1px solid var(--line-soft); cursor: pointer; font: inherit; color: inherit; }
+.jump-btn:hover .t, .jump-btn:focus-visible .t { color: var(--accent); }
+.jump-open { color: var(--muted); font-weight: 400; }
 .jbadge {
   flex: none; font: 700 12px/1 var(--font-display); font-optical-sizing: auto; color: var(--accent);
 }

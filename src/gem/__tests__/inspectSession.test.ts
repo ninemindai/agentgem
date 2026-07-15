@@ -102,6 +102,12 @@ describe("parseClaudeTranscriptView", () => {
     expect(view.turns[0].tokens).toEqual({ in: 0, out: 0, cache: 0 }); // user: no usage
   });
 
+  it("each turn carries its raw JSONL line index (msgIndex) — the workflowScan coordinate", () => {
+    // Lines 0 and 1 of the fixture; the tool_result record (line 2) folds
+    // into the assistant turn, so no turn claims index 2.
+    expect(view.turns.map((t) => t.msgIndex)).toEqual([0, 1]);
+  });
+
   it("scrubs secrets and de-homes paths on the read path", () => {
     const call = view.turns[1].spans[1] as Extract<TranscriptSpanT, { kind: "tool_call" }>;
     expect(call.input).toContain("<redacted>");        // sk- token redacted

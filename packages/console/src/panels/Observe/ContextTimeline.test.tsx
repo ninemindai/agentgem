@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: MIT
 // packages/console/src/panels/Observe/ContextTimeline.test.tsx
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { render, screen, cleanup } from "@testing-library/react";
+import { render, screen, cleanup, fireEvent } from "@testing-library/react";
 import { ContextTimeline } from "./ContextTimeline.js";
 import * as routes from "../../api/routes.js";
 
@@ -35,6 +35,21 @@ describe("ContextTimeline", () => {
     // the skill marker is a ◆ path with an accessible name
     expect(document.querySelector('path[aria-label="skill: review"]')).toBeTruthy();
   });
+  it("clicking a jump row deep-links via onOpenTurn with the curve msgIndex", async () => {
+    vi.spyOn(routes.hygieneRoute, "call").mockResolvedValue(sample as any);
+    const onOpenTurn = vi.fn();
+    render(<ContextTimeline apiBase="/" agent="claude" sessionId="s1" onOpenTurn={onOpenTurn} />);
+    fireEvent.click(await screen.findByRole("button", { name: /open turn 1 in the transcript/i }));
+    expect(onOpenTurn).toHaveBeenCalledWith(4);   // the jump's curve point msgIndex
+  });
+
+  it("renders plain (non-button) jump rows without onOpenTurn", async () => {
+    vi.spyOn(routes.hygieneRoute, "call").mockResolvedValue(sample as any);
+    render(<ContextTimeline apiBase="/" agent="claude" sessionId="s1" />);
+    await screen.findByText(/bloated/i);
+    expect(screen.queryByRole("button", { name: /open turn/i })).toBeNull();
+  });
+
   it("renders nothing for codex", () => {
     const { container } = render(<ContextTimeline apiBase="/" agent="codex" sessionId="s1" />);
     expect(container.firstChild).toBeNull();

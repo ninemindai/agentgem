@@ -23,7 +23,12 @@ function tickStep(ymax: number): number {
   return 10 * pow;
 }
 
-export function ContextTimeline({ apiBase, agent, sessionId }: { apiBase: string; agent: "claude" | "codex"; sessionId: string }) {
+export function ContextTimeline({ apiBase, agent, sessionId, onOpenTurn }: {
+  apiBase: string; agent: "claude" | "codex"; sessionId: string;
+  // Spike → transcript join: called with the curve point's msgIndex (raw JSONL
+  // line); the host resolves it to a turn and deep-links (?turn=<n>).
+  onOpenTurn?: (msgIndex: number) => void;
+}) {
   const [rep, setRep] = useState<Report | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
@@ -94,6 +99,8 @@ export function ContextTimeline({ apiBase, agent, sessionId }: { apiBase: string
             aria-label="Context window over the session"
             onMouseMove={(e) => onMove(e.clientX)}
             onMouseLeave={() => setHover(null)}
+            onClick={() => { if (onOpenTurn && hover !== null) onOpenTurn(rep.curve[hover].msgIndex); }}
+            style={onOpenTurn ? { cursor: "pointer" } : undefined}
           >
             {rep.boundary && m.n > 1 && rep.boundary.segments.map((s, k) => (k % 2 === 1 ? (
               <rect key={`seg-${s.fromTurn}`} x={X(s.fromTurn / (m.n - 1))} y={PT}
@@ -143,7 +150,7 @@ export function ContextTimeline({ apiBase, agent, sessionId }: { apiBase: string
         </div>
         <div className="ct-readout obs-muted" aria-live="polite">
           {hovered
-            ? <>turn {hovered.turn} · context {fmtTokens(hovered.ctxTokens)} · out {fmtTokens(hovered.outTokens)}{hovered.cacheCreation > 0 && <> · +{fmtTokens(hovered.cacheCreation)} new</>}</>
+            ? <>turn {hovered.turn} · context {fmtTokens(hovered.ctxTokens)} · out {fmtTokens(hovered.outTokens)}{hovered.cacheCreation > 0 && <> · +{fmtTokens(hovered.cacheCreation)} new</>}{onOpenTurn && <> · click to open in transcript</>}</>
             : <>peak {fmtTokens(peak)} of {fmtTokens(rep.meta.cap)} cap ({capPct}%) — hover for per-turn detail</>}
         </div>
       </div>
@@ -160,13 +167,21 @@ export function ContextTimeline({ apiBase, agent, sessionId }: { apiBase: string
           ))}
         </ul>
         <div className="rail-h">Biggest context jumps</div>
-        {m.jumps.map((j, i) => (
-          <div className="jump" key={i}>
-            <div className="jbadge">+{fmtTokens(j.delta)}</div>
-            <div className="jbody"><div className="t">turn {j.turn} · <span style={{ color: CATEGORY_COLOR[j.category] }}>{j.category}</span></div>
-              <div className="obs-muted">{j.cause}</div></div>
-          </div>
-        ))}
+        {m.jumps.map((j, i) => {
+          const body = (
+            <>
+              <div className="jbadge">+{fmtTokens(j.delta)}</div>
+              <div className="jbody"><div className="t">turn {j.turn} · <span style={{ color: CATEGORY_COLOR[j.category] }}>{j.category}</span>{onOpenTurn && <span className="jump-open"> ↗</span>}</div>
+                <div className="obs-muted">{j.cause}</div></div>
+            </>
+          );
+          return onOpenTurn ? (
+            <button type="button" className="jump jump-btn" key={i} onClick={() => onOpenTurn(j.msgIndex)}
+              aria-label={`open turn ${j.turn} in the transcript`}>{body}</button>
+          ) : (
+            <div className="jump" key={i}>{body}</div>
+          );
+        })}
         {rep.boundary && (
           <>
             <div className="rail-h">Task areas — where to cut</div>

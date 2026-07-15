@@ -32,6 +32,11 @@ export interface TranscriptTurn {
   tsMs: number;
   spans: TranscriptSpan[];
   tokens: TokenBreakdown;
+  // Raw JSONL line index of the record this turn came from — the SAME coordinate
+  // workflowScan's contextSeries/eventSeries use, so the context-timeline curve
+  // joins onto transcript turns (spike → verbatim turn deep-link). Claude-only;
+  // absent on codex turns.
+  msgIndex?: number;
 }
 
 export interface TranscriptView {
@@ -98,7 +103,15 @@ function resultText(content: unknown): string {
 export function parseClaudeTranscriptView(text: string, path: string): TranscriptView | null {
   const meta = parseClaudeTranscript(text, path);
   if (!meta) return null;
-  const records = [...jsonLines(text)];
+  // Raw line indices (not jsonLines, which skips blank/malformed lines) so
+  // msgIndex matches workflowScan's coordinate system exactly.
+  const indexed: { rec: Record<string, unknown>; lineIdx: number }[] = [];
+  const rawLines = text.split("\n");
+  for (let lineIdx = 0; lineIdx < rawLines.length; lineIdx++) {
+    if (!rawLines[lineIdx].trim()) continue;
+    try { indexed.push({ rec: JSON.parse(rawLines[lineIdx]) as Record<string, unknown>, lineIdx }); } catch { /* skip malformed */ }
+  }
+  const records = indexed.map((e) => e.rec);
 
   // Pass 1: index tool outputs by tool_use_id so they pair onto the assistant's
   // tool_use span instead of surfacing as their own (duplicate) user turns.
@@ -117,7 +130,7 @@ export function parseClaudeTranscriptView(text: string, path: string): Transcrip
   // Pass 2: build turns.
   const turns: TranscriptTurn[] = [];
   let i = 0;
-  for (const rec of records) {
+  for (const { rec, lineIdx } of indexed) {
     const role = rec.type === "user" ? "user" : rec.type === "assistant" ? "assistant" : null;
     if (!role) continue;
     const msg = rec.message as Record<string, unknown> | undefined;
@@ -151,7 +164,7 @@ export function parseClaudeTranscriptView(text: string, path: string): Transcrip
 
     if (!spans.length) continue;
     const id = typeof rec.uuid === "string" ? rec.uuid : `${meta.sessionId}-${i++}`;
-    turns.push({ id, role, tsMs: Number.isNaN(tsMs) ? meta.startMs : tsMs, spans, tokens: usageOf(msg?.usage as Record<string, number> | undefined) });
+    turns.push({ id, role, tsMs: Number.isNaN(tsMs) ? meta.startMs : tsMs, spans, tokens: usageOf(msg?.usage as Record<string, number> | undefined), msgIndex: lineIdx });
   }
 
   return { sessionId: meta.sessionId, agent: "claude", meta, turns };
