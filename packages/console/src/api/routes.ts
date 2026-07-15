@@ -1053,14 +1053,17 @@ export const sourceImportRoute = defineRoute("POST", "/api/sources/import", {
 });
 
 // ---- Play (miniapps) — client mirrors of the server /api/play/* routes ----
-// The 3 action caps (open-link/send-message/update-model-context) are included alongside the 4 tool caps
-// so this schema covers the full GameCapability union (@agentgem/model) — the built-in Protocol Inspector
-// below declares seven of these, and a response `needs` array response validation would otherwise reject it.
-const PlayNeedsSchema = z.array(z.enum([
+// The FULL GameCapability union (@agentgem/model) as the ONE client-side wire enum — every route field
+// that carries capabilities (`needs`, `prunedNeeds`) must use this, never an inline subset: the server
+// echoes any capability here, and a missing member makes the CLIENT reject an otherwise-successful
+// response ("save failed" after the server already saved). Drift-guarded by capTool.drift.test.ts.
+export const PLAY_CAPS = [
   "session-data", "live-session-events", "local-project-access", "invoke-agent",
   "context-hygiene",
   "open-link", "send-message", "update-model-context", "copy-command",
-])).optional();
+] as const;
+const PlayCapEnum = z.enum(PLAY_CAPS);
+const PlayNeedsSchema = z.array(PlayCapEnum).optional();
 const PlaySourceSchema = z.discriminatedUnion("kind", [
   z.object({ kind: z.literal("session"), agent: z.string(), project: z.string().optional(), sessionId: z.string(), summary: z.string() }),
   z.object({ kind: z.literal("skill"), skillName: z.string(), sourceId: z.string().optional() }),
@@ -1106,7 +1109,7 @@ export const playSaveRoute = defineRoute("POST", "/api/play/save", {
   response: z.object({
     name: z.string(),
     commit: z.string().nullable(),
-    prunedNeeds: z.array(z.enum(["session-data", "live-session-events", "local-project-access", "invoke-agent"])).default([]),
+    prunedNeeds: z.array(PlayCapEnum).default([]),
   }),
 });
 export const playDeleteRoute = defineRoute("POST", "/api/play/delete", {

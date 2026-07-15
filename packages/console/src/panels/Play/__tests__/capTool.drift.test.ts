@@ -3,8 +3,10 @@
 // barrel pulls node:os/node:path. So consent.ts keeps a browser-safe mirror of the canonical map. This
 // test runs in Node, where the import is free, and fails the moment the two drift apart.
 import { describe, it, expect } from "vitest";
+import { z } from "zod";
 import { CAP_TOOL as CANONICAL, CAP_METHOD, AUTO_CAPS as CANONICAL_AUTO } from "@agentgem/play";
 import { CAP_TOOL, TOOL_CAP, CONSENT_CAPS, AUTO_CAPS } from "../consent.js";
+import { PLAY_CAPS, playSaveRoute } from "../../../api/routes.js";
 
 describe("console CAP_TOOL mirrors @agentgem/model's canonical map", () => {
   it("has identical entries", () => {
@@ -19,5 +21,19 @@ describe("console CAP_TOOL mirrors @agentgem/model's canonical map", () => {
   });
   it("AUTO_CAPS mirrors the canonical auto-approved set", () => {
     expect([...AUTO_CAPS].sort()).toEqual([...CANONICAL_AUTO].sort());
+  });
+  it("the routes wire enum covers the FULL GameCapability union (tool + action caps)", () => {
+    // Regression: playSaveRoute's prunedNeeds once used an inline 4-cap enum, so a server response that
+    // pruned "context-hygiene" failed CLIENT-side response validation — Studio showed "save failed"
+    // after the server had already saved (registry write + git commit + gem upsert all done).
+    const full = [...Object.keys(CANONICAL), ...Object.keys(CAP_METHOD)].sort();
+    expect([...PLAY_CAPS].sort()).toEqual(full);
+  });
+  it("playSaveRoute accepts a response that prunes any capability", () => {
+    const response = playSaveRoute.schemas.response as z.ZodTypeAny;
+    const parsed = response.safeParse({
+      name: "g", commit: null, prunedNeeds: ["context-hygiene", "copy-command"],
+    });
+    expect(parsed.success).toBe(true);
   });
 });
