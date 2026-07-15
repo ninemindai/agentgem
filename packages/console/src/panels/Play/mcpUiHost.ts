@@ -28,6 +28,7 @@ export interface UiHostDeps {
   hostContext?: () => Record<string, unknown>;       // PR 3 wires the Runner's live theme/size; PR 2: absent -> {}
   onDisplayMode?: (mode: string) => string;          // PR 3: Runner applies/refuses; returns the mode ACTUALLY applied
   openExternal?: (url: string) => void;              // 3.4: open-link's actual browser navigation, injected by the Runner
+  copyText?: (text: string) => void;                 // copy-command's actual clipboard write, injected by the Runner
 }
 
 export interface UiHost {
@@ -179,6 +180,22 @@ export function createUiHost(deps: UiHostDeps): UiHost {
     reply(d.id, {});
   }
 
+  // ui/copy-command: write a short command to the OS clipboard. Same posture as open-link — consent-gated,
+  // NEVER remembered, and the modal shows the exact `text` (Runner treats it like open-link) so a shared
+  // miniapp can't silently swap the copied string between grants. Length-capped to bound the payload.
+  async function handleCopy(d: RpcMessage): Promise<void> {
+    const cap = "copy-command";
+    if (!deps.needs.includes(cap)) { replyError(d.id, -32601, `capability not permitted: ${cap}`); return; }
+    const text = d.params?.text;
+    if (typeof text !== "string" || text.length === 0 || text.length > 256) { replyError(d.id, -32602, "invalid params: text must be a 1-256 char string"); return; }
+    const gen = generation;
+    const ok = await deps.requestConsent(cap, text);
+    if (stale(gen)) return;                            // game changed while the prompt was open
+    if (!ok) { replyError(d.id, -32001, "consent denied"); return; }
+    deps.copyText?.(text);
+    reply(d.id, {});
+  }
+
   // ui/message / ui/update-model-context: only meaningful in an EXTERNAL chat host (Claude Desktop) that
   // spawned the miniapp — the console Play panel has no conversation sink to write into. Still enforce
   // the needs gate (a game that never declared the cap gets -32601 either way), but a declared-and-denied
@@ -214,6 +231,7 @@ export function createUiHost(deps: UiHostDeps): UiHost {
     }
     if (d.method === "tools/call") { void handleCall(d); return; }
     if (d.method === "ui/open-link") { void handleOpenLink(d); return; }
+    if (d.method === "ui/copy-command") { void handleCopy(d); return; }
     if (d.method === "ui/message") { handleUnsupportedAction(d, "send-message"); return; }
     if (d.method === "ui/update-model-context") { handleUnsupportedAction(d, "update-model-context"); return; }
   }

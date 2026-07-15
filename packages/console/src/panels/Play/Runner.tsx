@@ -50,12 +50,13 @@ export const Runner = forwardRef<RunnerHandle,
   // Consent gate handed to the router: the router calls this for GATED caps only (AUTO caps bypass it).
   // Thumbnails never prompt/feed sensitive caps; remembered per-gem choices resolve immediately; a fresh
   // ask opens the modal and parks its resolver until Allow/Deny (decide()).
-  // open-link is special: it always shows the URL (`detail`) and is NEVER remembered — every call prompts
-  // fresh, unlike the cache-backed behavior every other gated cap gets.
+  // open-link and copy-command are special: they always show the `detail` (URL / clipboard text) and are
+  // NEVER remembered — every call prompts fresh, so the exact string leaving the frame can't change unseen
+  // between grants. Every other gated cap uses the cache-backed decision.
   const requestConsent = useCallback((cap: string, detail?: string): Promise<boolean> => {
     if (!interactive) return Promise.resolve(false);                 // thumbnails never prompt/feed sensitive caps
     if (name == null) return Promise.resolve(false);
-    if (cap !== "open-link") {
+    if (cap !== "open-link" && cap !== "copy-command") {
       const decision = getConsent(name, cap);
       if (decision === "granted") return Promise.resolve(true);
       if (decision === "denied") return Promise.resolve(false);
@@ -116,6 +117,7 @@ export const Runner = forwardRef<RunnerHandle,
       apiBase, name, needs, interactive, target, requestConsent, hostContext: stableHostContext,
       onDisplayMode: (m) => { const ok = interactive && m === "fullscreen"; setFs(ok); return ok ? "fullscreen" : "inline"; },
       openExternal: (url) => { window.open(url, "_blank", "noopener"); },
+      copyText: (text) => { void navigator.clipboard?.writeText(text); },
     });
     hostRef.current = host;
     const onMsg = (e: MessageEvent) => host.handleMessage(e);
@@ -168,8 +170,8 @@ export const Runner = forwardRef<RunnerHandle,
     if (pending == null || name == null || !needs?.includes(pending)) {
       pendingResolve.current?.(false); pendingResolve.current = null; setPending(null); setPendingDetail(undefined); return;
     }
-    // open-link is never remembered — every call re-prompts, so don't cache a grant/denial for it.
-    if (pending !== "open-link") setConsent(name, pending, allow ? "granted" : "denied");
+    // open-link / copy-command are never remembered — every call re-prompts, so don't cache their decision.
+    if (pending !== "open-link" && pending !== "copy-command") setConsent(name, pending, allow ? "granted" : "denied");
     pendingResolve.current?.(allow);                                 // resume the router's gated call
     pendingResolve.current = null;
     setPending(null);
@@ -290,11 +292,11 @@ export const Runner = forwardRef<RunnerHandle,
           <div className="play-consent__box">
             <div className="play-consent__ico">🔒</div>
             <div className="play-consent__title">“{name}” wants to {CAP_LABEL[pending] ?? pending}</div>
-            {pending === "open-link" && pendingDetail && (
+            {(pending === "open-link" || pending === "copy-command") && pendingDetail && (
               <div className="play-consent__sub"><code>{pendingDetail}</code></div>
             )}
             <div className="play-consent__sub">
-              {pending === "open-link"
+              {pending === "open-link" || pending === "copy-command"
                 ? "The game stays sealed (no network of its own) — the host feeds this in only if you allow. Asked every time."
                 : "The game stays sealed (no network of its own) — the host feeds this in only if you allow. Remembered for this game."}
             </div>
