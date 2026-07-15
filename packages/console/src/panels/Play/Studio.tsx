@@ -24,6 +24,14 @@ const j = (r: Response) => { if (!r.ok) throw new Error(String(r.status)); retur
 // imported: that file lives in the root package, which @agentgem/console has no workspace dependency on.
 const COVER_MAX_DATA_URL_LEN = 700_000;
 
+// Destination-focused helper copy for the visibility choice (user-approved verbatim in the
+// design spec). Keyed by the same union the `scope` state uses.
+const SCOPE_HELP = {
+  public: "Listed in Explore — anyone can find and play it.",
+  unlisted: "Anyone with the link can play; not listed in Explore.",
+  private: "Only you — lives in My apps.",
+} as const;
+
 // Structured chat log entries so we can render bubbles + tool chips instead of one rolling string.
 type Msg = { role: "user" | "agent"; text: string } | { role: "tool"; title: string; failed?: boolean };
 
@@ -508,14 +516,7 @@ export function Studio({
         <button className="play-btn" onClick={save}>Save</button>
         {(busy || chatId) && <button className="play-btn play-btn--ghost" onClick={stop} title="kill the agent session">Stop</button>}
         <button className="play-btn play-btn--ghost" onClick={pushGit} title="git push the miniapps registry to your git remote">Push to git</button>
-        <input className="play-tags-input" type="text" aria-label="tags" placeholder="tags, comma separated"
-          value={tags} onChange={(e) => setTags(e.target.value)} />
-        <div className="play-scope" role="radiogroup" aria-label="Sharing scope">
-          <button type="button" className={`play-btn ${scope === "public" ? "play-btn--primary" : "play-btn--ghost"}`} aria-pressed={scope === "public"} onClick={() => setScope("public")}>Public</button>
-          <button type="button" className={`play-btn ${scope === "unlisted" ? "play-btn--primary" : "play-btn--ghost"}`} aria-pressed={scope === "unlisted"} onClick={() => setScope("unlisted")}>Unlisted</button>
-          <button type="button" className={`play-btn ${scope === "private" ? "play-btn--primary" : "play-btn--ghost"}`} aria-pressed={scope === "private"} onClick={() => setScope("private")}>Private</button>
-        </div>
-        <button className="play-btn play-btn--primary" onClick={shareToExplore}>Share to app.agentgem.ai</button>
+        <button className="play-btn play-btn--primary" onClick={shareToExplore} title="Share to app.agentgem.ai">Share</button>
         <button className="play-btn play-btn--ghost" onClick={requestReview}>Request review</button>
       </div>
 
@@ -544,7 +545,7 @@ export function Studio({
         </div>
       )}
       {coverStage === "confirm" && (
-        <div className="play-banner">
+        <div className="play-banner play-banner--share">
           <span className="play-banner__ico">🖼️</span>
           {coverPreview && (
             <img src={coverPreview} alt="captured cover preview" style={{ width: 96, height: 60, objectFit: "cover", borderRadius: 6, border: "1px solid var(--line)" }} />
@@ -564,6 +565,19 @@ export function Studio({
             <input type="file" accept="image/png,image/jpeg,image/webp" style={{ display: "none" }} onChange={onCoverFile} />
           </label>
           <button className="play-btn play-btn--ghost" onClick={() => { coverRef.current = null; closeBanner(); void proceedToPublish(); }}>Skip</button>
+          <div className="play-banner__opts">
+            <span className="play-banner__opts-label">Visibility</span>
+            <div className="play-seg" role="radiogroup" aria-label="Sharing scope">
+              <button type="button" aria-pressed={scope === "public"} onClick={() => setScope("public")}>Public</button>
+              <button type="button" aria-pressed={scope === "unlisted"} onClick={() => setScope("unlisted")}>Unlisted</button>
+              <button type="button" aria-pressed={scope === "private"} onClick={() => setScope("private")}>Private</button>
+            </div>
+            <span className="play-banner__opts-help" aria-live="polite">{SCOPE_HELP[scope]}</span>
+            <span className="play-banner__opts-spacer" />
+            <label className="play-banner__opts-label" htmlFor="play-share-tags">Tags</label>
+            <input id="play-share-tags" className="play-tags-input" type="text" placeholder="tags, comma separated"
+              value={tags} onChange={(e) => setTags(e.target.value)} />
+          </div>
         </div>
       )}
       {gate && (

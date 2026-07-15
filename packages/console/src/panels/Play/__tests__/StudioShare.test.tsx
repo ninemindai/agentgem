@@ -54,10 +54,11 @@ function mountWithChip() {
 
 // The publish flow now ALWAYS pauses on the cover-confirm banner (a screenshot is attempted after
 // save()). The default Runner stub returns {ok:false}, so the banner opens with no thumbnail and
-// Skip proceeds to publish with no cover. Flow tests that don't care about the cover click through
-// it here: Share, wait for the banner, Skip.
-async function shareAndSkipCover() {
-  fireEvent.click(await screen.findByRole("button", { name: /share to app\.agentgem\.ai/i }));
+// Skip proceeds to publish with no cover. Visibility now lives IN the banner, so tests pick it
+// here (after Share, before Skip); omitting `scope` publishes with the default (public).
+async function shareAndSkipCover(scope?: "unlisted" | "private") {
+  fireEvent.click(await screen.findByRole("button", { name: /^share$/i }));
+  if (scope) fireEvent.click(await screen.findByRole("button", { name: new RegExp(`^${scope}$`, "i") }));
   fireEvent.click(await screen.findByRole("button", { name: /^skip$/i }));
 }
 
@@ -82,8 +83,7 @@ describe("Studio → Share to app.agentgem.ai", () => {
     vi.spyOn(routes.publishStatusRoute, "call").mockResolvedValue({ exists: false, ownedByMe: false, latestVersion: null } as never);
     const publish = vi.spyOn(routes.publishSetupRoute, "call").mockResolvedValue({ exploreRef: "@bob/snake", version: "0.1.0", shareUrl: "https://agentgem.ai/share/s" } as never);
     mount();
-    fireEvent.click(await screen.findByRole("button", { name: /^unlisted$/i }));
-    await shareAndSkipCover();
+    await shareAndSkipCover("unlisted");
     await waitFor(() => expect(publish).toHaveBeenCalledTimes(1));
     expect(publish.mock.calls[0][1]).toMatchObject({ body: expect.objectContaining({ scope: "bob", workspace: "snake", version: "0.1.0", visibility: "unlisted" }) });
     expect(await screen.findByText(/Published to app\.agentgem\.ai/)).toBeTruthy();
@@ -97,8 +97,7 @@ describe("Studio → Share to app.agentgem.ai", () => {
     vi.spyOn(routes.publishStatusRoute, "call").mockResolvedValue({ exists: false, ownedByMe: false, latestVersion: null } as never);
     const publish = vi.spyOn(routes.publishSetupRoute, "call").mockResolvedValue({ exploreRef: "@bob/snake", version: "0.1.0", shareUrl: "https://agentgem.ai/share/s" } as never);
     mount();
-    fireEvent.click(await screen.findByRole("button", { name: /^private$/i }));
-    await shareAndSkipCover();
+    await shareAndSkipCover("private");
     await waitFor(() => expect(publish).toHaveBeenCalledTimes(1));
     expect(publish.mock.calls[0][1]).toMatchObject({ body: expect.objectContaining({ scope: "bob", workspace: "snake", version: "0.1.0", visibility: "private" }) });
     // Private isn't Explore-listed, so it must NOT get the /gems/ link like public does — a private
@@ -192,7 +191,7 @@ describe("Studio → Share to app.agentgem.ai", () => {
     vi.spyOn(routes.playMiniappRoute, "call").mockResolvedValue(miniapp as never);
     vi.spyOn(routes.playSaveRoute, "call").mockRejectedValue(new Error("gate: needs a seal"));
     mount();
-    fireEvent.click(await screen.findByRole("button", { name: /share to app\.agentgem\.ai/i }));
+    fireEvent.click(await screen.findByRole("button", { name: /^share$/i }));
     await waitFor(() => expect(screen.getByText(/save failed|Not sealed yet/i)).toBeTruthy());
     expect(screen.queryByText(/Connect GitHub to publish/i)).toBeNull();
   });
@@ -251,7 +250,7 @@ describe("Studio → Share to app.agentgem.ai", () => {
     mockRequestCapture.mockResolvedValueOnce({ ok: true, dataUrl });
 
     mount();
-    fireEvent.click(await screen.findByRole("button", { name: /share to app\.agentgem\.ai/i }));
+    fireEvent.click(await screen.findByRole("button", { name: /^share$/i }));
 
     // Publish is paused until the author decides — the confirm banner shows the thumbnail first.
     expect(await screen.findByAltText(/captured cover preview/i)).toBeTruthy();
@@ -272,7 +271,7 @@ describe("Studio → Share to app.agentgem.ai", () => {
     mockRequestCapture.mockResolvedValueOnce({ ok: true, dataUrl: "data:image/png;base64,AAAA" });
 
     mount();
-    fireEvent.click(await screen.findByRole("button", { name: /share to app\.agentgem\.ai/i }));
+    fireEvent.click(await screen.findByRole("button", { name: /^share$/i }));
     expect(await screen.findByAltText(/captured cover preview/i)).toBeTruthy();
 
     fireEvent.click(await screen.findByRole("button", { name: /^skip$/i }));
@@ -290,7 +289,7 @@ describe("Studio → Share to app.agentgem.ai", () => {
     mockRequestCapture.mockResolvedValueOnce({ ok: true, dataUrl: oversized });
 
     mount();
-    fireEvent.click(await screen.findByRole("button", { name: /share to app\.agentgem\.ai/i }));
+    fireEvent.click(await screen.findByRole("button", { name: /^share$/i }));
 
     // The too-large capture is rejected client-side, but the banner still opens (visible message +
     // Upload/Skip reachable) rather than silently publishing with no cover and no explanation.
@@ -314,7 +313,7 @@ describe("Studio → Share to app.agentgem.ai", () => {
     mockRequestCapture.mockResolvedValueOnce({ ok: false, reason: "no-canvas" });
 
     mount();
-    fireEvent.click(await screen.findByRole("button", { name: /share to app\.agentgem\.ai/i }));
+    fireEvent.click(await screen.findByRole("button", { name: /^share$/i }));
 
     // Manual upload is the spec's fallback for a game that can't be auto-captured — the banner must
     // appear even when capture fails outright, with Upload/Skip reachable and no thumbnail/Use this.
@@ -327,5 +326,37 @@ describe("Studio → Share to app.agentgem.ai", () => {
     fireEvent.click(screen.getByRole("button", { name: /^skip$/i }));
     await waitFor(() => expect(publish).toHaveBeenCalledTimes(1));
     expect(publish.mock.calls[0][1]).toMatchObject({ body: expect.objectContaining({ coverDataUrl: undefined }) });
+  });
+
+  it("the banner explains each visibility choice as it's selected, and marks the selection", async () => {
+    vi.spyOn(routes.bindStatusRoute, "call").mockResolvedValue({ bound: true, login: "bob", sessionActive: true } as never);
+    vi.spyOn(routes.playMiniappRoute, "call").mockResolvedValue(miniapp as never);
+    vi.spyOn(routes.playSaveRoute, "call").mockResolvedValue({ name: "g1", commit: "abc1234", prunedNeeds: [] } as never);
+    mount();
+    fireEvent.click(await screen.findByRole("button", { name: /^share$/i }));
+
+    // Default is public — its helper shows without any interaction.
+    expect(await screen.findByText("Listed in Explore — anyone can find and play it.")).toBeTruthy();
+    expect(screen.getByRole("button", { name: /^public$/i }).getAttribute("aria-pressed")).toBe("true");
+
+    fireEvent.click(screen.getByRole("button", { name: /^unlisted$/i }));
+    expect(screen.getByText("Anyone with the link can play; not listed in Explore.")).toBeTruthy();
+    expect(screen.getByRole("button", { name: /^unlisted$/i }).getAttribute("aria-pressed")).toBe("true");
+    expect(screen.getByRole("button", { name: /^public$/i }).getAttribute("aria-pressed")).toBe("false");
+
+    fireEvent.click(screen.getByRole("button", { name: /^private$/i }));
+    expect(screen.getByText("Only you — lives in My apps.")).toBeTruthy();
+    expect(screen.getByRole("button", { name: /^private$/i }).getAttribute("aria-pressed")).toBe("true");
+  });
+
+  it("the toolbar hosts only actions — visibility and tags live in the share banner", async () => {
+    vi.spyOn(routes.bindStatusRoute, "call").mockResolvedValue({ bound: true, login: "bob", sessionActive: true } as never);
+    vi.spyOn(routes.playMiniappRoute, "call").mockResolvedValue(miniapp as never);
+    mount();
+    await screen.findByRole("button", { name: /^share$/i });
+    // Before Share is clicked there is no banner — so no visibility control and no tags input anywhere.
+    expect(screen.queryByRole("button", { name: /^public$/i })).toBeNull();
+    expect(screen.queryByRole("button", { name: /^unlisted$/i })).toBeNull();
+    expect(screen.queryByPlaceholderText(/tags, comma separated/i)).toBeNull();
   });
 });
