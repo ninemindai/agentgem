@@ -11,3 +11,7 @@ website/dist/
 # Load these from the Keychain or a secrets manager at build time instead.
 .apple/
 
+
+# Claude Code project config: track shareable skills, ignore local runtime state
+.claude/*
+!.claude/skills
