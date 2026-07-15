@@ -96,42 +96,97 @@ export function SessionDashboard({ apiBase, agent, sessionId }: { apiBase: strin
   );
 }
 
-// The feedback loop: the report's deterministic findings, each with its advice,
-// plus one wired CTA — distill this session into installable gems (skill drafts
-// + lessons via the existing pipeline and cards). Findings inform; the distill
-// pass turns them into artifacts the next session actually loads.
+// The two detector ids whose findings the guardrail pipeline understands
+// (guardrails.ts GUARDRAIL_IDS): these route to the Dream review queue instead
+// of the lesson distiller.
+const GUARDRAIL_ACTION_IDS = new Set(["repeated-tool-error", "tool-rejection"]);
+
+type ActState =
+  | { kind: "idle" }
+  | { kind: "running" }
+  | { kind: "queued"; enqueued: number }
+  | { kind: "error"; message: string };
+
+// The feedback loop: the report's deterministic findings, each with a wired
+// next step — rejection/error findings enqueue a guardrail into the Dream
+// review queue (deterministic, instant); everything else can mint a lesson
+// gem targeted at exactly that weakness via the focused distill pass. The
+// whole-session distill CTA stays for the broad sweep.
 function ActionStrip({ apiBase, agent, sessionId, actions }: {
   apiBase: string; agent: "claude" | "codex"; sessionId: string; actions: RecommendedAction[];
 }) {
   const [state, setState] = useState<"idle" | "running" | "done" | "error">("idle");
+  const [runningId, setRunningId] = useState<string | null>(null);   // which action's lesson pass is running
   const [drafts, setDrafts] = useState<DistilledSkill[]>([]);
   const [lessons, setLessons] = useState<DistilledLesson[]>([]);
   const [degraded, setDegraded] = useState(false);
   const [err, setErr] = useState<string | null>(null);
+  const [queueState, setQueueState] = useState<Record<string, ActState>>({});
 
-  const distill = () => {
-    setState("running"); setErr(null);
-    inspectDistillRoute.call(makeClient(apiBase), { body: { id: sessionId, agent } })
+  const distill = (focus?: string, actionId?: string) => {
+    setState("running"); setErr(null); setRunningId(actionId ?? null);
+    inspectDistillRoute.call(makeClient(apiBase), { body: { id: sessionId, agent, ...(focus ? { focus } : {}) } })
       .then((r) => { setDrafts(r.distilled); setLessons(r.lessons); setDegraded(r.degraded); setState("done"); })
-      .catch((e) => { setErr(String(e?.message ?? e)); setState("error"); });
+      .catch((e) => { setErr(String(e?.message ?? e)); setState("error"); })
+      .finally(() => setRunningId(null));
+  };
+
+  // Deterministic fast path: run only the guardrail detectors over this session
+  // and land the drafts in the Dream review queue (accept writes CLAUDE.md there).
+  const queueGuardrail = (actionId: string) => {
+    setQueueState((s) => ({ ...s, [actionId]: { kind: "running" } }));
+    fetch(`${apiBase}/api/dream/learn`, {
+      method: "POST", headers: { "content-type": "application/json" },
+      body: JSON.stringify({ session: sessionId, only: "guardrails" }),
+    })
+      .then(async (r) => { if (!r.ok) throw new Error(String(r.status)); return r.json() as Promise<{ enqueued: number }>; })
+      .then((r) => setQueueState((s) => ({ ...s, [actionId]: { kind: "queued", enqueued: r.enqueued } })))
+      .catch((e) => setQueueState((s) => ({ ...s, [actionId]: { kind: "error", message: String(e?.message ?? e) } })));
   };
 
   return (
     <div className="sd-actions">
       <div className="rail-h">Recommended actions</div>
       <ul className="sd-action-list">
-        {actions.map((a) => (
-          <li key={a.id} className={"sd-action is-" + a.severity}>
-            <b>{a.title}</b>
-            {a.occurrences > 1 && <span className="obs-muted"> ×{a.occurrences}</span>}
-            <div className="obs-muted">{a.advice}</div>
-          </li>
-        ))}
+        {actions.map((a) => {
+          const qs = queueState[a.id] ?? { kind: "idle" };
+          const guardrail = GUARDRAIL_ACTION_IDS.has(a.id);
+          return (
+            <li key={a.id} className={"sd-action is-" + a.severity}>
+              <b>{a.title}</b>
+              {a.occurrences > 1 && <span className="obs-muted"> ×{a.occurrences}</span>}
+              <div className="obs-muted">{a.advice}</div>
+              {agent === "claude" && (
+                <div className="sd-action-do">
+                  {guardrail ? (
+                    qs.kind === "queued" ? (
+                      <span className="obs-muted">
+                        {qs.enqueued > 0 ? `queued ${qs.enqueued} for review` : "already in the queue"} ·{" "}
+                        <a href="#/dreaming">Review in Journey ↗</a>
+                      </span>
+                    ) : (
+                      <>
+                        <button type="button" className="obs-open-transcript" onClick={() => queueGuardrail(a.id)} disabled={qs.kind === "running"}>
+                          {qs.kind === "running" ? "Queuing…" : "Queue guardrail"}
+                        </button>
+                        {qs.kind === "error" && <span className="obs-error tv-distill-note">{qs.message}</span>}
+                      </>
+                    )
+                  ) : (
+                    <button type="button" className="obs-open-transcript" onClick={() => distill(`${a.title}: ${a.advice}`, a.id)} disabled={state === "running"}>
+                      {runningId === a.id ? "Distilling…" : "✦ Distill a lesson for this"}
+                    </button>
+                  )}
+                </div>
+              )}
+            </li>
+          );
+        })}
       </ul>
       {agent === "claude" && (
         <div className="sd-act-cta">
-          <button type="button" className="tv-distill-btn" onClick={distill} disabled={state === "running"}>
-            {state === "running" ? "Distilling…" : "✦ Turn this session into gems"}
+          <button type="button" className="tv-distill-btn" onClick={() => distill()} disabled={state === "running"}>
+            {state === "running" && runningId === null ? "Distilling…" : "✦ Turn this session into gems"}
           </button>
           {state === "error" && <span className="obs-error tv-distill-note">{err}</span>}
           {state === "done" && degraded && (

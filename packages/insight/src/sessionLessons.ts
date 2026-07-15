@@ -22,13 +22,20 @@ const log = createLogger("insight");
 
 // Friction-seeded lessons prompt. One session's mission + redacted verb spine in;
 // durable lessons out. Counts/coordinates are facts; never ask for provenance.
-export const SESSION_LESSONS = (missionJson: string, spineJson: string): string =>
+// With `focus` (a deterministic finding from the session report, e.g. "Same
+// command repeated back-to-back: read its full output before re-running"), the
+// pass targets that ONE flagged weakness instead of open-ended friction hunting.
+export const SESSION_LESSONS = (missionJson: string, spineJson: string, focus?: string): string =>
   `You are reviewing ONE coding-agent session to extract the durable LESSONS a ` +
   `developer should remember — the non-obvious gotchas, the things that went wrong ` +
   `and how they were resolved, what to do differently next time.\n` +
-  `First identify the FRICTION (what was hard or surprising in this session), then ` +
-  `distill each into a reusable lesson. Skip the routine; a lesson must be worth ` +
-  `telling a teammate. Each lesson: one or two sentences, imperative, self-contained.\n` +
+  (focus
+    ? `A deterministic review of this session flagged ONE specific weakness — distill a lesson ` +
+      `that addresses exactly it, grounded in how it shows up in the spine below. Prefer one ` +
+      `targeted lesson over generic observations.\nFLAGGED WEAKNESS: ${focus}\n`
+    : `First identify the FRICTION (what was hard or surprising in this session), then ` +
+      `distill each into a reusable lesson. Skip the routine; a lesson must be worth ` +
+      `telling a teammate. Each lesson: one or two sentences, imperative, self-contained.\n`) +
   `SESSION (mission = the user's goal + the final outcome; spine = the redacted ` +
   `ordered tool verbs):\nmission: ${missionJson}\nspine: ${spineJson}\n\n` +
   `Return ONLY JSON: {"lessons":[{"body":"...","importance":"high"|"medium"}]}. ` +
@@ -88,7 +95,7 @@ export function validateSessionLessons(raw: unknown, session: SessionSequence, r
 export async function distillSessionLessons(
   signal: WorkflowSignal,
   _inv: ScanInventory,
-  opts: { connectFn?: AcpConnectFn; timeoutMs?: number } = {},
+  opts: { connectFn?: AcpConnectFn; timeoutMs?: number; focus?: string } = {},
 ): Promise<{ lessons: DistilledLesson[]; degraded: boolean }> {
   const session = signal.sequences?.sessions?.[0];
   if (!session?.missionHint) return { lessons: [], degraded: false };
@@ -101,7 +108,7 @@ export async function distillSessionLessons(
   const t0 = Date.now();
   try {
     const spine = session.steps.map((s) => s.verb);
-    const prompt = SESSION_LESSONS(JSON.stringify(session.missionHint), JSON.stringify(spine));
+    const prompt = SESSION_LESSONS(JSON.stringify(session.missionHint), JSON.stringify(spine), opts.focus);
     const deadline = Date.now() + timeoutMs;
     const left = () => Math.max(0, deadline - Date.now());
     const agent = taskAgent("judge");

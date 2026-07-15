@@ -79,3 +79,25 @@ describe("learnFromSession", () => {
     expect(r).toMatchObject({ enqueued: 0, skills: 0, lessons: 0, degraded: true });
   });
 });
+
+describe("learnFromSession only:guardrails (finding → review queue fast path)", () => {
+  it("skips the LLM distill and reflections entirely, enqueues only guardrail drafts", async () => {
+    let distillCalled = false, reflCalled = false;
+    const r = await learnFromSession({
+      root: PROJ, dir: claudeDir, base, session: "s-new", only: "guardrails",
+      distillWf: (async () => { distillCalled = true; return { distilled: [fakeSkill], degraded: false }; }) as never,
+      extractRefl: (() => { reflCalled = true; return []; }) as never,
+      detectGuardrails: () => [{
+        detectorId: "tool-rejection", tool: "Bash", detail: "Bash actions were blocked 3 times",
+        confidence: "high", occurrences: 3, provenance: prov,
+      }] as never,
+    });
+    expect(distillCalled).toBe(false);
+    expect(reflCalled).toBe(false);
+    expect(r).toMatchObject({ enqueued: 1, skills: 0, guardrails: 1, degraded: false });
+    expect(r.entries[0].kind).toBe("guardrail");
+    const q = readQueue(base);
+    expect(q).toHaveLength(1);
+    expect(q[0]).toMatchObject({ kind: "guardrail", phase: "LEARN", status: "queued" });
+  });
+});

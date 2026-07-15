@@ -79,3 +79,28 @@ describe("validateSessionLessons", () => {
     expect(out[0].importance).toBe("medium");
   });
 });
+
+describe("focused lessons (finding-scoped)", () => {
+  it("threads the flagged weakness into the prompt and drops the open-ended friction hunt", async () => {
+    let seen = "";
+    const capture: AcpConnectFn = async () => ({ ctx: { async open(_cwd: string) {
+      return { async setMode(_m: string) {}, async promptText(t: string) { seen = t; return JSON.stringify({ lessons: [] }); }, dispose() {} };
+    } }, close() {} });
+    await distillSessionLessons(signalWith([sess("a", "Fix flaky CI")]), inv, {
+      connectFn: capture,
+      focus: "Same command repeated back-to-back: read its full output before re-running it",
+    });
+    expect(seen).toContain("FLAGGED WEAKNESS: Same command repeated back-to-back");
+    expect(seen).not.toContain("identify the FRICTION");   // targeted mode replaces the open-ended hunt
+  });
+
+  it("without focus the prompt keeps the friction-hunting framing", async () => {
+    let seen = "";
+    const capture: AcpConnectFn = async () => ({ ctx: { async open(_cwd: string) {
+      return { async setMode(_m: string) {}, async promptText(t: string) { seen = t; return JSON.stringify({ lessons: [] }); }, dispose() {} };
+    } }, close() {} });
+    await distillSessionLessons(signalWith([sess("a", "Fix flaky CI")]), inv, { connectFn: capture });
+    expect(seen).toContain("identify the FRICTION");
+    expect(seen).not.toContain("FLAGGED WEAKNESS");
+  });
+});

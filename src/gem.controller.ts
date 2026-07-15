@@ -159,7 +159,9 @@ const AtifTrajectorySchema = z.looseObject({
 // "Distill this session" (proposal phase 3): runs the EXISTING workflow scan +
 // distill pipeline over a single session's transcript. Claude-only, like the
 // project analyze flow (workflowScan reads Claude transcripts).
-const InspectDistillBodySchema = z.object({ id: z.string(), agent: z.enum(["claude", "codex"]) });
+// `focus` scopes the pass to ONE flagged weakness (a report finding's
+// "title: advice" line): lessons-only, targeted prompt, no skill drafts.
+const InspectDistillBodySchema = z.object({ id: z.string(), agent: z.enum(["claude", "codex"]), focus: z.string().max(400).optional() });
 const InspectDistillResponseSchema = z.object({ distilled: z.array(DistilledSkillSchema), lessons: z.array(DistilledLessonSchema), degraded: z.boolean() });
 const OptimizeQuerySchema = z.object({
   range: z.enum(["today", "7d", "30d", "all"]).optional(),
@@ -702,10 +704,15 @@ export class GemController {
     if (!project) throw new InvalidInputError(`Project for session '${input.body.id}' not found in inventory.`);
     const scanInv = { project, global: { skills: inventory.skills, mcpServers: inventory.mcpServers, hooks: inventory.hooks } };
     const signal = scanWorkflow([found.path], scanInv, { retainSequences: true });
-    const [distill, lessonsRes] = await Promise.all([
-      distillWorkflow(signal, scanInv),
-      distillSessionLessons(signal, scanInv),
-    ]);
+    // A focused run targets one flagged weakness: lessons only — the whole-session
+    // skill mining would be unrelated noise (and the slower half of the pass).
+    const focus = input.body.focus?.trim() || undefined;
+    const [distill, lessonsRes] = focus
+      ? [{ distilled: [], degraded: false }, await distillSessionLessons(signal, scanInv, { focus })]
+      : await Promise.all([
+          distillWorkflow(signal, scanInv),
+          distillSessionLessons(signal, scanInv),
+        ]);
     // The client sent only a session id, so the derived absolute project path
     // (carries the OS username) must not leak back via evidence.root — mirror the
     // TranscriptView boundary. Skills AND lessons both carry evidence.root.
