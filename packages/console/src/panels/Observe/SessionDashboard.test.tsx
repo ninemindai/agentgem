@@ -5,6 +5,7 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 import { render, screen, cleanup, fireEvent, act } from "@testing-library/react";
 import { SessionDashboard } from "./SessionDashboard.js";
 import * as stream from "./dashboardStream.js";
+import * as routes from "../../api/routes.js";
 import type { SessionDashboardEvent } from "./dashboardStream.js";
 
 beforeEach(() => { cleanup(); vi.restoreAllMocks(); });
@@ -55,6 +56,25 @@ describe("SessionDashboard", () => {
     const s = mockStream();
     render(<SessionDashboard apiBase="/" agent="codex" sessionId="c1" />);
     expect(s.spy).toHaveBeenCalledWith(expect.anything(), expect.objectContaining({ id: "c1", agent: "codex" }), expect.any(Function));
+  });
+
+  it("report done events render the act-on-it strip with a wired distill CTA", async () => {
+    const s = mockStream();
+    const distill = vi.spyOn(routes.inspectDistillRoute, "call").mockResolvedValue({ distilled: [], lessons: [], degraded: false } as any);
+    render(<SessionDashboard apiBase="/" agent="claude" sessionId="s1" />);
+    fireEvent.click(screen.getByRole("tab", { name: /report/i }));
+    s.emit({
+      type: "done", html: "<h1>r</h1>", cached: true, updatedAt: 1,
+      actions: [
+        { id: "retry-loop", title: "Same command repeated", advice: "Read the output first.", severity: "warn", occurrences: 3 },
+        { id: "session-split", title: "Split long sessions at task boundaries", advice: "…", severity: "info", occurrences: 1 },
+      ],
+    });
+    expect(screen.getByText(/Recommended actions/i)).toBeTruthy();
+    expect(screen.getByText(/Same command repeated/)).toBeTruthy();
+    expect(document.querySelector(".sd-action.is-warn")).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: /turn this session into gems/i }));
+    expect(distill).toHaveBeenCalledWith(expect.anything(), { body: { id: "s1", agent: "claude" } });
   });
 
   it("switches to the Report kind and reopens the stream for it", async () => {

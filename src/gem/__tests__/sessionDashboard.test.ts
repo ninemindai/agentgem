@@ -6,7 +6,7 @@ import { mkdtempSync, rmSync, writeFileSync, utimesSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { dashboardToken, readDashboardCacheEntry, writeDashboardCache } from "@agentgem/insight";
-import { capDashboardEvents, blastFacts, downsampleCurve } from "../../sessionDashboardCore.js";
+import { capDashboardEvents, blastFacts, downsampleCurve, recommendedActions } from "../../sessionDashboardCore.js";
 import type { SessionEvent, BlastReport } from "@agentgem/insight";
 
 let home: string;
@@ -67,6 +67,21 @@ describe("report facts", () => {
     expect(f).toMatchObject({ events: 7, filesTouched: 2, edited: 1, outsideProject: 1, errors: 1, skills: ["qa"], subagents: ["Explore"] });
     expect(f.topTargets[0]).toMatchObject({ target: "src/a.ts", visits: 2, edited: true });
     expect(f.topCommands).toEqual([{ verb: "git commit", count: 2 }]);
+  });
+
+  it("recommendedActions merges fired findings, dedupes by id, ranks warn-first, appends the split suggestion", () => {
+    const findings = [
+      { id: "retry-loop", title: "Same command repeated", advice: "Read the output first.", severity: "warn" as const, count: 3 },
+      { id: "quiet", title: "Never fired", advice: "-", severity: "warn" as const, count: 0 },        // dropped
+      { id: "context-pinned", title: "Window pinned", advice: "Cut earlier.", severity: "info" as const, count: 1 },
+      { id: "retry-loop", title: "Same command repeated", advice: "dup from hygiene", severity: "warn" as const, count: 3 }, // deduped
+    ];
+    const actions = recommendedActions(findings, { segments: [{ fromTurn: 0, toTurn: 5 }, { fromTurn: 6, toTurn: 9 }], cutTurn: 6 });
+    expect(actions.map((a) => a.id)).toEqual(["retry-loop", "context-pinned", "session-split"]);
+    expect(actions[0].severity).toBe("warn");
+    expect(actions[2].advice).toMatch(/turn 6/);
+    // no boundary, nothing fired → empty
+    expect(recommendedActions([{ id: "x", title: "t", advice: "a", severity: "info", count: 0 }])).toEqual([]);
   });
 
   it("downsampleCurve bounds long curves and always keeps the last point", () => {

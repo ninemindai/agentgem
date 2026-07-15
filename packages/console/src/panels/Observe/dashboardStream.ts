@@ -9,16 +9,28 @@
 import { z } from "zod";
 import { defineRoute, type Client } from "@agentback/client";
 
+// Deterministic finding the report's act-on-it strip renders (finding → gem).
+export interface RecommendedAction {
+  id: string; title: string; advice: string;
+  severity: "info" | "warn"; occurrences: number;
+}
+
 export type SessionDashboardEvent =
   | { type: "start"; cached: boolean; events: number }
   | { type: "delta"; text: string }
-  | { type: "done"; html: string; cached: boolean; updatedAt: number }
+  | { type: "done"; html: string; cached: boolean; updatedAt: number; actions?: RecommendedAction[] }
   | { type: "failed"; message: string };
 
 const WireEvent = z.discriminatedUnion("type", [
   z.object({ type: z.literal("start"), cached: z.boolean(), events: z.number() }),
   z.object({ type: z.literal("delta"), text: z.string() }),
-  z.object({ type: z.literal("done"), html: z.string(), cached: z.boolean(), updatedAt: z.number() }),
+  z.object({
+    type: z.literal("done"), html: z.string(), cached: z.boolean(), updatedAt: z.number(),
+    actions: z.array(z.object({
+      id: z.string(), title: z.string(), advice: z.string(),
+      severity: z.enum(["info", "warn"]), occurrences: z.number(),
+    })).optional(),
+  }),
   z.object({ type: z.literal("failed"), message: z.string() }),
 ]);
 
