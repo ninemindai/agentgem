@@ -1361,6 +1361,8 @@ button.scorecard-intent { line-height: 1.4; }
 @media (max-width: 880px) { .ct { grid-template-columns: 1fr; } .ct .split-handle { display: none; } }
 .ct-chart { min-width: 0; }
 .ct-scroll { overflow-x: auto; }
+.ct-tick { font: 500 9.5px var(--font-mono); fill: var(--muted); }
+.ct-readout { font-size: 12px; font-family: var(--font-mono); margin-top: 4px; min-height: 16px; }
 .ct-rail {
   min-width: 0; max-height: 420px; overflow-y: auto;
   display: flex; flex-direction: column; gap: 4px;

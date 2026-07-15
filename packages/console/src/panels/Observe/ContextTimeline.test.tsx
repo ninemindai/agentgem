@@ -28,6 +28,12 @@ describe("ContextTimeline", () => {
     expect(await screen.findByText(/review/i)).toBeTruthy(); // jump cause names the skill
     // the chart|aside divider is wired onto .ct (aside is the resizable pane)
     expect(document.querySelector(".ct .split-handle")?.getAttribute("data-side")).toBe("end");
+    // headroom readout anchors the chart to the model cap
+    expect(document.querySelector(".ct-readout")?.textContent).toMatch(/cap \(50%\)/);
+    // y-axis gridline labels render in the left gutter
+    expect(document.querySelectorAll(".ct-tick").length).toBeGreaterThan(0);
+    // the skill marker is a ◆ path with an accessible name
+    expect(document.querySelector('path[aria-label="skill: review"]')).toBeTruthy();
   });
   it("renders nothing for codex", () => {
     const { container } = render(<ContextTimeline apiBase="/" agent="codex" sessionId="s1" />);

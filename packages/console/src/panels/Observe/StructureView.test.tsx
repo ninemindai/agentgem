@@ -48,8 +48,25 @@ describe("StructureView", () => {
     expect(document.body.style.overflow).toBe("");
   });
 
-  it("hides the Blast tab for codex", () => {
+  it("hides the Blast and Context tabs for codex", () => {
     render(<StructureView view={{ ...view, agent: "codex" }} collapsed={new Set()} onToggle={() => {}} apiBase="/" agent="codex" />);
     expect(screen.queryByRole("button", { name: /blast/i })).toBeNull();
+    expect(screen.queryByRole("button", { name: /context/i })).toBeNull();
+  });
+
+  it("offers a Context tab for claude that lazily loads the context timeline", async () => {
+    const call = vi.spyOn(routes.hygieneRoute, "call").mockResolvedValue({
+      meta: { sessionId: "s", transcript: "s.jsonl", model: "m", cap: 1_000_000 },
+      curve: [
+        { turn: 0, msgIndex: 1, ctxTokens: 100_000, cacheCreation: 0, outTokens: 10 },
+        { turn: 1, msgIndex: 4, ctxTokens: 500_000, cacheCreation: 0, outTokens: 20 },
+      ],
+      events: [], factors: [], hygiene: { score: 90, verdict: "bounded" },
+    } as any);
+    render(<StructureView view={view} collapsed={new Set()} onToggle={() => {}} apiBase="/" agent="claude" />);
+    expect(call).not.toHaveBeenCalled();                       // no fetch until the tab opens
+    fireEvent.click(screen.getByRole("button", { name: /context/i }));
+    expect(await screen.findByText(/bounded/i)).toBeTruthy();
+    expect(call).toHaveBeenCalledTimes(1);
   });
 });
