@@ -1,11 +1,13 @@
 // packages/console/src/panels/Observe/StructureView.tsx
 //
-// Map <-> Blast <-> Transcript toggle for the session drill-down. Map renders a
-// phase-by-phase flamestrip of tool/skill calls (phases.js); Blast is the
-// replayable blast-radius touch map (Claude-only — the tab hides for codex, and
-// its fetch only fires when the tab is opened); Transcript is the existing
-// verbatim turn tree, sourced from turnTree.js to avoid the import cycle
-// (StructureView needs Turn; TranscriptViewer needs StructureView).
+// Map <-> Blast <-> Context <-> Dashboard <-> Transcript toggle for the session
+// drill-down. Map renders a phase-by-phase flamestrip of tool/skill calls
+// (phases.js); Blast is the replayable blast-radius touch map; Context is the
+// window timeline (Claude-only — see the inline note); Dashboard is the cached
+// agent-generated readout. Blast/Context/Dashboard fetch only when their tab is
+// opened. Transcript is the verbatim turn tree, sourced from turnTree.js to
+// avoid the import cycle (StructureView needs Turn; TranscriptViewer needs
+// StructureView).
 import { useEffect, useState } from "react";
 import type { TranscriptView } from "../../api/routes.js";
 import { phasesOf } from "./phases.js";
@@ -44,13 +46,14 @@ export function StructureView({ view, collapsed, onToggle, forceTx, apiBase, age
         <div className="sv-controls">
           <div className="seg">
             <button type="button" className={mode === "map" ? "on" : ""} onClick={() => setMode("map")}>◆ Map</button>
+            <button type="button" className={mode === "blast" ? "on" : ""} onClick={() => setMode("blast")}>◎ Blast</button>
+            {/* Context stays Claude-only: its analysis stack (hygiene detectors,
+                boundary segmentation, jump attribution) reads Claude usage
+                records; codex rollouts carry no per-turn window accounting. */}
             {agent === "claude" && (
-              <>
-                <button type="button" className={mode === "blast" ? "on" : ""} onClick={() => setMode("blast")}>◎ Blast</button>
-                <button type="button" className={mode === "ctx" ? "on" : ""} onClick={() => setMode("ctx")}>∿ Context</button>
-                <button type="button" className={mode === "dash" ? "on" : ""} onClick={() => setMode("dash")}>▤ Dashboard</button>
-              </>
+              <button type="button" className={mode === "ctx" ? "on" : ""} onClick={() => setMode("ctx")}>∿ Context</button>
             )}
+            <button type="button" className={mode === "dash" ? "on" : ""} onClick={() => setMode("dash")}>▤ Dashboard</button>
             <button type="button" className={mode === "tx" ? "on" : ""} onClick={() => setMode("tx")}>≣ Transcript</button>
           </div>
           <button

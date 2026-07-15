@@ -8,7 +8,10 @@
 // controller maps exactly these to a clean `failed` event / 400 class.
 import { readFile } from "node:fs/promises";
 import { basename } from "node:path";
-import { claudeSessionEvents, resolveClaudeSession, dashboardToken, type SessionEvent } from "@agentgem/insight";
+import {
+  claudeSessionEvents, codexSessionEvents, resolveClaudeSession, resolveCodexSession,
+  dashboardToken, type SessionEvent,
+} from "@agentgem/insight";
 
 export class DashboardInputError extends Error {}
 
@@ -48,11 +51,12 @@ export interface SessionDashboardInput {
 }
 
 export async function resolveSessionDashboardInput(id: string, agent: string): Promise<SessionDashboardInput> {
-  if (agent !== "claude") throw new DashboardInputError("Session dashboards are available for Claude sessions only.");
-  const found = await resolveClaudeSession(id);
-  if (!found) throw new DashboardInputError(`No Claude session '${id}' found.`);
+  if (agent !== "claude" && agent !== "codex") throw new DashboardInputError(`Session dashboards are not available for agent '${agent}'.`);
+  const found = agent === "claude" ? await resolveClaudeSession(id) : await resolveCodexSession(id);
+  if (!found) throw new DashboardInputError(`No ${agent === "claude" ? "Claude" : "Codex"} session '${id}' found.`);
   const text = await readFile(found.path, "utf8");
-  const events = capDashboardEvents(claudeSessionEvents(text, found.path));
+  const extract = agent === "claude" ? claudeSessionEvents : codexSessionEvents;
+  const events = capDashboardEvents(extract(text, found.path));
   if (events.length === 0) throw new DashboardInputError("This session has no readable events to render.");
   return {
     path: found.path,

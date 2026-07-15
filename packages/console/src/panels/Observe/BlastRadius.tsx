@@ -6,8 +6,8 @@
 // session touched — project files by directory, outside-project paths, skills,
 // subagents, MCP servers, commands — with a bucketed cool/warm playback deck.
 // Scrub or play the run and watch the map light up; click a target to pin its
-// visit history; click a visit to jump the playhead. Claude-only, like the
-// context timeline (the scan reads Claude transcripts). Inspired by
+// visit history; click a visit to jump the playhead. Works for both agents —
+// the server picks the Claude or Codex scan by the `agent` param. Inspired by
 // cosmtrek/mindwalk's touch-depth night map.
 import { useEffect, useMemo, useRef, useState } from "react";
 import { blastRoute, makeClient, type BlastReport } from "../../api/routes.js";
@@ -38,7 +38,6 @@ export function BlastRadius({ apiBase, agent, sessionId }: { apiBase: string; ag
   const deckRef = useRef<SVGSVGElement | null>(null);
 
   useEffect(() => {
-    if (agent !== "claude") return;
     let alive = true;
     setLoading(true); setError(null); setRep(null); setPlayhead(Infinity); setPlaying(false); setPinned(null);
     blastRoute.call(makeClient(apiBase), { query: { id: sessionId, agent } })
@@ -69,7 +68,6 @@ export function BlastRadius({ apiBase, agent, sessionId }: { apiBase: string; ag
   // Hooks above the early returns (rules of hooks); the rail is the resizable pane.
   const split = useSplit("blast", { initial: 288, min: 240, max: 460, side: "end" });
 
-  if (agent !== "claude") return null;
   if (loading) return <div className="obs br"><div className="obs-muted">Mapping blast radius…</div></div>;
   if (error) return <div className="obs br"><div className="obs-error">{error}</div></div>;
   if (!m || m.n === 0) return null;

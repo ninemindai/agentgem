@@ -11,7 +11,7 @@
 // redact path) before it leaves here: this read path must not become the hole in
 // the secret-safe boundary. Unknown record/content shapes degrade to text and
 // never throw (matches observeScan's robustness contract).
-import { readFile } from "node:fs/promises";
+import { readFile, open } from "node:fs/promises";
 import { join, basename } from "node:path";
 import { resolveDirs } from "@agentgem/model";
 import { jsonLines, listFiles, parseClaudeTranscript, parseCodexTranscript } from "./observeScan.js";
@@ -336,6 +336,41 @@ export async function loadSessionTranscript(
     let raw: string; try { raw = await readFile(f, "utf8"); } catch { continue; }
     const view = parseCodexTranscriptView(raw, f);
     if (view && view.sessionId === sessionId) return view;
+  }
+  return null;
+}
+
+/** Server-only: resolve a Codex session to its rollout file path and RAW cwd —
+ *  mirror of resolveClaudeSession for the codex store. The sessionId lives in
+ *  the first record (session_meta.payload.id), so a bounded head read per file
+ *  finds it without parsing whole rollouts (same 64KB assumption as the claude
+ *  cwd head-read in workflowScan). Returns null if not found. */
+const CODEX_HEAD_BYTES = 1 << 16; // 64KB
+export async function resolveCodexSession(
+  sessionId: string,
+  dirs?: { codexDir?: string },
+): Promise<{ path: string; cwd: string | null } | null> {
+  const codexDir = dirs?.codexDir ?? resolveDirs().codexDir;
+  for (const f of listFiles(join(codexDir, "sessions"), ".jsonl")) {
+    if (!basename(f).startsWith("rollout-")) continue;
+    let head: string;
+    try {
+      const fd = await open(f, "r");
+      try {
+        const buf = Buffer.alloc(CODEX_HEAD_BYTES);
+        const { bytesRead } = await fd.read(buf, 0, CODEX_HEAD_BYTES, 0);
+        head = buf.toString("utf8", 0, bytesRead);
+      } finally { await fd.close(); }
+    } catch { continue; }
+    const nl = head.indexOf("\n");
+    const first = nl >= 0 ? head.slice(0, nl) : head;
+    try {
+      const rec = JSON.parse(first) as Record<string, unknown>;
+      if (rec?.type !== "session_meta") continue;
+      const p = rec.payload as Record<string, unknown> | undefined;
+      if (p?.id !== sessionId) continue;
+      return { path: f, cwd: typeof p?.cwd === "string" ? p.cwd : null };
+    } catch { continue; }
   }
   return null;
 }
