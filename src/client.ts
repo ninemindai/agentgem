@@ -15,6 +15,7 @@ import { isMain } from "@agentback/core";
 import type { RestApplication } from "@agentback/rest";
 import { buildCommonApp, finalizeCommonApp, installGracefulShutdown, warmEnabled } from "./appCommon.js";
 import { BenchmarkProxyController } from "./benchmark.proxy.controller.js";
+import { AgentTasksController } from "./agentTasks.controller.js";
 import { startWarmSchedule } from "./warm/schedule.js";
 
 export async function createClientApp(port: number): Promise<RestApplication> {
@@ -23,6 +24,9 @@ export async function createClientApp(port: number): Promise<RestApplication> {
   // hosted aggregator over plain fetch. Slots where mountAggregator sits on the server entry —
   // this is the ONLY controller the client entry adds, and it needs no DB.
   app.restController(BenchmarkProxyController);
+  // Settings for background agent tasks (report/distill/recommend/judge model+agent defaults) —
+  // these tasks run locally in client mode too, so the picker must exist here as well.
+  app.restController(AgentTasksController);
   // Same global originGuard + /healthz + console-serving + SSE routes as the server entry
   // (Task 5), registered after the controller step like createApp does with mountAggregator.
   finalizeCommonApp(app, server);
