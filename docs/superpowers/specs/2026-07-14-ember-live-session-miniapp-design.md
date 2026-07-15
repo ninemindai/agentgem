@@ -124,11 +124,43 @@ live coding session
   → GET /api/watch/hygiene?file=<most-recent>   (existing SSE)
   → mcpHostTools.subscribeHygiene / mcpUiHost broker  (NEW)
   → postMessage notification into sealed iframe
-  → EMBER_HTML maps { score, cap, curveTail, verdict } onto:
-       gauge fill   ← score / cap
-       mood text    ← verdict + score band
-       nudges       ← verdict transitions / nudge advice
+  → EMBER_HTML maps { verdict, cap, curveTail } onto:
+       gauge fill   ← curveTail.at(-1).ctxTokens / cap   (== mockup stress())
+       turn         ← curveTail.at(-1).turn
+       mood text    ← verdict (tone) refined by stress band
+       nudges       ← the stream's `nudge` events (real server advice)
 ```
+
+`CurvePoint = { turn, msgIndex, ctxTokens, cacheCreation, outTokens }` and `cap`
+is the model's real token cap (both from `BloatCurve.tsx`, same units). The
+latest `curveTail` point is the current context size — the mockup's `stress()`
+(`context / CAP`) works verbatim once `CAP` is replaced by the streamed `cap`.
+
+## Design/UX review (2026-07-14)
+
+Reconciling the mockup against real hygiene data surfaced four fixes the port
+MUST make — the mockup only works for a 1M-cap model and drives itself on a timer:
+
+1. **Thresholds as fractions of `cap`, not absolute tokens.** The mockup hardcodes
+   `SWEET = [140_000, 320_000]` and nudge marks at `520_000 / 780_000` against a
+   fixed `CAP = 1_000_000`. On a 200k-cap model the entire window sits inside that
+   "sweet" band and no nudge ever fires. Express every threshold as a ratio of the
+   streamed `cap`, preserving the mockup's ratios (0.14 / 0.32 sweet spot;
+   0.52 / 0.78 nudges). `cap` is per-session from the stream.
+2. **Event-driven state in live mode, not the `TICK` timer.** State advances only
+   on real `hygiene` events (one per turn, arriving at human speed). Keep the
+   `requestAnimationFrame` flame render for visual life, but gate `turn()`/state
+   mutation behind incoming events. The `TICK` self-simulation runs ONLY in demo
+   (idle) mode.
+3. **Real `nudge` advice over hardcoded strings.** The stream emits
+   `{ type: "nudge"; verdict; advice }`. Surface that server advice in the toast
+   instead of the mockup's baked-in `NUDGES[]` copy (demo mode keeps the baked
+   copy).
+4. **Respect the Runner's host-context size; don't assume full viewport.** The
+   mockup is `height:100%; overflow:hidden` full-bleed. Sealed miniapps are sized
+   by the host (Arcade card thumbnail, overlay, fullscreen) — a known sizing trap.
+   Read the `ui/initialize` `hostContext` dimensions / `host-context-changed`
+   pushes (as other miniapps do) and lay out to the given box.
 
 ## BANK semantics (phase 1 — advisory)
 
@@ -137,6 +169,12 @@ live coding session
   if a zero-permission affordance exists in the sealed context.
 - BANK never mutates the session. Score/streak reflect real banking *decisions*,
   persisted in the miniapp's storage shim (`localStorage`) as `best`.
+- **Honest live gauge.** Because BANK can't compact for real (phase 1), the gauge
+  in live mode does NOT reset on BANK — it keeps following real data and only
+  cools when the user actually runs `/compact` and the next `hygiene` event shows
+  a lower `ctxTokens`. This is deliberate: it teaches that *stopping requires real
+  action*, and it's the emotional hook for phase 2's real BANK. (Demo mode keeps
+  the mockup's satisfying instant reset.)
 
 ## Idle / demo fallback
 
