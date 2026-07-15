@@ -144,12 +144,6 @@ body::before {
 }
 .console-mark { width: 18px; height: 18px; color: var(--accent); flex: none;
   filter: drop-shadow(0 1px 0 rgba(255,255,255,.6)); }
-/* Notification bell rides at the far end of the masthead. Nudged up to sit on the
-   wordmark's baseline, not the border-bottom padding. */
-.console-brand .notify-bell { margin-left: auto; align-self: center; margin-bottom: 12px; }
-.console.is-rail .console-brand .notify-bell { display: none; }
-.console-brand .activity-menu { align-self: center; margin-bottom: 12px; }
-.console.is-rail .console-brand .activity-menu { display: none; }
 
 /* Warming pill — shows only while background precompute runs. A soft terracotta
    pill with a light sweep crossing it left→right (same shimmer language as the
@@ -2018,6 +2012,20 @@ button.scorecard-intent { line-height: 1.4; }
 .activity-dot-running { background: var(--accent); }
 .activity-dot-done { background: var(--emerald); }
 .activity-dot-failed { background: var(--red); }
+
+/* Report menu lives in the footer now (above Settings), styled like a nav row.
+   Its popover opens UPWARD so it clears the bottom edge of the sidebar. */
+.console-footer .activity-menu { display: flex; }
+.console-footer .activity-toggle {
+  display: flex; align-items: center; gap: 10px; width: 100%; opacity: 1;
+  padding: 9px 11px; border-radius: 7px;
+  color: var(--ink-soft); font: 500 13.5px/1 var(--font-ui); letter-spacing: .005em;
+}
+.console-footer .activity-toggle:hover, .console-footer .activity-toggle.is-active { color: var(--ink); }
+.activity-glyph { font-size: 14px; line-height: 1; width: 16px; text-align: center; opacity: .85; }
+.console-footer .activity-pop { top: auto; bottom: 100%; left: 0; right: auto; margin: 0 0 4px; }
+.console.is-rail .console-footer .activity-label { display: none; }
+.console.is-rail .console-footer .activity-toggle { justify-content: center; gap: 0; padding-left: 0; padding-right: 0; }
 
 /* Play capability-consent prompt (overlays the sealed game when it requests a gated capability) */
 .play-consent { position: absolute; inset: 0; z-index: 1002; display: grid; place-items: center; background: rgba(12,10,18,.72); }

@@ -23,7 +23,9 @@ export function ActivityMenu(): ReactElement {
       <button type="button" className={"activity-toggle" + (active > 0 ? " is-active" : "")}
         aria-label={active > 0 ? `${active} running report${active === 1 ? "" : "s"}` : "Report activity"}
         aria-expanded={open} onClick={() => setOpen((o) => !o)}>
-        🗂{active > 0 && <span className="activity-count">{active}</span>}
+        <span className="activity-glyph" aria-hidden="true">🗂</span>
+        <span className="activity-label">Reports</span>
+        {active > 0 && <span className="activity-count">{active}</span>}
       </button>
       {open && (
         <div className="activity-pop" role="menu">

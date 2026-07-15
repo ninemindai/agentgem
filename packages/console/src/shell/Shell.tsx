@@ -6,7 +6,6 @@ import { WarmingPill } from "../components/WarmingPill.js";
 import { useRovingTabIndex } from "./useRovingTabIndex.js";
 import { ToastProvider } from "./Toast.js";
 import { NotificationsProvider } from "../notify/NotificationsProvider.js";
-import { NotifyBell } from "../notify/NotifyBell.js";
 import { ActivityProvider } from "../notify/ActivityProvider.js";
 import { ActivityMenu } from "../notify/ActivityMenu.js";
 import { IdentityProvider } from "../identity/IdentityProvider.js";
@@ -171,8 +170,6 @@ export function Shell({ pages, apiBase }: { pages: ConsolePage[]; apiBase: strin
               <path d="M2 9h20M9 3 7 9l5 12M15 3l2 6-5 12" stroke="currentColor" strokeWidth="1" strokeLinejoin="round" opacity=".7" />
             </svg>
             AgentGem
-            <NotifyBell />
-            <ActivityMenu />
           </div>
           <WarmingPill apiBase={apiBase} />
           <div className="console-phase-switch" role="radiogroup" aria-label="Phase" {...roving.containerProps}>
@@ -204,7 +201,7 @@ export function Shell({ pages, apiBase }: { pages: ConsolePage[]; apiBase: strin
               {g.pages.map(item)}
             </div>
           ))}
-          <div className="console-footer">{footer.map(item)}<IdentityChip apiBase={apiBase} /></div>
+          <div className="console-footer"><ActivityMenu />{footer.map(item)}<IdentityChip apiBase={apiBase} /></div>
         </nav>
         <main className={"console-main" + (active?.fullWidth ? " console-main--wide" : "")}>{ActivePage ? <ActivePage apiBase={apiBase} /> : null}</main>
         <NotificationsProvider apiBase={apiBase} />

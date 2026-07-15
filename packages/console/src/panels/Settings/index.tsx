@@ -9,6 +9,7 @@ import { useIdentity } from "../../identity/IdentityProvider.js";
 import { useGitHubBind } from "../../identity/useGitHubBind.js";
 import { ConnectGitHub } from "../../identity/ConnectGitHub.js";
 import { AgentTasks } from "./AgentTasks.js";
+import { NotifyBell } from "../../notify/NotifyBell.js";
 
 type Backend = { id: string; label: string; ready: boolean };
 
@@ -103,6 +104,14 @@ export function Settings({ apiBase }: { apiBase: string }) {
             />
           </>
         )}
+      </section>
+
+      <section className="ledger-group">
+        <h2 className="ledger-group-label">Notifications</h2>
+        <div className="ledger-bar">
+          <NotifyBell />
+          <span className="ws-note">Desktop notification when a background report finishes.</span>
+        </div>
       </section>
 
       <section className="ledger-group">
