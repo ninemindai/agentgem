@@ -37,8 +37,31 @@ export interface UpdateSurface {
 }
 
 export interface UpdateController {
-  // manual: true when the user picked "Check for Updates…"; false for the startup check.
-  check(opts?: { manual?: boolean }): void;
+  // manual: true when the user asked for the check; false for the startup check.
+  // quietOffline: keep result dialogs but swallow connectivity failures — for surfaces
+  // (About) where "no network" should not turn into an error popup.
+  check(opts?: { manual?: boolean; quietOffline?: boolean }): void;
+}
+
+// Connectivity failures, as opposed to a broken feed (404, missing latest*.yml). Covers the
+// Node error codes and the Chromium net:: messages electron-updater passes through.
+const OFFLINE_CODES = new Set([
+  "ENOTFOUND",
+  "ECONNREFUSED",
+  "ECONNRESET",
+  "ETIMEDOUT",
+  "ENETUNREACH",
+  "ENETDOWN",
+  "EHOSTUNREACH",
+  "EAI_AGAIN",
+]);
+const OFFLINE_NET_MESSAGE =
+  /net::ERR_(INTERNET_DISCONNECTED|NAME_NOT_RESOLVED|NETWORK_CHANGED|ADDRESS_UNREACHABLE|CONNECTION_(REFUSED|RESET|TIMED_OUT)|TIMED_OUT|PROXY_CONNECTION_FAILED)/;
+
+export function isOfflineError(err: Error & { code?: string }): boolean {
+  if (!err) return false;
+  if (err.code && OFFLINE_CODES.has(err.code)) return true;
+  return OFFLINE_NET_MESSAGE.test(err.message ?? "");
 }
 
 // Wiring around electron-updater. autoUpdater is a singleton emitter shared by the startup
@@ -48,9 +71,11 @@ export interface UpdateController {
 export function createUpdateController(updater: MinimalUpdater, surface: UpdateSurface): UpdateController {
   updater.autoDownload = true;
   let manual = false;
+  let quietOffline = false;
   let inFlight = false;
   const done = (): void => {
     manual = false;
+    quietOffline = false;
     inFlight = false;
   };
 
@@ -71,15 +96,16 @@ export function createUpdateController(updater: MinimalUpdater, surface: UpdateS
   // stayed invisible for two releases. A background failure stays in the log; the app works
   // fine without an update.
   updater.on("error", (err: Error) => {
-    if (manual) surface.failed(err);
+    if (manual && !(quietOffline && isOfflineError(err))) surface.failed(err);
     else console.error("[updater] check failed:", err?.message ?? err);
     done();
   });
 
   return {
-    check({ manual: isManual = false } = {}) {
+    check({ manual: isManual = false, quietOffline: isQuietOffline = false } = {}) {
       if (inFlight) return; // one check at a time — ignore a double-click or an overlapping startup check
       manual = isManual;
+      quietOffline = isQuietOffline;
       inFlight = true;
       // The "error" listener above surfaces the failure; this only keeps the rejection from
       // going unhandled in the main process.

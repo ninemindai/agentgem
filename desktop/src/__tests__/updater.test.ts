@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from "vitest";
-import { updaterFeed, repoUrlFromPackageJson, createUpdateController } from "../updater.js";
+import { updaterFeed, repoUrlFromPackageJson, createUpdateController, isOfflineError } from "../updater.js";
 
 // A fake standing in for electron-updater's AppUpdater: `on` records listeners,
 // `emit` fires one, and checkForUpdates resolves or rejects on demand.
@@ -67,6 +67,24 @@ describe("repoUrlFromPackageJson", () => {
   });
 });
 
+describe("isOfflineError", () => {
+  it("classifies Node connectivity codes as offline", () => {
+    for (const code of ["ENOTFOUND", "ECONNREFUSED", "ETIMEDOUT", "ENETUNREACH", "EAI_AGAIN"]) {
+      expect(isOfflineError(Object.assign(new Error(`request failed: ${code}`), { code }))).toBe(true);
+    }
+  });
+  it("classifies Chromium net:: connectivity failures as offline", () => {
+    expect(isOfflineError(new Error("net::ERR_INTERNET_DISCONNECTED"))).toBe(true);
+    expect(isOfflineError(new Error("net::ERR_NAME_NOT_RESOLVED"))).toBe(true);
+    expect(isOfflineError(new Error("net::ERR_CONNECTION_TIMED_OUT"))).toBe(true);
+  });
+  it("does not classify a feed/server failure as offline", () => {
+    expect(isOfflineError(new Error("HttpError: 404 Not Found"))).toBe(false);
+    expect(isOfflineError(new Error("Cannot find latest-mac.yml in the latest release artifacts"))).toBe(false);
+    expect(isOfflineError(undefined as unknown as Error)).toBe(false);
+  });
+});
+
 describe("createUpdateController", () => {
   it("subscribes to the four lifecycle events and auto-downloads", () => {
     const u = fakeUpdater();
@@ -128,6 +146,47 @@ describe("createUpdateController", () => {
     c.check(); // background
     u.emit("error", err);
     expect(s.failed).not.toHaveBeenCalled();
+  });
+
+  // The About-triggered check: dialogs for results, silence for a dead network.
+  it("a quiet-offline manual check suppresses offline errors but still surfaces real failures", () => {
+    const u = fakeUpdater();
+    const s = fakeSurface();
+    const c = createUpdateController(u, s);
+
+    c.check({ manual: true, quietOffline: true });
+    u.emit("error", new Error("net::ERR_INTERNET_DISCONNECTED"));
+    expect(s.failed).not.toHaveBeenCalled();
+
+    const feedErr = new Error("HttpError: 404 Not Found");
+    c.check({ manual: true, quietOffline: true });
+    u.emit("error", feedErr);
+    expect(s.failed).toHaveBeenCalledWith(feedErr);
+  });
+
+  it("a plain manual check still surfaces offline errors", () => {
+    const u = fakeUpdater();
+    const s = fakeSurface();
+    const c = createUpdateController(u, s);
+    const err = new Error("net::ERR_INTERNET_DISCONNECTED");
+
+    c.check({ manual: true });
+    u.emit("error", err);
+    expect(s.failed).toHaveBeenCalledWith(err);
+  });
+
+  it("quietOffline does not leak into the next check", () => {
+    const u = fakeUpdater();
+    const s = fakeSurface();
+    const c = createUpdateController(u, s);
+    const err = new Error("net::ERR_INTERNET_DISCONNECTED");
+
+    c.check({ manual: true, quietOffline: true });
+    u.emit("update-not-available", { version: "0.7.0" }); // resolves the quiet check
+
+    c.check({ manual: true }); // plain manual check afterwards
+    u.emit("error", err);
+    expect(s.failed).toHaveBeenCalledWith(err);
   });
 
   it("ignores an overlapping check until the in-flight one resolves", () => {
