@@ -8,6 +8,7 @@ describe("capability <-> tool bijection", () => {
       "live-session-events": "agentgem_subscribe_sessions",
       "local-project-access": "agentgem_get_inventory",
       "invoke-agent": "agentgem_invoke_agent",
+      "context-hygiene": "agentgem_subscribe_hygiene",
     });
   });
 
