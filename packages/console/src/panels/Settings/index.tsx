@@ -8,6 +8,7 @@ import {
 import { useIdentity } from "../../identity/IdentityProvider.js";
 import { useGitHubBind } from "../../identity/useGitHubBind.js";
 import { ConnectGitHub } from "../../identity/ConnectGitHub.js";
+import { AgentTasks } from "./AgentTasks.js";
 
 type Backend = { id: string; label: string; ready: boolean };
 
@@ -102,6 +103,15 @@ export function Settings({ apiBase }: { apiBase: string }) {
             />
           </>
         )}
+      </section>
+
+      <section className="ledger-group">
+        <h2 className="ledger-group-label">Background agent tasks</h2>
+        <p className="deploy-hint">
+          Reports, distillation, recommendations and judging run a local coding agent in the
+          background. They default to a fast model — pick a different agent or model per task.
+        </p>
+        <AgentTasks apiBase={apiBase} />
       </section>
 
       <section className="ledger-group">
