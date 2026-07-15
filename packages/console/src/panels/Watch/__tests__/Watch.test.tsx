@@ -73,12 +73,13 @@ describe("Watch panel", () => {
     await waitFor(() => expect(screen.getByText(/No sessions active/)).toBeTruthy());
   });
 
-  it("switches to the Dashboard tab and opens the dashboard stream", async () => {
+  it("offers only Feed and Artifact tabs (the live Dashboard tab was retired for the History → Session lens)", async () => {
     vi.stubGlobal("EventSource", FakeES as unknown as typeof EventSource);
     vi.stubGlobal("fetch", vi.fn(async () => ({ ok: true, json: async () => ({ sessions: [SESSION] }) })) as unknown as typeof fetch);
     render(<Watch apiBase="" />);
     fireEvent.click(await screen.findByText("site"));
-    fireEvent.click(screen.getByRole("tab", { name: "Dashboard" }));
-    await waitFor(() => expect(FakeES.last!.url).toContain("/api/watch/dashboard"));
+    expect(screen.getByRole("tab", { name: "Feed" })).toBeTruthy();
+    expect(screen.getByRole("tab", { name: "Artifact" })).toBeTruthy();
+    expect(screen.queryByRole("tab", { name: "Dashboard" })).toBeNull();
   });
 });
