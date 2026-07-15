@@ -35,6 +35,22 @@ describe("Arcade", () => {
     expect(screen.getAllByText("api")).toHaveLength(1);      // the title alone — no duplicate line
   });
 
+  it("built-in (__-prefixed) cards have no delete affordance, but are still openable", async () => {
+    vi.spyOn(playMiniappsRoute, "call").mockResolvedValue({
+      miniapps: [
+        { name: "__ember", title: "Ember", genre: "session-heatmap", needs: ["context-hygiene"] },
+        { name: "duel", title: "Duel", genre: "project-fun" },
+      ],
+    });
+    const onOpen = vi.fn();
+    render(<Arcade apiBase="" onOpen={onOpen} />);
+    await waitFor(() => expect(screen.getByText("Ember")).toBeTruthy());
+    expect(screen.queryByLabelText("Delete __ember")).toBeNull();     // built-in: not deletable
+    expect(screen.getByLabelText("Delete duel")).toBeTruthy();        // registry card: still deletable
+    fireEvent.click(screen.getByText("Ember"));
+    expect(onOpen).toHaveBeenCalledWith("__ember");                   // still opens
+  });
+
   it("lists miniapps and calls onOpen when a card is clicked", async () => {
     vi.spyOn(playMiniappsRoute, "call").mockResolvedValue({
       miniapps: [{ name: "auth-replay", title: "Auth Replay", genre: "replay", needs: ["live-session-events"] }],
