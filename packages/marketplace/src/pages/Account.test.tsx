@@ -253,6 +253,10 @@ describe("Account page", () => {
 
   it("shim renders the panel inline for a signed-in user with NO handle", () => {
     const handleless: Me = { ...me, handle: null };
+    // Without this stub, PasskeysSection's mount effect fires a REAL fetch to
+    // https://api.x (ENOTFOUND) whose late rejection flakes the run as an
+    // unhandled error under CI load.
+    stubAccountFetch((u) => { throw new Error("unexpected fetch: " + u); });
     render(<Account api={{ getAccountProviders: () => Promise.resolve({ connected: [] }) } as never} me={handleless} base="https://api.x" />);
     expect(screen.getByRole("heading", { name: /account/i })).toBeTruthy();
     expect(nav).not.toHaveBeenCalled();
