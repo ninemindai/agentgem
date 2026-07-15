@@ -10,8 +10,13 @@ describe("contextCap", () => {
     expect(contextCap("claude-opus-4-8[1m]")).toBe(1_000_000);
     expect(contextCap("claude-sonnet-5-1m")).toBe(1_000_000);
   });
-  it("defaults to 200k for a normal model id or when unknown", () => {
-    expect(contextCap("claude-sonnet-5")).toBe(200_000);
+  it("returns 1M for model families whose window is 1M by default", () => {
+    expect(contextCap("claude-sonnet-5")).toBe(1_000_000);
+    expect(contextCap("claude-fable-5")).toBe(1_000_000);
+    expect(contextCap("claude-opus-4-8")).toBe(1_000_000);
+  });
+  it("defaults to 200k for a 200k-window model id or when unknown", () => {
+    expect(contextCap("claude-haiku-4-5")).toBe(200_000);
     expect(contextCap(undefined)).toBe(200_000);
     expect(contextCap("")).toBe(200_000);
   });
@@ -134,7 +139,7 @@ describe("context-pinned detector", () => {
   it("does NOT fire for a long but un-pinned session (the bounded control)", () => {
     // 200k-cap model, window hovering ~120k — long, healthy, must stay quiet
     const series = Array.from({ length: 40 }, (_, i) => turn(i, 120_000));
-    const sig = signalWith([sessM([step("Read", "Read", "packages/a/f.ts", 0)], series, "claude-sonnet-5")]);
+    const sig = signalWith([sessM([step("Read", "Read", "packages/a/f.ts", 0)], series, "claude-haiku-4-5")]);
     expect(fire(sig, "context-pinned")).toHaveLength(0);
   });
   it("degrades to [] when there is no contextSeries", () => {
