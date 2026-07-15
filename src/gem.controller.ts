@@ -95,6 +95,22 @@ export const HygieneReportSchema = z.object({
     cutTurn: z.number().nullable(),
   }).optional(),
 });
+// Session blast radius: ordered scrubbed touch events (mirrored in the console's
+// api/routes.ts — keep both in sync).
+export const BlastReportSchema = z.object({
+  meta: z.object({
+    sessionId: z.string(), transcript: z.string(),
+    project: z.string().nullable(), startMs: z.number(), endMs: z.number(),
+  }),
+  events: z.array(z.object({
+    seq: z.number(), msgIndex: z.number(), tsMs: z.number().nullable(),
+    tool: z.string(),
+    action: z.enum(["read", "search", "edit", "exec", "skill", "agent", "mcp", "other"]),
+    target: z.string().nullable(),
+    zone: z.enum(["project", "home", "tmp", "outside"]).optional(),
+    sidechain: z.boolean().optional(), error: z.boolean().optional(),
+  })),
+});
 const TokenBreakdownSchema = z.object({ in: z.number(), out: z.number(), cache: z.number() });
 const TranscriptSpanSchema = z.discriminatedUnion("kind", [
   z.object({ kind: z.literal("message"), role: z.enum(["user", "assistant"]), text: z.string() }),
@@ -300,6 +316,7 @@ import { distillWorkflow, distillSessionLessons, type DistilledSkill } from "@ag
 import { computeWorkflowAnalysis } from "./workflowCore.js";
 import { computeDistill, DISTILL_BACKGROUND_TIMEOUT_MS } from "./distillCore.js";
 import { sessionHygiene, HygieneInputError, type HygieneReport } from "./sessionHygieneCore.js";
+import { sessionBlast, BlastInputError } from "./sessionBlastCore.js";
 
 // A playbook prepare that misses the cache kicks off the heavy distill in the
 // background (capped batch + generous budget so it actually completes and caches).
@@ -533,6 +550,16 @@ export class GemController {
       return await sessionHygiene(input.query.id, input.query.agent);
     } catch (err) {
       if (err instanceof HygieneInputError) throw new InvalidInputError(err.message);
+      throw err; // unexpected internal fault → 500, no echoed message
+    }
+  }
+
+  @get("/inspect/session/blast", { query: InspectSessionQuerySchema, response: BlastReportSchema })
+  async inspectSessionBlast(input: { query: z.infer<typeof InspectSessionQuerySchema> }): Promise<z.infer<typeof BlastReportSchema>> {
+    try {
+      return await sessionBlast(input.query.id, input.query.agent);
+    } catch (err) {
+      if (err instanceof BlastInputError) throw new InvalidInputError(err.message);
       throw err; // unexpected internal fault → 500, no echoed message
     }
   }
