@@ -9,7 +9,10 @@
 // degrades to a deterministic frequency-based recommendation. Never throws.
 import { join } from "node:path";
 import { agentgemHome } from "@agentgem/model";
-import { connectAcpAdapter, createLogger, type AgentDescriptor } from "@agentgem/base";
+import {
+  connectAcpAdapter, createLogger, resolveLaunch, adapterRuntimeCtx, ADAPTER_VERSIONS,
+  type AgentDescriptor, type AdapterCtx,
+} from "@agentgem/base";
 export type { AgentDescriptor } from "@agentgem/base";
 
 const log = createLogger("insight");
@@ -58,8 +61,23 @@ export interface AcpSessionHandle {
 export interface AcpCtx { open(cwd: string): Promise<AcpSessionHandle> }
 export type AcpConnectFn = (descriptor: AgentDescriptor, app: unknown) => Promise<{ ctx: AcpCtx; close: () => void }>;
 
-// Pinned Claude ACP adapter (npm: @agentclientprotocol/claude-agent-acp).
-export const CLAUDE_AGENT: AgentDescriptor = { id: "claude-code", name: "Claude Code", command: ["claude-agent-acp"] };
+// Pinned Claude ACP adapter (npm: @agentclientprotocol/claude-agent-acp). Carries
+// the package + version pin so resolveAgentLaunch can fall back to a managed or
+// (desktop) bundled install when the bin isn't on PATH.
+export const CLAUDE_AGENT: AgentDescriptor = {
+  id: "claude-code", name: "Claude Code", command: ["claude-agent-acp"],
+  package: "@agentclientprotocol/claude-agent-acp",
+  version: ADAPTER_VERSIONS["@agentclientprotocol/claude-agent-acp"],
+};
+
+// Resolve a descriptor into a spawnable launch plan (PATH → managed → bundled),
+// falling back to the bare descriptor so a truly-missing adapter still fails with
+// the same spawn error as before. A Finder-launched desktop app has a minimal
+// PATH without claude-agent-acp but ships the adapter under resources/adapters/;
+// bare-spawning from PATH there made every distill degrade to heuristics.
+export function resolveAgentLaunch(descriptor: AgentDescriptor, ctx: AdapterCtx = adapterRuntimeCtx()): AgentDescriptor {
+  return resolveLaunch(descriptor, ctx) ?? descriptor;
+}
 
 // Neutral working dir for the recommender's ACP session. We do NOT open the
 // session in the analyzed project, or claude-agent-acp would log a session
@@ -278,7 +296,7 @@ export async function recommendWorkflow(
  * only the agent's message text into a string.
  */
 export const defaultConnectFn: AcpConnectFn = async (descriptor) => {
-  const raw = await connectAcpAdapter(descriptor, { clientName: "agentgem-workflow-recommender", permission: "deny" });
+  const raw = await connectAcpAdapter(resolveAgentLaunch(descriptor), { clientName: "agentgem-workflow-recommender", permission: "deny" });
   const ctx: AcpCtx = {
     async open(cwd: string) {
       const session = await raw.open(cwd);

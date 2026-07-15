@@ -13,7 +13,7 @@ import { connectAcpAdapter } from "@agentgem/base";
 import { createLogger } from "@agentgem/base";
 import { loadSessionTranscript } from "./inspectSession.js";
 import type { TranscriptView } from "./inspectSession.js";
-import { analysisWorkspace } from "./acpRecommender.js";
+import { analysisWorkspace, resolveAgentLaunch } from "./acpRecommender.js";
 import type { AcpConnectFn, AcpCtx } from "./acpRecommender.js";
 
 const log = createLogger("insight");
@@ -96,7 +96,7 @@ function withTimeout<T>(p: Promise<T>, ms: number): Promise<T> {
 // Real connect: same plumbing as acpRecommender.defaultConnectFn, deny perms,
 // aggregate only agent_message_chunk text.
 export const defaultAskConnectFn: AcpConnectFn = async (descriptor) => {
-  const raw = await connectAcpAdapter(descriptor as AgentDescriptor, { clientName: "agentgem-goldmine-ask", permission: "deny" });
+  const raw = await connectAcpAdapter(resolveAgentLaunch(descriptor as AgentDescriptor), { clientName: "agentgem-goldmine-ask", permission: "deny" });
   const ctx: AcpCtx = {
     async open(cwd: string) {
       const session = await raw.open(cwd);
