@@ -1449,6 +1449,17 @@ button.scorecard-intent { line-height: 1.4; }
 .br-visit-t { flex: none; font-family: var(--font-mono); font-size: 11px; }
 .br-visit-tool { font-weight: 600; }
 
+/* session dashboard lens: one-shot agent-generated HTML in a sealed frame */
+.sd { margin: 0; display: flex; flex-direction: column; gap: 8px; }
+.sd-head { display: flex; align-items: baseline; gap: 10px; font-size: 12px; }
+.sd-head .sd-regen { margin-left: auto; }
+.sd-progress { font-size: 12.5px; }
+.sd-regen { flex: none; }
+.sd-frame {
+  width: 100%; height: 580px; border: 1px solid var(--line); border-radius: var(--radius);
+  background: var(--raised);
+}
+
 /* worst-first cross-session hygiene leaderboard (Rubrics panel) */
 .hyg-lb-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 0; }
 .hyg-lb-row {

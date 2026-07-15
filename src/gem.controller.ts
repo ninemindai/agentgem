@@ -111,6 +111,18 @@ export const BlastReportSchema = z.object({
     sidechain: z.boolean().optional(), error: z.boolean().optional(),
   })),
 });
+// Session dashboard SSE (mirrored in the console's panels/Observe/dashboardStream.ts).
+const SessionDashboardQuerySchema = z.object({
+  id: z.string(),
+  agent: z.string(),
+  fresh: z.string().optional(),   // "true" → skip the cache and regenerate
+});
+const SessionDashboardEventSchema = z.discriminatedUnion("type", [
+  z.object({ type: z.literal("start"), cached: z.boolean(), events: z.number() }),
+  z.object({ type: z.literal("delta"), text: z.string() }),
+  z.object({ type: z.literal("done"), html: z.string(), cached: z.boolean(), updatedAt: z.number() }),
+  z.object({ type: z.literal("failed"), message: z.string() }),
+]);
 const TokenBreakdownSchema = z.object({ in: z.number(), out: z.number(), cache: z.number() });
 const TranscriptSpanSchema = z.discriminatedUnion("kind", [
   z.object({ kind: z.literal("message"), role: z.enum(["user", "assistant"]), text: z.string() }),
@@ -318,6 +330,10 @@ import { computeWorkflowAnalysis } from "./workflowCore.js";
 import { computeDistill, DISTILL_BACKGROUND_TIMEOUT_MS } from "./distillCore.js";
 import { sessionHygiene, HygieneInputError, type HygieneReport } from "./sessionHygieneCore.js";
 import { sessionBlast, BlastInputError } from "./sessionBlastCore.js";
+import { resolveSessionDashboardInput, DashboardInputError } from "./sessionDashboardCore.js";
+import { renderDashboard, readDashboardCacheEntry, writeDashboardCache } from "@agentgem/insight";
+import { pump } from "./sse/pump.js";
+import { beginForeground, endForeground } from "./warm/orchestrator.js";
 
 // A playbook prepare that misses the cache kicks off the heavy distill in the
 // background (capped batch + generous budget so it actually completes and caches).
@@ -563,6 +579,48 @@ export class GemController {
       if (err instanceof BlastInputError) throw new InvalidInputError(err.message);
       throw err; // unexpected internal fault → 500, no echoed message
     }
+  }
+
+  // GET /api/inspect/session/dashboard — SSE render of a completed session into
+  // the same agent-generated HTML dashboard the Watch panel shows live, cached by
+  // (sessionId, transcript mtime) so reopening a finished session is instant.
+  // Heavy ACP work → foreground-gated like the rubric report stream.
+  @get("/inspect/session/dashboard", { query: SessionDashboardQuerySchema, streamOf: SessionDashboardEventSchema })
+  async *inspectSessionDashboard(input: {
+    query: z.infer<typeof SessionDashboardQuerySchema>;
+  }): AsyncGenerator<z.infer<typeof SessionDashboardEventSchema>> {
+    const { id, agent } = input.query;
+    const fresh = input.query.fresh === "true";
+    yield* pump<z.infer<typeof SessionDashboardEventSchema>>(async (emit) => {
+      beginForeground();
+      try {
+        const inp = await resolveSessionDashboardInput(id, agent);
+        const cached = readDashboardCacheEntry(id, inp.token);
+        if (cached && !fresh) {
+          emit({ type: "start", cached: true, events: inp.events.length });
+          emit({ type: "done", html: cached.html, cached: true, updatedAt: cached.ts });
+          return;
+        }
+        emit({ type: "start", cached: false, events: inp.events.length });
+        const r = await renderDashboard({
+          prevHtml: "", deltaEvents: inp.events, final: true,
+          meta: { project: inp.project, agent: "claude" },
+          timeoutMs: 240_000,
+          onDelta: (chunk) => emit({ type: "delta", text: chunk }),
+        });
+        if (!r.ok) { emit({ type: "failed", message: "dashboard rendering failed — is the local coding agent available?" }); return; }
+        const now = Date.now();
+        writeDashboardCache(id, inp.token, r.html, now);
+        emit({ type: "done", html: r.html, cached: false, updatedAt: now });
+      } catch (err) {
+        // Only tagged guard failures echo their message — an unexpected fault's
+        // text could carry a filesystem path (same boundary as the hygiene route).
+        const m = err instanceof DashboardInputError ? err.message : "dashboard generation failed unexpectedly";
+        emit({ type: "failed", message: m });
+      } finally {
+        endForeground();
+      }
+    });
   }
 
   @get("/inspect/session/process", { query: InspectSessionQuerySchema, response: SessionSummarySchema })

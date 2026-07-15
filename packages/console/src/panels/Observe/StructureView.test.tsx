@@ -48,10 +48,24 @@ describe("StructureView", () => {
     expect(document.body.style.overflow).toBe("");
   });
 
-  it("hides the Blast and Context tabs for codex", () => {
+  it("hides the Blast, Context, and Dashboard tabs for codex", () => {
     render(<StructureView view={{ ...view, agent: "codex" }} collapsed={new Set()} onToggle={() => {}} apiBase="/" agent="codex" />);
     expect(screen.queryByRole("button", { name: /blast/i })).toBeNull();
     expect(screen.queryByRole("button", { name: /context/i })).toBeNull();
+    expect(screen.queryByRole("button", { name: /dashboard/i })).toBeNull();
+  });
+
+  it("offers a Dashboard tab for claude that lazily opens the render stream", async () => {
+    const dashboardStream = await import("./dashboardStream.js");
+    const open = vi.spyOn(dashboardStream, "openSessionDashboardStream").mockImplementation((_c, _p, onEvent) => {
+      onEvent({ type: "done", html: "<b>dash</b>", cached: true, updatedAt: 1 });
+      return () => {};
+    });
+    render(<StructureView view={view} collapsed={new Set()} onToggle={() => {}} apiBase="/" agent="claude" />);
+    expect(open).not.toHaveBeenCalled();                        // no stream until the tab opens
+    fireEvent.click(screen.getByRole("button", { name: /dashboard/i }));
+    expect(open).toHaveBeenCalledTimes(1);
+    expect(document.querySelector("iframe.sd-frame")).toBeTruthy();
   });
 
   it("offers a Context tab for claude that lazily loads the context timeline", async () => {
