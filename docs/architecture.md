@@ -12,6 +12,12 @@ first.
 > Diagram: [`diagrams/system-architecture.svg`](diagrams/system-architecture.svg) ·
 > [PNG](diagrams/system-architecture.png) ·
 > [interactive HTML](diagrams/system-architecture.html) (Copy / PNG / PDF export)
+>
+> The SVG map shows the local **build spine** and session intelligence. The hosted
+> half — better-auth identity, the aggregator + **benchmark contribution loop**, org
+> governance, and **`@agentgem/memory`** sync — is captured in the package table and
+> prose below (and in the [benchmark feedback loop](diagrams/benchmark-feedback-loop.html)
+> and [desktop client/server](diagrams/desktop-client-server-architecture.html) diagrams).
 
 There are four horizontal bands:
 
