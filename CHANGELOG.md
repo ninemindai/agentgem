@@ -7,6 +7,78 @@ All notable changes to AgentGem are documented here. The format follows
 The npm core (`@ninemind/agentgem`) and the desktop app share a version number but
 are tagged separately: core releases are tagged `v*`, desktop releases `desktop-v*`.
 
+## [0.7.0] — `@ninemind/agentgem` (npm core) — 2026-07-15
+
+A release about closing loops: session inspection grows analytical lenses whose
+findings feed back into the gem loop, a two-way memory bridge syncs curated
+learnings with hosted AI-memory providers, recall ranking learns from proven
+outcomes, and org admins get a governed view of their own benchmark. Background
+agent tasks pick their agent and model per task family. 110 commits since 0.6.0.
+
+### Added
+
+- **Memory-provider sync bridge.** A new `@agentgem/memory` package syncs curated
+  memories two ways with hosted AI-memory providers — **mem0** and **supermemory**
+  adapters ship first. Pulls land in the recall index behind a per-provider cursor;
+  pushes go through a consent-gated curation outbox with scrub + dedupe, per-candidate
+  bookkeeping so a mid-batch failure can't double-write, and a (provider,key) re-push
+  guard. A console **Memory panel** manages providers and the outbox; secrets live in
+  a 0600 config file, and the routes are local-only (never hosted).
+- **Inspect lenses on finished sessions.** A generated-and-cached **Dashboard lens**
+  with a long-form editorial **Report mode** whose recommended actions feed the gem
+  loop; a **Blast-radius map** — a replayable touch map of files, skills, and tools —
+  inside the Map⇄Transcript structure toggle; a **Context lens** with a richer context
+  chart, context spikes that deep-link to the verbatim transcript turn, a full-screen
+  structure panel, and Codex session support across the new lenses.
+- **Background agent tasks settings.** Reports, distillation, recommendations, and
+  judging default to a fast model and now resolve their agent + model from per-task-
+  family preferences — editable in a new Settings section backed by
+  `/api/agent-tasks`.
+- **Proven-use recall ranking.** Insights' judge pass persists per-session outcomes
+  into an artifact-outcomes store; recall applies a Wilson-shrunk outcome score as a
+  per-session-outcome boost, validated by an A/B route and an offline judge-agreement
+  probe.
+- **Org benchmark view + governance.** Org admins get a Benchmark tab on the
+  `/orgs/:scope` hub (org-scoped, no k-floor) with member breakdowns, plus a
+  Governance section: a `contributeAllowed` forbid that rejects ingest from members
+  and a flag controlling the benchmark view.
+- **EMBER, a built-in Arcade miniapp.** A live context-hygiene gauge over the watched
+  session, driven by a brokered context-hygiene stream into sealed miniapps, with a
+  consent-gated `copy-command` capability that copies `/compact` to the clipboard
+  (never remembered).
+- **Rubric quality-of-life.** Agent-rendered HTML reports from rubric evaluations,
+  one-click hygiene shortcuts on Sessions rows and the Mine scope, a scope-adaptive
+  session picker for session-granular rubrics, and live progress on report render.
+
+### Changed
+
+- **The live Dashboard tab in Watch retires** in favor of the Inspect Dashboard lens.
+- Notify + report controls move off the wordmark; the session picker rebinds the
+  context-hygiene stream on switch.
+- Docs: architecture diagrams gain the hosted band and a memory-sync diagram; the
+  website adds a Marketplace section and Memory card; guides cover memory sync,
+  proven-use recall, publish scopes, and PWA installs.
+
+### Fixed
+
+- Background insight agents resolve the ACP adapter launch (PATH → managed → bundled)
+  before spawning, and report/distill timeouts accommodate slower default models.
+- The `/api/benchmark` proxy mounts in server mode too, `contextCap` recognizes
+  1M-default model families, and a memory-provider save with a blank key can no
+  longer clobber the stored key.
+- The end-side split handle parks in the grid gap instead of over rail text, and a
+  rubric session pin no longer fights reattach.
+
+## [desktop-v0.7.0] — desktop app — 2026-07-15
+
+### Changed
+
+- Notifications are on by default in the desktop app, and **Check for Updates** gives
+  visible feedback.
+- Everything in npm core 0.7.0 above, since the desktop app embeds the same console
+  and server: Inspect lenses, the memory bridge, per-family agent tasks, EMBER, and
+  proven-use recall.
+
 ## [0.6.0] — `@ninemind/agentgem` (npm core) — 2026-07-13
 
 A follow-up release focused on the benchmark data loop, report durability, and
