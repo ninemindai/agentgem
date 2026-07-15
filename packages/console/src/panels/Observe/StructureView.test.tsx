@@ -38,6 +38,16 @@ describe("StructureView", () => {
     expect(await screen.findByText("a.ts")).toBeTruthy();
     expect(call).toHaveBeenCalledTimes(1);
   });
+  it("expands any lens to a full-screen overlay and exits on Escape", () => {
+    render(<StructureView view={view} collapsed={new Set()} onToggle={() => {}} apiBase="/" agent="claude" />);
+    fireEvent.click(screen.getByRole("button", { name: /full screen/i }));
+    expect(document.querySelector(".sv.is-full")).toBeTruthy();
+    expect(document.body.style.overflow).toBe("hidden");     // page behind stops scrolling
+    fireEvent.keyDown(window, { key: "Escape" });
+    expect(document.querySelector(".sv.is-full")).toBeNull();
+    expect(document.body.style.overflow).toBe("");
+  });
+
   it("hides the Blast tab for codex", () => {
     render(<StructureView view={{ ...view, agent: "codex" }} collapsed={new Set()} onToggle={() => {}} apiBase="/" agent="codex" />);
     expect(screen.queryByRole("button", { name: /blast/i })).toBeNull();

@@ -1591,6 +1591,21 @@ button.scorecard-intent { line-height: 1.4; }
 .seg button.on { background: var(--accent); color: var(--raised); }
 .seg button:not(.on):hover { color: var(--ink); }
 .sv-body { display: flex; flex-direction: column; gap: 8px; }
+.sv-controls { display: inline-flex; align-items: center; gap: 6px; }
+.sv-full-btn {
+  flex: none; width: 26px; height: 26px; border: 1px solid var(--line); border-radius: 7px;
+  background: var(--raised); color: var(--ink-soft); cursor: pointer; font-size: 13px; line-height: 1;
+}
+.sv-full-btn:hover { border-color: var(--accent); color: var(--accent); }
+/* full-screen overlay: the whole structure panel fixed over the shell (modal
+   z-scale = 60), so every lens — Map, Blast, Transcript — expands with it.
+   The blast map/rail height caps lift so the extra room reaches the map. */
+.sv.is-full {
+  position: fixed; inset: 0; z-index: 60; margin: 0;
+  overflow-y: auto; padding: 16px 24px 24px; background: var(--paper);
+}
+.sv.is-full .br-map { max-height: none; }
+.sv.is-full .br-rail { max-height: calc(100vh - 120px); }
 
 .phase { border: 1px solid var(--line); border-radius: var(--radius); background: var(--raised); padding: 8px 12px; }
 .ph { display: flex; align-items: baseline; gap: 9px; }
