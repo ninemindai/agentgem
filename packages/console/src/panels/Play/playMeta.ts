@@ -5,6 +5,7 @@ export const GENRES: Record<string, { label: string; icon: string; tint: string 
   replay: { label: "Session replay", icon: "▶", tint: "var(--gold)" },
   "skill-run": { label: "Skill run", icon: "⚙", tint: "var(--emerald)" },
   "project-fun": { label: "Project fun", icon: "★", tint: "var(--accent)" },
+  "session-heatmap": { label: "Live session", icon: "🔥", tint: "var(--accent)" },
   html: { label: "Imported", icon: "⌘", tint: "var(--ink-soft)" },
 };
 export const genre = (g: string) => GENRES[g] ?? { label: g, icon: "◆", tint: "var(--muted)" };
@@ -12,6 +13,7 @@ export const genre = (g: string) => GENRES[g] ?? { label: g, icon: "◆", tint: 
 // Capability chips are DISPLAY-ONLY in v1 (the consent gate + broker are deferred).
 export const CHIP: Record<string, { label: string; title: string }> = {
   "live-session-events": { label: "🔴 live", title: "reads live sessions (host-brokered, read-only)" },
+  "context-hygiene": { label: "🔥 pulse", title: "reads your live session's context-health (host-brokered, read-only)" },
   "local-project-access": { label: "🟡 local", title: "reads local projects (host-brokered, read-only)" },
   "invoke-agent": { label: "⚙ agent", title: "runs a local agent (local-authored only)" },
   "session-data": { label: "📊 data", title: "reads its source session (host-brokered)" },

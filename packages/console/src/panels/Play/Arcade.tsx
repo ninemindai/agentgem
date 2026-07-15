@@ -101,11 +101,15 @@ export function Arcade({ apiBase, onOpen }: { apiBase: string; onOpen: (name: st
         const showId = idIsWorthShowing(m, items);
         return (
           <li key={m.name} className="play-card" onClick={() => !asking && onOpen(m.name)} title={`Open ${m.name}`}>
-            <button
-              type="button" className="play-card__del" aria-label={`Delete ${m.name}`} title={`Delete ${m.name}`}
-              disabled={deleting !== null}   // no second dialog while a delete is in flight
-              onClick={(e) => { e.stopPropagation(); askDelete(m.name); }}
-            >✕</button>
+            {/* Built-ins (__-prefixed, e.g. __ember) are served constants, not registry entries — deleting
+                them is meaningless (and would 404), so they carry no delete affordance. */}
+            {!m.name.startsWith("__") && (
+              <button
+                type="button" className="play-card__del" aria-label={`Delete ${m.name}`} title={`Delete ${m.name}`}
+                disabled={deleting !== null}   // no second dialog while a delete is in flight
+                onClick={(e) => { e.stopPropagation(); askDelete(m.name); }}
+              >✕</button>
+            )}
             <Thumb apiBase={apiBase} name={m.name} needs={m.needs} />
             <div className="play-card__body">
               <div className="play-card__title">{m.title}</div>
