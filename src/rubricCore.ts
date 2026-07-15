@@ -18,9 +18,9 @@ import {
   transcriptToken, readAnalysisCacheEntry, writeAnalysisCache,
   computeCached, type CacheHit,
   builtinRubrics, loadRubrics, validateRubric, defaultRubricsDir, evaluateRubric,
-  artifactToRubric,
+  artifactToRubric, rubricGranularity,
   DETECTORS, loadRuleDetectors,
-  type Rubric, type RubricScope, type RubricReport, type WorkflowSignal, type AcpConnectFn,
+  type Rubric, type RubricScope, type RubricReport, type WorkflowSignal, type AcpConnectFn, type RubricGranularity,
 } from "@agentgem/insight";
 
 const ID_RE = /^[a-z0-9][a-z0-9-]{0,63}$/;
@@ -60,10 +60,12 @@ export function listRubrics(dir?: string): Rubric[] {
   return [...builtinRubrics(), ...loadRubrics(dir, reserved)];
 }
 
-/** Catalog listing with a `builtin` flag so the UI can gate edit/delete to user rubrics. */
-export function listRubricsWithMeta(dir?: string): (Rubric & { builtin: boolean })[] {
+/** Catalog listing with a `builtin` flag so the UI can gate edit/delete to user
+ *  rubrics, and `granularity` so the picker can offer session scope only for
+ *  session-granular rubrics (mirrors the server-side scopeAllowed hard rule). */
+export function listRubricsWithMeta(dir?: string): (Rubric & { builtin: boolean; granularity: RubricGranularity })[] {
   const builtinIds = new Set(builtinRubrics().map((r) => r.id));
-  return listRubrics(dir).map((r) => ({ ...r, builtin: builtinIds.has(r.id) }));
+  return listRubrics(dir).map((r) => ({ ...r, builtin: builtinIds.has(r.id), granularity: rubricGranularity(r) }));
 }
 
 // ── Authoring: validate / save / delete user rubrics (JSON in ~/.agentgem/rubrics) ──

@@ -3,6 +3,7 @@ import { testbedRecentsRoute, testbedProjectsRoute, rubricsRoute, makeClient, ty
 import { defineConsolePage } from "../../registry.js";
 import { openRubricStream, openRubricReportStream, type RubricReportView, type RubricFactorView, type RubricScopeParams } from "./rubricStream.js";
 import { HygieneLeaderboard } from "./HygieneLeaderboard.js";
+import { SessionPicker, type PickedSession } from "../_shared/SessionPicker.js";
 import { consumePendingRubricRun, type PendingRubricRun } from "../../pendingAnalyze.js";
 import { Loading } from "../../shell/Loading.js";
 import { timeAgo } from "../../util/timeAgo.js";
@@ -229,6 +230,13 @@ export function Rubrics({ apiBase }: { apiBase: string }) {
   };
   const reportElapsed = reportGen.startedAt ? Math.floor((Date.now() - reportGen.startedAt) / 1000) : 0;
 
+  const selected = rubrics?.find((r) => r.id === rubricId);
+  // Whether this rubric may run at "session" scope — the hard rule the server
+  // enforces via scopeAllowed (session needs a session-granular rubric). Trust the
+  // server-computed `granularity`; fall back to the naturalScope hint only for an
+  // older server that predates the field.
+  const sessionCapable = selected ? (selected.granularity ? selected.granularity === "session" : selected.naturalScope === "session") : false;
+
   const rows = (() => {
     const seen = new Set<string>();
     const acc: { path: string; flavor: string; label: string }[] = [];
@@ -237,14 +245,28 @@ export function Rubrics({ apiBase }: { apiBase: string }) {
     const q = query.trim().toLowerCase();
     const matched = q ? acc.filter((r) => r.label.toLowerCase().includes(q) || r.path.toLowerCase().includes(q)) : acc;
     return [
-      // The deep-linked session target leads the list — it's what the user clicked for.
-      ...(sessionRow ? [{ path: "session:" + sessionRow.sessionId, flavor: "session", label: sessionRow.label }] : []),
+      // The picked/deep-linked session leads the list — but only while the rubric
+      // can run per-session; an aggregate rubric offers project/all rows only.
+      ...(sessionRow && sessionCapable ? [{ path: "session:" + sessionRow.sessionId, flavor: "session", label: sessionRow.label }] : []),
       { path: "*", flavor: "all", label: "All projects" },
       ...matched.slice(0, 40),
     ];
   })();
 
-  const selected = rubrics?.find((r) => r.id === rubricId);
+  // Picking a session runs it straight away (like the deep-link autorun) and pins
+  // its synthetic row so the output has somewhere to render.
+  const onPickSession = (s: PickedSession) => {
+    setSessionRow(s);
+    startRun(rubricId, "session:" + s.sessionId, { scope: "session", sessionId: s.sessionId });
+  };
+
+  // Switching to an aggregate-only rubric drops any pinned session — it can't run
+  // per-session, so the stale session row (and its active output) must clear.
+  useEffect(() => {
+    if (sessionCapable || !sessionRow) return;
+    setSessionRow(null);
+    setActivePath((p) => (p?.startsWith("session:") ? null : p));
+  }, [sessionCapable, sessionRow]);
 
   const running = view.status === "running";
   const report = view.report?.report ?? null;
@@ -267,6 +289,21 @@ export function Rubrics({ apiBase }: { apiBase: string }) {
         </select>
         {selected?.naturalScope && <span className="ws-chip" title="The scope this rubric is designed for">best at: {selected.naturalScope}</span>}
       </div>
+
+      {/* Session-granular rubrics can run against one session; pick it here. They can
+          also aggregate over a project or the corpus, so the row list below stays. */}
+      {sessionCapable && (
+        <div className="rub-picker">
+          <label className="rub-picker-label">Session</label>
+          <SessionPicker
+            apiBase={apiBase}
+            selectedId={sessionRow?.sessionId ?? null}
+            selectedLabel={sessionRow?.label ?? null}
+            onPick={onPickSession}
+          />
+          <span className="ledger-muted">— or run a whole project / the corpus below</span>
+        </div>
+      )}
 
       {(projects || recents) && (
         <input className="ledger-search" type="text" placeholder="search projects…" aria-label="search projects" value={query} onChange={(e) => setQuery(e.target.value)} style={{ margin: "12px 0" }} />

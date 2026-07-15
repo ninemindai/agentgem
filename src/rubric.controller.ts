@@ -45,8 +45,12 @@ const RubricSchema = z.object({
   factors: z.array(RubricFactorRefSchema),
   criteria: z.array(LlmCriterionSchema).optional(),
 });
-// listRubricsWithMeta adds the `builtin` flag the picker gates edit/delete on.
-const RubricWithBuiltinSchema = RubricSchema.extend({ builtin: z.boolean() });
+// listRubricsWithMeta adds the `builtin` flag the picker gates edit/delete on,
+// and `granularity` so the picker offers session scope only where scopeAllowed does.
+const RubricWithBuiltinSchema = RubricSchema.extend({
+  builtin: z.boolean(),
+  granularity: z.enum(["session", "aggregate"]),
+});
 const FactorKindSchema = z.object({
   factor: z.string(),
   kind: z.enum(["detector", "rule", "criterion", "unknown"]),
