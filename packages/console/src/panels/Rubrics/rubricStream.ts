@@ -68,6 +68,56 @@ const rubricStreamRoute = defineRoute("GET", "/api/rubric/stream", {
  * panel already uses, but typed end to end and validated per event. Returns a
  * function that aborts the stream (also stops the server generator via res.close).
  */
+// ── Report render stream (GET /api/rubric/report) ───────────────────────────
+// Turns a (cached) rubric evaluation into a self-contained HTML report via the
+// server's plan-mode agent. Same addressing as the evaluation stream, no refresh.
+export type RubricReportRenderEvent =
+  | { type: "start"; rubric: string; title: string; scope: string }
+  | { type: "delta"; text: string }
+  | { type: "done"; html: string; truncated: boolean }
+  | { type: "failed"; message: string };
+
+const ReportWireEvent = z.discriminatedUnion("type", [
+  z.object({ type: z.literal("start"), rubric: z.string(), title: z.string(), scope: z.string() }),
+  z.object({ type: z.literal("delta"), text: z.string() }),
+  z.object({ type: z.literal("done"), html: z.string(), truncated: z.boolean() }),
+  z.object({ type: z.literal("failed"), message: z.string() }),
+]);
+
+const rubricReportRoute = defineRoute("GET", "/api/rubric/report", {
+  query: z.object({
+    rubric: z.string(),
+    scope: z.enum(["session", "project", "all"]).optional(),
+    root: z.string().optional(),
+    sessionId: z.string().optional(),
+  }),
+  streamOf: ReportWireEvent,
+});
+
+/** Open the report-render stream. Same `(onEvent) => cleanup` contract as
+ *  openRubricStream. */
+export function openRubricReportStream(
+  client: Client,
+  params: RubricScopeParams,
+  onEvent: (e: RubricReportRenderEvent) => void,
+): () => void {
+  const ctrl = new AbortController();
+  const query: { rubric: string; scope: RubricScopeParams["scope"]; root?: string; sessionId?: string } = {
+    rubric: params.rubric,
+    scope: params.scope,
+  };
+  if (params.root) query.root = params.root;
+  if (params.sessionId) query.sessionId = params.sessionId;
+  void (async () => {
+    try {
+      for await (const e of rubricReportRoute.stream(client, { query }, { signal: ctrl.signal })) onEvent(e);
+    } catch {
+      if (!ctrl.signal.aborted) onEvent({ type: "failed", message: "stream connection error" });
+    }
+  })();
+  return () => ctrl.abort();
+}
+
 export function openRubricStream(
   client: Client,
   params: RubricScopeParams,

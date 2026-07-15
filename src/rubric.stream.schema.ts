@@ -49,3 +49,28 @@ export const RubricEvent = z.discriminatedUnion("type", [
   FailedEvent,
 ]);
 export type RubricEvent = z.infer<typeof RubricEvent>;
+
+/** Query for GET /api/rubric/report — same scope addressing as the evaluation
+ *  stream. No `refresh`: the report renders from the (cached) evaluation; a
+ *  fresh evaluation happens on the evaluation stream, not here. */
+export const RubricReportStreamQuery = z.object({
+  rubric: z.string().min(1),
+  scope: z.enum(["session", "project", "all"]).optional(),
+  root: z.string().optional(),
+  sessionId: z.string().optional(),
+  dir: z.string().optional(),
+});
+export type RubricReportStreamQuery = z.infer<typeof RubricReportStreamQuery>;
+
+const ReportStartEvent = z.object({ type: z.literal("start"), rubric: z.string(), title: z.string(), scope: z.string() });
+// `html` is the finished self-contained document (already capped server-side).
+const ReportDoneEvent = z.object({ type: z.literal("done"), html: z.string(), truncated: z.boolean() });
+
+/** One report-render event. Reuses the evaluation stream's delta/failed shapes. */
+export const RubricReportEvent = z.discriminatedUnion("type", [
+  ReportStartEvent,
+  DeltaEvent,
+  ReportDoneEvent,
+  FailedEvent,
+]);
+export type RubricReportEvent = z.infer<typeof RubricReportEvent>;

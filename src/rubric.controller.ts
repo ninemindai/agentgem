@@ -16,13 +16,13 @@ import { z } from "zod";
 import { api, get, post } from "@agentback/openapi";
 import { inject } from "@agentback/core";
 import { listRubricsWithMeta, validateRubricInput, saveRubric, deleteRubric, computeRubric as realComputeRubric, resolveRubric } from "./rubricCore.js";
-import { scopeAllowed, resolveClaudeSession, type RubricScope } from "@agentgem/insight";
+import { scopeAllowed, resolveClaudeSession, renderReport as realRenderReport, type RubricScope } from "@agentgem/insight";
 import { resolveDir } from "@agentgem/model";
 import { beginForeground, endForeground } from "./warm/orchestrator.js";
 import { ReportRegistry, REPORT_REGISTRY } from "./report/registry.js";
 import { trackerFor, rubricParamsKey, queryParams } from "./report/track.js";
 import { pump } from "./sse/pump.js";
-import { RubricStreamQuery, RubricEvent } from "./rubric.stream.schema.js";
+import { RubricStreamQuery, RubricEvent, RubricReportStreamQuery, RubricReportEvent } from "./rubric.stream.schema.js";
 
 // The Rubric shape (packages/insight/src/rubrics.ts), mirrored so /openapi.json
 // describes the catalog + validation payloads. Response validation is advisory
@@ -76,6 +76,26 @@ export function setRubricComputeForTests(fn: ComputeRubric | null): void {
   computeFn = fn ?? realComputeRubric;
 }
 
+// Same seam for the report renderer: the /rubric/report route can be driven
+// without spawning a real coding agent.
+type RenderReport = typeof realRenderReport;
+let renderFn: RenderReport = realRenderReport;
+export function setReportRenderForTests(fn: RenderReport | null): void {
+  renderFn = fn ?? realRenderReport;
+}
+
+// Session scope without a root: derive it server-side from the session's own
+// transcript. Same claude-dir base computeRubric uses (resolveDirs(dir)), and
+// the raw cwd never crosses to the client (see dehomeDistilled's rationale).
+// Returns the error message to emit, or null once scope.root is filled.
+async function fillSessionRoot(scope: RubricScope, dir?: string): Promise<string | null> {
+  if (scope.kind !== "session" || scope.root) return null;
+  const found = await resolveClaudeSession(scope.sessionId, { claudeDir: resolveDir(dir) });
+  if (!found?.cwd) return `session not found: ${scope.sessionId}`;
+  scope.root = found.cwd;
+  return null;
+}
+
 const str = (q: unknown): string | undefined => (typeof q === "string" && q ? q : undefined);
 
 // Parse ?scope=&root=&sessionId= into a RubricScope, or a user-facing error
@@ -126,17 +146,8 @@ export class RubricController {
         if (!rubric) { const m = `unknown rubric: ${id}`; emit({ type: "failed", message: m }); track?.failed(m); return; }
         const scope = parseScope(input.query);
         if ("error" in scope) { emit({ type: "failed", message: scope.error }); track?.failed(scope.error); return; }
-        // Session scope without a root: derive it server-side from the session's
-        // transcript. Same claude-dir base computeRubric uses (resolveDirs(dir)),
-        // and the raw cwd never crosses to the client (see dehomeDistilled's rationale).
-        if (scope.kind === "session" && !scope.root) {
-          const found = await resolveClaudeSession(scope.sessionId, { claudeDir: resolveDir(dir) });
-          if (!found?.cwd) {
-            const m = `session not found: ${scope.sessionId}`;
-            emit({ type: "failed", message: m }); track?.failed(m); return;
-          }
-          scope.root = found.cwd;
-        }
+        const rootErr = await fillSessionRoot(scope, dir);
+        if (rootErr) { emit({ type: "failed", message: rootErr }); track?.failed(rootErr); return; }
         // Hard rule: an aggregate-only rubric can't run at session scope.
         if (!scopeAllowed(rubric, scope.kind)) {
           const m = `rubric "${rubric.id}" is aggregate-only and cannot run at scope "${scope.kind}"`;
@@ -152,6 +163,47 @@ export class RubricController {
       } catch (err) {
         const m = (err as Error)?.message ?? String(err);
         emit({ type: "failed", message: m }); track?.failed(m);
+      } finally {
+        endForeground();
+      }
+    });
+  }
+
+  // GET /api/rubric/report — SSE render of one rubric evaluation into a
+  // self-contained HTML report (the agentgem-report contract, reportRender.ts).
+  // Reads the CACHED evaluation (computeRubric force:false — fresh runs happen on
+  // the evaluation stream, not here), then drives the plan-mode agent. Heavy ACP
+  // work → foreground-gated like the evaluation stream. Not registry-tracked: the
+  // html is downloaded interactively, there is nothing to reattach to.
+  @get("/rubric/report", { query: RubricReportStreamQuery, streamOf: RubricReportEvent })
+  async *report(input: {
+    query: z.infer<typeof RubricReportStreamQuery>;
+  }): AsyncGenerator<z.infer<typeof RubricReportEvent>> {
+    const { rubric: id, dir } = input.query;
+    yield* pump<z.infer<typeof RubricReportEvent>>(async (emit) => {
+      beginForeground();
+      try {
+        const rubric = resolveRubric(id, dir);
+        if (!rubric) { emit({ type: "failed", message: `unknown rubric: ${id}` }); return; }
+        const scope = parseScope(input.query);
+        if ("error" in scope) { emit({ type: "failed", message: scope.error }); return; }
+        const rootErr = await fillSessionRoot(scope, dir);
+        if (rootErr) { emit({ type: "failed", message: rootErr }); return; }
+        if (!scopeAllowed(rubric, scope.kind)) {
+          emit({ type: "failed", message: `rubric "${rubric.id}" is aggregate-only and cannot run at scope "${scope.kind}"` });
+          return;
+        }
+        emit({ type: "start", rubric: rubric.id, title: rubric.title, scope: scope.kind });
+        const { payload } = await computeFn(rubric, scope, { dir });
+        const r = await renderFn({
+          facts: payload,
+          meta: { rubricId: rubric.id, title: rubric.title, scope: scope.kind },
+          onDelta: (chunk) => emit({ type: "delta", text: chunk }),
+        });
+        if (!r.ok) { emit({ type: "failed", message: "report rendering failed — is the local coding agent available?" }); return; }
+        emit({ type: "done", html: r.html, truncated: r.truncated ?? false });
+      } catch (err) {
+        emit({ type: "failed", message: (err as Error)?.message ?? String(err) });
       } finally {
         endForeground();
       }
