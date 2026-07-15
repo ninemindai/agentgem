@@ -42,4 +42,19 @@ describe("resolveLaunch", () => {
   it("returns null when missing", () => {
     expect(resolveLaunch(codex, ctx())).toBeNull();
   });
+
+  it("preserves a descriptor env overlay for a managed adapter (cli)", () => {
+    const entry = entryOf(managedAdapterDir("/home/u", "codex"));
+    const d = resolveLaunch({ ...codex, env: { ANTHROPIC_MODEL: "claude-haiku-4-5" } }, ctx({ present: new Set([entry]) }));
+    expect(d?.env).toEqual({ ANTHROPIC_MODEL: "claude-haiku-4-5" });
+  });
+
+  it("merges ELECTRON_RUN_AS_NODE onto a descriptor env overlay (desktop)", () => {
+    const entry = entryOf(`/Res/adapters/codex`);
+    const d = resolveLaunch(
+      { ...codex, env: { ANTHROPIC_MODEL: "claude-haiku-4-5" } },
+      ctx({ runtime: "desktop", execPath: "/App/Electron", resourcesPath: "/Res", present: new Set([entry]) }),
+    );
+    expect(d?.env).toEqual({ ANTHROPIC_MODEL: "claude-haiku-4-5", ELECTRON_RUN_AS_NODE: "1" });
+  });
 });

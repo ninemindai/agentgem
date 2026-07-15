@@ -109,7 +109,9 @@ export function resolveLaunch(descriptor: AgentDescriptor, ctx: AdapterCtx): Age
     return { ...descriptor, command: [r.binOnPath ?? descriptor.command[0], ...descriptor.command.slice(1)] };
   }
   const command = [ctx.execPath, r.entry!, ...descriptor.command.slice(1)];
-  const env = ctx.runtime === "desktop" ? { ELECTRON_RUN_AS_NODE: "1" } : undefined;
+  // Merge (not replace) onto the descriptor's own overlay — e.g. a per-task
+  // ANTHROPIC_MODEL from agentTasks must survive the desktop launch rewrite.
+  const env = ctx.runtime === "desktop" ? { ...descriptor.env, ELECTRON_RUN_AS_NODE: "1" } : descriptor.env;
   return env ? { ...descriptor, command, env } : { ...descriptor, command };
 }
 
