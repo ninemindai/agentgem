@@ -14,7 +14,6 @@ import { Loading } from "../../shell/Loading.js";
 import { setPendingContribution } from "../../pendingAnalyze.js";
 import { QuickShareButton } from "../_shared/QuickShareButton.js";
 import { ContextTimeline } from "./ContextTimeline.js";
-import { BlastRadius } from "./BlastRadius.js";
 import { ProcessQualityReport } from "./ProcessQualityReport.js";
 import { StructureView } from "./StructureView.js";
 
@@ -79,7 +78,6 @@ export function TranscriptViewer({ apiBase, agent, sessionId, onBack, turn }: {
       </div>
 
       {view && <ContextTimeline apiBase={apiBase} agent={agent} sessionId={view.sessionId} />}
-      {view && <BlastRadius apiBase={apiBase} agent={agent} sessionId={view.sessionId} />}
       {view && <ProcessQualityReport apiBase={apiBase} agent={agent} sessionId={view.sessionId} />}
       {view && <DistillSection apiBase={apiBase} agent={agent} sessionId={view.sessionId} turns={view.turns} />}
 
@@ -90,7 +88,7 @@ export function TranscriptViewer({ apiBase, agent, sessionId, onBack, turn }: {
       ) : view.turns.length === 0 ? (
         <p className="obs-empty">This session has no readable turns.</p>
       ) : (
-        <StructureView key={targetId ?? "default"} view={view} collapsed={collapsed} onToggle={toggle} forceTx={targetId !== undefined} />
+        <StructureView key={targetId ?? "default"} view={view} collapsed={collapsed} onToggle={toggle} forceTx={targetId !== undefined} apiBase={apiBase} agent={agent} />
       )}
     </div>
   );
