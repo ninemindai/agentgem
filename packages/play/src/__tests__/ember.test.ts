@@ -30,6 +30,32 @@ describe("EMBER built-in miniapp", () => {
     dom.window.close();
   });
 
+  it("goes live from the host's real notification wire, through the embedded shim", () => {
+    // Regression: EMBER once registered onNotification("agentgem_subscribe_hygiene", ...) — a key the
+    // shim never dispatches (it dispatches "ui/notifications/tool-result" with {toolName, chunk}) — so
+    // live mode was dead and the game sat in DEMO forever. Drive the REAL wire: post the host's exact
+    // notification envelope at the window (the shim's `host` is window.parent === window in jsdom, and
+    // jsdom drops `source`, so pin it explicitly — same trick as the console Runner tests).
+    const dom = new JSDOM(EMBER_HTML, { runScripts: "dangerously", pretendToBeVisual: true, url: "https://localhost/" });
+    const w = dom.window;
+    const ev = new w.MessageEvent("message", {
+      data: {
+        jsonrpc: "2.0", method: "ui/notifications/tool-result",
+        params: {
+          content: [],
+          structuredContent: { type: "hygiene", verdict: "bounded", cap: 1_000_000, curveTail: [{ turn: 400, msgIndex: 900, ctxTokens: 420_000, cacheCreation: 0, outTokens: 0 }] },
+          _meta: { "ai.agentgem/stream": { toolName: "agentgem_subscribe_hygiene" } },
+        },
+      },
+    });
+    Object.defineProperty(ev, "source", { value: w });
+    w.dispatchEvent(ev);
+    const fill = w.document.getElementById("fill") as HTMLElement;
+    expect(parseFloat(fill.style.width)).toBeCloseTo(42, 0); // 420k / 1M — live gauge, not demo
+    expect((w.document.getElementById("demoBadge") as HTMLElement).style.display).toBe("none");
+    dom.window.close();
+  });
+
   it("declares copy-command and copies /compact on a live clean-cut BANK", () => {
     expect(EMBER_META.needs).toContain("copy-command");
     expect(EMBER_HTML).toContain("copyCommand");
