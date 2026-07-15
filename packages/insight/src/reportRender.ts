@@ -45,10 +45,13 @@ export function buildReportPrompt(input: ReportRenderInput): string {
 }
 
 /** Render one report. A generous default timeout: a full document is a bigger
- *  ask than the live dashboard's incremental evolve. */
+ *  ask than the live dashboard's incremental evolve, and the ACP agent inherits the
+ *  user's default coding-agent model — which may be a large, slow-to-generate one.
+ *  A ~1500-word HTML doc measured at ~68s on a large model; 300s leaves margin for a
+ *  full report before we surface a timeout. See fix/agent-timeouts. */
 export async function renderReport(input: ReportRenderInput): Promise<ReportRenderResult> {
   const connectFn = input.connectFn ?? currentTestConnectFn() ?? defaultConnectFn;
-  const timeoutMs = input.timeoutMs ?? 180_000;
+  const timeoutMs = input.timeoutMs ?? 300_000;
   let conn: { ctx: AcpCtx; close: () => void } | null = null;
   let handle: AcpSessionHandle | null = null;
   const t0 = Date.now();
