@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { buildTimeline } from "./ctxTimeline.js";
+import { buildTimeline, turnIndexForMsg } from "./ctxTimeline.js";
 
 const curve = [
   { turn: 0, msgIndex: 1, ctxTokens: 1000, cacheCreation: 500, outTokens: 10 },
@@ -50,5 +50,26 @@ describe("buildTimeline", () => {
     const issuingTurnJump = m.jumps.find((j) => j.turn === 1);
     expect(issuingTurnJump).toMatchObject({ delta: 50, category: "other" });
     expect(issuingTurnJump?.cause).not.toMatch(/review/);
+  });
+});
+
+describe("turnIndexForMsg", () => {
+  const turns = [{ msgIndex: 0 }, { msgIndex: 3 }, { msgIndex: 7 }];
+  it("maps a curve msgIndex to the last turn at or before that line", () => {
+    expect(turnIndexForMsg(turns, 7)).toBe(2);
+    expect(turnIndexForMsg(turns, 5)).toBe(1);
+    expect(turnIndexForMsg(turns, 0)).toBe(0);
+  });
+  it("returns null when no turn precedes the line or turns carry no msgIndex", () => {
+    expect(turnIndexForMsg([{}, {}], 5)).toBeNull();      // codex / old server
+    expect(turnIndexForMsg(turns, -1)).toBeNull();
+  });
+});
+
+describe("jump msgIndex", () => {
+  it("each ranked jump carries the curve point's msgIndex for the transcript deep-link", () => {
+    const m = buildTimeline(curve, events, 1_000_000);
+    expect(m.jumps[0].msgIndex).toBe(4);   // turn 1's curve point
+    expect(m.jumps[1].msgIndex).toBe(7);   // turn 2's curve point
   });
 });

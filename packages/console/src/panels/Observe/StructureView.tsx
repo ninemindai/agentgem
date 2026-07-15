@@ -13,6 +13,7 @@ import { PhaseFlamestrip } from "./PhaseFlamestrip.js";
 import { Turn } from "./turnTree.js";
 import { BlastRadius } from "./BlastRadius.js";
 import { ContextTimeline } from "./ContextTimeline.js";
+import { turnIndexForMsg } from "./ctxTimeline.js";
 
 export function StructureView({ view, collapsed, onToggle, forceTx, apiBase, agent }: {
   view: TranscriptView; collapsed: Set<string>; onToggle: (id: string) => void; forceTx?: boolean;
@@ -67,7 +68,14 @@ export function StructureView({ view, collapsed, onToggle, forceTx, apiBase, age
           : mode === "blast"
           ? <BlastRadius apiBase={apiBase} agent={agent} sessionId={view.sessionId} />
           : mode === "ctx"
-          ? <ContextTimeline apiBase={apiBase} agent={agent} sessionId={view.sessionId} />
+          ? <ContextTimeline apiBase={apiBase} agent={agent} sessionId={view.sessionId}
+              onOpenTurn={(msgIndex) => {
+                // Spike → verbatim turn: reuse the existing ?turn deep-link
+                // (Recall's path), which re-keys StructureView into Transcript
+                // mode with the target turn expanded and scrolled into view.
+                const idx = turnIndexForMsg(view.turns, msgIndex);
+                if (idx !== null) window.location.hash = `#/sessions/${agent}/${view.sessionId}?turn=${idx}`;
+              }} />
           : <ol className="tv-turns">{view.turns.map((turn) => (
               <Turn key={turn.id} turn={turn} startMs={view.meta.startMs} open={!collapsed.has(turn.id)} onToggle={() => onToggle(turn.id)} />
             ))}</ol>}

@@ -119,6 +119,7 @@ const TranscriptSpanSchema = z.discriminatedUnion("kind", [
 const TranscriptTurnSchema = z.object({
   id: z.string(), role: z.enum(["user", "assistant"]), tsMs: z.number(),
   spans: z.array(TranscriptSpanSchema), tokens: TokenBreakdownSchema,
+  msgIndex: z.number().optional(),   // raw JSONL line index (Claude only) — joins the hygiene curve
 });
 const TranscriptViewSchema = z.object({
   sessionId: z.string(), agent: z.string(),
