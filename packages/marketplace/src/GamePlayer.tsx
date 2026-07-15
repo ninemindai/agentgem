@@ -2,8 +2,8 @@
 import { useEffect, useRef, useState, type CSSProperties } from "react";
 
 // Seal an artifact's HTML: strict CSP (no network) + a null-origin sandbox. Mirrors the console's
-// sandboxDoc, including the in-memory localStorage shim so a game that touches storage doesn't crash
-// on load in the null-origin frame.
+// sandboxDoc — the in-memory localStorage shim (a game that touches storage doesn't crash in the
+// null-origin frame), the '#'-anchor shim, and the CSP-first re-emit.
 const CSP = "default-src 'none'; style-src 'unsafe-inline'; script-src 'unsafe-inline'; img-src data:; font-src data:; media-src data:;";
 const STORAGE_SHIM =
   "<script>(function(){function make(){var m=Object.create(null);return{" +
@@ -13,10 +13,29 @@ const STORAGE_SHIM =
   "get length(){return Object.keys(m).length;}};}" +
   "['localStorage','sessionStorage'].forEach(function(n){var ok=false;try{window[n]&&window[n].getItem;ok=true;}catch(e){}" +
   "if(!ok){try{Object.defineProperty(window,n,{value:make(),configurable:true});}catch(e){}}});})();</script>";
+
+// A srcdoc frame inherits the PARENT's document URL as its base, so a bare in-page anchor (<a href="#/x">,
+// the shape every hash-router game emits) resolves against the game page's URL rather than the frame's own
+// about:srcdoc. Clicking it is therefore a cross-document navigation that loads the marketplace SPA shell
+// inside the sealed null-origin frame, where its crossorigin assets fail CORS — the game goes blank.
+// Intercept same-page anchors in the capture phase and drive location.hash on THIS document instead: a
+// same-document fragment change scrolls / fires hashchange in-frame (hash-router games keep working) and
+// can never reach the host. preventDefault only — the game's own click handlers still run.
+const ANCHOR_SHIM =
+  "<script>(function(){document.addEventListener('click',function(e){" +
+  "var a=e.target&&e.target.closest?e.target.closest('a[href]'):null;if(!a)return;" +
+  "var h=a.getAttribute('href');if(!h||h.charAt(0)!=='#')return;" +
+  "e.preventDefault();try{location.hash=h.slice(1);}catch(_e){}},true);})();</script>";
+
 function sealedDoc(html: string): string {
-  const head = `<meta http-equiv="Content-Security-Policy" content="${CSP}">${STORAGE_SHIM}`;
-  if (/<head[\s>]/i.test(html)) return html.replace(/<head([^>]*)>/i, `<head$1>${head}`);
-  return `<!doctype html><html><head>${head}</head><body>${html}</body></html>`;
+  const head = `<meta http-equiv="Content-Security-Policy" content="${CSP}">${STORAGE_SHIM}${ANCHOR_SHIM}`;
+  // Force the CSP meta to be the FIRST node in <head>, whatever the input's shape. Injecting after an
+  // existing <head> lets a <script> placed BEFORE that <head> run at parse time — before the policy
+  // applied — free to open a network connection the CSP would otherwise block. DOMParser does NOT execute
+  // scripts; HTML5 tree construction relocates any pre-<head> script into <head>. Re-emit with our static
+  // CSP first, then the parsed head/body, so the policy parses before any of the document's own scripts.
+  const doc = new DOMParser().parseFromString(html, "text/html");
+  return `<!doctype html><html><head>${head}${doc.head.innerHTML}</head><body>${doc.body.innerHTML}</body></html>`;
 }
 
 // Sealed mini-game player: null-origin sandboxed iframe (no allow-same-origin → no network).
