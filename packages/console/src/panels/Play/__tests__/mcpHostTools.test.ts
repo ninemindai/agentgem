@@ -114,18 +114,19 @@ describe("invokeAgent", () => {
 });
 
 describe("CAP_TOOL / TOOL_CAP / HOST_TOOLS", () => {
-  it("CAP_TOOL and TOOL_CAP are exact inverses over 4 capabilities", () => {
-    expect(Object.keys(CAP_TOOL)).toHaveLength(4);
-    expect(Object.keys(TOOL_CAP)).toHaveLength(4);
+  it("CAP_TOOL and TOOL_CAP are exact inverses over 5 capabilities", () => {
+    expect(Object.keys(CAP_TOOL)).toHaveLength(5);
+    expect(Object.keys(TOOL_CAP)).toHaveLength(5);
     for (const [cap, tool] of Object.entries(CAP_TOOL)) expect(TOOL_CAP[tool]).toBe(cap);
   });
 
-  it("HOST_TOOLS has the 4 exact tool names, each visibility:['app']", () => {
-    expect(HOST_TOOLS).toHaveLength(4);
+  it("HOST_TOOLS has the 5 exact tool names, each visibility:['app']", () => {
+    expect(HOST_TOOLS).toHaveLength(5);
     expect(HOST_TOOLS.map((t) => t.name).sort()).toEqual([
       "agentgem_get_inventory",
       "agentgem_get_session_data",
       "agentgem_invoke_agent",
+      "agentgem_subscribe_hygiene",
       "agentgem_subscribe_sessions",
     ]);
     for (const t of HOST_TOOLS) expect(t._meta.ui.visibility).toEqual(["app"]);

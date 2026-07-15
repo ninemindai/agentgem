@@ -1005,9 +1005,10 @@ export const sourceImportRoute = defineRoute("POST", "/api/sources/import", {
 // ---- Play (miniapps) — client mirrors of the server /api/play/* routes ----
 // The 3 action caps (open-link/send-message/update-model-context) are included alongside the 4 tool caps
 // so this schema covers the full GameCapability union (@agentgem/model) — the built-in Protocol Inspector
-// below declares all seven, and a response `needs` array response validation would otherwise reject it.
+// below declares seven of these, and a response `needs` array response validation would otherwise reject it.
 const PlayNeedsSchema = z.array(z.enum([
   "session-data", "live-session-events", "local-project-access", "invoke-agent",
+  "context-hygiene",
   "open-link", "send-message", "update-model-context",
 ])).optional();
 const PlaySourceSchema = z.discriminatedUnion("kind", [

@@ -60,7 +60,8 @@ export type ToolCapability =
   | "session-data"          // read-only: the game's own source-session transcript ({meta,timeline}), host-brokered on demand
   | "live-session-events"   // read-only: streamed live session events (host -> /api/watch/stream)
   | "local-project-access"  // read-only: local projects / setup / inventory (host-brokered)
-  | "invoke-agent";         // privileged: host runs a local ACP agent in the sandbox; game gets the transcript
+  | "invoke-agent"          // privileged: host runs a local ACP agent in the sandbox; game gets the transcript
+  | "context-hygiene";      // read-only: streamed context-hygiene of the viewer's live session (host -> /api/watch/hygiene)
 
 // A ui/* method on window.agentgemApp with no backing tool. deriveNeeds() matches these by METHOD NAME
 // (capabilities.ts CAP_METHOD). Egress channels out of the sealed frame — see the design spec F5.

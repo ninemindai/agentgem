@@ -18,6 +18,7 @@ const CAP_CLASS: Record<GameCapability, "content" | "enhancement"> = {
   "live-session-events": "enhancement",
   "local-project-access": "enhancement",
   "invoke-agent": "enhancement",
+  "context-hygiene": "enhancement",      // live-only upgrade; the demo-mode sim is the baked no-host fallback
   "open-link": "enhancement",            // egress, never a game's primary content
   "send-message": "enhancement",
   "update-model-context": "enhancement",
