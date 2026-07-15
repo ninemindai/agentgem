@@ -30,4 +30,28 @@ describe("GamePlayer", () => {
     expect(frame().getAttribute("srcdoc")).toContain("PLAY ME");
     expect(frame().getAttribute("sandbox")).toBe("allow-scripts");
   });
+
+  it("neutralizes in-page '#' anchors so they can't escape the srcdoc frame to the host page", () => {
+    // A srcdoc frame inherits the PARENT's URL as its base, so a hash-router game's <a href="#/route">
+    // resolves to the host page URL — a cross-document navigation that loads the whole SPA shell inside
+    // the null-origin frame, where its crossorigin assets fail CORS and the game goes blank.
+    render(<GamePlayer html='<a href="#/find-my-match">go</a>' startFullscreen />);
+    const doc = frame().getAttribute("srcdoc")!;
+    expect(doc).toContain("addEventListener('click'");
+    expect(doc).toContain("location.hash");
+    // armed before the body so the listener is live before the game's own scripts/clicks
+    expect(doc.indexOf("location.hash")).toBeLessThan(doc.indexOf("<body"));
+  });
+
+  it("keeps the CSP meta ahead of a script placed before <head> (pre-CSP execution)", () => {
+    // With naive head-injection, a script placed BEFORE <head> runs at parse time before the CSP
+    // meta applies — free to open a connection the policy would block.
+    render(<GamePlayer html="<script>window.__evil=1</script><head><title>t</title></head><body>x</body>" startFullscreen />);
+    const doc = frame().getAttribute("srcdoc")!;
+    const cspAt = doc.indexOf("Content-Security-Policy");
+    const evilAt = doc.indexOf("__evil");
+    expect(cspAt).toBeGreaterThanOrEqual(0);
+    expect(evilAt).toBeGreaterThanOrEqual(0);
+    expect(cspAt).toBeLessThan(evilAt); // CSP parses first → the script runs under the policy
+  });
 });
