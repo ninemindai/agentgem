@@ -167,6 +167,44 @@ function makeUpdateSurface(): UpdateSurface {
   };
 }
 
+// Shared by File → "Check for Updates…" and the About dialog's button.
+function checkForUpdates(opts: { quietOffline?: boolean } = {}): void {
+  // electron-updater can't update an unpackaged build (dev run) — a manual check would
+  // just error with "not packed". Say so plainly instead of a confusing failure dialog.
+  if (!app.isPackaged) {
+    void dialog
+      .showMessageBox({
+        type: "info",
+        buttons: ["OK"],
+        title: DESKTOP_NAME,
+        message: "Updates are disabled in development.",
+        detail: "Run a packaged build to test auto-update.",
+      })
+      .catch(() => {});
+    return;
+  }
+  updateController?.check({ manual: true, ...opts });
+}
+
+// Custom About: the native panel can't host an update check. quietOffline keeps the
+// result dialogs but drops the error popup when the machine simply has no network.
+function showAbout(): void {
+  void dialog
+    .showMessageBox({
+      type: "info",
+      title: `About ${DESKTOP_NAME}`,
+      message: DESKTOP_NAME,
+      detail: `Version ${app.getVersion()}`,
+      buttons: ["Check for Updates…", "OK"],
+      defaultId: 1,
+      cancelId: 1,
+    })
+    .then(({ response }) => {
+      if (response === 0) checkForUpdates({ quietOffline: true });
+    })
+    .catch(() => {});
+}
+
 function setupUpdates(): UpdateController {
   // Set the update feed explicitly from package.json's repository field. If that
   // fails (missing/odd repository), fall back to the publish config baked into
@@ -248,23 +286,8 @@ async function boot(): Promise<void> {
         platform: process.platform,
         isDev,
         appName: DESKTOP_NAME,
-        onCheckUpdates: () => {
-          // electron-updater can't update an unpackaged build (dev run) — a manual check would
-          // just error with "not packed". Say so plainly instead of a confusing failure dialog.
-          if (!app.isPackaged) {
-            void dialog
-              .showMessageBox({
-                type: "info",
-                buttons: ["OK"],
-                title: DESKTOP_NAME,
-                message: "Updates are disabled in development.",
-                detail: "Run a packaged build to test auto-update.",
-              })
-              .catch(() => {});
-            return;
-          }
-          updateController?.check({ manual: true });
-        },
+        onCheckUpdates: () => checkForUpdates(),
+        onAbout: showAbout,
       }),
     ),
   );

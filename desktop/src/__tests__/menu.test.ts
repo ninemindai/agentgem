@@ -1,8 +1,8 @@
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, vi } from "vitest";
 import { buildMenuTemplate, buildContextMenuTemplate } from "../menu.js";
 
 const noop = () => {};
-const base = { appName: "AgentGem", onCheckUpdates: noop };
+const base = { appName: "AgentGem", onCheckUpdates: noop, onAbout: noop };
 
 describe("buildMenuTemplate", () => {
   it("adds a branded app menu first on darwin", () => {
@@ -10,7 +10,30 @@ describe("buildMenuTemplate", () => {
     expect(t[0].label).toBe("AgentGem");
     const items = t[0].submenu as any[];
     expect(items.some((i) => i.role === "quit" && i.label === "Quit AgentGem")).toBe(true);
-    expect(items.some((i) => i.role === "about" && i.label === "About AgentGem")).toBe(true);
+    expect(items.some((i) => i.label === "About AgentGem")).toBe(true);
+  });
+
+  // About is a custom dialog (version + update check), not the native role —
+  // the native macOS About panel can't host a "Check for Updates…" button.
+  it("wires About to onAbout instead of the native role on darwin", () => {
+    const onAbout = vi.fn();
+    const t = buildMenuTemplate({ platform: "darwin", isDev: false, ...base, onAbout });
+    const about = (t[0].submenu as any[]).find((i) => i.label === "About AgentGem");
+    expect(about.role).toBeUndefined();
+    about.click();
+    expect(onAbout).toHaveBeenCalledTimes(1);
+  });
+
+  it("offers About in a Help menu on non-darwin platforms", () => {
+    const onAbout = vi.fn();
+    for (const platform of ["win32", "linux"] as const) {
+      onAbout.mockClear();
+      const t = buildMenuTemplate({ platform, isDev: false, ...base, onAbout });
+      const help = t.find((m) => m.label === "Help");
+      const about = (help?.submenu as any[]).find((i) => i.label === "About AgentGem");
+      about.click();
+      expect(onAbout).toHaveBeenCalledTimes(1);
+    }
   });
 
   it("omits the app menu on non-darwin", () => {
