@@ -1459,6 +1459,9 @@ button.scorecard-intent { line-height: 1.4; }
   width: 100%; height: 580px; border: 1px solid var(--line); border-radius: var(--radius);
   background: var(--raised);
 }
+/* the long-form report is a document, not a panel — give it a page's height */
+.sd-frame.is-report { height: min(1100px, 78vh); }
+.sd-kind { flex: none; }
 
 /* worst-first cross-session hygiene leaderboard (Rubrics panel) */
 .hyg-lb-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 0; }

@@ -10,7 +10,7 @@ import { readFile } from "node:fs/promises";
 import { basename } from "node:path";
 import {
   claudeSessionEvents, codexSessionEvents, resolveClaudeSession, resolveCodexSession,
-  dashboardToken, type SessionEvent,
+  dashboardToken, type SessionEvent, type BlastReport,
 } from "@agentgem/insight";
 
 export class DashboardInputError extends Error {}
@@ -48,6 +48,62 @@ export interface SessionDashboardInput {
   token: string;                // dashboardToken(path)
   project: string | null;       // cwd basename — display name only, never the full path
   events: SessionEvent[];       // capped, ordered
+}
+
+// ── Report facts (kind=report) ───────────────────────────────────────────────
+// The long-form editorial report (renderReport / the agentgem-report contract,
+// same engine as the rubric reports and the context-bloat mockup family) wants
+// DETERMINISTIC FACTS, not raw events: session basics, the hygiene readout
+// (Claude only — codex carries no per-turn window accounting), and a blast
+// summary. Everything here is already scrubbed by the underlying cores.
+const TOP_TARGETS = 12;
+const TOP_COMMANDS = 10;
+const CURVE_POINTS = 240;
+
+export function blastFacts(rep: BlastReport): Record<string, unknown> {
+  type Tally = { target: string; zone?: string; visits: number; edited: boolean; errors: number };
+  const files = new Map<string, Tally>();
+  const commands = new Map<string, number>();
+  const skills = new Set<string>();
+  const agents = new Set<string>();
+  let errors = 0, outside = 0;
+  for (const e of rep.events) {
+    if (e.error) errors++;
+    if (e.zone && e.target) {
+      const key = `${e.zone}|${e.target}`;
+      let t = files.get(key);
+      if (!t) { t = { target: e.target, zone: e.zone, visits: 0, edited: false, errors: 0 }; files.set(key, t); }
+      t.visits++;
+      if (e.action === "edit") t.edited = true;
+      if (e.error) t.errors++;
+    } else if (e.action === "exec" && e.target) {
+      commands.set(e.target, (commands.get(e.target) ?? 0) + 1);
+    } else if (e.action === "skill" && e.target) skills.add(e.target);
+    else if (e.action === "agent" && e.target) agents.add(e.target);
+  }
+  const all = [...files.values()];
+  outside = all.filter((t) => t.zone !== "project").length;
+  return {
+    events: rep.events.length,
+    filesTouched: all.length,
+    edited: all.filter((t) => t.edited).length,
+    outsideProject: outside,
+    errors,
+    topTargets: all.sort((a, b) => b.visits - a.visits).slice(0, TOP_TARGETS),
+    topCommands: [...commands.entries()].sort((a, b) => b[1] - a[1]).slice(0, TOP_COMMANDS)
+      .map(([verb, count]) => ({ verb, count })),
+    skills: [...skills].sort(),
+    subagents: [...agents].sort(),
+  };
+}
+
+/** Downsample a hygiene curve to at most `max` points, always keeping the last. */
+export function downsampleCurve<T>(curve: T[], max = CURVE_POINTS): T[] {
+  if (curve.length <= max) return curve;
+  const step = Math.ceil(curve.length / max);
+  const out = curve.filter((_, i) => i % step === 0);
+  if (out[out.length - 1] !== curve[curve.length - 1]) out.push(curve[curve.length - 1]);
+  return out;
 }
 
 export async function resolveSessionDashboardInput(id: string, agent: string): Promise<SessionDashboardInput> {
