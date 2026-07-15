@@ -1,4 +1,5 @@
 import { describe, it, expect } from "vitest";
+import { JSDOM } from "jsdom";
 import { EMBER_META, EMBER_HTML } from "../ember.js";
 
 describe("EMBER built-in miniapp", () => {
@@ -13,5 +14,19 @@ describe("EMBER built-in miniapp", () => {
     expect(EMBER_HTML).toContain('id="fill"'); // the gauge element the live event drives
     // Word-list trap: served constants skip gameGate, but keep the doc clean of network keywords anyway.
     expect(EMBER_HTML).not.toMatch(/EventSource|XMLHttpRequest|WebSocket|sendBeacon/);
+  });
+
+  it("a pushed hygiene event drives the gauge fill from ctxTokens/cap and hides the DEMO badge", () => {
+    // jsdom has no canvas 2D context (render() no-ops); the game's DOM logic still runs. __emberFeed is
+    // the same function the host-brokered onNotification calls, so this exercises the real live mapping.
+    const dom = new JSDOM(EMBER_HTML, { runScripts: "dangerously", pretendToBeVisual: true, url: "https://localhost/" });
+    const w = dom.window as unknown as { __emberFeed?: (e: unknown) => void; document: Document };
+    expect(typeof w.__emberFeed).toBe("function");
+    w.__emberFeed!({ type: "hygiene", verdict: "bloated", cap: 200000, curveTail: [{ turn: 9, msgIndex: 18, ctxTokens: 160000, cacheCreation: 0, outTokens: 0 }] });
+    const fill = w.document.getElementById("fill") as HTMLElement;
+    expect(parseFloat(fill.style.width)).toBeGreaterThan(75); // 160000/200000 = 80%
+    expect(parseFloat(fill.style.width)).toBeLessThanOrEqual(100);
+    expect((w.document.getElementById("demoBadge") as HTMLElement).style.display).toBe("none"); // live -> no DEMO
+    dom.window.close();
   });
 });
