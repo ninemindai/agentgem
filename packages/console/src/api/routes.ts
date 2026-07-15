@@ -541,6 +541,30 @@ export const hygieneRoute = defineRoute("GET", "/api/inspect/session/hygiene", {
 });
 export type HygieneReport = z.infer<typeof HygieneReportSchema>;
 
+// Per-session blast radius: ordered scrubbed touch events (files, skills,
+// subagents, MCP servers, commands) for the Inspect → Session replay map.
+// Mirrors the server BlastReportSchema (src/gem.controller.ts) exactly.
+export const BlastReportSchema = z.object({
+  meta: z.object({
+    sessionId: z.string(), transcript: z.string(),
+    project: z.string().nullable(), startMs: z.number(), endMs: z.number(),
+  }),
+  events: z.array(z.object({
+    seq: z.number(), msgIndex: z.number(), tsMs: z.number().nullable(),
+    tool: z.string(),
+    action: z.enum(["read", "search", "edit", "exec", "skill", "agent", "mcp", "other"]),
+    target: z.string().nullable(),
+    zone: z.enum(["project", "home", "tmp", "outside"]).optional(),
+    sidechain: z.boolean().optional(), error: z.boolean().optional(),
+  })),
+});
+export const blastRoute = defineRoute("GET", "/api/inspect/session/blast", {
+  query: z.object({ id: z.string(), agent: z.enum(["claude", "codex"]) }),
+  response: BlastReportSchema,
+});
+export type BlastReport = z.infer<typeof BlastReportSchema>;
+export type BlastEvent = BlastReport["events"][number];
+
 // Mirrors the server SessionSummarySchema (src/gem.controller.ts) exactly.
 export const SessionSummarySchema = z.object({
   sessionId: z.string(), agent: z.string(),

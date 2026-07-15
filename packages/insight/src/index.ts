@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: MIT
 // @agentgem/insight — scan transcripts -> signals, distill skills, recommend & attest Gems.
 export * from "./workflowScan.js";
+export * from "./blastScan.js";
 export * from "./rawUsageScan.js";
 export * from "./outcomeScore.js";
 export * from "./artifactOutcomes.js";
