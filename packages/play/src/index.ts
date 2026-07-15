@@ -21,3 +21,4 @@ export { resolveSessionRef, type SessionRef } from "./sessionRef.js";
 export { CAP_TOOL, TOOL_CAP, CAP_METHOD, METHOD_CAP, AUTO_CAPS } from "@agentgem/model";
 export { deriveNeeds, reconcileNeeds, hasDynamicToolCall, type Reconciled } from "./capabilityScan.js";
 export { INSPECTOR_HTML, INSPECTOR_META } from "./inspector.js";
+export { EMBER_HTML, EMBER_META } from "./ember.js";

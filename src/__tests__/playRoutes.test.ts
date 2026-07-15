@@ -84,7 +84,16 @@ describe("PlayController", () => {
     const a = await ctrl.blank({ body: { title: "Duel" } });
     const b = await ctrl.blank({ body: { title: "Duel" } });
     expect([a.name, b.name]).toEqual(["duel", "duel-2"]);
-    expect((await ctrl.miniapps()).miniapps.map((m) => m.name).sort()).toEqual(["duel", "duel-2"]);
+    // Filter built-ins (__-prefixed served constants like __ember) — this asserts registry behavior.
+    expect((await ctrl.miniapps()).miniapps.map((m) => m.name).filter((n) => !n.startsWith("__")).sort()).toEqual(["duel", "duel-2"]);
+  });
+
+  it("built-in EMBER is listed as an Arcade card and resolvable by name", async () => {
+    const ctrl = new PlayController();
+    expect((await ctrl.miniapps()).miniapps.map((m) => m.name)).toContain("__ember");
+    const r = await ctrl.miniapp({ query: { name: "__ember" } });
+    expect(r.html).toContain("agentgem_subscribe_hygiene");
+    expect(r.meta.needs).toContain("context-hygiene");
   });
 
   // A typed name is honored exactly; a taken one is a 409 (well-formed request, id not free), never a
@@ -93,7 +102,7 @@ describe("PlayController", () => {
     const ctrl = new PlayController();
     expect((await ctrl.blank({ body: { title: "Anything", name: "My Duel" } })).name).toBe("my-duel");
     await expect(ctrl.blank({ body: { title: "Anything", name: "my-duel" } })).rejects.toMatchObject({ statusCode: 409 });
-    expect((await ctrl.miniapps()).miniapps.map((m) => m.name)).toEqual(["my-duel"]);  // no my-duel-2
+    expect((await ctrl.miniapps()).miniapps.map((m) => m.name).filter((n) => !n.startsWith("__"))).toEqual(["my-duel"]);  // no my-duel-2
   });
 
   it("an explicit name works on import too, and the bundle lands in index.html", async () => {
