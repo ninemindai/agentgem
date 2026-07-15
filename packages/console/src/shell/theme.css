@@ -608,7 +608,11 @@ body::before {
   transform: translateX(-6px); border-radius: 6px;
 }
 .split-handle[data-side="start"] { left: var(--split); }
-.split-handle[data-side="end"]   { right: var(--split); transform: translateX(6px); }
+/* end-side: `right` resolves against the container's PADDING box while the grid
+   rail sits in the content box, so each container reports its padding-right via
+   --split-gutter; the -2px shift then parks the handle in the grid gap instead
+   of over the rail's first glyphs (.ct/.br gap 16, .rub-editor gap 12). */
+.split-handle[data-side="end"]   { right: calc(var(--split) + var(--split-gutter, 0px)); transform: translateX(-2px); }
 .split-handle::before {
   content: ""; position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);
   width: 3px; height: 34px; border-radius: 3px; background: var(--line);
@@ -1353,7 +1357,7 @@ button.scorecard-intent { line-height: 1.4; }
 .ct {
   margin: 0 0 16px; padding: 12px 14px; border: 1px solid var(--line); border-radius: var(--radius);
   background: var(--raised); box-shadow: var(--shadow-sm);
-  position: relative;
+  position: relative; --split-gutter: 14px;
   display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, var(--split, 288px)); gap: 16px; align-items: start;
 }
 /* Below the responsive collapse the panel is a single column, so the divider
@@ -1391,7 +1395,7 @@ button.scorecard-intent { line-height: 1.4; }
 .br {
   margin: 0 0 16px; padding: 12px 14px; border: 1px solid var(--line); border-radius: var(--radius);
   background: var(--raised); box-shadow: var(--shadow-sm);
-  position: relative;
+  position: relative; --split-gutter: 14px;
   display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, var(--split, 288px)); gap: 16px; align-items: start;
 }
 .br:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
@@ -1897,7 +1901,7 @@ button.scorecard-intent { line-height: 1.4; }
 .rub-lib-top { display: flex; align-items: flex-start; gap: 12px; margin-bottom: 12px; }
 .rub-lib-top .analyze-intro { flex: 1; }
 .rub-del { color: var(--accent); }
-.rub-editor { position: relative; display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, var(--split, 240px)); gap: 12px; margin: 8px 0 12px;
+.rub-editor { position: relative; --split-gutter: 12px; display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, var(--split, 240px)); gap: 12px; margin: 8px 0 12px;
   border: 1px solid var(--line); border-radius: var(--radius); background: var(--raised); padding: 12px; }
 .rub-editor-text { font: 12.5px/1.5 var(--font-mono); color: var(--ink); background: var(--paper);
   border: 1px solid var(--line); border-radius: 7px; padding: 10px; resize: vertical; width: 100%; }
