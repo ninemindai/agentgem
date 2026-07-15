@@ -68,7 +68,8 @@ export type ToolCapability =
 export type ActionCapability =
   | "open-link"             // ui/open-link: navigate the user to an external URL (consent-gated, URL shown)
   | "send-message"          // ui/message: speak into the conversation as the user (local-only)
-  | "update-model-context"; // ui/update-model-context: push structured state into the model (local-only)
+  | "update-model-context"  // ui/update-model-context: push structured state into the model (local-only)
+  | "copy-command";         // ui/copy-command: copy a command to the clipboard (consent-gated, text shown, never remembered)
 
 export type GameCapability = ToolCapability | ActionCapability;
 

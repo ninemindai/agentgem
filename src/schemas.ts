@@ -101,7 +101,7 @@ export const ReferenceArtifactSchema = z.object({
 export const GameCapabilityEnum = z.enum([
   "session-data", "live-session-events", "local-project-access", "invoke-agent",
   "context-hygiene",
-  "open-link", "send-message", "update-model-context",
+  "open-link", "send-message", "update-model-context", "copy-command",
 ]);
 
 // The GameGenre union (packages/model types.ts) as a wire enum. Used both by the archive-facing

@@ -13,13 +13,14 @@ export const CAP_LABEL: Record<string, string> = {
   "open-link": "open an external link in your browser",
   "send-message": "send a message into your conversation as you",
   "update-model-context": "push structured state into the model's context",
+  "copy-command": "copy a command to your clipboard",
 };
 
 // The consent-gated capabilities, in display order. `session-data` is deliberately absent: AUTO_CAPS
 // marks it auto-approved (declared at seed), so it is never something a user opts into.
 export const CONSENT_CAPS = [
   "local-project-access", "live-session-events", "context-hygiene", "invoke-agent",
-  "open-link", "send-message", "update-model-context",
+  "open-link", "send-message", "update-model-context", "copy-command",
 ] as const;
 
 // GameCapability -> MCP tool name, and the inverse. Browser-safe mirror of @agentgem/model's canonical
