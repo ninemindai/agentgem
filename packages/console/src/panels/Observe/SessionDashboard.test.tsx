@@ -44,6 +44,21 @@ describe("SessionDashboard", () => {
     expect(s.spy).toHaveBeenLastCalledWith(expect.anything(), expect.objectContaining({ fresh: true }), expect.any(Function));
   });
 
+  it("a stale done event shows the session-changed notice and regenerate affordance without auto-regenerating", async () => {
+    const s = mockStream();
+    render(<SessionDashboard apiBase="/" agent="claude" sessionId="s1" />);
+    s.emit({ type: "done", html: "<b>stale copy</b>", cached: true, stale: true, updatedAt: 1_752_598_000_000 });
+    // stale copy still renders — no silent regeneration was requested
+    const frame = document.querySelector("iframe.sd-frame") as HTMLIFrameElement;
+    expect(frame.getAttribute("srcdoc")).toContain("stale copy");
+    expect(s.spy).toHaveBeenCalledTimes(1);
+    expect(s.spy).toHaveBeenLastCalledWith(expect.anything(), expect.objectContaining({ fresh: false }), expect.any(Function));
+    expect(screen.getByText(/session changed since this was generated/i)).toBeTruthy();
+    // the affordance: user decides when to pay for the re-render
+    fireEvent.click(screen.getByRole("button", { name: /session changed — regenerate/i }));
+    expect(s.spy).toHaveBeenLastCalledWith(expect.anything(), expect.objectContaining({ fresh: true }), expect.any(Function));
+  });
+
   it("surfaces failures with a retry", async () => {
     const s = mockStream();
     render(<SessionDashboard apiBase="/" agent="claude" sessionId="s1" />);

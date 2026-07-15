@@ -130,7 +130,10 @@ const SessionDashboardEventSchema = z.discriminatedUnion("type", [
   // `actions` rides the report kind's done event: deterministic findings the
   // console pairs with the distill pipeline (finding → gem). Recomputed on
   // every request — the cache stores only the expensive html.
-  z.object({ type: z.literal("done"), html: z.string(), cached: z.boolean(), updatedAt: z.number(), actions: z.array(RecommendedActionSchema).optional() }),
+  // `stale: true` = the transcript changed since this html was generated; the
+  // server serves the old copy instantly and the console offers a regenerate
+  // affordance instead of silently re-running the expensive agent render.
+  z.object({ type: z.literal("done"), html: z.string(), cached: z.boolean(), stale: z.boolean().optional(), updatedAt: z.number(), actions: z.array(RecommendedActionSchema).optional() }),
   z.object({ type: z.literal("failed"), message: z.string() }),
 ]);
 const TokenBreakdownSchema = z.object({ in: z.number(), out: z.number(), cache: z.number() });
@@ -343,7 +346,7 @@ import { computeDistill, DISTILL_BACKGROUND_TIMEOUT_MS } from "./distillCore.js"
 import { sessionHygiene, HygieneInputError, type HygieneReport } from "./sessionHygieneCore.js";
 import { sessionBlast, BlastInputError } from "./sessionBlastCore.js";
 import { resolveSessionDashboardInput, DashboardInputError, blastFacts, downsampleCurve, recommendedActions } from "./sessionDashboardCore.js";
-import { renderDashboard, renderReport, readDashboardCacheEntry, writeDashboardCache } from "@agentgem/insight";
+import { renderDashboard, renderReport, readDashboardCacheEntry, readDashboardCacheLatest, writeDashboardCache } from "@agentgem/insight";
 import { pump } from "./sse/pump.js";
 import { beginForeground, endForeground } from "./warm/orchestrator.js";
 
@@ -628,6 +631,15 @@ export class GemController {
         if (cached && !fresh) {
           emit({ type: "start", cached: true, events: inp.events.length });
           emit({ type: "done", html: cached.html, cached: true, updatedAt: cached.ts, ...(actions ? { actions } : {}) });
+          return;
+        }
+        // Transcript changed since the last render (token mismatch): serve the
+        // stale copy instantly and let the user decide whether to regenerate —
+        // never silently re-run the multi-minute agent render.
+        const stale = fresh ? null : readDashboardCacheLatest(id, kind);
+        if (stale) {
+          emit({ type: "start", cached: true, events: inp.events.length });
+          emit({ type: "done", html: stale.html, cached: true, stale: true, updatedAt: stale.ts, ...(actions ? { actions } : {}) });
           return;
         }
         emit({ type: "start", cached: false, events: inp.events.length });

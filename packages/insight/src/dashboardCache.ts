@@ -41,6 +41,14 @@ export function readDashboardCacheEntry(sessionId: string, token: string, kind: 
   return e ? { html: e.html, ts: e.ts } : null;
 }
 
+/** Latest cached entry for (sessionId, kind) IGNORING the token — used to serve a
+ *  stale copy instantly when the transcript changed, instead of silently re-running
+ *  the expensive agent render. Callers mark the result stale and let the user decide. */
+export function readDashboardCacheLatest(sessionId: string, kind: DashboardKind = "summary"): { html: string; ts: number } | null {
+  const e = readAll().find((x) => x.sessionId === sessionId && kindOf(x) === kind);
+  return e ? { html: e.html, ts: e.ts } : null;
+}
+
 /** Store (sessionId, kind, token) → html, replacing any prior entry for that
  *  session+kind. Capped + best-effort. */
 export function writeDashboardCache(sessionId: string, token: string, html: string, nowMs: number, kind: DashboardKind = "summary"): void {

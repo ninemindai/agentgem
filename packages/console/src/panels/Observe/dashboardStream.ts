@@ -18,14 +18,14 @@ export interface RecommendedAction {
 export type SessionDashboardEvent =
   | { type: "start"; cached: boolean; events: number }
   | { type: "delta"; text: string }
-  | { type: "done"; html: string; cached: boolean; updatedAt: number; actions?: RecommendedAction[] }
+  | { type: "done"; html: string; cached: boolean; stale?: boolean; updatedAt: number; actions?: RecommendedAction[] }
   | { type: "failed"; message: string };
 
 const WireEvent = z.discriminatedUnion("type", [
   z.object({ type: z.literal("start"), cached: z.boolean(), events: z.number() }),
   z.object({ type: z.literal("delta"), text: z.string() }),
   z.object({
-    type: z.literal("done"), html: z.string(), cached: z.boolean(), updatedAt: z.number(),
+    type: z.literal("done"), html: z.string(), cached: z.boolean(), stale: z.boolean().optional(), updatedAt: z.number(),
     actions: z.array(z.object({
       id: z.string(), title: z.string(), advice: z.string(),
       severity: z.enum(["info", "warn"]), occurrences: z.number(),
