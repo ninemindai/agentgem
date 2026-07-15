@@ -159,9 +159,9 @@ describe("Shell — phase-primary nav", () => {
     expect(screen.getByText("My Gem")).toBeTruthy();
   });
 
-  it("renders the notification bell in the header", () => {
+  it("renders the report-activity menu in the footer", () => {
     render(<Shell pages={pages} apiBase="" />);
-    expect(screen.getByRole("button", { name: /notification/i })).toBeTruthy();
+    expect(screen.getByRole("button", { name: /report activity/i })).toBeTruthy();
   });
 
   it("renders the identity chip in the footer, unbound when the daemon is unreachable", async () => {
