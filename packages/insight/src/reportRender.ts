@@ -10,11 +10,11 @@
 // (dual-shipped as skills/agentgem-report/SKILL.md).
 import {
   type AcpConnectFn, type AcpCtx, type AcpSessionHandle,
-  CLAUDE_AGENT, analysisWorkspace, currentTestConnectFn, defaultConnectFn,
+  analysisWorkspace, currentTestConnectFn, defaultConnectFn,
 } from "./acpRecommender.js";
 import { extractHtml } from "./dashboardRender.js";
 import { REPORT_BUILDER_BRIEF } from "./reportBrief.js";
-import { createLogger } from "@agentgem/base";
+import { createLogger, taskAgent } from "@agentgem/base";
 
 const log = createLogger("insight");
 
@@ -58,7 +58,7 @@ export async function renderReport(input: ReportRenderInput): Promise<ReportRend
   try {
     const deadline = Date.now() + timeoutMs;
     const left = () => Math.max(0, deadline - Date.now());
-    conn = await withTimeout(connectFn(CLAUDE_AGENT, null), left());
+    conn = await withTimeout(connectFn(taskAgent("report"), null), left());
     handle = await withTimeout(conn.ctx.open(analysisWorkspace()), left());
     await withTimeout(handle.setMode("plan"), left());
     const text = await withTimeout(handle.promptText(buildReportPrompt(input), input.onDelta), left());

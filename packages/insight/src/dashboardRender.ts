@@ -8,11 +8,11 @@
 // Mirrors narrateInsights: never throws — returns the last-good HTML on any failure.
 import {
   type AcpConnectFn, type AcpCtx, type AcpSessionHandle,
-  CLAUDE_AGENT, analysisWorkspace, currentTestConnectFn, defaultConnectFn,
+  analysisWorkspace, currentTestConnectFn, defaultConnectFn,
 } from "./acpRecommender.js";
 import type { SessionEvent } from "./inspectSession.js";
 import type { AgentId } from "./observeAggregate.js";
-import { createLogger } from "@agentgem/base";
+import { createLogger, taskAgent } from "@agentgem/base";
 
 const log = createLogger("insight");
 export const MAX_HTML = 80_000;
@@ -96,7 +96,7 @@ export async function renderDashboard(input: RenderInput): Promise<RenderResult>
   try {
     const deadline = Date.now() + timeoutMs;
     const left = () => Math.max(0, deadline - Date.now());
-    conn = await withTimeout(connectFn(CLAUDE_AGENT, null), left());
+    conn = await withTimeout(connectFn(taskAgent("report"), null), left());
     handle = await withTimeout(conn.ctx.open(analysisWorkspace()), left());
     await withTimeout(handle.setMode("plan"), left());
     const text = await withTimeout(handle.promptText(buildPrompt(input)), left());

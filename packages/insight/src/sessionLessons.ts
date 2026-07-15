@@ -14,9 +14,9 @@ import type { DistilledLesson, Occurrence, Provenance } from "./distillTypes.js"
 import { lessonSlug } from "./distillTypes.js";
 import { sanitizeShareText, scrubText } from "./scrub.js";
 import {
-  type AcpConnectFn, CLAUDE_AGENT, analysisWorkspace, currentTestConnectFn, defaultConnectFn,
+  type AcpConnectFn, analysisWorkspace, currentTestConnectFn, defaultConnectFn,
 } from "./acpRecommender.js";
-import { createLogger } from "@agentgem/base";
+import { createLogger, taskAgent } from "@agentgem/base";
 
 const log = createLogger("insight");
 
@@ -104,8 +104,9 @@ export async function distillSessionLessons(
     const prompt = SESSION_LESSONS(JSON.stringify(session.missionHint), JSON.stringify(spine));
     const deadline = Date.now() + timeoutMs;
     const left = () => Math.max(0, deadline - Date.now());
-    log.debug("session-lessons: requesting %s for 1 session (%d step(s))", CLAUDE_AGENT.name, spine.length);
-    conn = await withTimeout(connectFn(CLAUDE_AGENT, null), left());
+    const agent = taskAgent("judge");
+    log.debug("session-lessons: requesting %s for 1 session (%d step(s))", agent.name, spine.length);
+    conn = await withTimeout(connectFn(agent, null), left());
     handle = await withTimeout(conn.ctx.open(analysisWorkspace()), left());
     await withTimeout(handle.setMode("plan"), left());
     const text = await withTimeout(handle.promptText(prompt), left());
