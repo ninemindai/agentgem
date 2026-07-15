@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { testbedRecentsRoute, testbedProjectsRoute, rubricsRoute, makeClient, type RecentEntry, type ProjectCandidate, type RubricSummary } from "../../api/routes.js";
 import { defineConsolePage } from "../../registry.js";
-import { openRubricStream, type RubricReportView, type RubricFactorView, type RubricScopeParams } from "./rubricStream.js";
+import { openRubricStream, openRubricReportStream, type RubricReportView, type RubricFactorView, type RubricScopeParams } from "./rubricStream.js";
 import { HygieneLeaderboard } from "./HygieneLeaderboard.js";
 import { consumePendingRubricRun, type PendingRubricRun } from "../../pendingAnalyze.js";
 import { Loading } from "../../shell/Loading.js";
@@ -180,15 +180,34 @@ export function Rubrics({ apiBase }: { apiBase: string }) {
     else if (p.root) setActivePath(p.root);
   }, [view.params, activePath]);
 
+  // Map a row path to its stream scope params (shared by evaluate + report).
+  const scopeFor = (path: string): { scope: "all" | "project" | "session"; root?: string; sessionId?: string } =>
+    path.startsWith("session:") ? { scope: "session", sessionId: path.slice("session:".length) }
+      : path === "*" ? { scope: "all" }
+      : { scope: "project", root: path };
+
   const run = (path: string, fresh = false) => {
     if (!rubricId) return;
-    if (path.startsWith("session:")) {
-      startRun(rubricId, path, { scope: "session", sessionId: path.slice("session:".length) }, fresh);
-    } else if (path === "*") {
-      startRun(rubricId, path, { scope: "all" }, fresh);
-    } else {
-      startRun(rubricId, path, { scope: "project", root: path }, fresh);
-    }
+    startRun(rubricId, path, scopeFor(path), fresh);
+  };
+
+  // "Generate report": render the (cached) evaluation into a self-contained HTML
+  // document via the server's plan-mode agent, then download it. One at a time.
+  const [reportGen, setReportGen] = useState<{ status: "idle" | "running" | "done" | "failed"; error?: string }>({ status: "idle" });
+  const generateReport = (path: string) => {
+    if (!rubricId || reportGen.status === "running") return;
+    setReportGen({ status: "running" });
+    openRubricReportStream(makeClient(apiBase), { rubric: rubricId, ...scopeFor(path) }, (e) => {
+      if (e.type === "done") {
+        const a = document.createElement("a");
+        a.href = URL.createObjectURL(new Blob([e.html], { type: "text/html" }));
+        a.download = `${rubricId}-report.html`;
+        a.click();
+        setReportGen({ status: "done" });
+      } else if (e.type === "failed") {
+        setReportGen({ status: "failed", error: e.message });
+      }
+    });
   };
 
   const rows = (() => {
@@ -259,9 +278,20 @@ export function Rubrics({ apiBase }: { apiBase: string }) {
                           <>
                             {updatedAt != null && <span className="ledger-muted" style={{ marginLeft: "auto", marginRight: 8 }}>updated {timeAgo(updatedAt)}</span>}
                             <button type="button" className="ledger-view" style={updatedAt == null ? { marginLeft: "auto" } : undefined} onClick={() => run(r.path, true)}>Re-run ↻</button>
+                            <button
+                              type="button"
+                              className="ledger-view"
+                              style={{ marginLeft: 8 }}
+                              disabled={reportGen.status === "running"}
+                              title="Render this evaluation into a self-contained HTML report (local agent) and download it"
+                              onClick={() => generateReport(r.path)}
+                            >
+                              {reportGen.status === "running" ? "Generating…" : "Generate report ⤓"}
+                            </button>
                           </>
                         )}
                       </div>
+                      {reportGen.status === "failed" && <p className="ledger-error">{reportGen.error}</p>}
                       {error && <p className="ledger-error">{error}</p>}
                       {out && !report && <pre className="run-transcript">{out}</pre>}
                       {report && <RubricReportCard report={report} />}

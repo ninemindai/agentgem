@@ -7,8 +7,8 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import supertest from "supertest";
 import { RestApplication } from "@agentback/rest";
-import { RubricController, setRubricComputeForTests } from "../rubric.controller.js";
-import { RubricEvent } from "../rubric.stream.schema.js";
+import { RubricController, setRubricComputeForTests, setReportRenderForTests } from "../rubric.controller.js";
+import { RubricEvent, RubricReportEvent } from "../rubric.stream.schema.js";
 import { ReportRegistry, REPORT_REGISTRY } from "../report/registry.js";
 import { isForegroundBusy } from "../warm/orchestrator.js";
 import type { RubricResult } from "../rubricCore.js";
@@ -203,6 +203,52 @@ describe("RubricController.stream (streamOf route)", () => {
     await drain(ctrl.stream({ query: { rubric: "hygiene", scope: "all" } }));
 
     expect(reg.list().find((r) => r.kind === "rubric")).toMatchObject({ status: "done" });
+  });
+
+  it("report route: renders the cached evaluation into html (start → delta → done)", async () => {
+    setRubricComputeForTests(fakeCompute([]));
+    setReportRenderForTests(async (input) => {
+      input.onDelta?.("rendering…");
+      return { html: "<html>R</html>", ok: true };
+    });
+    try {
+      const events = await drain(new RubricController().report({ query: { rubric: "hygiene", scope: "project", root: "/x" } }));
+      expect(events.map((e) => (e as { type: string }).type)).toEqual(["start", "delta", "done"]);
+      for (const e of events) expect(RubricReportEvent.safeParse(e).success).toBe(true);
+      expect(events[0]).toMatchObject({ type: "start", rubric: "hygiene", scope: "project" });
+      expect(events[2]).toMatchObject({ type: "done", html: "<html>R</html>", truncated: false });
+    } finally {
+      setReportRenderForTests(null);
+    }
+  });
+
+  it("report route: hands the compute payload to the renderer as FACTS", async () => {
+    setRubricComputeForTests(fakeCompute([]));
+    let facts: unknown = null;
+    setReportRenderForTests(async (input) => { facts = input.facts; return { html: "<p>r</p>", ok: true }; });
+    try {
+      await drain(new RubricController().report({ query: { rubric: "hygiene", scope: "all" } }));
+      expect(facts).toMatchObject({ rubricId: "hygiene" });
+    } finally {
+      setReportRenderForTests(null);
+    }
+  });
+
+  it("report route: a degraded renderer (agent offline) becomes a failed event", async () => {
+    setRubricComputeForTests(fakeCompute([]));
+    setReportRenderForTests(async () => ({ html: "", ok: false }));
+    try {
+      const events = await drain(new RubricController().report({ query: { rubric: "hygiene", scope: "all" } }));
+      expect(events.map((e) => (e as { type: string }).type)).toEqual(["start", "failed"]);
+      expect(events[1]).toMatchObject({ type: "failed", message: expect.stringContaining("report rendering failed") });
+    } finally {
+      setReportRenderForTests(null);
+    }
+  });
+
+  it("report route: unknown rubric is a failed event", async () => {
+    const events = await drain(new RubricController().report({ query: { rubric: "nope" } }));
+    expect(events).toEqual([{ type: "failed", message: "unknown rubric: nope" }]);
   });
 
   it("holds the foreground gate until compute settles, even after client disconnect", async () => {
