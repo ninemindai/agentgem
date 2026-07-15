@@ -6,6 +6,7 @@ import { join } from "node:path";
 import { api, get, post } from "@agentback/openapi";
 import { writeDistilledDraft, writeDistilledLesson } from "@agentgem/capture";
 import type { DistilledSkill, Reflection, GuardrailDraft } from "@agentgem/insight";
+import { resolveClaudeSession } from "@agentgem/insight";
 import { agentgemHome, InvalidInputError, resolveTarget, previewGuardrails, applyGuardrails } from "@agentgem/model";
 import { getWarmStatus, runWarmPass, PHASE_OF } from "./warm/orchestrator.js";
 import { reflectionToLesson } from "@agentgem/insight";
@@ -101,9 +102,15 @@ const JourneyEventSchema = z.object({
 });
 const JourneySchema = z.object({ events: z.array(JourneyEventSchema), truncated: z.boolean() });
 const LearnBody = z.object({
-  root: z.string().min(1),
+  // Optional when `session` is given: the console's session views know only the
+  // session id (paths never cross to the client), so the server resolves the
+  // project root from the transcript itself — same boundary as inspectDistill.
+  root: z.string().min(1).optional(),
   dir: z.string().optional(),      // claude-home override (tests / non-default homes)
   session: z.string().optional(),  // transcript basename (".jsonl" optional); default: newest
+  // "guardrails" = deterministic-only fast path (no LLM): enqueue just the
+  // detector guardrails — the session report's finding → review-queue click.
+  only: z.enum(["guardrails"]).optional(),
 });
 const LearnResultSchema = z.object({
   session: z.string(),
@@ -263,6 +270,13 @@ export class DreamController {
   // second entry point into the same queue — accept/dismiss flow is unchanged.
   @post("/dream/learn", { body: LearnBody, response: LearnResultSchema })
   async learn(input: { body: z.infer<typeof LearnBody> }): Promise<z.infer<typeof LearnResultSchema>> {
-    return learnFromSession({ ...input.body, base: this.base });
+    let root = input.body.root;
+    if (!root) {
+      if (!input.body.session) throw new InvalidInputError("Either root or session is required.");
+      const found = await resolveClaudeSession(input.body.session.replace(/\.jsonl$/, ""));
+      if (!found?.cwd) throw new InvalidInputError(`No Claude session '${input.body.session}' found (or it has no recorded project).`);
+      root = found.cwd;
+    }
+    return learnFromSession({ ...input.body, root, base: this.base });
   }
 }

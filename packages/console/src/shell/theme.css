@@ -1472,6 +1472,8 @@ button.scorecard-intent { line-height: 1.4; }
 .sd-action.is-warn { border-left-color: var(--gold); }
 .sd-action b { font-weight: 600; color: var(--ink); }
 .sd-act-cta { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.sd-action-do { margin-top: 4px; display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap; }
+.sd-action-do a { color: var(--accent); }
 
 /* worst-first cross-session hygiene leaderboard (Rubrics panel) */
 .hyg-lb-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 0; }

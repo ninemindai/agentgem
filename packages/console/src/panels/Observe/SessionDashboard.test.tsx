@@ -77,6 +77,36 @@ describe("SessionDashboard", () => {
     expect(distill).toHaveBeenCalledWith(expect.anything(), { body: { id: "s1", agent: "claude" } });
   });
 
+  it("per-finding actions: focused distill for process findings, queue-guardrail for rejection findings", async () => {
+    const s = mockStream();
+    const distill = vi.spyOn(routes.inspectDistillRoute, "call").mockResolvedValue({ distilled: [], lessons: [], degraded: false } as any);
+    const fetchSpy = vi.fn(async () => ({ ok: true, json: async () => ({ enqueued: 1 }) }));
+    vi.stubGlobal("fetch", fetchSpy as unknown as typeof fetch);
+    render(<SessionDashboard apiBase="" agent="claude" sessionId="s1" />);
+    fireEvent.click(screen.getByRole("tab", { name: /report/i }));
+    s.emit({
+      type: "done", html: "<h1>r</h1>", cached: true, updatedAt: 1,
+      actions: [
+        { id: "retry-storm", title: "Same command repeated back-to-back", advice: "Read the output first.", severity: "warn", occurrences: 3 },
+        { id: "tool-rejection", title: "Tool actions the user repeatedly blocked", advice: "Add a guardrail.", severity: "warn", occurrences: 2 },
+      ],
+    });
+    // process finding → focused lesson distill with the finding as focus
+    fireEvent.click(screen.getByRole("button", { name: /distill a lesson for this/i }));
+    expect(distill).toHaveBeenCalledWith(expect.anything(), {
+      body: { id: "s1", agent: "claude", focus: "Same command repeated back-to-back: Read the output first." },
+    });
+    // rejection finding → deterministic guardrail enqueue via /api/dream/learn
+    fireEvent.click(screen.getByRole("button", { name: /queue guardrail/i }));
+    expect(fetchSpy).toHaveBeenCalledWith("/api/dream/learn", expect.objectContaining({
+      method: "POST",
+      body: JSON.stringify({ session: "s1", only: "guardrails" }),
+    }));
+    expect(await screen.findByText(/queued 1 for review/i)).toBeTruthy();
+    expect((screen.getByText(/Review in Journey/) as HTMLAnchorElement).getAttribute("href")).toBe("#/dreaming");
+    vi.unstubAllGlobals();
+  });
+
   it("switches to the Report kind and reopens the stream for it", async () => {
     const s = mockStream();
     render(<SessionDashboard apiBase="/" agent="claude" sessionId="s1" />);

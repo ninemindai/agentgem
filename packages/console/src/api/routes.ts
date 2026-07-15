@@ -650,7 +650,8 @@ export const DistilledLessonSchema = z.object({
 });
 export type DistilledLesson = z.infer<typeof DistilledLessonSchema>;
 export const inspectDistillRoute = defineRoute("POST", "/api/inspect/distill", {
-  body: z.object({ id: z.string(), agent: z.enum(["claude", "codex"]) }),
+  // `focus` scopes the pass to one flagged weakness (report finding): lessons only.
+  body: z.object({ id: z.string(), agent: z.enum(["claude", "codex"]), focus: z.string().max(400).optional() }),
   response: z.object({ distilled: z.array(DistilledSkillSchema), lessons: z.array(DistilledLessonSchema), degraded: z.boolean() }),
 });
 export const workflowDraftRoute = defineRoute("POST", "/api/workflow/draft", {

@@ -32,6 +32,11 @@ export async function learnFromSession(opts: {
   root: string;
   dir?: string;
   session?: string;
+  // "guardrails" = the deterministic-only fast path (no LLM): skip the workflow
+  // distill and reflections, enqueue just the detector guardrails. Used by the
+  // session report's act-on-it strip to route a flagged rejection/error finding
+  // into the review queue in one click.
+  only?: "guardrails";
   now?: () => number;
   distillWf?: typeof distillWorkflow;
   extractRefl?: typeof extractReflections;
@@ -59,8 +64,11 @@ export async function learnFromSession(opts: {
   const g = introspectConfig(dirs);
   const scanInv = { project, global: { skills: g.skills, mcpServers: g.mcpServers, hooks: g.hooks } };
   const signal = scanWorkflow([target], scanInv, { retainSequences: true });
-  const wf = await (opts.distillWf ?? distillWorkflow)(signal, scanInv);
-  const reflections = (opts.extractRefl ?? extractReflections)(signal);
+  const guardrailsOnly = opts.only === "guardrails";
+  const wf = guardrailsOnly
+    ? { distilled: [], degraded: false }
+    : await (opts.distillWf ?? distillWorkflow)(signal, scanInv);
+  const reflections = guardrailsOnly ? [] : (opts.extractRefl ?? extractReflections)(signal);
   const guardrails = (opts.detectGuardrails ?? detectorGuardrails)(signal);
 
   const entries = [
