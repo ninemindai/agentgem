@@ -31,7 +31,6 @@ import { RubricController } from "./rubric.controller.js";
 import { streamWatch } from "./watchStream.js";
 import { streamWatchEvents } from "./watchEvents.js";
 import { streamWatchHygiene } from "./watchHygiene.js";
-import { streamWatchDashboard } from "./watchDashboard.js";
 import { listActiveSessions } from "./watchSessions.js";
 import { registerChatRoutes, makeChatConnectFn, installAgentFn, goldmineMcpServers, resolveChatCwd } from "./goldmine/chatRoutes.js";
 import { resolveAllowedProjectRoot } from "./goldmine/projectRoots.js";
@@ -287,7 +286,6 @@ export function finalizeCommonApp(app: RestApplication, server: Awaited<RestAppl
   server.expressApp.get("/api/watch/hygiene", originGuard, (req, res) => streamWatchHygiene(req as never, res as never));
   // Flavor B: SSE-stream a living HTML dashboard the ACP agent evolves in place,
   // debounced to one render per work-burst.
-  server.expressApp.get("/api/watch/dashboard", originGuard, (req, res) => streamWatchDashboard(req as never, res as never));
   // Goldmine chat: REST + SSE endpoints for multi-turn agent chat grounded in the
   // user's session goldmine. One ChatManager per server process; idle sessions are
   // swept every 60 s. The neutral cwd for each chat session is a stable directory
