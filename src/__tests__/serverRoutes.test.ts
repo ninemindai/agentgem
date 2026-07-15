@@ -16,9 +16,13 @@ import type { RestApplication } from "@agentback/rest";
 describe("server entry route registration (aggregator surface)", () => {
   let app: RestApplication;
   let server: Awaited<RestApplication["restServer"]>;
+  const prevAggUrl = process.env.AGENTGEM_AGGREGATOR_URL;
 
   beforeAll(async () => {
     process.env.SERVE_CONSOLE = "false";
+    // The benchmark proxy fetches the hosted aggregator; point it at an unreachable host so it
+    // degrades to [] (still 200) without a live network dependency in CI.
+    process.env.AGENTGEM_AGGREGATOR_URL = "http://127.0.0.1:1";
     app = await createApp(0);
     // The REST controller dispatch onion is wired up by RestApplication.start(), not merely by
     // awaiting `restServer` — without this, every @api-decorated route 404s even though the
@@ -29,6 +33,8 @@ describe("server entry route registration (aggregator surface)", () => {
 
   afterAll(async () => {
     await app.stop();
+    if (prevAggUrl === undefined) delete process.env.AGENTGEM_AGGREGATOR_URL;
+    else process.env.AGENTGEM_AGGREGATOR_URL = prevAggUrl;
   });
 
   it("registers /healthz", async () => {
@@ -42,5 +48,15 @@ describe("server entry route registration (aggregator surface)", () => {
       .set("sec-fetch-site", "same-origin");
     expect(res.status).not.toBe(404);
     expect(res.status).toBe(200);
+  });
+
+  // The console's Benchmark tab calls /api/benchmark (the hosted-network proxy) in every mode.
+  // The desktop client entry mounts it; the server entry must too, or the tab 404s under
+  // `npx agentgem` / `pnpm dev`. Data comes from the hosted aggregator, not the local pglite.
+  it("serves /api/benchmark via the hosted-network proxy (not a 404)", async () => {
+    const res = await request(server.expressApp).get("/api/benchmark").set("sec-fetch-site", "same-origin");
+    expect(res.status).not.toBe(404);
+    expect(res.status).toBe(200);
+    expect(res.body).toEqual([]); // proxy offline (unreachable AGENTGEM_AGGREGATOR_URL) → degrades to []
   });
 });
