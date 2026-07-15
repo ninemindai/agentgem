@@ -2,6 +2,7 @@
 import { describe, it, expect, afterEach, vi } from "vitest";
 import { playSessionDataRoute, inventoryRoute } from "../../../api/routes.js";
 import * as watchStream from "../../Watch/watchStream.js";
+import * as hygieneStream from "../../Watch/hygieneStream.js";
 import * as studioStream from "../studioStream.js";
 import { createUiHost, type UiHostDeps } from "../mcpUiHost.js";
 
@@ -110,6 +111,36 @@ describe("mcpUiHost — streaming + generation + dispose", () => {
         method: "ui/notifications/tool-result",
         params: { content: [], structuredContent: { type: "event", index: 0 }, _meta: { "ai.agentgem/stream": { toolName: "agentgem_subscribe_sessions" } } },
       }), "*");
+  });
+
+  it("context-hygiene subscribe opens the hygiene stream and pushes events as tool-result chunks", async () => {
+    vi.spyOn(watchStream, "fetchSessions").mockResolvedValue([sess("/f.jsonl")]);
+    let emit: (e: unknown) => void = () => {};
+    vi.spyOn(hygieneStream, "openHygieneStream").mockImplementation((_a, _f, cb) => { emit = cb as (e: unknown) => void; return () => {}; });
+    const { host, target } = mkHost({ needs: ["context-hygiene"] });
+    host.handleMessage(msg(target, { method: "tools/call", id: 21, params: { name: "agentgem_subscribe_hygiene", arguments: {} } }));
+    await tick();
+    expect(posted(target)).toHaveBeenCalledWith(expect.objectContaining({ id: 21, result: { status: "subscribed" } }), "*");
+    const evt = { type: "hygiene", verdict: "bounded", score: 5, cap: 200000, curveTail: [{ turn: 3, msgIndex: 6, ctxTokens: 42000, cacheCreation: 0, outTokens: 0 }], factors: [] };
+    emit(evt);
+    expect(posted(target)).toHaveBeenCalledWith(
+      expect.objectContaining({
+        method: "ui/notifications/tool-result",
+        params: { content: [], structuredContent: evt, _meta: { "ai.agentgem/stream": { toolName: "agentgem_subscribe_hygiene" } } },
+      }), "*");
+  });
+
+  it("context-hygiene idle (no session) releases the guard for a later retry", async () => {
+    const fs = vi.spyOn(watchStream, "fetchSessions").mockResolvedValueOnce([]);
+    const open = vi.spyOn(hygieneStream, "openHygieneStream").mockImplementation(() => () => {});
+    const { host, target } = mkHost({ needs: ["context-hygiene"] });
+    host.handleMessage(msg(target, { method: "tools/call", id: 22, params: { name: "agentgem_subscribe_hygiene", arguments: {} } }));
+    await tick();
+    expect(posted(target)).toHaveBeenCalledWith(expect.objectContaining({ id: 22, result: { status: "idle" } }), "*");
+    fs.mockResolvedValueOnce([sess("/f.jsonl")]);
+    host.handleMessage(msg(target, { method: "tools/call", id: 23, params: { name: "agentgem_subscribe_hygiene", arguments: {} } }));
+    await tick();
+    expect(open).toHaveBeenCalled();  // guard was released, retry subscribed
   });
 
   it("invoke-agent opens a neutral chat (no miniapp field) and streams deltas back", async () => {

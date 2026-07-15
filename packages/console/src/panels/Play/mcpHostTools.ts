@@ -6,6 +6,7 @@
 import type { McpUiTool } from "@agentgem/play";
 import { makeClient, playSessionDataRoute, inventoryRoute } from "../../api/routes.js";
 import { fetchSessions, openWatchStream } from "../Watch/watchStream.js";
+import { openHygieneStream, type HygieneMsg } from "../Watch/hygieneStream.js";
 import { openStudioStream } from "./studioStream.js";
 import { CAP_TOOL, TOOL_CAP } from "./consent.js";
 
@@ -70,6 +71,20 @@ export async function subscribeSessions(
   const file = sessions[0]?.file;
   if (!file) return { status: "idle" };
   const close = openWatchStream(apiBase, file, onEvent);
+  return { status: "subscribed", handle: { close } };
+}
+
+// subscribeHygiene: the "context-hygiene" cap — the most-recent session is "live"; opens the same
+// server-computed context-hygiene SSE the Watch tab consumes. Idle when no session exists yet (the caller
+// releases its guard so a later retry can succeed, mirroring subscribeSessions).
+export async function subscribeHygiene(
+  apiBase: string,
+  onEvent: (e: HygieneMsg) => void,
+): Promise<{ status: "subscribed"; handle: StreamHandle } | { status: "idle" }> {
+  const sessions = await fetchSessions(apiBase);
+  const file = sessions[0]?.file;
+  if (!file) return { status: "idle" };
+  const close = openHygieneStream(apiBase, file, onEvent);
   return { status: "subscribed", handle: { close } };
 }
 

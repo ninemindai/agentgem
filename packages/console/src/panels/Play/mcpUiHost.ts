@@ -11,7 +11,7 @@
 // supplies that callback. This module is inert: nothing imports it yet.
 import { AUTO_CAPS } from "./consent.js";
 import {
-  getSessionData, getInventory, subscribeSessions, openNeutralChat, invokeAgent,
+  getSessionData, getInventory, subscribeSessions, subscribeHygiene, openNeutralChat, invokeAgent,
   CAP_TOOL, TOOL_CAP, HOST_TOOLS, type StreamHandle,
 } from "./mcpHostTools.js";
 
@@ -48,6 +48,7 @@ export function createUiHost(deps: UiHostDeps): UiHost {
   const handles = new Set<StreamHandle>();           // open streams to close on dispose / stale
   // Single-flight guards — the exact set Runner.serve() kept as refs.
   let liveOpen = false;                              // one live-session-events stream
+  let hygieneOpen = false;                            // one context-hygiene stream
   let invoking = false;                              // one invoke-agent turn at a time
   let chatId: string | null = null;                  // reused neutral chat session
   let chatPromise: Promise<string> | null = null;    // in-flight chat-open (serialize concurrent invokes)
@@ -105,6 +106,18 @@ export function createUiHost(deps: UiHostDeps): UiHost {
           register(gen, r.handle);
           reply(id, { status: "subscribed" });
         } catch (e) { liveOpen = false; throw e; }                              // release the guard so a retry can succeed
+        return;
+      }
+      if (cap === "context-hygiene") {
+        if (hygieneOpen) { reply(id, { status: "already-subscribed" }); return; } // idempotent — one stream per game
+        hygieneOpen = true;
+        try {
+          const r = await subscribeHygiene(deps.apiBase, (ev) => { if (!stale(gen)) notify(tool, ev); });
+          if (stale(gen)) { if (r.status === "subscribed") { try { r.handle.close(); } catch { /* ignore */ } } hygieneOpen = false; return; }
+          if (r.status === "idle") { hygieneOpen = false; reply(id, { status: "idle" }); return; } // release so a later retry can succeed
+          register(gen, r.handle);
+          reply(id, { status: "subscribed" });
+        } catch (e) { hygieneOpen = false; throw e; }                            // release the guard so a retry can succeed
         return;
       }
       if (cap === "invoke-agent") {
