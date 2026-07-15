@@ -301,7 +301,12 @@ export const EMBER_HTML = `<!doctype html>
   }
   window.__emberFeed = applyHygiene;   // test + no-host seam
   if(app){
-    app.onNotification('agentgem_subscribe_hygiene', applyHygiene);
+    // The shim's FROZEN envelope: notifications dispatch under "ui/notifications/tool-result" as
+    // { toolName, chunk } (see mcpAppClient.ts) — never under the tool name itself. Registering on
+    // the tool name silently receives nothing and the game stays in DEMO forever.
+    app.onNotification('ui/notifications/tool-result', function(p){
+      if(p && p.toolName==='agentgem_subscribe_hygiene') applyHygiene(p.chunk);
+    });
     app.callTool('agentgem_subscribe_hygiene').catch(function(){ /* idle/denied -> stays demo */ });
   }
 
