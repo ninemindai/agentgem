@@ -92,4 +92,67 @@ describe("Rubrics panel — reattach vs default-select race", () => {
     // The list resolving afterward must not clobber the reattached selection.
     expect(select.value).toBe("hygiene");
   });
+
+  // A session-scope reattach must end with the session row intact even when
+  // /api/report/runs wins the race against /api/rubrics. During that window
+  // `selected` is undefined so `sessionCapable` reads false for every rubric; the
+  // clear-on-switch effect is guarded on `rubrics` being loaded so it doesn't act
+  // on that "catalog unknown" state. This test locks in the correct end state for
+  // the whole mount path (rubrics held until the reattach has applied).
+  it("keeps a reattached session-scope run's row after /api/rubrics resolves afterward", async () => {
+    let releaseRubrics: (() => void) | null = null;
+    const rubricsGate = new Promise<void>((resolve) => { releaseRubrics = resolve; });
+    let markStreamOpened: (() => void) | null = null;
+    const streamOpened = new Promise<void>((resolve) => { markStreamOpened = resolve; });
+
+    vi.stubGlobal("fetch", vi.fn(async (u: string) => {
+      const url = String(u);
+      if (url.includes("/api/rubric/stream")) {
+        markStreamOpened!();
+        // A well-formed (clean) report so the active session row's RubricReportCard
+        // renders — a real done event always carries the full report shape.
+        return sseResponse([{ type: "done", cached: true, updatedAt: null, report: {
+          rubricId: "hygiene", target: "s1", scope: "session", factors: [],
+          sessionsScanned: 1, clean: true, degraded: false, skippedFactors: [],
+        } }]);
+      }
+      if (url.includes("/api/report/runs")) {
+        // A done SESSION-scope run for "hygiene".
+        return jsonResponse({
+          runs: [{
+            id: "r1", kind: "rubric", paramsKey: "hygiene:session:/proj:s1",
+            params: { rubric: "hygiene", scope: "session", root: "/proj", sessionId: "s1" },
+            status: "done", phase: "done", startedAt: Date.now(),
+          }],
+        });
+      }
+      if (url.includes("/api/rubrics")) {
+        await rubricsGate;
+        // hygiene is session-granular, so it stays session-capable once loaded.
+        return jsonResponse({
+          rubrics: [
+            { id: "correctness", title: "Correctness", target: "session", factors: [{ factor: "f1" }], granularity: "aggregate" },
+            { id: "hygiene", title: "Hygiene", target: "session", factors: [{ factor: "f2" }], granularity: "session" },
+          ],
+        });
+      }
+      if (url.includes("/api/testbed/projects")) return jsonResponse({ projects: [{ path: "/proj", flavor: "claude", name: "proj" }] });
+      if (url.includes("/api/testbed/recents")) return jsonResponse({ recents: [] });
+      return jsonResponse({});
+    }));
+
+    render(<Rubrics apiBase="http://x" />);
+    await streamOpened;
+
+    const select = (await screen.findByLabelText("Rubric")) as HTMLSelectElement;
+    releaseRubrics!();
+    await waitFor(() => expect(select.options.length).toBe(2));
+    expect(select.value).toBe("hygiene");
+
+    // The reattached session row (labelled "session <id>" by the reattach effect)
+    // must survive the mount-order race — the session-picker wiring must not drop
+    // an actual reattached run just because the catalog hasn't classified its
+    // rubric's granularity yet.
+    expect(screen.getByText("session s1")).toBeTruthy();
+  });
 });

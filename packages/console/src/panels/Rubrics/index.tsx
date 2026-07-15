@@ -245,9 +245,12 @@ export function Rubrics({ apiBase }: { apiBase: string }) {
     const q = query.trim().toLowerCase();
     const matched = q ? acc.filter((r) => r.label.toLowerCase().includes(q) || r.path.toLowerCase().includes(q)) : acc;
     return [
-      // The picked/deep-linked session leads the list — but only while the rubric
-      // can run per-session; an aggregate rubric offers project/all rows only.
-      ...(sessionRow && sessionCapable ? [{ path: "session:" + sessionRow.sessionId, flavor: "session", label: sessionRow.label }] : []),
+      // The picked/deep-linked/reattached session leads the list — it's an actual
+      // run target, so it stays pinned across rubric switches (exactly like a
+      // project row does; nothing resets the active row on rubricId change). Only
+      // the session PICKER above is gated by granularity — the row itself is not,
+      // so a legit session deep-link isn't hidden before its rubric is classified.
+      ...(sessionRow ? [{ path: "session:" + sessionRow.sessionId, flavor: "session", label: sessionRow.label }] : []),
       { path: "*", flavor: "all", label: "All projects" },
       ...matched.slice(0, 40),
     ];
@@ -259,14 +262,6 @@ export function Rubrics({ apiBase }: { apiBase: string }) {
     setSessionRow(s);
     startRun(rubricId, "session:" + s.sessionId, { scope: "session", sessionId: s.sessionId });
   };
-
-  // Switching to an aggregate-only rubric drops any pinned session — it can't run
-  // per-session, so the stale session row (and its active output) must clear.
-  useEffect(() => {
-    if (sessionCapable || !sessionRow) return;
-    setSessionRow(null);
-    setActivePath((p) => (p?.startsWith("session:") ? null : p));
-  }, [sessionCapable, sessionRow]);
 
   const running = view.status === "running";
   const report = view.report?.report ?? null;
