@@ -29,6 +29,10 @@ export interface RenderInput {
   meta: { project: string | null; agent: AgentId };
   connectFn?: AcpConnectFn;
   timeoutMs?: number;
+  // Historical one-shot mode (Inspect → Session · Dashboard lens): the session has
+  // ended, so the prompt asks for a final summary instead of a live status board.
+  final?: boolean;
+  onDelta?: (chunk: string) => void;
 }
 export interface RenderResult { html: string; ok: boolean; truncated?: boolean; }
 
@@ -48,11 +52,15 @@ function buildPrompt(input: RenderInput): string {
   const events = JSON.stringify(input.deltaEvents.map((e) => e.span));
   const prev = input.prevHtml ? input.prevHtml : "(none — this is the first render)";
   const project = input.meta.project ?? "this session";
+  const framing = input.final
+    ? `You render a FINAL dashboard of a COMPLETED ${input.meta.agent} coding-agent session, for the AgentGem console. ` +
+      `The session has ended: summarize what it set out to do, what it touched, and how it finished — no "running"/"in progress" language.\n`
+    : `You render a LIVE dashboard of a running ${input.meta.agent} coding-agent session, for the AgentGem console.\n`;
   return (
-    `You render a LIVE dashboard of a running ${input.meta.agent} coding-agent session, for the AgentGem console.\n` +
+    framing +
     `SESSION: project "${project}" (agent: ${input.meta.agent}). Put the project name in the dashboard header — do not use a placeholder.\n` +
     `PREVIOUS DASHBOARD HTML:\n${prev}\n\n` +
-    `NEW EVENTS since it was rendered (JSON):\n${events}\n\n` +
+    `${input.final ? "SESSION EVENTS (JSON)" : "NEW EVENTS since it was rendered (JSON)"}:\n${events}\n\n` +
     `Return ONE self-contained HTML document that EVOLVES the previous dashboard in place to reflect the new events. ` +
     `Rules: inline <style> only, NO external resources (no CDN/fonts/img/scripts). ` +
     `Match this palette and composition EXACTLY — do not invent a generic SaaS look:\n` +
@@ -99,7 +107,7 @@ export async function renderDashboard(input: RenderInput): Promise<RenderResult>
     conn = await withTimeout(connectFn(taskAgent("report"), null), left());
     handle = await withTimeout(conn.ctx.open(analysisWorkspace()), left());
     await withTimeout(handle.setMode("plan"), left());
-    const text = await withTimeout(handle.promptText(buildPrompt(input)), left());
+    const text = await withTimeout(handle.promptText(buildPrompt(input), input.onDelta), left());
     const html = extractHtml(text);
     if (!html) return { html: input.prevHtml, ok: false };
     log.debug("dashboard: rendered in %dms (%d bytes)", Date.now() - t0, html.length);

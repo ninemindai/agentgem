@@ -23,6 +23,7 @@ export * from "./observeScan.js";
 export * from "./inspectSession.js";
 export * from "./artifactScan.js";
 export * from "./analysisCache.js";
+export * from "./dashboardCache.js";
 export * from "./distill.js";
 export * from "./distillTypes.js";
 export * from "./extract.js";
