@@ -354,6 +354,7 @@ describe("Studio → Share to app.agentgem.ai", () => {
     vi.spyOn(routes.playMiniappRoute, "call").mockResolvedValue(miniapp as never);
     mount();
     await screen.findByRole("button", { name: /^share$/i });
+    expect(screen.getByRole("button", { name: /^share$/i }).getAttribute("title")).toBe("Share to app.agentgem.ai");
     // Before Share is clicked there is no banner — so no visibility control and no tags input anywhere.
     expect(screen.queryByRole("button", { name: /^public$/i })).toBeNull();
     expect(screen.queryByRole("button", { name: /^unlisted$/i })).toBeNull();
