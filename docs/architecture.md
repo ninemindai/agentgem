@@ -13,16 +13,16 @@ first.
 > [PNG](diagrams/system-architecture.png) ·
 > [interactive HTML](diagrams/system-architecture.html) (Copy / PNG / PDF export)
 >
-> The SVG map shows the local **build spine** and session intelligence. The hosted
-> half — better-auth identity, the aggregator + **benchmark contribution loop**, org
-> governance, and **`@agentgem/memory`** sync — is captured in the package table and
-> prose below (and in the [benchmark feedback loop](diagrams/benchmark-feedback-loop.html)
-> and [desktop client/server](diagrams/desktop-client-server-architecture.html) diagrams).
+> Two subsystems get their own detail diagrams: the
+> [memory-sync bridge](diagrams/memory-sync.svg) and the
+> [benchmark feedback loop](diagrams/benchmark-feedback-loop.html); the desktop
+> client/server split is in [its own diagram](diagrams/desktop-client-server-architecture.html).
 
-There are four horizontal bands:
+There are four main horizontal bands:
 
 1. **Hosts / clients** — the web UI (`src/public/index.html`), any local coding agent, and
-   the [Desktop app](desktop.md), which embeds the same server in Electron (tray + auto-update).
+   the [Desktop app](desktop.md), which runs the same core in **client mode** in Electron
+   (tray + auto-update).
 2. **Contract surface** — one Zod definition per operation, surfaced as a REST endpoint, an
    MCP tool, and an OpenAPI 3.1 document. See [the one-contract model](#the-one-contract-model).
 3. **Gem core** (the `@agentgem/*` packages) — pure, framework-agnostic functions:
@@ -44,6 +44,14 @@ A parallel **session-intelligence** surface reads the same transcripts for a dif
 search (Recall), context-hygiene scoring, an aggregates-only chat/MCP, and Play mini-games. It's
 described in [Session intelligence](#session-intelligence-recall-hygiene-chat-play) below and is
 independent of the Gem-build spine.
+
+A bottom band — the **hosted aggregator & network** (`app.agentgem.ai`, `@agentgem/aggregator`)
+— is where the console signs in, publishes, contributes, and syncs: better-auth identity
+(GitHub / Google / passkeys) with `/@handle` profiles, groups, and orgs; the catalog and its
+publish scopes / versioning / review-gating; the opt-in, k-anonymized
+[benchmark feedback loop](diagrams/benchmark-feedback-loop.html) with org governance; and
+[memory-provider sync](diagrams/memory-sync.svg). The desktop app talks to it as a pure client —
+see the [client/server split](diagrams/desktop-client-server-architecture.html).
 
 Server-side state lives under `~/.agentgem` (workspaces, recents, credentials, deploy
 records) — never inside a Gem.
@@ -145,6 +153,16 @@ half is served from `src/goldmine/*` and `src/warm/*`, backed by `@agentgem/reca
 - **Play** (`@agentgem/play`, `src/play.controller.ts`) — mini-games authored by an ACP agent
   jailed to a single miniapp dir, saved through a **seal** (no-network admission gate) into a
   git-backed registry and a one-artifact `game` Gem. See [Play](play.md).
+- **Memory sync** (`@agentgem/memory`) — bridges the recall index to external AI memory
+  providers (**mem0**, **supermemory**) two ways: pull their memories into recall, and push
+  scrubbed, consent-gated candidates out through a review outbox. Routes are local-only (gated
+  on `SERVE_CONSOLE`), never hosted.
+
+![AgentGem memory sync](diagrams/memory-sync.svg)
+
+> Diagram: [`diagrams/memory-sync.svg`](diagrams/memory-sync.svg) ·
+> [PNG](diagrams/memory-sync.png) ·
+> [interactive HTML](diagrams/memory-sync.html) (Copy / PNG / PDF export)
 
 ## Distribution
 
