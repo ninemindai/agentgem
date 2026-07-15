@@ -6,7 +6,7 @@
 // the Watch panel renders live, produced once for a completed session and
 // cached server-side by (sessionId, transcript mtime). One-shot — no SSE
 // double-buffer; a single sealed srcdoc iframe (sandboxDoc CSP, null origin).
-// Claude-only, like the Blast and Context lenses.
+// Works for both agents — the server resolves Claude or Codex sessions by id.
 import { useEffect, useState } from "react";
 import { makeClient } from "../../api/routes.js";
 import { openSessionDashboardStream, type SessionDashboardEvent } from "./dashboardStream.js";
@@ -25,7 +25,6 @@ export function SessionDashboard({ apiBase, agent, sessionId }: { apiBase: strin
   const [fresh, setFresh] = useState(false);    // regenerate on the next open
 
   useEffect(() => {
-    if (agent !== "claude") return;
     setPhase({ kind: "connecting" });
     let chars = 0;
     const close = openSessionDashboardStream(makeClient(apiBase), { id: sessionId, agent, fresh }, (e: SessionDashboardEvent) => {
@@ -36,8 +35,6 @@ export function SessionDashboard({ apiBase, agent, sessionId }: { apiBase: strin
     });
     return close;
   }, [apiBase, agent, sessionId, run, fresh]);
-
-  if (agent !== "claude") return null;
 
   const regenerate = () => { setFresh(true); setRun((r) => r + 1); };
 

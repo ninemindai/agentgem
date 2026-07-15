@@ -66,6 +66,130 @@ function classify(raw: string, cwd: string | null): { target: string; zone: Blas
 
 export interface BlastScanOptions { cwd?: string | null; sessionId?: string; transcript?: string }
 
+// ── Codex rollouts ───────────────────────────────────────────────────────────
+// Codex has no typed Read/Edit tools — everything goes through exec_command (or
+// the older `shell`) plus apply_patch, so actions come from command SEMANTICS
+// (mindwalk's approach): reading commands → read, searching commands → search,
+// apply_patch file headers → edit, spawn_agent → agent, the rest → exec.
+const READ_CMDS = new Set(["cat", "head", "tail", "less", "more", "bat", "sed", "wc"]);
+const SEARCH_CMDS = new Set(["rg", "grep", "find", "fd", "ls", "tree", "glob"]);
+const MAX_CMD_TARGETS = 3;
+
+// Path-looking tokens of a shell command: absolute, homed, or slashed relative —
+// never flags, and never glob/regex arguments (rg -g '!**/dist/**', sed
+// expressions, redirections), which contain a slash but aren't files.
+function commandPaths(cmd: string): string[] {
+  const out: string[] = [];
+  for (const raw of cmd.split(/\s+/).slice(1)) {
+    const tok = raw.replace(/^['"]|['"]$/g, "");
+    if (!tok || tok.startsWith("-")) continue;
+    if (/[*?[\]()|!^$"'{}<>]/.test(tok)) continue;   // glob/regex/redirection noise
+    if (tok.startsWith("/") || tok.startsWith("~/") || (tok.includes("/") && !tok.includes("://"))) out.push(tok);
+    if (out.length >= MAX_CMD_TARGETS) break;
+  }
+  return out;
+}
+
+// apply_patch bodies name their files as "*** Add|Update|Delete File: <path>".
+function patchPaths(body: string): string[] {
+  const out: string[] = [];
+  for (const m of body.matchAll(/^\*\*\* (?:Add|Update|Delete) File: (.+)$/gm)) out.push(m[1].trim());
+  return out;
+}
+
+// A codex function_call's `arguments` is a JSON STRING; the command may be `cmd`
+// (string) or `command` (string | argv array) depending on tool generation.
+function codexCommand(args: unknown): string | null {
+  if (typeof args !== "string") return null;
+  try {
+    const o = JSON.parse(args) as Record<string, unknown>;
+    if (typeof o.cmd === "string") return o.cmd;
+    if (typeof o.command === "string") return o.command;
+    if (Array.isArray(o.command)) return o.command.filter((t) => typeof t === "string").join(" ");
+    return null;
+  } catch { return null; }
+}
+
+const EXIT_CODE_RE = /(?:exited with code|exit code)[ :]+(\d+)/i;
+
+/** Parse one Codex rollout's text into a BlastReport. Same contract as
+ *  scanSessionBlast: pure, total, only scrubbed/relative strings leave. */
+export function scanCodexSessionBlast(text: string, opts: BlastScanOptions = {}): BlastReport {
+  const cwd = opts.cwd ?? null;
+  const events: BlastEvent[] = [];
+  const byCallId = new Map<string, BlastEvent[]>();
+  let sessionId = opts.sessionId ?? "";
+  let startMs = Infinity, endMs = 0;
+
+  const lines = text.split("\n");
+  for (let msgIndex = 0; msgIndex < lines.length; msgIndex++) {
+    const line = lines[msgIndex];
+    if (!line.trim()) continue;
+    let rec: any;
+    try { rec = JSON.parse(line); } catch { continue; }
+    if (!sessionId && rec?.type === "session_meta" && typeof rec?.payload?.id === "string") sessionId = rec.payload.id;
+    const p = rec?.payload;
+    if (!p || typeof p !== "object") continue;
+    const tsMs = typeof rec?.timestamp === "string" ? Date.parse(rec.timestamp) || null : null;
+    if (tsMs) { startMs = Math.min(startMs, tsMs); endMs = Math.max(endMs, tsMs); }
+
+    if (rec.type === "response_item" && p.type === "function_call" && typeof p.name === "string") {
+      const name: string = p.name;
+      const callId = typeof p.call_id === "string" ? p.call_id : null;
+      const emitted: BlastEvent[] = [];
+      const push = (action: BlastAction, target: string | null, zone?: BlastZone) => {
+        const ev: BlastEvent = {
+          seq: events.length, msgIndex, tsMs, tool: name, action, target,
+          ...(zone ? { zone } : {}),
+        };
+        events.push(ev); emitted.push(ev);
+      };
+      if (name === "exec_command" || name === "shell" || name === "local_shell") {
+        const cmd = codexCommand(p.arguments);
+        if (cmd) {
+          const argv0 = (cmd.trim().split(/\s+/)[0]?.split("/").pop() ?? "").replace(/[;|&]+$/, "");
+          const action: BlastAction = READ_CMDS.has(argv0) ? "read" : SEARCH_CMDS.has(argv0) ? "search" : "exec";
+          const paths = action === "exec" ? [] : commandPaths(cmd);
+          if (paths.length) for (const raw of paths) { const { target, zone } = classify(raw, cwd); push(action, target, zone); }
+          else push("exec", scrubStep("Bash", { command: cmd }).verb.replace(/^Bash:?/, "") || null);
+        } else push("exec", null);
+      } else if (name === "apply_patch") {
+        const body = typeof p.arguments === "string" ? p.arguments : "";
+        const paths = patchPaths((() => { try { const o = JSON.parse(body); return typeof o.input === "string" ? o.input : body; } catch { return body; } })());
+        if (paths.length) for (const raw of paths) { const { target, zone } = classify(raw, cwd); push("edit", target, zone); }
+        else push("edit", null);
+      } else if (name === "spawn_agent") {
+        let sub = "agent";
+        try { const o = JSON.parse(p.arguments as string); if (typeof o.agent_type === "string") sub = o.agent_type; } catch { /* keep default */ }
+        push("agent", sub);
+      } else {
+        push("other", null);
+      }
+      if (callId && emitted.length) byCallId.set(callId, emitted);
+    }
+
+    if (rec.type === "response_item" && p.type === "function_call_output" && typeof p.call_id === "string") {
+      const targets = byCallId.get(p.call_id);
+      if (targets) {
+        const out = typeof p.output === "string" ? p.output : JSON.stringify(p.output ?? "");
+        const m = EXIT_CODE_RE.exec(out.slice(0, 400));
+        if (m && m[1] !== "0") for (const ev of targets) ev.error = true;
+      }
+    }
+  }
+
+  return {
+    meta: {
+      sessionId,
+      transcript: opts.transcript ?? "",
+      project: cwd ? scrubText(cwd) : null,
+      startMs: startMs === Infinity ? 0 : startMs,
+      endMs,
+    },
+    events,
+  };
+}
+
 /** Parse one Claude transcript's text into a BlastReport. Pure and total:
  *  unparseable lines are skipped, an empty input yields a valid zero report. */
 export function scanSessionBlast(text: string, opts: BlastScanOptions = {}): BlastReport {

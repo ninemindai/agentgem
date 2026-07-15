@@ -57,9 +57,14 @@ describe("BlastRadius", () => {
     expect(screen.getByText("2/4")).toBeTruthy();                // next edit is seq 1
   });
 
-  it("renders nothing for codex and for an empty report", async () => {
-    const { container } = render(<BlastRadius apiBase="/" agent="codex" sessionId="s1" />);
-    expect(container.firstChild).toBeNull();
+  it("fetches for codex too (server picks the codex scan by agent param)", async () => {
+    const call = vi.spyOn(routes.blastRoute, "call").mockResolvedValue(sample as any);
+    render(<BlastRadius apiBase="/" agent="codex" sessionId="c1" />);
+    expect(await screen.findByText("a.ts")).toBeTruthy();
+    expect(call).toHaveBeenCalledWith(expect.anything(), { query: { id: "c1", agent: "codex" } });
+  });
+
+  it("renders nothing for an empty report", async () => {
     vi.spyOn(routes.blastRoute, "call").mockResolvedValue({ meta: sample.meta, events: [] } as any);
     const { container: c2 } = render(<BlastRadius apiBase="/" agent="claude" sessionId="s2" />);
     await vi.waitFor(() => expect(c2.firstChild).toBeNull());

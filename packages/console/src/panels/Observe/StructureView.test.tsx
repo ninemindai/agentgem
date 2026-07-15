@@ -48,11 +48,11 @@ describe("StructureView", () => {
     expect(document.body.style.overflow).toBe("");
   });
 
-  it("hides the Blast, Context, and Dashboard tabs for codex", () => {
+  it("keeps Blast and Dashboard for codex but hides the Claude-only Context tab", () => {
     render(<StructureView view={{ ...view, agent: "codex" }} collapsed={new Set()} onToggle={() => {}} apiBase="/" agent="codex" />);
-    expect(screen.queryByRole("button", { name: /blast/i })).toBeNull();
+    expect(screen.getByRole("button", { name: /blast/i })).toBeTruthy();
+    expect(screen.getByRole("button", { name: /dashboard/i })).toBeTruthy();
     expect(screen.queryByRole("button", { name: /context/i })).toBeNull();
-    expect(screen.queryByRole("button", { name: /dashboard/i })).toBeNull();
   });
 
   it("offers a Dashboard tab for claude that lazily opens the render stream", async () => {

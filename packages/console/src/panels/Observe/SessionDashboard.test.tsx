@@ -51,10 +51,9 @@ describe("SessionDashboard", () => {
     expect(screen.getByRole("button", { name: /try again/i })).toBeTruthy();
   });
 
-  it("renders nothing for codex", () => {
+  it("opens the stream for codex sessions too", () => {
     const s = mockStream();
-    const { container } = render(<SessionDashboard apiBase="/" agent="codex" sessionId="s1" />);
-    expect(container.firstChild).toBeNull();
-    expect(s.spy).not.toHaveBeenCalled();
+    render(<SessionDashboard apiBase="/" agent="codex" sessionId="c1" />);
+    expect(s.spy).toHaveBeenCalledWith(expect.anything(), expect.objectContaining({ id: "c1", agent: "codex" }), expect.any(Function));
   });
 });

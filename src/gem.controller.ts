@@ -604,7 +604,7 @@ export class GemController {
         emit({ type: "start", cached: false, events: inp.events.length });
         const r = await renderDashboard({
           prevHtml: "", deltaEvents: inp.events, final: true,
-          meta: { project: inp.project, agent: "claude" },
+          meta: { project: inp.project, agent: agent === "codex" ? "codex" : "claude" },
           timeoutMs: 240_000,
           onDelta: (chunk) => emit({ type: "delta", text: chunk }),
         });
