@@ -6,7 +6,7 @@ import { z } from "zod";
 import {
   saveMiniapp, deleteMiniapp, listMiniapps, readMiniapp, miniappsRoot, setRemote, push, seedStudio, importStudio, blankStudio,
   compactTurns, resolveSessionRef, mcpAppFor, migrateAllMiniapps, INSPECTOR_HTML, INSPECTOR_META, type MiniappMeta,
-  readMiniappShare,
+  EMBER_HTML, EMBER_META, readMiniappShare,
 } from "@agentgem/play";
 import { defaultReaders } from "./play.readers.js";
 import { listActiveSessions } from "./watchSessions.js";
@@ -91,11 +91,23 @@ export class PlayController {
 
   @get("/play/miniapps", { response: MiniappListSchema })
   async miniapps(): Promise<z.infer<typeof MiniappListSchema>> {
-    return { miniapps: listMiniapps().map((m) => ({ name: m.name, title: m.meta.title, genre: m.meta.genre, ...(m.meta.needs ? { needs: m.meta.needs } : {}) })) };
+    // Built-in EMBER is a served constant (never in the registry) but IS listed so it shows as an Arcade
+    // card — prepended so it leads the grid. `miniapp()` special-cases its name below.
+    const builtins = [{ name: EMBER_META.name, title: EMBER_META.title, genre: EMBER_META.genre, needs: EMBER_META.needs }];
+    const registry = listMiniapps().map((m) => ({ name: m.name, title: m.meta.title, genre: m.meta.genre, ...(m.meta.needs ? { needs: m.meta.needs } : {}) }));
+    return { miniapps: [...builtins, ...registry] };
   }
 
   @get("/play/miniapp", { query: PlayMiniappQuerySchema, response: PlayMiniappSchema })
   async miniapp(input: { query: z.infer<typeof PlayMiniappQuerySchema> }): Promise<z.infer<typeof PlayMiniappSchema>> {
+    // "__ember" is a constant (packages/play/src/ember.ts), never written to the registry, so it must be
+    // resolved BEFORE readMiniapp (which would 404). Mirrors the "__inspector" special-case in mcpApp().
+    if (input.query.name === EMBER_META.name) {
+      return { name: EMBER_META.name, html: EMBER_HTML, meta: {
+        title: EMBER_META.title, genre: EMBER_META.genre, createdFrom: EMBER_META.createdFrom,
+        engineVersion: EMBER_META.engineVersion, needs: EMBER_META.needs,
+      } };
+    }
     try {
       const r = readMiniapp(input.query.name);
       const share = readMiniappShare(input.query.name);
