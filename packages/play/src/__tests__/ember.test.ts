@@ -29,4 +29,22 @@ describe("EMBER built-in miniapp", () => {
     expect((w.document.getElementById("demoBadge") as HTMLElement).style.display).toBe("none"); // live -> no DEMO
     dom.window.close();
   });
+
+  it("declares copy-command and copies /compact on a live clean-cut BANK", () => {
+    expect(EMBER_META.needs).toContain("copy-command");
+    expect(EMBER_HTML).toContain("copyCommand");
+    const dom = new JSDOM(EMBER_HTML, { runScripts: "dangerously", pretendToBeVisual: true, url: "https://localhost/" });
+    const w = dom.window as unknown as { __emberFeed?: (e: unknown) => void; agentgemApp?: unknown; document: Document };
+    const copied: string[] = [];
+    // Attach a host stub AFTER construction — EMBER reads window.agentgemApp fresh at BANK time.
+    w.agentgemApp = {
+      onNotification() {}, callTool() { return Promise.resolve({}); },
+      copyCommand(t: string) { copied.push(t); return Promise.resolve({}); },
+    };
+    // Drive into the sweet spot: cap 200k, ctx 60k = 30% (within [14%, 32%]).
+    w.__emberFeed!({ type: "hygiene", cap: 200000, curveTail: [{ turn: 10, msgIndex: 20, ctxTokens: 60000, cacheCreation: 0, outTokens: 0 }] });
+    (w.document.getElementById("bank") as HTMLElement).click();
+    expect(copied).toContain("/compact");
+    dom.window.close();
+  });
 });

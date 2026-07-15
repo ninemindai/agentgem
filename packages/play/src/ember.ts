@@ -27,7 +27,7 @@ export const EMBER_META = {
   engineVersion: "1",
   // `as GameCapability[]` (not `as const`): MiniappMeta.needs is a mutable GameCapability[]; a readonly
   // tuple from `as const` would fail the `satisfies` assignability check (mirrors inspector.ts).
-  needs: ["context-hygiene"] as GameCapability[],
+  needs: ["context-hygiene", "copy-command"] as GameCapability[],
 } satisfies MiniappMeta & { name: string };
 
 export const EMBER_HTML = `<!doctype html>
@@ -239,7 +239,19 @@ export const EMBER_HTML = `<!doctype html>
       var gainL = Math.max(1, Math.round(g.freshness*(cleanL?2:1)*(1+state.streak*0.12)));
       state.score += gainL; state.best = Math.max(state.best, state.score); persistBest();
       combo((cleanL?'CLEAN CUT ':'bank ')+'· /compact', cleanL?'var(--fresh)':'var(--ash)');
-      toast(cleanL ? '🟢 <b>clean cut.</b> run <b>/compact</b> now — the flame cools when the real window resets.' : 'run <b>/compact</b> to bank and reset the window.');
+      // On a clean cut, hand the user /compact frictionlessly: the host copies it to the clipboard (read
+      // window.agentgemApp fresh so a test/host that attaches late is still seen). Fall back to the plain
+      // advisory toast when the copy is denied or the cap is unsupported.
+      var api = window.agentgemApp;
+      if(cleanL && api && typeof api.copyCommand==='function'){
+        api.copyCommand('/compact').then(function(){
+          toast('🟢 <b>clean cut.</b> copied <b>/compact</b> — paste it into your session.');
+        }, function(){
+          toast('🟢 <b>clean cut.</b> run <b>/compact</b> now — the flame cools when the real window resets.');
+        });
+      } else {
+        toast(cleanL ? '🟢 <b>clean cut.</b> run <b>/compact</b> now — the flame cools when the real window resets.' : 'run <b>/compact</b> to bank and reset the window.');
+      }
       syncHUD(); return;
     }
     if(g.work<8){ toast('nothing to bank yet — get some work done first.'); return; }
