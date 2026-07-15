@@ -6,6 +6,7 @@ import { Runner, type RunnerHandle } from "../Runner.js";
 import { playSessionDataRoute, inventoryRoute } from "../../../api/routes.js";
 import { getConsent } from "../consent.js";
 import * as watchStream from "../../Watch/watchStream.js";
+import * as hygieneStream from "../../Watch/hygieneStream.js";
 import * as studioStream from "../studioStream.js";
 import * as mcpUiHost from "../mcpUiHost.js";
 
@@ -317,13 +318,13 @@ describe("Runner — Replay yours picker", () => {
     const { container } = render(<Runner html={html} name="dup2" apiBase="" needs={["session-data", "local-project-access"]} />);
     const open = await screen.findByRole("button", { name: /replay yours/i });
     fireEvent.click(open);
-    expect(await screen.findByRole("dialog", { name: "Pick a session to replay" })).toBeTruthy(); // picker open
+    expect(await screen.findByRole("dialog", { name: "Pick a session" })).toBeTruthy(); // picker open
 
     const win = (container.querySelector("iframe") as HTMLIFrameElement).contentWindow as Window;
     callTool(win, "agentgem_get_inventory"); // gated cap request while the picker is open
 
     await waitFor(() => expect(screen.getByText("Allow")).toBeTruthy());                          // consent prompt now shown
-    expect(screen.queryByRole("dialog", { name: "Pick a session to replay" })).toBeNull();          // picker closed, not stacked
+    expect(screen.queryByRole("dialog", { name: "Pick a session" })).toBeNull();          // picker closed, not stacked
     vi.unstubAllGlobals();
   });
 
@@ -337,9 +338,9 @@ describe("Runner — Replay yours picker", () => {
     render(<Runner html={html} name="dup" apiBase="" needs={["session-data"]} />);
     const open = await screen.findByRole("button", { name: /replay yours/i });
     fireEvent.click(open);
-    const dialog = await screen.findByRole("dialog", { name: "Pick a session to replay" });
+    const dialog = await screen.findByRole("dialog", { name: "Pick a session" });
     fireEvent.keyDown(dialog, { key: "Escape" });
-    await waitFor(() => expect(screen.queryByRole("dialog", { name: "Pick a session to replay" })).toBeNull());
+    await waitFor(() => expect(screen.queryByRole("dialog", { name: "Pick a session" })).toBeNull());
     expect(document.activeElement).toBe(open);
   });
 
@@ -352,6 +353,21 @@ describe("Runner — Replay yours picker", () => {
     fireEvent.keyDown(row, { key: "Enter" });
     await waitFor(() => expect(data).toHaveBeenCalled());
     expect(data.mock.calls[0][1]).toMatchObject({ query: { name: "dup", sessionId: "mine-1", agent: "codex" } });
+  });
+
+  it("offers the picker for a context-hygiene miniapp and re-points the hygiene stream at the picked session", async () => {
+    stubSessions();
+    const opened: string[] = [];
+    vi.spyOn(hygieneStream, "openHygieneStream").mockImplementation((_a, file) => { opened.push(file); return () => {}; });
+    render(<Runner html={html} name="__ember" apiBase="" needs={["context-hygiene"]} />);
+    fireEvent.click(await screen.findByRole("button", { name: /pick session/i }));
+    // hygiene is claude-only server-side: the codex session ("app") is hidden, only the claude one offered
+    await screen.findByRole("dialog", { name: "Pick a session" });
+    expect(screen.queryByText("app")).toBeNull();
+    fireEvent.click(await screen.findByText("lib"));
+    // host-initiated rebind opens the hygiene SSE on the picked session's transcript file
+    await waitFor(() => expect(opened).toEqual(["/f2"]));
+    expect(screen.queryByRole("dialog", { name: "Pick a session" })).toBeNull(); // picker closed on pick
   });
 
   // requestCapture posts agentgem:capture to the sealed frame and resolves on the one-shot
