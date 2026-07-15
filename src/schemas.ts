@@ -100,6 +100,7 @@ export const ReferenceArtifactSchema = z.object({
 // __tests__ drift guard. Widening this widens the gem-archive contract — additive only.
 export const GameCapabilityEnum = z.enum([
   "session-data", "live-session-events", "local-project-access", "invoke-agent",
+  "context-hygiene",
   "open-link", "send-message", "update-model-context",
 ]);
 

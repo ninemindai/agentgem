@@ -21,6 +21,7 @@ const DESCRIPTIONS: Record<string, string> = {
   "local-project-access": "Get the viewer's local inventory (skills, MCP servers, projects).",
   "live-session-events": "Subscribe to the viewer's live coding-session events.",
   "invoke-agent": "Run a local AI agent turn and stream back the transcript.",
+  "context-hygiene": "Subscribe to the viewer's live session context-health (bloat) signal.",
 };
 
 // session-data/invoke-agent take optional args; the other two take none. McpUiTool's reused
