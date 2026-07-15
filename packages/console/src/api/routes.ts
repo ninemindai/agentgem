@@ -934,6 +934,27 @@ export const contributeRoute = defineRoute("POST", "/api/benchmark/contribute", 
   response: z.object({ results: z.array(ContributeResultSchema) }),
 });
 
+// Background agent task defaults: which local agent runs each background task family
+// (report render, distill, recommender, judge) and which model it requests. Mirrors
+// the server's AgentTasksController schemas exactly (src/agentTasks.controller.ts).
+export const AGENT_TASK_FAMILIES = ["report", "distill", "recommend", "judge"] as const;
+export type AgentTaskFamily = (typeof AGENT_TASK_FAMILIES)[number];
+const AgentTaskPrefSchema = z.object({ agent: z.string(), model: z.string() });
+export const AgentTaskSettingsSchema = z.object({
+  families: z.object({
+    report: AgentTaskPrefSchema, distill: AgentTaskPrefSchema,
+    recommend: AgentTaskPrefSchema, judge: AgentTaskPrefSchema,
+  }),
+});
+export type AgentTaskSettings = z.infer<typeof AgentTaskSettingsSchema>;
+export const agentTaskSettingsRoute = defineRoute("GET", "/api/agent-tasks/settings", {
+  response: AgentTaskSettingsSchema,
+});
+export const setAgentTaskSettingRoute = defineRoute("POST", "/api/agent-tasks/settings", {
+  body: z.object({ family: z.enum(AGENT_TASK_FAMILIES), agent: z.string(), model: z.string() }),
+  response: AgentTaskSettingsSchema,
+});
+
 // Identity binding: link the local key to a GitHub account via device-flow OAuth.
 export const bindStatusRoute = defineRoute("GET", "/api/bind/status", {
   response: z.object({ bound: z.boolean(), login: z.string().optional(), provider: z.string().optional(), avatarUrl: z.string().optional(), sessionActive: z.boolean().optional() }),
