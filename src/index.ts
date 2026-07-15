@@ -13,6 +13,7 @@ import { isMain } from "@agentback/core";
 import type { RestApplication } from "@agentback/rest";
 import { buildCommonApp, finalizeCommonApp, installGracefulShutdown, warmEnabled } from "./appCommon.js";
 import { mountAggregator } from "./serverAggregator.js";
+import { BenchmarkProxyController } from "./benchmark.proxy.controller.js";
 import { startWarmSchedule } from "./warm/schedule.js";
 
 // Moved to serverAggregator.ts (Task 4); re-exported here because
@@ -35,6 +36,12 @@ export async function createApp(port: number): Promise<RestApplication> {
   // account + OG cards + the GitHub App + registry upload-publish (Task 4: extracted into
   // serverAggregator.ts, no behaviour change).
   await mountAggregator(app, server, process.env);
+  // The console's Benchmark tab reads the hosted benchmark NETWORK (k-anon, cross-producer) at
+  // /api/benchmark in every mode — that data lives on the hosted aggregator, never in the local
+  // pglite. The desktop client entry mounts this proxy; the server entry (npx / dev) must too, or
+  // the tab 404s. It fetches AGENTGEM_AGGREGATOR_URL (default api.agentgem.ai) — a different route
+  // (/api/aggregator/benchmarks) than this one, so even on the hosted box it's one hop, not a loop.
+  app.restController(BenchmarkProxyController);
   // Global originGuard + /healthz + console-serving + the raw SSE routes (Task 5: extracted into
   // appCommon.ts, no behaviour change). Registered AFTER mountAggregator — see appCommon.ts's
   // module comment for why the ordering matters (AgentBack orders same-group express middlewares
