@@ -18,6 +18,7 @@ export {
 } from "@agentgem/model";
 export type { StrongCredentialHit, LeakFinding, LeakReport } from "@agentgem/model";
 export * from "./agents.js";
+export * from "./agentTasks.js";
 export * from "./log.js";
 export * from "./adapters.js";
 export * from "./concurrency.js";
