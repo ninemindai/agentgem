@@ -66,6 +66,9 @@ export const RubricSummarySchema = z.object({
   factors: z.array(z.object({ factor: z.string(), weight: z.number().optional() })),
   criteria: z.array(z.looseObject({ id: z.string() })).optional(),
   builtin: z.boolean().optional(),   // built-in rubrics can't be edited/deleted
+  // "session" iff every factor is session-granular; gates the in-page session picker
+  // (mirrors the server's scopeAllowed — session scope needs a session-granular rubric).
+  granularity: z.enum(["session", "aggregate"]).optional(),
 });
 export type RubricSummary = z.infer<typeof RubricSummarySchema>;
 export const rubricsRoute = defineRoute("GET", "/api/rubrics", {

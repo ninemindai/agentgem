@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: MIT
 import { describe, it, expect } from "vitest";
 import { builtinRubrics, type Rubric, type RubricScope } from "@agentgem/insight";
-import { rubricToken, resolveRubric, listRubrics } from "../rubricCore.js";
+import { rubricToken, resolveRubric, listRubrics, listRubricsWithMeta } from "../rubricCore.js";
 
 const hygiene = builtinRubrics().find((r) => r.id === "hygiene")!;
 const project: RubricScope = { kind: "project", root: "/p" };
@@ -31,5 +31,13 @@ describe("resolveRubric / listRubrics", () => {
     expect(resolveRubric("hygiene")?.id).toBe("hygiene");
     expect(resolveRubric("nope")).toBeNull();
     expect(listRubrics().map((r) => r.id)).toContain("hygiene");
+  });
+
+  it("listRubricsWithMeta tags each rubric with builtin + granularity for the picker", () => {
+    const meta = listRubricsWithMeta().find((r) => r.id === "hygiene")!;
+    expect(meta.builtin).toBe(true);
+    // hygiene is detector-based; every factor is session-granular, so it may run
+    // at session scope — the signal the Rubrics page gates its session picker on.
+    expect(meta.granularity).toBe("session");
   });
 });
