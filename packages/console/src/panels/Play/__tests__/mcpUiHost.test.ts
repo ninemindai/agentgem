@@ -270,6 +270,45 @@ describe("mcpUiHost — action capabilities (open-link / send-message / update-m
     expect(posted(target)).toHaveBeenCalledWith(expect.objectContaining({ id: 33, error: expect.objectContaining({ code: -32602 }) }), "*");
   });
 
+  it("ui/copy-command with the cap + consent granted copies the text and replies {}", async () => {
+    const copyText = vi.fn();
+    const { host, target, requestConsent } = mkHost({ needs: ["copy-command"], copyText });
+    host.handleMessage(msg(target, { method: "ui/copy-command", id: 40, params: { text: "/compact" } }));
+    await tick();
+    expect(requestConsent).toHaveBeenCalledWith("copy-command", "/compact");
+    expect(copyText).toHaveBeenCalledWith("/compact");
+    expect(posted(target)).toHaveBeenCalledWith(expect.objectContaining({ id: 40, result: {} }), "*");
+  });
+
+  it("ui/copy-command with consent denied does not copy and replies -32001", async () => {
+    const copyText = vi.fn();
+    const { host, target } = mkHost({ needs: ["copy-command"], copyText, requestConsent: vi.fn(async () => false) });
+    host.handleMessage(msg(target, { method: "ui/copy-command", id: 41, params: { text: "/compact" } }));
+    await tick();
+    expect(copyText).not.toHaveBeenCalled();
+    expect(posted(target)).toHaveBeenCalledWith(expect.objectContaining({ id: 41, error: expect.objectContaining({ code: -32001 }) }), "*");
+  });
+
+  it("ui/copy-command with the cap NOT in needs replies -32601", async () => {
+    const copyText = vi.fn();
+    const { host, target, requestConsent } = mkHost({ needs: ["session-data"], copyText });
+    host.handleMessage(msg(target, { method: "ui/copy-command", id: 42, params: { text: "/compact" } }));
+    await tick();
+    expect(requestConsent).not.toHaveBeenCalled();
+    expect(copyText).not.toHaveBeenCalled();
+    expect(posted(target)).toHaveBeenCalledWith(expect.objectContaining({ id: 42, error: expect.objectContaining({ code: -32601 }) }), "*");
+  });
+
+  it("ui/copy-command rejects over-length / empty text with -32602", async () => {
+    const copyText = vi.fn();
+    const { host, target, requestConsent } = mkHost({ needs: ["copy-command"], copyText });
+    host.handleMessage(msg(target, { method: "ui/copy-command", id: 43, params: { text: "x".repeat(257) } }));
+    await tick();
+    expect(requestConsent).not.toHaveBeenCalled();
+    expect(copyText).not.toHaveBeenCalled();
+    expect(posted(target)).toHaveBeenCalledWith(expect.objectContaining({ id: 43, error: expect.objectContaining({ code: -32602 }) }), "*");
+  });
+
   it("ui/message with the cap declared replies -32601 'unsupported by this host'", async () => {
     const { host, target, requestConsent } = mkHost({ needs: ["send-message"] });
     host.handleMessage(msg(target, { method: "ui/message", id: 34, params: { role: "user", content: "hi" } }));
