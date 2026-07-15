@@ -193,12 +193,30 @@ export function Rubrics({ apiBase }: { apiBase: string }) {
 
   // "Generate report": render the (cached) evaluation into a self-contained HTML
   // document via the server's plan-mode agent, then download it. One at a time.
-  const [reportGen, setReportGen] = useState<{ status: "idle" | "running" | "done" | "failed"; error?: string }>({ status: "idle" });
+  // Report rendering drives a local coding agent, which can run up to ~3 min (and time out).
+  // Track elapsed + streamed chars so "Generating…" shows real progress instead of an opaque wait.
+  const [reportGen, setReportGen] = useState<{
+    status: "idle" | "running" | "done" | "failed";
+    error?: string;
+    startedAt?: number;
+    chars?: number;
+  }>({ status: "idle" });
+  // A once-a-second tick that re-renders the elapsed counter while a report is generating.
+  const [, setTick] = useState(0);
+  useEffect(() => {
+    if (reportGen.status !== "running") return;
+    const id = setInterval(() => setTick((t) => t + 1), 1000);
+    return () => clearInterval(id);
+  }, [reportGen.status]);
+
   const generateReport = (path: string) => {
     if (!rubricId || reportGen.status === "running") return;
-    setReportGen({ status: "running" });
+    setReportGen({ status: "running", startedAt: Date.now(), chars: 0 });
     openRubricReportStream(makeClient(apiBase), { rubric: rubricId, ...scopeFor(path) }, (e) => {
-      if (e.type === "done") {
+      if (e.type === "delta") {
+        // The agent streams the HTML as it renders — surface it as a "chars streamed" liveness signal.
+        setReportGen((g) => (g.status === "running" ? { ...g, chars: (g.chars ?? 0) + e.text.length } : g));
+      } else if (e.type === "done") {
         const a = document.createElement("a");
         a.href = URL.createObjectURL(new Blob([e.html], { type: "text/html" }));
         a.download = `${rubricId}-report.html`;
@@ -209,6 +227,7 @@ export function Rubrics({ apiBase }: { apiBase: string }) {
       }
     });
   };
+  const reportElapsed = reportGen.startedAt ? Math.floor((Date.now() - reportGen.startedAt) / 1000) : 0;
 
   const rows = (() => {
     const seen = new Set<string>();
@@ -286,12 +305,19 @@ export function Rubrics({ apiBase }: { apiBase: string }) {
                               title="Render this evaluation into a self-contained HTML report (local agent) and download it"
                               onClick={() => generateReport(r.path)}
                             >
-                              {reportGen.status === "running" ? "Generating…" : "Generate report ⤓"}
+                              {reportGen.status === "running" ? `Generating… ${reportElapsed}s` : "Generate report ⤓"}
                             </button>
                           </>
                         )}
                       </div>
-                      {reportGen.status === "failed" && <p className="ledger-error">{reportGen.error}</p>}
+                      {reportGen.status === "running" && (
+                        <p className="ledger-muted">
+                          Rendering with the local coding agent{reportGen.chars ? ` · ${reportGen.chars.toLocaleString()} chars` : ""} — this can take up to ~3 min.
+                        </p>
+                      )}
+                      {reportGen.status === "failed" && (
+                        <p className="ledger-error">Report render failed — {reportGen.error}</p>
+                      )}
                       {error && <p className="ledger-error">{error}</p>}
                       {out && !report && <pre className="run-transcript">{out}</pre>}
                       {report && <RubricReportCard report={report} />}
