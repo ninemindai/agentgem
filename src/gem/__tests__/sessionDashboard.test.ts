@@ -6,8 +6,8 @@ import { mkdtempSync, rmSync, writeFileSync, utimesSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { dashboardToken, readDashboardCacheEntry, writeDashboardCache } from "@agentgem/insight";
-import { capDashboardEvents } from "../../sessionDashboardCore.js";
-import type { SessionEvent } from "@agentgem/insight";
+import { capDashboardEvents, blastFacts, downsampleCurve } from "../../sessionDashboardCore.js";
+import type { SessionEvent, BlastReport } from "@agentgem/insight";
 
 let home: string;
 beforeAll(() => {
@@ -30,6 +30,15 @@ describe("dashboardCache", () => {
     expect(readDashboardCacheEntry("s1", "dv1:200")?.html).toBe("<html>v2</html>");
   });
 
+  it("keeps summary and report artifacts independently per session", () => {
+    writeDashboardCache("s3", "dv1:100", "<html>sum</html>", 1000, "summary");
+    writeDashboardCache("s3", "dv1:100", "<html>rep</html>", 2000, "report");
+    expect(readDashboardCacheEntry("s3", "dv1:100", "summary")?.html).toBe("<html>sum</html>");
+    expect(readDashboardCacheEntry("s3", "dv1:100", "report")?.html).toBe("<html>rep</html>");
+    // legacy entries (written before kinds) read back as summary
+    expect(readDashboardCacheEntry("s3", "dv1:100")).toEqual({ html: "<html>sum</html>", ts: 1000 });
+  });
+
   it("token derives from the transcript mtime and version", () => {
     const p = join(home, "t.jsonl");
     writeFileSync(p, "{}");
@@ -39,6 +48,35 @@ describe("dashboardCache", () => {
 });
 
 const msg = (text: string): SessionEvent => ({ tsMs: 0, span: { kind: "message", role: "user", text } });
+
+describe("report facts", () => {
+  it("blastFacts tallies files, edits, outside touches, errors, and top targets/commands", () => {
+    const rep: BlastReport = {
+      meta: { sessionId: "s", transcript: "s.jsonl", project: "~/p", startMs: 0, endMs: 10 },
+      events: [
+        { seq: 0, msgIndex: 0, tsMs: 1, tool: "Read", action: "read", target: "src/a.ts", zone: "project" },
+        { seq: 1, msgIndex: 1, tsMs: 2, tool: "Edit", action: "edit", target: "src/a.ts", zone: "project" },
+        { seq: 2, msgIndex: 2, tsMs: 3, tool: "Read", action: "read", target: "/etc/hosts", zone: "outside", error: true },
+        { seq: 3, msgIndex: 3, tsMs: 4, tool: "Bash", action: "exec", target: "git commit" },
+        { seq: 4, msgIndex: 4, tsMs: 5, tool: "Bash", action: "exec", target: "git commit" },
+        { seq: 5, msgIndex: 5, tsMs: 6, tool: "Skill", action: "skill", target: "qa" },
+        { seq: 6, msgIndex: 6, tsMs: 7, tool: "Task", action: "agent", target: "Explore" },
+      ],
+    };
+    const f = blastFacts(rep) as any;
+    expect(f).toMatchObject({ events: 7, filesTouched: 2, edited: 1, outsideProject: 1, errors: 1, skills: ["qa"], subagents: ["Explore"] });
+    expect(f.topTargets[0]).toMatchObject({ target: "src/a.ts", visits: 2, edited: true });
+    expect(f.topCommands).toEqual([{ verb: "git commit", count: 2 }]);
+  });
+
+  it("downsampleCurve bounds long curves and always keeps the last point", () => {
+    const curve = Array.from({ length: 1000 }, (_, i) => ({ i }));
+    const out = downsampleCurve(curve, 240);
+    expect(out.length).toBeLessThanOrEqual(241);
+    expect(out[out.length - 1]).toEqual({ i: 999 });
+    expect(downsampleCurve(curve.slice(0, 10), 240)).toHaveLength(10);
+  });
+});
 
 describe("capDashboardEvents", () => {
   it("clips long span text and keeps short lists intact", () => {

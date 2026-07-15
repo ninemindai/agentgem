@@ -116,6 +116,9 @@ const SessionDashboardQuerySchema = z.object({
   id: z.string(),
   agent: z.string(),
   fresh: z.string().optional(),   // "true" → skip the cache and regenerate
+  // "summary" (default) = the compact evolving-dashboard artifact;
+  // "report" = the long-form editorial readout (renderReport / agentgem-report).
+  kind: z.enum(["summary", "report"]).optional(),
 });
 const SessionDashboardEventSchema = z.discriminatedUnion("type", [
   z.object({ type: z.literal("start"), cached: z.boolean(), events: z.number() }),
@@ -330,8 +333,8 @@ import { computeWorkflowAnalysis } from "./workflowCore.js";
 import { computeDistill, DISTILL_BACKGROUND_TIMEOUT_MS } from "./distillCore.js";
 import { sessionHygiene, HygieneInputError, type HygieneReport } from "./sessionHygieneCore.js";
 import { sessionBlast, BlastInputError } from "./sessionBlastCore.js";
-import { resolveSessionDashboardInput, DashboardInputError } from "./sessionDashboardCore.js";
-import { renderDashboard, readDashboardCacheEntry, writeDashboardCache } from "@agentgem/insight";
+import { resolveSessionDashboardInput, DashboardInputError, blastFacts, downsampleCurve } from "./sessionDashboardCore.js";
+import { renderDashboard, renderReport, readDashboardCacheEntry, writeDashboardCache } from "@agentgem/insight";
 import { pump } from "./sse/pump.js";
 import { beginForeground, endForeground } from "./warm/orchestrator.js";
 
@@ -591,26 +594,57 @@ export class GemController {
   }): AsyncGenerator<z.infer<typeof SessionDashboardEventSchema>> {
     const { id, agent } = input.query;
     const fresh = input.query.fresh === "true";
+    const kind = input.query.kind ?? "summary";
     yield* pump<z.infer<typeof SessionDashboardEventSchema>>(async (emit) => {
       beginForeground();
       try {
         const inp = await resolveSessionDashboardInput(id, agent);
-        const cached = readDashboardCacheEntry(id, inp.token);
+        const cached = readDashboardCacheEntry(id, inp.token, kind);
         if (cached && !fresh) {
           emit({ type: "start", cached: true, events: inp.events.length });
           emit({ type: "done", html: cached.html, cached: true, updatedAt: cached.ts });
           return;
         }
         emit({ type: "start", cached: false, events: inp.events.length });
-        const r = await renderDashboard({
-          prevHtml: "", deltaEvents: inp.events, final: true,
-          meta: { project: inp.project, agent: agent === "codex" ? "codex" : "claude" },
-          timeoutMs: 240_000,
-          onDelta: (chunk) => emit({ type: "delta", text: chunk }),
-        });
-        if (!r.ok) { emit({ type: "failed", message: "dashboard rendering failed — is the local coding agent available?" }); return; }
+        let r: { html: string; ok: boolean };
+        if (kind === "report") {
+          // Long-form editorial readout from DETERMINISTIC facts (session basics
+          // + blast summary + the hygiene readout, Claude only) — same engine and
+          // authoring contract as the rubric reports.
+          const blast = await sessionBlast(id, agent);
+          const hygiene = agent === "claude" ? await sessionHygiene(id, agent) : undefined;
+          const facts = {
+            session: {
+              sessionId: id, agent, project: inp.project,
+              startMs: blast.meta.startMs, endMs: blast.meta.endMs,
+              durationMs: Math.max(0, blast.meta.endMs - blast.meta.startMs),
+              ...(hygiene ? { model: hygiene.meta.model, contextCap: hygiene.meta.cap } : {}),
+            },
+            blast: blastFacts(blast),
+            ...(hygiene ? {
+              hygiene: {
+                verdict: hygiene.hygiene, factors: hygiene.factors,
+                curve: downsampleCurve(hygiene.curve), events: hygiene.events,
+                ...(hygiene.boundary ? { boundary: hygiene.boundary } : {}),
+              },
+            } : {}),
+          };
+          r = await renderReport({
+            facts,
+            meta: { rubricId: "session-report", title: `Session report — ${inp.project ?? id}`, scope: "session" },
+            onDelta: (chunk) => emit({ type: "delta", text: chunk }),
+          });
+        } else {
+          r = await renderDashboard({
+            prevHtml: "", deltaEvents: inp.events, final: true,
+            meta: { project: inp.project, agent: agent === "codex" ? "codex" : "claude" },
+            timeoutMs: 240_000,
+            onDelta: (chunk) => emit({ type: "delta", text: chunk }),
+          });
+        }
+        if (!r.ok) { emit({ type: "failed", message: `${kind} rendering failed — is the local coding agent available?` }); return; }
         const now = Date.now();
-        writeDashboardCache(id, inp.token, r.html, now);
+        writeDashboardCache(id, inp.token, r.html, now, kind);
         emit({ type: "done", html: r.html, cached: false, updatedAt: now });
       } catch (err) {
         // Only tagged guard failures echo their message — an unexpected fault's

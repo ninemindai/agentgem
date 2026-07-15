@@ -22,8 +22,10 @@ const WireEvent = z.discriminatedUnion("type", [
   z.object({ type: z.literal("failed"), message: z.string() }),
 ]);
 
+export type SessionDashboardKind = "summary" | "report";
+
 const sessionDashboardRoute = defineRoute("GET", "/api/inspect/session/dashboard", {
-  query: z.object({ id: z.string(), agent: z.string(), fresh: z.string().optional() }),
+  query: z.object({ id: z.string(), agent: z.string(), fresh: z.string().optional(), kind: z.enum(["summary", "report"]).optional() }),
   streamOf: WireEvent,
 });
 
@@ -31,12 +33,13 @@ const sessionDashboardRoute = defineRoute("GET", "/api/inspect/session/dashboard
  *  openRubricStream. */
 export function openSessionDashboardStream(
   client: Client,
-  params: { id: string; agent: string; fresh?: boolean },
+  params: { id: string; agent: string; fresh?: boolean; kind?: SessionDashboardKind },
   onEvent: (e: SessionDashboardEvent) => void,
 ): () => void {
   const ctrl = new AbortController();
-  const query: { id: string; agent: string; fresh?: string } = { id: params.id, agent: params.agent };
+  const query: { id: string; agent: string; fresh?: string; kind?: SessionDashboardKind } = { id: params.id, agent: params.agent };
   if (params.fresh) query.fresh = "true";
+  if (params.kind && params.kind !== "summary") query.kind = params.kind;
   void (async () => {
     try {
       for await (const e of sessionDashboardRoute.stream(client, { query }, { signal: ctrl.signal })) onEvent(e);

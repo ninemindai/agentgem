@@ -24,7 +24,7 @@ describe("SessionDashboard", () => {
     const s = mockStream();
     render(<SessionDashboard apiBase="/" agent="claude" sessionId="s1" />);
     s.emit({ type: "start", cached: false, events: 42 });
-    expect(screen.getByText(/Generating dashboard/)).toBeTruthy();
+    expect(screen.getByText(/Generating summary/)).toBeTruthy();
     s.emit({ type: "done", html: "<section>hi</section>", cached: false, updatedAt: 1_752_598_000_000 });
     const frame = document.querySelector("iframe.sd-frame") as HTMLIFrameElement;
     expect(frame).toBeTruthy();
@@ -55,5 +55,18 @@ describe("SessionDashboard", () => {
     const s = mockStream();
     render(<SessionDashboard apiBase="/" agent="codex" sessionId="c1" />);
     expect(s.spy).toHaveBeenCalledWith(expect.anything(), expect.objectContaining({ id: "c1", agent: "codex" }), expect.any(Function));
+  });
+
+  it("switches to the Report kind and reopens the stream for it", async () => {
+    const s = mockStream();
+    render(<SessionDashboard apiBase="/" agent="claude" sessionId="s1" />);
+    expect(s.spy).toHaveBeenLastCalledWith(expect.anything(), expect.objectContaining({ kind: "summary" }), expect.any(Function));
+    s.emit({ type: "done", html: "<b>sum</b>", cached: true, updatedAt: 1 });
+    fireEvent.click(screen.getByRole("tab", { name: /report/i }));
+    expect(s.spy).toHaveBeenLastCalledWith(expect.anything(), expect.objectContaining({ kind: "report" }), expect.any(Function));
+    s.emit({ type: "done", html: "<h1>report</h1>", cached: false, updatedAt: 2 });
+    const frame = document.querySelector("iframe.sd-frame.is-report") as HTMLIFrameElement;
+    expect(frame).toBeTruthy();                                  // report gets the tall document frame
+    expect(frame.getAttribute("srcdoc")).toContain("report");
   });
 });
