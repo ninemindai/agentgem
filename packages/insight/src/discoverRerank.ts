@@ -6,10 +6,10 @@
 // reusing the acpRecommender façade. The agent may ONLY reorder/re-reason the items
 // it was given — anything outside the input set is dropped, and any failure degrades
 // to the Stage-1 order. Never throws. Token-costing — invoked behind an explicit UI button.
-import { CLAUDE_AGENT, analysisWorkspace, defaultConnectFn, currentTestConnectFn, type AcpConnectFn, type AcpCtx, type AcpSessionHandle } from "./acpRecommender.js";
+import { analysisWorkspace, defaultConnectFn, currentTestConnectFn, type AcpConnectFn, type AcpCtx, type AcpSessionHandle } from "./acpRecommender.js";
 import { describeCandidates } from "./skillDescribe.js";
 import type { DiscoverCandidate, DiscoverPayload } from "./discover.js";
-import { createLogger } from "@agentgem/base";
+import { createLogger, taskAgent } from "@agentgem/base";
 
 const log = createLogger("insight");
 
@@ -83,7 +83,8 @@ export async function rerankCandidates(
   try {
     const deadline = Date.now() + timeoutMs;
     const left = () => Math.max(0, deadline - Date.now());
-    log.debug("discover-rerank: requesting %s over %d candidate(s)", CLAUDE_AGENT.name, input.candidates.length);
+    const agent = taskAgent("recommend");
+    log.debug("discover-rerank: requesting %s over %d candidate(s)", agent.name, input.candidates.length);
     // Fetch descriptions in parallel with agent startup. Self-bounded and best-effort:
     // it resolves to an empty map on failure or after its own budget, so slow clones
     // never eat the agent's time budget or fail the whole re-rank.
@@ -92,7 +93,7 @@ export async function rerankCandidates(
       describe(input.candidates).catch(() => new Map<string, string>()),
       new Promise<Map<string, string>>((res) => setTimeout(() => res(new Map()), descBudget)),
     ]);
-    conn = await withTimeout(connectFn(CLAUDE_AGENT, null), left());
+    conn = await withTimeout(connectFn(agent, null), left());
     handle = await withTimeout(conn.ctx.open(analysisWorkspace()), left());
     await withTimeout(handle.setMode("plan"), left());
     const descriptions = await descP;

@@ -11,9 +11,9 @@
 import type { SessionFacet } from "./facets.js";
 import {
   type AcpConnectFn, type AcpCtx, type AcpSessionHandle,
-  CLAUDE_AGENT, analysisWorkspace, currentTestConnectFn, defaultConnectFn,
+  analysisWorkspace, currentTestConnectFn, defaultConnectFn,
 } from "./acpRecommender.js";
-import { createLogger } from "@agentgem/base";
+import { createLogger, taskAgent } from "@agentgem/base";
 
 const log = createLogger("insight");
 
@@ -65,8 +65,9 @@ export async function narrateInsights(
     const prompt = NARRATE(JSON.stringify(payload));
     const deadline = Date.now() + timeoutMs;
     const left = () => Math.max(0, deadline - Date.now());
-    log.debug("narrate: requesting %s over %d facet(s)", CLAUDE_AGENT.name, facets.length);
-    conn = await withTimeout(connectFn(CLAUDE_AGENT, null), left());
+    const agent = taskAgent("report");
+    log.debug("narrate: requesting %s over %d facet(s)", agent.name, facets.length);
+    conn = await withTimeout(connectFn(agent, null), left());
     handle = await withTimeout(conn.ctx.open(analysisWorkspace()), left());
     await withTimeout(handle.setMode("plan"), left());
     const text = await withTimeout(handle.promptText(prompt, opts.onDelta), left());

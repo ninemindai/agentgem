@@ -6,11 +6,11 @@
 // skills folded back into Gem candidates. See
 // docs/proposals/skill-distillation-from-transcripts.md.
 import type { WorkflowSignal, ScanInventory } from "./workflowScan.js";
-import { CLAUDE_AGENT, analysisWorkspace, defaultConnectFn, currentTestConnectFn, type AcpConnectFn } from "./acpRecommender.js";
+import { analysisWorkspace, defaultConnectFn, currentTestConnectFn, type AcpConnectFn } from "./acpRecommender.js";
 import type { GatedCandidate, ProcedureCandidate, DistilledSkill, Provenance, Occurrence } from "./distillTypes.js";
 import { extractCandidates } from "./extract.js";
 import type { TriggerContract } from "@agentgem/model";
-import { createLogger } from "@agentgem/base";
+import { createLogger, taskAgent } from "@agentgem/base";
 
 const log = createLogger("insight");
 
@@ -191,13 +191,14 @@ export async function distillWorkflow(
   const t0 = Date.now();
   try {
     const prompt = DISTILL(JSON.stringify(candidates.map(trimCandidate)), JSON.stringify(installedSkillNames(inv)));
-    log.debug("distill: requesting %s for %d candidate(s)", CLAUDE_AGENT.name, candidates.length);
+    const agent = taskAgent("distill");
+    log.debug("distill: requesting %s for %d candidate(s)", agent.name, candidates.length);
     // Bound EVERY step against one shared deadline — connect + session open +
     // setMode + prompt — since the ACP handshake/session start are otherwise
     // unbounded (acpSession) and would hang past the prompt-only timeout.
     const deadline = Date.now() + timeoutMs;
     const left = () => Math.max(0, deadline - Date.now());
-    conn = await withTimeout(connectFn(CLAUDE_AGENT, null), left());
+    conn = await withTimeout(connectFn(agent, null), left());
     handle = await withTimeout(conn.ctx.open(analysisWorkspace()), left());   // neutral cwd — don't pollute the project
     await withTimeout(handle.setMode("plan"), left());                          // explicit — never edits files
     const text = await withTimeout(handle.promptText(prompt), left());

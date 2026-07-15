@@ -23,9 +23,9 @@ import type { DetectorFinding, DetectorSeverity } from "./detectors.js";
 import type { LlmCriterion } from "./rubrics.js";
 import {
   type AcpConnectFn, type AcpCtx, type AcpSessionHandle,
-  CLAUDE_AGENT, analysisWorkspace, currentTestConnectFn, defaultConnectFn,
+  analysisWorkspace, currentTestConnectFn, defaultConnectFn,
 } from "./acpRecommender.js";
-import { createLogger } from "@agentgem/base";
+import { createLogger, taskAgent } from "@agentgem/base";
 
 const log = createLogger("insight");
 
@@ -112,8 +112,9 @@ async function judgeBatch(
     const prompt = PROMPT(JSON.stringify(critPayload), JSON.stringify(sessPayload));
     const deadline = Date.now() + timeoutMs;
     const left = () => Math.max(0, deadline - Date.now());
-    log.debug("criterion-judge: requesting %s for %d session(s) × %d criteria", CLAUDE_AGENT.name, sessions.length, criteria.length);
-    conn = await withTimeout(connectFn(CLAUDE_AGENT, null), left());
+    const agent = taskAgent("judge");
+    log.debug("criterion-judge: requesting %s for %d session(s) × %d criteria", agent.name, sessions.length, criteria.length);
+    conn = await withTimeout(connectFn(agent, null), left());
     handle = await withTimeout(conn.ctx.open(analysisWorkspace()), left());   // neutral cwd — don't pollute the project
     await withTimeout(handle.setMode("plan"), left());                        // explicit — never edits files
     const text = await withTimeout(handle.promptText(prompt, onDelta), left());

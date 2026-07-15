@@ -10,7 +10,7 @@
 import { join } from "node:path";
 import { agentgemHome } from "@agentgem/model";
 import {
-  connectAcpAdapter, createLogger, resolveLaunch, adapterRuntimeCtx, ADAPTER_VERSIONS,
+  connectAcpAdapter, createLogger, resolveLaunch, adapterRuntimeCtx, ADAPTER_VERSIONS, taskAgent,
   type AgentDescriptor, type AdapterCtx,
 } from "@agentgem/base";
 export type { AgentDescriptor } from "@agentgem/base";
@@ -268,14 +268,15 @@ export async function recommendWorkflow(
     // the full `signal` object — only this prompt copy is trimmed.
     const { sequences: _seq, procedures: _proc, ...leanSignal } = signal;
     const prompt = GROUNDING(JSON.stringify(leanSignal), JSON.stringify(trimmedInv));
-    log.debug("workflow-recommender: requesting %s over %d artifact(s)", CLAUDE_AGENT.name, signal.artifacts.length);
+    const agent = taskAgent("recommend");
+    log.debug("workflow-recommender: requesting %s over %d artifact(s)", agent.name, signal.artifacts.length);
     // Bound EVERY step against one shared deadline — connect + session open +
     // setMode + prompt. The ACP `initialize` handshake and session start are
     // otherwise unbounded (acpSession), so a stalled adapter/auth would hang
     // forever, past the prompt-only timeout.
     const deadline = Date.now() + timeoutMs;
     const left = () => Math.max(0, deadline - Date.now());
-    conn = await withTimeout(connectFn(CLAUDE_AGENT, null), left());
+    conn = await withTimeout(connectFn(agent, null), left());
     handle = await withTimeout(conn.ctx.open(analysisWorkspace()), left());   // neutral cwd — don't pollute the project
     await withTimeout(handle.setMode("plan"), left());                 // explicit — never edits files
     const text = await withTimeout(handle.promptText(prompt, opts.onDelta), left());

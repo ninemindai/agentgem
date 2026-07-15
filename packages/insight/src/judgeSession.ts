@@ -14,9 +14,9 @@ import type { SessionFacet } from "./facets.js";
 import { deterministicFacets, validateFacets } from "./facets.js";
 import {
   type AcpConnectFn, type AcpCtx, type AcpSessionHandle,
-  CLAUDE_AGENT, analysisWorkspace, currentTestConnectFn, defaultConnectFn,
+  analysisWorkspace, currentTestConnectFn, defaultConnectFn,
 } from "./acpRecommender.js";
-import { createLogger } from "@agentgem/base";
+import { createLogger, taskAgent } from "@agentgem/base";
 
 const log = createLogger("insight");
 
@@ -59,8 +59,9 @@ async function judgeBatch(
     const prompt = JUDGE(JSON.stringify(payload));
     const deadline = Date.now() + timeoutMs;
     const left = () => Math.max(0, deadline - Date.now());
-    log.debug("session-judge: requesting %s for %d session(s)", CLAUDE_AGENT.name, sessions.length);
-    conn = await withTimeout(connectFn(CLAUDE_AGENT, null), left());
+    const agent = taskAgent("judge");
+    log.debug("session-judge: requesting %s for %d session(s)", agent.name, sessions.length);
+    conn = await withTimeout(connectFn(agent, null), left());
     handle = await withTimeout(conn.ctx.open(analysisWorkspace()), left());  // neutral cwd — don't pollute the project
     await withTimeout(handle.setMode("plan"), left());                       // explicit — never edits files
     const text = await withTimeout(handle.promptText(prompt, onDelta), left());
