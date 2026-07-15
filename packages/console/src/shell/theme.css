@@ -584,7 +584,6 @@ body::before {
 /* Studio */
 .play-studio-head { display: flex; align-items: center; gap: 12px; margin-bottom: 12px; }
 .play-studio-head .sp { flex: 1; }
-.play-scope { display: inline-flex; gap: 6px; }
 .play-studio-title { font: 600 19px var(--font-display); letter-spacing: -.01em; color: var(--ink); }
 .play-caps { display: flex; flex-direction: column; gap: 4px; margin: 6px 0 10px; }
 .play-caps__row { display: flex; gap: 8px; align-items: baseline; font-size: 12px; }
@@ -719,6 +718,28 @@ body::before {
 .play-banner__detail { font: 500 11.5px var(--font-mono); color: var(--ink-soft); word-break: break-word; }
 .play-banner--ok { border-color: rgba(47,107,58,.3); background: #eef4ee; }
 .play-banner--ok .play-banner__title { color: var(--emerald); }
+
+/* Share banner settings footer (visibility + tags moved out of the Studio toolbar).
+   The banner wraps so the footer takes a full row under a hairline; wrap order at
+   narrow widths: helper drops under the segmented control first, then the tags
+   group takes its own line. */
+.play-banner--share { flex-wrap: wrap; }
+.play-banner__opts { flex-basis: 100%; display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
+  border-top: 1px solid var(--line); margin-top: 10px; padding-top: 9px; }
+.play-banner__opts-label { font: 600 11px var(--font-ui); letter-spacing: .05em; text-transform: uppercase;
+  color: var(--muted); }
+.play-banner__opts-help { font: 500 11.5px var(--font-ui); color: var(--muted); }
+.play-banner__opts-spacer { flex: 1; }
+
+/* Joined single-choice segmented control. Selected segment is INK, deliberately not the
+   terracotta primary — the banner's one primary stays "Use this". */
+.play-seg { display: inline-flex; border: 1px solid var(--line); border-radius: var(--radius);
+  overflow: hidden; background: var(--raised); }
+.play-seg button { font: 600 12px var(--font-ui); padding: 7px 13px; border: 0; background: transparent;
+  color: var(--ink-soft); cursor: pointer; border-right: 1px solid var(--line); transition: .14s; }
+.play-seg button:last-child { border-right: 0; }
+.play-seg button[aria-pressed="true"] { background: var(--ink); color: var(--raised); }
+.play-seg button:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
 
 /* Composer source rows + HTML drop zone */
 .play-src { list-style: none; padding: 0; margin: 0; display: flex; flex-direction: column; gap: 7px; }
