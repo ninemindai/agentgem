@@ -13,7 +13,6 @@ import { fmtTokens, fmtDuration, fmtTime } from "./data.js";
 import { Loading } from "../../shell/Loading.js";
 import { setPendingContribution } from "../../pendingAnalyze.js";
 import { QuickShareButton } from "../_shared/QuickShareButton.js";
-import { ContextTimeline } from "./ContextTimeline.js";
 import { ProcessQualityReport } from "./ProcessQualityReport.js";
 import { StructureView } from "./StructureView.js";
 
@@ -77,7 +76,6 @@ export function TranscriptViewer({ apiBase, agent, sessionId, onBack, turn }: {
         )}
       </div>
 
-      {view && <ContextTimeline apiBase={apiBase} agent={agent} sessionId={view.sessionId} />}
       {view && <ProcessQualityReport apiBase={apiBase} agent={agent} sessionId={view.sessionId} />}
       {view && <DistillSection apiBase={apiBase} agent={agent} sessionId={view.sessionId} turns={view.turns} />}
 

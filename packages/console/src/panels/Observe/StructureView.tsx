@@ -12,12 +12,13 @@ import { phasesOf } from "./phases.js";
 import { PhaseFlamestrip } from "./PhaseFlamestrip.js";
 import { Turn } from "./turnTree.js";
 import { BlastRadius } from "./BlastRadius.js";
+import { ContextTimeline } from "./ContextTimeline.js";
 
 export function StructureView({ view, collapsed, onToggle, forceTx, apiBase, agent }: {
   view: TranscriptView; collapsed: Set<string>; onToggle: (id: string) => void; forceTx?: boolean;
   apiBase: string; agent: "claude" | "codex";
 }) {
-  const [mode, setMode] = useState<"map" | "blast" | "tx">(forceTx ? "tx" : "map");
+  const [mode, setMode] = useState<"map" | "blast" | "ctx" | "tx">(forceTx ? "tx" : "map");
   const [full, setFull] = useState(false);
 
   // Full-screen is a CSS overlay (position: fixed), not the native Fullscreen
@@ -42,7 +43,10 @@ export function StructureView({ view, collapsed, onToggle, forceTx, apiBase, age
           <div className="seg">
             <button type="button" className={mode === "map" ? "on" : ""} onClick={() => setMode("map")}>◆ Map</button>
             {agent === "claude" && (
-              <button type="button" className={mode === "blast" ? "on" : ""} onClick={() => setMode("blast")}>◎ Blast</button>
+              <>
+                <button type="button" className={mode === "blast" ? "on" : ""} onClick={() => setMode("blast")}>◎ Blast</button>
+                <button type="button" className={mode === "ctx" ? "on" : ""} onClick={() => setMode("ctx")}>∿ Context</button>
+              </>
             )}
             <button type="button" className={mode === "tx" ? "on" : ""} onClick={() => setMode("tx")}>≣ Transcript</button>
           </div>
@@ -62,6 +66,8 @@ export function StructureView({ view, collapsed, onToggle, forceTx, apiBase, age
           ? phases.map((p, i) => <PhaseFlamestrip key={i} phase={p} index={i} />)
           : mode === "blast"
           ? <BlastRadius apiBase={apiBase} agent={agent} sessionId={view.sessionId} />
+          : mode === "ctx"
+          ? <ContextTimeline apiBase={apiBase} agent={agent} sessionId={view.sessionId} />
           : <ol className="tv-turns">{view.turns.map((turn) => (
               <Turn key={turn.id} turn={turn} startMs={view.meta.startMs} open={!collapsed.has(turn.id)} onToggle={() => onToggle(turn.id)} />
             ))}</ol>}
