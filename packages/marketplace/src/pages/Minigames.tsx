@@ -105,7 +105,7 @@ export function Minigames({ api, stars }: { api: Api; stars: StarsCtx }) {
       <h2 className="mg-h">Miniapps</h2>
       <p className="mg-intro">AI-authored miniapps — sealed and playable right here. Click any one to play fullscreen.</p>
       {games.length === 0
-        ? <div className="mg-empty">No miniapps published yet. Build one in AgentGem → <b>Play</b> → <b>Share to app.agentgem.ai</b>.</div>
+        ? <div className="mg-empty">No miniapps published yet. Build one in AgentGem → <b>Play</b> → <b>Share</b>.</div>
         : <>
             <input className="ex-search" type="search" aria-label="search miniapps"
               placeholder="filter miniapps by name, tag, description…" value={search}

@@ -155,8 +155,8 @@ source and cannot see an aliased reference.
 
 ## Privacy
 
-Whatever you bake into this file ships. Saving writes a \`game\` gem, and "Share to app.agentgem.ai"
-makes it public to anyone.
+Whatever you bake into this file ships. Saving writes a \`game\` gem, and "Share" (publishes to
+app.agentgem.ai) makes it public to anyone.
 
 The seed data was already scrubbed by \`redactForBake\`: the home directory replaced with \`~\`, and
 OpenAI, GitHub, AWS, Slack and JWT token shapes replaced with \`‹redacted›\`. That is best-effort, not
@@ -185,7 +185,7 @@ a guarantee. So:
 
 ## Finishing
 
-The user drives this. **Save** runs both gates. **Push to git** commits the registry. **Share to
-app.agentgem.ai** publishes the gem. If Save fails, read the gate message and fix the file — the
+The user drives this. **Save** runs both gates. **Push to git** commits the registry. **Share**
+publishes the gem to app.agentgem.ai. If Save fails, read the gate message and fix the file — the
 console also offers "Fix with agent", which sends the failure straight back to you.
 `;
