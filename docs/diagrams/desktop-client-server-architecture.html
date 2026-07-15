@@ -158,7 +158,7 @@
         <text x="559" y="514" fill="white" font-size="10.5" font-weight="600" text-anchor="middle">Neon Postgres</text>
         <text x="559" y="534" fill="#c4b5fd" font-size="8.5" text-anchor="middle">public network data</text>
         <text x="559" y="550" fill="#c4b5fd" font-size="8.5" text-anchor="middle">k-anon · quarantine</text>
-        <text x="559" y="574" fill="#fb7185" font-size="8.5" text-anchor="middle">producers = 0 today</text>
+        <text x="559" y="574" fill="#34d399" font-size="8.5" text-anchor="middle">producers accruing (opt-in)</text>
         <text x="559" y="590" fill="#94a3b8" font-size="7.5" text-anchor="middle">(needs producer ingest — separate)</text>
 
         <!-- private enterprise deployment -->
@@ -202,7 +202,7 @@
       <div class="card">
         <div class="card-header"><div class="card-dot amber"></div><h3>Two deployments, one image</h3></div>
         <ul>
-          <li><b>Public</b> <code>api.agentgem.ai</code> → Neon, the k-anon network view (empty until producers ingest).</li>
+          <li><b>Public</b> <code>api.agentgem.ai</code> → Neon, the k-anon network view (fills as producers opt in and ingest).</li>
           <li><b>Private enterprise</b> → their own <code>DATABASE_URL</code>; data stays in their tenant, never mixes with the public network.</li>
           <li>Enterprise desktops just set <code>AGENTGEM_AGGREGATOR_URL</code> to their API.</li>
         </ul>
