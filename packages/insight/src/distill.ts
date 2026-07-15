@@ -181,7 +181,11 @@ export async function distillWorkflow(
   const skeletons = candidates.map((c) => c.skeleton);
 
   const connectFn = opts.connectFn ?? currentTestConnectFn() ?? defaultConnectFn;
-  const timeoutMs = opts.timeoutMs ?? 60_000;
+  // Default for callers that don't pass one (workflowCore / learnCore). The ACP agent
+  // inherits the user's default coding-agent model, which may be slow: a modest generation
+  // already exceeded the old 60s, so this always degraded to skeletons. 150s lets a real
+  // distill land before falling back. (Background warm distill uses DISTILL_BACKGROUND_TIMEOUT_MS.)
+  const timeoutMs = opts.timeoutMs ?? 150_000;
   let conn: { ctx: { open(cwd: string): Promise<{ setMode(m: string): Promise<void>; promptText(t: string): Promise<string>; dispose(): void }> }; close: () => void } | null = null;
   let handle: { setMode(m: string): Promise<void>; promptText(t: string): Promise<string>; dispose(): void } | null = null;
   const t0 = Date.now();
