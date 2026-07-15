@@ -5,7 +5,7 @@ import { describe, it, expect, beforeAll, afterAll } from "vitest";
 import { mkdtempSync, rmSync, writeFileSync, utimesSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
-import { dashboardToken, readDashboardCacheEntry, writeDashboardCache } from "@agentgem/insight";
+import { dashboardToken, readDashboardCacheEntry, readDashboardCacheLatest, writeDashboardCache } from "@agentgem/insight";
 import { capDashboardEvents, blastFacts, downsampleCurve, recommendedActions } from "../../sessionDashboardCore.js";
 import type { SessionEvent, BlastReport } from "@agentgem/insight";
 
@@ -44,6 +44,17 @@ describe("dashboardCache", () => {
     writeFileSync(p, "{}");
     utimesSync(p, new Date(1_700_000_000_000), new Date(1_700_000_000_000));
     expect(dashboardToken(p)).toBe("dv1:1700000000000");
+  });
+
+  it("readDashboardCacheLatest serves the entry regardless of token, scoped by kind", () => {
+    writeDashboardCache("s4", "dv1:100", "<html>old-sum</html>", 1000, "summary");
+    writeDashboardCache("s4", "dv1:100", "<html>old-rep</html>", 2000, "report");
+    // token mismatch (transcript changed) — exact read misses, latest read serves
+    expect(readDashboardCacheEntry("s4", "dv1:999", "summary")).toBeNull();
+    expect(readDashboardCacheLatest("s4", "summary")).toEqual({ html: "<html>old-sum</html>", ts: 1000 });
+    expect(readDashboardCacheLatest("s4", "report")).toEqual({ html: "<html>old-rep</html>", ts: 2000 });
+    // no entry for that session/kind at all
+    expect(readDashboardCacheLatest("s-none", "summary")).toBeNull();
   });
 });
 

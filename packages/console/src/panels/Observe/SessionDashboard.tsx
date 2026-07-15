@@ -21,7 +21,7 @@ import { DraftCard, LessonCard } from "./gemCards.js";
 type Phase =
   | { kind: "connecting" }
   | { kind: "generating"; chars: number }
-  | { kind: "done"; html: string; cached: boolean; updatedAt: number; actions?: RecommendedAction[] }
+  | { kind: "done"; html: string; cached: boolean; stale: boolean; updatedAt: number; actions?: RecommendedAction[] }
   | { kind: "failed"; message: string };
 
 export function SessionDashboard({ apiBase, agent, sessionId }: { apiBase: string; agent: "claude" | "codex"; sessionId: string }) {
@@ -36,7 +36,7 @@ export function SessionDashboard({ apiBase, agent, sessionId }: { apiBase: strin
     const close = openSessionDashboardStream(makeClient(apiBase), { id: sessionId, agent, fresh, kind: mode }, (e: SessionDashboardEvent) => {
       if (e.type === "start" && !e.cached) setPhase({ kind: "generating", chars: 0 });
       else if (e.type === "delta") { chars += e.text.length; setPhase({ kind: "generating", chars }); }
-      else if (e.type === "done") setPhase({ kind: "done", html: e.html, cached: e.cached, updatedAt: e.updatedAt, ...(e.actions ? { actions: e.actions } : {}) });
+      else if (e.type === "done") setPhase({ kind: "done", html: e.html, cached: e.cached, stale: e.stale === true, updatedAt: e.updatedAt, ...(e.actions ? { actions: e.actions } : {}) });
       else if (e.type === "failed") setPhase({ kind: "failed", message: e.message });
     });
     return close;
@@ -79,9 +79,9 @@ export function SessionDashboard({ apiBase, agent, sessionId }: { apiBase: strin
       <div className="sd-head">
         {picker}
         <span className="obs-muted">
-          {phase.cached ? "cached · " : ""}generated {fmtTime(phase.updatedAt)}
+          {phase.stale ? "session changed since this was generated · " : phase.cached ? "cached · " : ""}generated {fmtTime(phase.updatedAt)}
         </span>
-        <button type="button" className="obs-open-transcript sd-regen" onClick={regenerate}>Regenerate</button>
+        <button type="button" className="obs-open-transcript sd-regen" onClick={regenerate}>{phase.stale ? "Session changed — regenerate" : "Regenerate"}</button>
       </div>
       <iframe
         className={"sd-frame" + (mode === "report" ? " is-report" : "")}
