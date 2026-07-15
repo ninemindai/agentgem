@@ -36,6 +36,7 @@ export const CAP_METHOD: Record<ActionCapability, string> = {
   "open-link": "openLink",
   "send-message": "sendMessage",
   "update-model-context": "updateModelContext",
+  "copy-command": "copyCommand",
 };
 
 export const METHOD_CAP: Record<string, ActionCapability> = Object.fromEntries(

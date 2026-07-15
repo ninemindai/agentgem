@@ -1009,7 +1009,7 @@ export const sourceImportRoute = defineRoute("POST", "/api/sources/import", {
 const PlayNeedsSchema = z.array(z.enum([
   "session-data", "live-session-events", "local-project-access", "invoke-agent",
   "context-hygiene",
-  "open-link", "send-message", "update-model-context",
+  "open-link", "send-message", "update-model-context", "copy-command",
 ])).optional();
 const PlaySourceSchema = z.discriminatedUnion("kind", [
   z.object({ kind: z.literal("session"), agent: z.string(), project: z.string().optional(), sessionId: z.string(), summary: z.string() }),
