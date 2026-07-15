@@ -14,6 +14,7 @@ import type { RestApplication } from "@agentback/rest";
 import { buildCommonApp, finalizeCommonApp, installGracefulShutdown, warmEnabled } from "./appCommon.js";
 import { mountAggregator } from "./serverAggregator.js";
 import { BenchmarkProxyController } from "./benchmark.proxy.controller.js";
+import { AgentTasksController } from "./agentTasks.controller.js";
 import { startWarmSchedule } from "./warm/schedule.js";
 
 // Moved to serverAggregator.ts (Task 4); re-exported here because
@@ -42,6 +43,8 @@ export async function createApp(port: number): Promise<RestApplication> {
   // the tab 404s. It fetches AGENTGEM_AGGREGATOR_URL (default api.agentgem.ai) — a different route
   // (/api/aggregator/benchmarks) than this one, so even on the hosted box it's one hop, not a loop.
   app.restController(BenchmarkProxyController);
+  // Settings for background agent tasks (report/distill/recommend/judge model+agent defaults).
+  app.restController(AgentTasksController);
   // Global originGuard + /healthz + console-serving + the raw SSE routes (Task 5: extracted into
   // appCommon.ts, no behaviour change). Registered AFTER mountAggregator — see appCommon.ts's
   // module comment for why the ordering matters (AgentBack orders same-group express middlewares
