@@ -128,3 +128,25 @@ the v1.1 install-time enrichment. Beware treating author-time hints as verified 
 
 **Depends on / blocked by:** MCP connectors PR-1 (publish wire schema) + D11 annotation
 handling.
+
+## Test the MCP connection manager's http/sse transport branches
+
+**What:** Add an in-process HTTP MCP server fixture and a test exercising
+`mcpConnectors.ts`'s `StreamableHTTPClientTransport` / `SSEClientTransport` branches.
+While there, wrap `new URL(config.url)` so an invalid connector URL surfaces as
+`server_unavailable`, not the generic-tail `tool_error`.
+
+**Why:** Spec §7 lists an http-transport fixture at the manager layer; PR-2 shipped
+stdio-only (the demo/E2E path). The http/sse branch is a thin lazy pass-through to the
+SDK constructors, so it's low-risk, but it's a real spec-listed coverage item and the
+URL-error mislabel lives on that same untested path.
+
+**Pros:** Closes the §7 gap; proves the http connector path before a real http connector
+gem ships. **Cons:** Needs an in-process Streamable-HTTP MCP server harness (the SDK
+provides `StreamableHTTPServerTransport`, as mcpProxy.ts already shows).
+
+**Context:** Flagged by the PR-2 final whole-branch review (2026-07-16, PR #454) as
+ride-to-PR-4. `packages/play/src/mcpConnectors.ts` http/sse branch. Natural home: PR-4,
+alongside the Repo Pulse demo + verify-skill E2E.
+
+**Depends on / blocked by:** Nothing. Belongs with PR-4.
