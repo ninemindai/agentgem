@@ -5,8 +5,10 @@
 // parseClaudeTranscript (metadata only, never keeps text); atifSessionEvents
 // mirrors claudeSessionEvents (ordered, unfolded, every string scrubbed).
 // Timestamps are optional in ATIF: absent → startMs/endMs are 0 and the
-// SourceSpec scanner backfills file mtime (parsers are fs-free).
-import { basename } from "node:path";
+// SourceSpec scanner backfills file mtime. The parser never reads transcript
+// bytes off disk; it does normalize an absolute session cwd to its git checkout
+// (a bounded statSync walk), so it is not fully fs-free.
+import { basename, isAbsolute } from "node:path";
 import { normalizeProjectRoot } from "@agentgem/model";
 import { scrubTruncate } from "../scrub.js";
 import type { SessionStat } from "../observeAggregate.js";
@@ -50,10 +52,13 @@ export function parseAtifMeta(text: string, path: string): SessionStat | null {
   return {
     agent: "atif",
     sessionId: atifSessionId(doc, path),
-    // Same project normalization as the claude/codex parsers: fold to the git
-    // checkout when the cwd exists locally; imported foreign cwds fall back to
-    // their own basename (normalizeProjectRoot never touches transcript text).
-    project: typeof cwd === "string" ? basename(normalizeProjectRoot(cwd)) : null,
+    // Same project normalization as the claude/codex parsers: fold an ABSOLUTE
+    // cwd to its git checkout; a relative/empty cwd (common for imported foreign
+    // trajectories) keeps its own basename rather than resolving against the
+    // server's own cwd. normalizeProjectRoot never touches transcript text.
+    project: typeof cwd === "string" && cwd
+      ? basename(isAbsolute(cwd) ? normalizeProjectRoot(cwd) : cwd)
+      : null,
     cwd: typeof cwd === "string" ? cwd : null,   // SessionStat.cwd (repo-owner attribution parity)
     model: doc.agent.model_name ?? null,
     gitBranch: null,

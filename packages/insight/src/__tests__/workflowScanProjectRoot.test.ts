@@ -30,6 +30,7 @@ beforeAll(() => {
   mkdirSync(join(main, ".git"), { recursive: true });
   worktree = join(base, "shiny-repo-worktrees", "task");
   mkdirSync(worktree, { recursive: true });
+  mkdirSync(join(main, ".git", "worktrees", "task"), { recursive: true });
   writeFileSync(join(worktree, ".git"), `gitdir: ${join(main, ".git", "worktrees", "task")}\n`);
   claudeDir = join(base, ".claude");
   mainSession = writeSession("p-main", "s1.jsonl", main);
