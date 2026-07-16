@@ -104,6 +104,16 @@ export const GameCapabilityEnum = z.enum([
   "open-link", "send-message", "update-model-context", "copy-command",
 ]);
 
+// McpNeed (packages/model types.ts) as a wire schema. ONE exported schema backs every echo of
+// mcpNeeds — save meta, artifact, list, read — the #446 lesson: an inline copy in any consumer
+// drifts silently. Kept in lockstep with the model type by the compile-time pin in
+// __tests__/mcpNeedsSchema.test.ts. Additive-only, like every gem-archive shape.
+export const McpNeedSchema = z.object({
+  server: z.string().min(1),
+  tools: z.array(z.string().min(1)),
+});
+export const McpNeedsSchema = z.array(McpNeedSchema).optional();
+
 // The GameGenre union (packages/model types.ts) as a wire enum. Used both by the archive-facing
 // GameArtifactSchema below and by the Play save-request meta — kept in one place so the two never drift.
 export const GameGenreEnum = z.enum(["replay", "skill-run", "project-fun", "session-heatmap"]);
@@ -124,6 +134,7 @@ export const GameArtifactSchema = z.object({
   ]),
   engineVersion: z.string(),
   needs: z.array(GameCapabilityEnum).optional(),
+  mcpNeeds: McpNeedsSchema,
   meta: z.object({ controls: z.string().optional(), estPlaySeconds: z.number().optional() }).optional(),
 });
 
@@ -1027,6 +1038,7 @@ export const PlaySaveRequestSchema = z.object({
     createdFrom: GameArtifactSchema.shape.createdFrom,
     engineVersion: z.string().default("1"),
     needs: z.array(GameCapabilityEnum).optional(),
+    mcpNeeds: McpNeedsSchema,
   }),
 });
 export const PlaySaveResponseSchema = z.object({
@@ -1034,6 +1046,9 @@ export const PlaySaveResponseSchema = z.object({
   commit: z.string().nullable(),
   // Declared capabilities the html never used. Reported, never silent — the Studio surfaces these.
   prunedNeeds: z.array(GameCapabilityEnum).default([]),
+  // Advisory scan output (never blocking): non-literal connector calls the static scan cannot
+  // verify, or mcp usage with no declaration. The Studio surfaces these like prunedNeeds.
+  mcpWarnings: z.array(z.string()).default([]),
 });
 export const PlayDeleteRequestSchema = z.object({ name: z.string() });
 // Delete shares {name, commit} with save but never reconciles capabilities, so it gets its own response
@@ -1061,6 +1076,7 @@ export const PlayMcpAppSchema = z.object({
         engineVersion: z.string(),
         createdFrom: GameArtifactSchema.shape.createdFrom,
         needs: PlayNeedsSchema,
+        mcpNeeds: McpNeedsSchema,
         offline: z.boolean(),
       }),
     }),
@@ -1072,7 +1088,7 @@ export const PlayMcpAppSchema = z.object({
     _meta: z.object({ ui: z.object({ resourceUri: z.string(), visibility: z.array(z.enum(["model", "app"])) }) }),
   }),
 });
-export const MiniappListSchema = z.object({ miniapps: z.array(z.object({ name: z.string(), title: z.string(), genre: z.string(), needs: PlayNeedsSchema })) });
+export const MiniappListSchema = z.object({ miniapps: z.array(z.object({ name: z.string(), title: z.string(), genre: z.string(), needs: PlayNeedsSchema, mcpNeeds: McpNeedsSchema })) });
 // The codemod pass over the whole registry (POST /play/migrate): rewrites old-bridge miniapps to the
 // MCP Apps client shim on disk. Optimization only — readMiniapp()'s on-read backstop already serves
 // migrated html regardless of whether this route has run.
@@ -1090,7 +1106,7 @@ export const PlaySessionDataQuerySchema = z.object({ name: z.string(), sessionId
 const PlayShareStateSchema = z.object({ shareId: z.string(), url: z.string(), sharedAtMs: z.number() });
 export const PlayMiniappSchema = z.object({
   name: z.string(), html: z.string(),
-  meta: z.object({ title: z.string(), genre: z.string(), createdFrom: GameArtifactSchema.shape.createdFrom, engineVersion: z.string(), needs: PlayNeedsSchema }),
+  meta: z.object({ title: z.string(), genre: z.string(), createdFrom: GameArtifactSchema.shape.createdFrom, engineVersion: z.string(), needs: PlayNeedsSchema, mcpNeeds: McpNeedsSchema }),
   share: PlayShareStateSchema.optional(),
 });
 // The built-in Protocol Inspector (GET /play/inspector): same shape as PlayMiniappSchema, but this one is
@@ -1098,7 +1114,7 @@ export const PlayMiniappSchema = z.object({
 // INSPECTOR_META constants, so it gets its own schema rather than implying a readMiniapp-backed route.
 export const PlayInspectorSchema = z.object({
   name: z.string(), html: z.string(),
-  meta: z.object({ title: z.string(), genre: z.string(), createdFrom: GameArtifactSchema.shape.createdFrom, engineVersion: z.string(), needs: PlayNeedsSchema }),
+  meta: z.object({ title: z.string(), genre: z.string(), createdFrom: GameArtifactSchema.shape.createdFrom, engineVersion: z.string(), needs: PlayNeedsSchema, mcpNeeds: McpNeedsSchema }),
 });
 export const PlayPublishRequestSchema = z.object({ remote: z.string().url().optional() });
 export const PlayPublishResponseSchema = z.object({ ok: z.boolean() });

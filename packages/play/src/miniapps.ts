@@ -7,7 +7,7 @@ import { homedir } from "node:os";
 import { join, sep } from "node:path";
 import { readdirSync, readFileSync, writeFileSync, existsSync, mkdirSync, rmSync } from "node:fs";
 import { safePathSegment, CAP_TOOL, CAP_METHOD } from "@agentgem/model";
-import type { Gem, GameArtifact, GameGenre, GameSource, GameCapability } from "@agentgem/model";
+import type { Gem, GameArtifact, GameGenre, GameSource, GameCapability, McpNeed } from "@agentgem/model";
 import { workspaceDir } from "@agentgem/base";
 import { writeGemArchive, writeArchiveDir } from "@agentgem/archive";
 import { gameGate } from "./gameGate.js";
@@ -18,10 +18,10 @@ import { MCP_CLIENT_MARKER } from "./mcpAppClient.js";
 import { reconcileNeeds, deriveNeeds, hasDynamicToolCall } from "./capabilityScan.js";
 
 export interface MiniappMeta {
-  title: string; genre: GameGenre; createdFrom: GameSource; engineVersion: string; needs?: GameCapability[];
+  title: string; genre: GameGenre; createdFrom: GameSource; engineVersion: string; needs?: GameCapability[]; mcpNeeds?: McpNeed[];
 }
 export interface SaveMiniappInput { name: string; html: string; meta: MiniappMeta }
-export interface SaveMiniappResult { name: string; commit: string | null; prunedNeeds: GameCapability[] }
+export interface SaveMiniappResult { name: string; commit: string | null; prunedNeeds: GameCapability[]; mcpWarnings: string[] }
 
 export function miniappsRoot(): string {
   // SAME convention as workspacesRoot(): AGENTGEM_HOME is already the ~/.agentgem dir.
@@ -156,7 +156,7 @@ export async function saveMiniapp(input: SaveMiniappInput): Promise<SaveMiniappR
   const note = rec.pruned.length ? ` (pruned unused capability: ${rec.pruned.join(", ")})` : "";
   const commit = await commitWithLock(root, `save miniapp ${safe}${note}`);
   writeGameGem(safe, html, meta);                  // the PRUNED meta — a phantom cap must not reach the gem
-  return { name: safe, commit, prunedNeeds: rec.pruned };
+  return { name: safe, commit, prunedNeeds: rec.pruned, mcpWarnings: [] };
 }
 
 // Remove the dual-written game gem — but ONLY the one WE wrote. workspaceDir() is a shared, name-keyed

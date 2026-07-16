@@ -73,6 +73,17 @@ export type ActionCapability =
 
 export type GameCapability = ToolCapability | ActionCapability;
 
+// A connector requirement: `server` names an installed mcp_server gem (McpServerArtifact.name);
+// `tools` are the upstream tool names the miniapp may call on it. DECLARED-AUTHORITATIVE: the
+// save-time scan auto-fills literal calls it can see and warns on usage it cannot resolve, but it
+// never prunes a declaration and never blocks a save — runtime manifest enforcement (the
+// /api/play/mcp/call route) is the security boundary, not this list's derivation. Contrast
+// `needs`, where the literal-string shim contract makes the static scan total and pruning safe.
+export interface McpNeed {
+  server: string;
+  tools: string[];
+}
+
 export type GameSource =
   | { kind: "session"; agent: string; project?: string; sessionId: string; summary: string }
   | { kind: "skill"; skillName: string; sourceId?: string }
@@ -90,6 +101,7 @@ export interface GameArtifact {
   createdFrom: GameSource;  // provenance reference + summary — NOT the raw source
   engineVersion: string;    // scaffold/genre version, for future migration
   needs?: GameCapability[]; // declared, read-only; host decides. Absent = pure snapshot.
+  mcpNeeds?: McpNeed[];     // declared-authoritative connector manifest — see McpNeed above.
   meta?: { controls?: string; estPlaySeconds?: number };
 }
 
