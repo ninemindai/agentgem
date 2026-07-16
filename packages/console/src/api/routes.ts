@@ -436,7 +436,7 @@ export const gemApplyRoute = defineRoute("POST", "/api/gem/apply", {
 });
 
 // Observe: session telemetry from the local aggregator.
-const ObservePayloadSchema = z.object({
+export const ObservePayloadSchema = z.object({
   pulse: z.object({ sessions: z.number(), msgs: z.number(), tokens: z.number(), activeMs: z.number() }),
   daily: z.array(z.object({ date: z.string(), sessions: z.number(), msgs: z.number(), tokensIn: z.number(), tokensOut: z.number(), tokensCache: z.number() })),
   sessions: z.array(z.object({ agent: z.string(), sessionId: z.string(), project: z.string().nullable(), model: z.string().nullable(), startMs: z.number(), endMs: z.number(), durationMs: z.number(), msgs: z.number(), tokens: z.number(), tokensIn: z.number(), tokensOut: z.number(), tokensCache: z.number(), gitBranch: z.string().nullable() })),
@@ -450,6 +450,11 @@ const ObservePayloadSchema = z.object({
     skills: z.record(z.string(), z.number()),
     subagents: z.record(z.string(), z.number()),
   })),
+  // Token attribution (spec 2026-07-16). .default([]) so an OLD server's payload
+  // (SPA-cached-at-boot skew) degrades to hidden cards for /api/observe consumers
+  // (SessionPicker et al.) instead of failing the whole-payload parse.
+  byProject: z.array(z.object({ project: z.string().nullable(), sessions: z.number(), tokens: z.number(), tokensIn: z.number(), tokensOut: z.number(), tokensCache: z.number() })).default([]),
+  topSessions: z.array(z.object({ agent: z.string(), sessionId: z.string(), project: z.string().nullable(), model: z.string().nullable(), tokens: z.number(), tokensIn: z.number(), tokensOut: z.number(), tokensCache: z.number(), endMs: z.number() })).default([]),
   facets: z.object({ agents: z.array(z.string()), projects: z.array(z.string()), models: z.array(z.string()) }),
   range: z.enum(["today", "7d", "30d", "all"]),
 });

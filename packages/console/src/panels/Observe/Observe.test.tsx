@@ -4,7 +4,7 @@ import { render, screen, cleanup, fireEvent } from "@testing-library/react";
 afterEach(() => { cleanup(); vi.unstubAllGlobals(); window.location.hash = ""; });
 import { Dashboard } from "./Dashboard.js";
 import { Observe } from "./index.js";
-import type { ObservePayload } from "../../api/routes.js";
+import { ObservePayloadSchema, type ObservePayload } from "../../api/routes.js";
 
 const res = (body: unknown) =>
   ({ ok: true, status: 200, text: async () => JSON.stringify(body) }) as unknown as Response;
@@ -119,5 +119,17 @@ describe("Observe first-run", () => {
     ));
     render(<Observe apiBase="" />);
     expect(await screen.findByText(/nothing to inspect yet/i)).toBeTruthy();
+  });
+});
+
+describe("ObservePayloadSchema version-skew defaults", () => {
+  it("parses an old server payload lacking byProject/topSessions (protects /api/observe consumers like SessionPicker)", () => {
+    const { byProject: _bp, topSessions: _ts, ...legacy } = payload as ObservePayload & { byProject?: unknown; topSessions?: unknown };
+    const parsed = ObservePayloadSchema.safeParse(legacy);
+    expect(parsed.success).toBe(true);
+    if (parsed.success) {
+      expect(parsed.data.byProject).toEqual([]);
+      expect(parsed.data.topSessions).toEqual([]);
+    }
   });
 });
