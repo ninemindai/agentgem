@@ -446,9 +446,15 @@ importers:
       '@agentgem/base':
         specifier: workspace:*
         version: link:../base
+      '@agentgem/capture':
+        specifier: workspace:*
+        version: link:../capture
       '@agentgem/model':
         specifier: workspace:*
         version: link:../model
+      '@modelcontextprotocol/sdk':
+        specifier: ^1.29.0
+        version: 1.29.0(zod@4.4.3)
       jsdom:
         specifier: ^29
         version: 29.1.1(@noble/hashes@2.2.0)
