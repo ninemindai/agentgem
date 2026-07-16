@@ -28,6 +28,7 @@ beforeAll(() => {
   mkdirSync(join(main, ".git"), { recursive: true });
   worktree = join(base, "shiny-repo-worktrees", "task");
   mkdirSync(worktree, { recursive: true });
+  mkdirSync(join(main, ".git", "worktrees", "task"), { recursive: true });
   writeFileSync(join(worktree, ".git"), `gitdir: ${join(main, ".git", "worktrees", "task")}\n`);
   claudeDir = join(base, ".claude");
   writeSession("p-main", main, new Date("2026-07-01T00:00:00Z"));

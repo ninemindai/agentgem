@@ -21,6 +21,7 @@ beforeAll(() => {
   mkdirSync(join(main, "packages", "web"), { recursive: true });
   worktree = join(base, "shiny-repo-worktrees", "task");
   mkdirSync(worktree, { recursive: true });
+  mkdirSync(join(main, ".git", "worktrees", "task"), { recursive: true });
   writeFileSync(join(worktree, ".git"), `gitdir: ${join(main, ".git", "worktrees", "task")}\n`);
 });
 
@@ -57,6 +58,14 @@ describe("scan normalizes project to the git checkout", () => {
     expect(stat?.project).toBe("proj");
   });
 
+  it("claude: a relative/empty cwd never folds via process.cwd()", () => {
+    // resolve("workspace/proj") is process.cwd()-relative; without an isAbsolute
+    // guard, gitProjectRoot would walk up from the agentgem server's own checkout
+    // and mislabel foreign transcripts as the local project.
+    expect(parseClaudeTranscript(claudeText("workspace/proj"), "/sessions/rel.jsonl")?.project).toBe("proj");
+    expect(parseClaudeTranscript(claudeText(""), "/sessions/empty.jsonl")?.project).toBeNull();
+  });
+
   it("codex: a worktree cwd reports the main checkout's name", () => {
     const stat = parseCodexTranscript(codexText(worktree), "/sessions/rollout-1.jsonl");
     expect(stat?.project).toBe("shiny-repo");
@@ -72,5 +81,14 @@ describe("scan normalizes project to the git checkout", () => {
     const stat = parseAtifMeta(doc, "/sessions/t1.json");
     expect(stat?.project).toBe("shiny-repo");
     expect(stat?.cwd).toBe(worktree);
+  });
+
+  it("atif: a relative cwd (imported foreign trajectory) keeps its basename", () => {
+    const doc = JSON.stringify({
+      schema_version: "ATIF-v1", trajectory_id: "t2", agent: { name: "a", model_name: "m" },
+      steps: [{ source: "user", timestamp: "2026-07-01T00:00:00Z", message: "hi" }],
+      extra: { cwd: "relative/foreign" },
+    });
+    expect(parseAtifMeta(doc, "/sessions/t2.json")?.project).toBe("foreign");
   });
 });

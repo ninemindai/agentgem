@@ -8,7 +8,7 @@
 // text (mirrors workflowScan.ts). Total functions: missing dirs / malformed
 // lines degrade to empty/skip, never throw.
 import { readdirSync } from "node:fs";
-import { join, basename } from "node:path";
+import { join, basename, isAbsolute } from "node:path";
 import { normalizeProjectRoot } from "@agentgem/model";
 import { BUILTIN_SOURCES, type SourceSpec, clearParseCache } from "./sources.js";
 import { transcriptToken } from "./analysisCache.js";
@@ -55,15 +55,24 @@ const usageFields = (tools: Record<string, number>, skills: Record<string, numbe
   ...(Object.keys(subagents).length ? { subagents } : {}),
 });
 
+// A cwd → project-root normalizer. The scan supplies a memoized one (a whole-store
+// scan touches thousands of transcripts sharing a handful of cwds); direct callers
+// get the plain resolver.
+type Normalizer = (cwd: string) => string;
+
 // Project = the git checkout containing the session cwd (worktrees and
 // subdirectories fold into the main checkout), by name; raw cwd stays on the
 // stat for attribution. Resolution walks the live filesystem, so cwds whose
 // checkout is gone (e.g. a removed worktree) fall back to their own basename.
-function projectLabel(cwd: string | null): string | null {
-  return cwd ? basename(normalizeProjectRoot(cwd)) : null;
+// Only ABSOLUTE cwds are normalized: a relative/empty cwd (common in imported
+// foreign transcripts) would otherwise resolve against the server's own cwd and
+// mislabel the session as the local project.
+function projectLabel(cwd: string | null, normalize: Normalizer): string | null {
+  if (!cwd) return null;
+  return isAbsolute(cwd) ? basename(normalize(cwd)) : basename(cwd);
 }
 
-export function parseClaudeTranscript(text: string, path: string): SessionStat | null {
+export function parseClaudeTranscript(text: string, path: string, normalize: Normalizer = normalizeProjectRoot): SessionStat | null {
   // Fix 1: canonical sessionId comes from the transcript filename (the UUID), not inline record fields.
   // Subagent/sidechain records carry a shared parent sessionId which would cause collisions.
   const sessionId = basename(path).replace(/\.jsonl$/, "");
@@ -101,10 +110,10 @@ export function parseClaudeTranscript(text: string, path: string): SessionStat |
     }
   }
   if (!sessionId || endMs < startMs) return null;
-  return { agent: "claude", sessionId, project: projectLabel(cwd), cwd, model, gitBranch, startMs, endMs, msgs, tokensIn, tokensOut, tokensCache, ...usageFields(tools, skills, subagents) };
+  return { agent: "claude", sessionId, project: projectLabel(cwd, normalize), cwd, model, gitBranch, startMs, endMs, msgs, tokensIn, tokensOut, tokensCache, ...usageFields(tools, skills, subagents) };
 }
 
-export function parseCodexTranscript(text: string, path: string): SessionStat | null {
+export function parseCodexTranscript(text: string, path: string, normalize: Normalizer = normalizeProjectRoot): SessionStat | null {
   let sessionId = "", cwd: string | null = null, model: string | null = null;
   let startMs = Infinity, endMs = -Infinity, msgs = 0;
   let total: Record<string, number> | null = null;   // cumulative; keep the last seen
@@ -132,7 +141,7 @@ export function parseCodexTranscript(text: string, path: string): SessionStat | 
   const input = total?.input_tokens ?? 0, cached = total?.cached_input_tokens ?? 0;
   const tokensIn = Math.max(0, input - cached);
   const tokensOut = (total?.output_tokens ?? 0) + (total?.reasoning_output_tokens ?? 0);
-  return { agent: "codex", sessionId, project: projectLabel(cwd), cwd, model, gitBranch: null, startMs, endMs, msgs, tokensIn, tokensOut, tokensCache: cached, ...usageFields(tools, {}, {}) };
+  return { agent: "codex", sessionId, project: projectLabel(cwd, normalize), cwd, model, gitBranch: null, startMs, endMs, msgs, tokensIn, tokensOut, tokensCache: cached, ...usageFields(tools, {}, {}) };
 }
 
 // Files the default-path scan reads, across every enumerable source. This is the

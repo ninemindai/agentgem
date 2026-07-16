@@ -8,7 +8,7 @@ import { readFile, stat } from "node:fs/promises";
 import { readdirSync, existsSync } from "node:fs";
 import { join, basename } from "node:path";
 import { homedir } from "node:os";
-import { resolveDirs } from "@agentgem/model";
+import { resolveDirs, makeProjectRootNormalizer } from "@agentgem/model";
 import type { AgentBinding, GemArtifact } from "@agentgem/model";
 import { mapPool } from "@agentgem/base";
 import type { AgentId, SessionStat } from "./observeAggregate.js";
@@ -78,7 +78,10 @@ const PARSE_CACHE_CAP = 20_000;
 /** Test seam: drop the incremental parse cache. */
 export function clearParseCache(): void { _parseCache.clear(); }
 
-async function scanJsonl(files: string[], parse: (t: string, p: string) => SessionStat | null): Promise<SessionStat[]> {
+async function scanJsonl(files: string[], parse: (t: string, p: string, normalize?: (cwd: string) => string) => SessionStat | null): Promise<SessionStat[]> {
+  // One normalizer per scan: thousands of transcripts share a handful of cwds, so
+  // memoizing the git-root walk across this scan avoids re-statting the same paths.
+  const normalize = makeProjectRootNormalizer();
   const parsed = await mapPool(files, READ_CONCURRENCY, async (f) => {
     // stat first (cheap): unchanged bytes → serve the cached parse, skipping read + JSON.parse.
     let meta: { mtimeMs: number; size: number };
@@ -86,7 +89,7 @@ async function scanJsonl(files: string[], parse: (t: string, p: string) => Sessi
     const hit = _parseCache.get(f);
     if (hit && hit.mtimeMs === meta.mtimeMs && hit.size === meta.size) return hit.stat;
     let text: string; try { text = await readFile(f, "utf8"); } catch { return null; }
-    const s = parse(text, f);
+    const s = parse(text, f, normalize);
     if (_parseCache.size >= PARSE_CACHE_CAP) _parseCache.clear();   // safety valve
     _parseCache.set(f, { ...meta, stat: s });
     return s;

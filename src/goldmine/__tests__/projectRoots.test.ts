@@ -21,6 +21,7 @@ beforeAll(() => {
   mkdirSync(join(main, ".git"), { recursive: true });
   worktree = join(home, "repos", "shiny-repo-worktrees", "task");
   mkdirSync(worktree, { recursive: true });
+  mkdirSync(join(main, ".git", "worktrees", "task"), { recursive: true });
   writeFileSync(join(worktree, ".git"), `gitdir: ${join(main, ".git", "worktrees", "task")}\n`);
   // One discovered session, run in the WORKTREE — the allow-list entry becomes the main root.
   const sessions = join(home, ".claude", "projects", "p1");

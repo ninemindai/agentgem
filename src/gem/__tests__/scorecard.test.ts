@@ -104,6 +104,7 @@ describe("selectScorecardRoots", () => {
       mkdirSync(join(main, ".git"), { recursive: true });
       const worktree = join(base, "repo-worktrees", "task");
       mkdirSync(worktree, { recursive: true });
+      mkdirSync(join(main, ".git", "worktrees", "task"), { recursive: true });
       writeFileSync(join(worktree, ".git"), `gitdir: ${join(main, ".git", "worktrees", "task")}\n`);
       expect(selectScorecardRoots(undefined, [worktree, main], deps)).toEqual([main]);
     } finally {
