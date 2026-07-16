@@ -47,6 +47,14 @@ export interface ObservePayload {
   // Per-day usage series for charting. Each day holds only the top-6 names of each
   // dimension (bounded payload); same UTC-date axis as `daily`.
   usageDaily: { date: string; tools: Record<string, number>; skills: Record<string, number>; subagents: Record<string, number> }[];
+  // Token attribution over the UNCAPPED filtered set (the `sessions` array below is
+  // recency-capped at 200 — deriving these client-side from it would silently
+  // truncate). byProject is a PARTIAL-FILTER aggregate: agent/model/minMsgs apply,
+  // the project filter does NOT — the Tokens-by-project card keeps its full ranking
+  // while a project filter is active (Variant B). `project` stays null for the
+  // unassigned bucket; labeling is the renderer's job.
+  byProject: { project: string | null; sessions: number; tokens: number; tokensIn: number; tokensOut: number; tokensCache: number }[];
+  topSessions: { agent: AgentId; sessionId: string; project: string | null; model: string | null; tokens: number; tokensIn: number; tokensOut: number; tokensCache: number; endMs: number }[];
   facets: { agents: string[]; projects: string[]; models: string[] };
   range: ObserveRange;
 }
@@ -80,12 +88,15 @@ export function aggregateObserve(stats: SessionStat[], range: ObserveRange, nowM
     models: [...new Set(rangeStats.map((s) => s.model).filter((m): m is string => m !== null))].sort(),
   };
 
-  // Apply attribute filters.
-  let filtered = rangeStats;
-  if (filter?.agent !== undefined) filtered = filtered.filter((s) => s.agent === filter.agent);
-  if (filter?.project !== undefined) filtered = filtered.filter((s) => s.project === filter.project);
-  if (filter?.model !== undefined) filtered = filtered.filter((s) => s.model === filter.model);
-  if (filter?.minMsgs !== undefined) filtered = filtered.filter((s) => s.msgs >= filter.minMsgs!);
+  // Apply attribute filters. byProject deliberately skips the project filter — a
+  // partial-filter aggregate (cousin of `facets` above, which skips ALL filters).
+  let attrFiltered = rangeStats;
+  if (filter?.agent !== undefined) attrFiltered = attrFiltered.filter((s) => s.agent === filter.agent);
+  if (filter?.model !== undefined) attrFiltered = attrFiltered.filter((s) => s.model === filter.model);
+  if (filter?.minMsgs !== undefined) attrFiltered = attrFiltered.filter((s) => s.msgs >= filter.minMsgs!);
+  const filtered = filter?.project !== undefined
+    ? attrFiltered.filter((s) => s.project === filter.project)
+    : attrFiltered;
 
   const byDay = new Map<string, ObservePayload["daily"][number]>();
   const byModel = new Map<string, ObservePayload["models"][number]>();
@@ -114,6 +125,25 @@ export function aggregateObserve(stats: SessionStat[], range: ObserveRange, nowM
     pTokens += tokensOf(s); pMsgs += s.msgs; pActive += Math.max(0, s.endMs - s.startMs);
   }
 
+  const byProj = new Map<string | null, ObservePayload["byProject"][number]>();
+  for (const s of attrFiltered) {
+    const b = byProj.get(s.project) ??
+      { project: s.project, sessions: 0, tokens: 0, tokensIn: 0, tokensOut: 0, tokensCache: 0 };
+    b.sessions++; b.tokens += tokensOf(s);
+    b.tokensIn += s.tokensIn; b.tokensOut += s.tokensOut; b.tokensCache += s.tokensCache;
+    byProj.set(s.project, b);
+  }
+  const byProject = [...byProj.values()].sort((a, b) => b.tokens - a.tokens);
+
+  const topSessions = [...filtered]
+    .sort((a, b) => tokensOf(b) - tokensOf(a))
+    .slice(0, 8)
+    .map((s) => ({
+      agent: s.agent, sessionId: s.sessionId, project: s.project, model: s.model,
+      tokens: tokensOf(s), tokensIn: s.tokensIn, tokensOut: s.tokensOut, tokensCache: s.tokensCache,
+      endMs: s.endMs,
+    }));
+
   const USAGE_TOP = 6;
   const byToolR = rankCounts(byTool), bySkillR = rankCounts(bySkill), bySubagentR = rankCounts(bySubagent);
   const top = (r: { name: string }[]) => r.slice(0, USAGE_TOP).map((x) => x.name);
@@ -138,6 +168,8 @@ export function aggregateObserve(stats: SessionStat[], range: ObserveRange, nowM
     bySkill: bySkillR,
     bySubagent: bySubagentR,
     usageDaily,
+    byProject,
+    topSessions,
     facets,
     range,
   };
