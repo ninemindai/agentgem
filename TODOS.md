@@ -2,6 +2,52 @@
 
 Deferred work, with enough context to pick up cold.
 
+## Theme-wide: muted small-text contrast is below WCAG 4.5:1
+
+**What:** Decide whether `--muted` (#8a7f69) on `--raised` (#fbf7ee) at 11–12px —
+used for `obs-usage-count`, legends, metadata lines across the Observe dashboard —
+should be darkened (e.g. toward `--ink-soft`) or the small-text sizes bumped.
+
+**Why:** WCAG AA wants ≥4.5:1 for body-size text; the muted-on-raised pair sits
+below that. Flagged during the 2026-07-16 design review of the Overview
+token-breakdown cards, but it's a theme convention, not a per-card issue — fixing
+one card would fork the design language.
+
+**Pros:** One token change fixes contrast everywhere at once; keeps every card
+consistent.
+
+**Cons:** Darkening `--muted` changes the whole page's texture — the warm
+letterpress look depends on the quiet metadata layer; needs a designer's eye pass,
+not a mechanical swap.
+
+**Context:** Tokens in `packages/console/src/shell/theme.css:14` (`--muted`) and
+the `obs-*` rules around line 1040. Verify candidate values against both `--paper`
+and `--raised` backgrounds.
+
+**Depends on / blocked by:** Nothing. Theme-level decision.
+
+## Null-project ("Unassigned") filterability on Observe
+
+**What:** Teach `ObserveFilter`/`aggregateObserve`/the project `<select>` a
+`project: null` value so the "Unassigned" bucket in "Tokens by project" becomes
+clickable like every other row.
+
+**Why:** Deferred from the 2026-07-16 token-breakdown design review (decision 9A):
+today "Unassigned" renders as an honest non-link. If a user's sessions are mostly
+projectless, their top spender is a row they can't drill into.
+
+**Pros:** Removes the one dead end in the token-attribution flow.
+
+**Cons:** Touches shared filter plumbing (`ObserveFilter` type, `aggregateObserve`
+filter application, `ObserveFilters` select) also used by Sessions; a sentinel
+value for "null" needs care in the select's empty-string convention.
+
+**Context:** Filter application at `packages/insight/src/observeAggregate.ts:86`;
+select at `packages/console/src/panels/Observe/ObserveControls.tsx:31-35`. Only do
+this if the Unassigned bucket proves dominant in real usage.
+
+**Depends on / blocked by:** The token-breakdown cards shipping first.
+
 ## Key federated membership on GitHub's numeric user id, not the login string
 
 **What:** Add `gh_user_id` to `org_members` and match accounts on
