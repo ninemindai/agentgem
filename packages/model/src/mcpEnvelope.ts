@@ -8,9 +8,13 @@
 // The code union is the FULL mirrored window.claude.mcp contract set, not just what v1 emits:
 // consumers branch on `code`, and a later server version emitting a new code must not require a
 // lockstep client change. Additive-only.
+//
+// `server_config_changed`: the connector's config changed since the caller's consented digest;
+// re-prompt and retry — a re-consent-needed signal alongside needs_reauth/selection_required.
 
 export const MCP_ERROR_CODES = [
   "needs_reauth",
+  "server_config_changed",
   "server_not_connected",
   "selection_required",
   "server_not_found",
