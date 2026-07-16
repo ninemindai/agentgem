@@ -359,5 +359,18 @@ describe("Studio → Share to app.agentgem.ai", () => {
     expect(screen.queryByRole("button", { name: /^public$/i })).toBeNull();
     expect(screen.queryByRole("button", { name: /^unlisted$/i })).toBeNull();
     expect(screen.queryByPlaceholderText(/tags, comma separated/i)).toBeNull();
+    // Save and Push to git are hidden — Share and Request review auto-save, so the row stays actions-only.
+    expect(screen.queryByRole("button", { name: /^save$/i })).toBeNull();
+    expect(screen.queryByRole("button", { name: /push to git/i })).toBeNull();
+  });
+
+  it("the preview caption row has a reload control that re-fetches the miniapp", async () => {
+    vi.spyOn(routes.bindStatusRoute, "call").mockResolvedValue({ bound: true, login: "bob", sessionActive: true } as never);
+    const load = vi.spyOn(routes.playMiniappRoute, "call").mockResolvedValue(miniapp as never);
+    mount();
+    const reload = await screen.findByRole("button", { name: /reload the preview/i });
+    const before = load.mock.calls.length;
+    fireEvent.click(reload);
+    await waitFor(() => expect(load.mock.calls.length).toBe(before + 1));
   });
 });

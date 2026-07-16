@@ -166,7 +166,9 @@ describe("Studio", () => {
     vi.spyOn(playSaveRoute, "call").mockResolvedValue({ name: "g1", commit: "abc1234", prunedNeeds: ["invoke-agent"] });
     expect(await screen.findByText(/run a local AI agent on your machine/i)).toBeTruthy();
 
-    fireEvent.click(screen.getByRole("button", { name: /^Save$/ }));
+    // The Save button is gone from the toolbar — Share saves first, and pauses at the cover
+    // banner long after these assertions resolve, so it stands in for a bare save here.
+    fireEvent.click(screen.getByRole("button", { name: /^share$/i }));
 
     expect(await screen.findByText(/removed invoke-agent — nothing in the miniapp uses it/i)).toBeTruthy();
     await waitFor(() => expect(screen.queryByText(/run a local AI agent on your machine/i)).toBeNull());
@@ -185,7 +187,8 @@ describe("Studio", () => {
     await waitFor(() => expect(playMiniappRoute.call).toHaveBeenCalled());
     expect(screen.queryByText(/read your local setup/i)).toBeNull();
 
-    // the agent edited meta.json between mount and Save: the re-read inside save() now sees the new cap
+    // the agent edited meta.json between mount and the next save (via Share): the re-read
+    // inside save() now sees the new cap
     vi.spyOn(playMiniappRoute, "call").mockResolvedValue({
       name: "g1", html: "<!doctype html><body><canvas></canvas></body>",
       meta: {
@@ -195,7 +198,7 @@ describe("Studio", () => {
     } as never);
     vi.spyOn(playSaveRoute, "call").mockResolvedValue({ name: "g1", commit: "abc1234", prunedNeeds: [] } as never);
 
-    fireEvent.click(screen.getByRole("button", { name: /^Save$/ }));
+    fireEvent.click(screen.getByRole("button", { name: /^share$/i }));
 
     expect(await screen.findByText(/read your local setup/i)).toBeTruthy();
   });
@@ -203,11 +206,11 @@ describe("Studio", () => {
   it("clears a prior prune notice when a later save prunes nothing", async () => {
     renderStudio(["invoke-agent"]);
     const save = vi.spyOn(playSaveRoute, "call").mockResolvedValue({ name: "g1", commit: "a", prunedNeeds: ["invoke-agent"] } as never);
-    fireEvent.click(await screen.findByRole("button", { name: /^Save$/ }));
+    fireEvent.click(await screen.findByRole("button", { name: /^share$/i }));
     expect(await screen.findByText(/removed invoke-agent/i)).toBeTruthy();
 
     save.mockResolvedValue({ name: "g1", commit: "b", prunedNeeds: [] } as never);
-    fireEvent.click(screen.getByRole("button", { name: /^Save$/ }));
+    fireEvent.click(screen.getByRole("button", { name: /^share$/i }));
     await waitFor(() => expect(screen.queryByText(/removed invoke-agent/i)).toBeNull());
   });
 });
