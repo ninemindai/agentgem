@@ -16,6 +16,7 @@ import type { Transport } from "@modelcontextprotocol/sdk/shared/transport.js";
 import type { McpServerArtifact, McpErrorCode } from "@agentgem/model";
 import { introspectConfig } from "@agentgem/capture";
 import { buildSpawnEnv } from "./mcpEnv.js";
+import { mcpServerConfigDigest } from "./mcpDigest.js";
 
 export class ConnectorError extends Error {
   constructor(message: string, readonly code: McpErrorCode) {
@@ -36,6 +37,14 @@ export function resolveConnectorGem(server: string): McpServerArtifact | undefin
   return reader(server);
 }
 
+// The console pins consent to a digest at approval time and re-sends it on every call (D3/D7); this
+// is the live comparand — the CURRENT installed gem's digest, recomputed from disk each call, never
+// cached, so a config edit is visible immediately without needing a pool invalidation of its own.
+export function resolveConnectorDigest(server: string): string | undefined {
+  const g = resolveConnectorGem(server);
+  return g ? mcpServerConfigDigest(g) : undefined;
+}
+
 const IDLE_MS = 5 * 60_000;
 const DEFAULT_TIMEOUT_MS = 30_000;
 
@@ -45,16 +54,27 @@ interface Entry {
   connecting: Promise<Client> | null;
   inFlight: number;
   idle?: ReturnType<typeof setTimeout>;
+  digest?: string; // the gem's config digest AT CONNECT TIME — compared against the live digest below
 }
 const pool = new Map<string, Entry>();
 
 async function ensureClient(server: string): Promise<Client> {
   const existing = pool.get(server);
+  // A connect already in flight is single-flighted as-is: joining callers must NOT re-resolve the
+  // gem (that would double-count reads in the single-flight test) or race a second invalidation
+  // against the same in-progress connect.
   if (existing?.connecting) return existing.connecting;
-  if (existing?.client) return existing.client;
 
   const gem = resolveConnectorGem(server);
   if (!gem) throw new ConnectorError(`no installed MCP server named "${server}"`, "server_not_connected");
+  const digest = mcpServerConfigDigest(gem);
+
+  if (existing?.client) {
+    if (existing.digest === digest) return existing.client;
+    // Config changed since this client connected (D3/D9): a stale client must not silently answer
+    // under the old identity. Close it and fall through to reconnect below.
+    await closeEntry(server);
+  }
 
   // IMPORTANT — two invariants depend on this exact ordering:
   //  1. Single-flight: `pool.set(server, entry)` below runs BEFORE the connect work is kicked off,
@@ -74,6 +94,7 @@ async function ensureClient(server: string): Promise<Client> {
     transport: undefined as unknown as Entry["transport"],
     connecting: null,
     inFlight: 0,
+    digest,
   };
   pool.set(server, entry);
 

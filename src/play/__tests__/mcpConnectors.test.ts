@@ -72,6 +72,21 @@ describe("connection manager", () => {
     await expect(callConnectorTool("fake", "read_thing", {}, { timeoutMs: 60 })).rejects.toMatchObject({ code: "server_unavailable" });
   }, 10000);
 
+  it("reconnects instead of reusing a pooled client when the resolved gem's config changes (D3/D9)", async () => {
+    // Flip the reader from a working gem to one with a different (broken) command. If the manager
+    // wrongly reused the pooled client from the first connect, this call would still succeed (same
+    // echo). Reconnecting attempts to spawn the new (nonexistent) command and fails — proof the
+    // digest change actually forced a fresh connect rather than answering from the stale client.
+    let broken = false;
+    __setConnectorReaderForTest(() => broken
+      ? { type: "mcp_server" as const, name: "fake", transport: "stdio" as const, config: { command: "definitely-not-a-real-binary-xyz" }, source: "user" }
+      : stdioGem("fake"));
+    const first = await callConnectorTool("fake", "read_thing", { q: 1 });
+    expect(JSON.parse((first.content[0] as { text: string }).text)).toEqual({ echo: { q: 1 } });
+    broken = true; // same server name, different command → digest changes
+    await expect(callConnectorTool("fake", "read_thing", { q: 2 })).rejects.toMatchObject({ code: "server_unavailable" });
+  });
+
   it("does NOT poison the pool after a failed connect — a retry once the secret is set succeeds", async () => {
     let hasSecret = false;
     __setConnectorReaderForTest(() => hasSecret ? stdioGem("fake") : ({ ...stdioGem("fake"), secretRefs: [{ name: "GITHUB_TOKEN", location: "env.GITHUB_TOKEN" }] }));

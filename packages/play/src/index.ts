@@ -21,9 +21,11 @@ export { resolveSessionRef, type SessionRef } from "./sessionRef.js";
 export { CAP_TOOL, TOOL_CAP, CAP_METHOD, METHOD_CAP, AUTO_CAPS } from "@agentgem/model";
 export { deriveNeeds, reconcileNeeds, hasDynamicToolCall, deriveMcpNeeds, mergeMcpNeeds, mcpUsageWarnings, type Reconciled } from "./capabilityScan.js";
 export { buildSpawnEnv } from "./mcpEnv.js";
+export { mcpServerConfigDigest } from "./mcpDigest.js";
 export {
   ConnectorError,
   resolveConnectorGem,
+  resolveConnectorDigest,
   listConnectorTools,
   callConnectorTool,
   __setConnectorReaderForTest,

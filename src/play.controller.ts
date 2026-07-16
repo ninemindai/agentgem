@@ -7,7 +7,7 @@ import {
   saveMiniapp, deleteMiniapp, listMiniapps, readMiniapp, miniappsRoot, setRemote, push, seedStudio, importStudio, blankStudio,
   compactTurns, resolveSessionRef, mcpAppFor, migrateAllMiniapps, INSPECTOR_HTML, INSPECTOR_META, type MiniappMeta,
   EMBER_HTML, EMBER_META, readMiniappShare,
-  callConnectorTool, listConnectorTools, resolveConnectorGem, ConnectorError,
+  callConnectorTool, listConnectorTools, resolveConnectorGem, resolveConnectorDigest, ConnectorError,
 } from "@agentgem/play";
 import { derivePayload } from "@agentgem/model";
 import { defaultReaders } from "./play.readers.js";
@@ -177,7 +177,7 @@ export class PlayController {
 
   @post("/play/mcp/call", { body: PlayMcpCallRequestSchema, response: PlayMcpCallResponseSchema })
   async mcpCall(input: { body: z.infer<typeof PlayMcpCallRequestSchema> }): Promise<z.infer<typeof PlayMcpCallResponseSchema>> {
-    const { name, server, tool, input: args } = input.body;
+    const { name, server, tool, input: args, expectedConfigDigest } = input.body;
     // 404 for an unknown miniapp (an AgentError, not an envelope error — the CALLER is malformed).
     let mcpNeeds;
     try { mcpNeeds = readMiniapp(name).meta.mcpNeeds ?? []; }
@@ -187,6 +187,11 @@ export class PlayController {
     const declared = mcpNeeds.find((n) => n.server === server);
     if (!declared || !declared.tools.includes(tool)) {
       return { ok: false, error: { code: "not_in_manifest", message: `"${server}"/"${tool}" is not in this miniapp's declared connectors` } };
+    }
+    // Digest re-check (D3/D7): AFTER the manifest check, BEFORE ever calling the connector. A caller
+    // that omits expectedConfigDigest (a non-console caller) skips this — the console always sends it.
+    if (expectedConfigDigest !== undefined && expectedConfigDigest !== resolveConnectorDigest(server)) {
+      return { ok: false, error: { code: "server_config_changed", message: "connector config changed since consent — re-approve" } };
     }
     try {
       const result = await callConnectorTool(server, tool, args);
@@ -210,8 +215,9 @@ export class PlayController {
       // shape). A failed listTools (connect error) also degrades to empty tools rather than failing
       // the whole route — one connector down must not blind the app to the others.
       if (!resolveConnectorGem(need.server)) { servers.push({ server: need.server, tools: [] }); continue; }
-      try { servers.push({ server: need.server, tools: await listConnectorTools(need.server) }); }
-      catch { servers.push({ server: need.server, tools: [] }); }
+      const configDigest = resolveConnectorDigest(need.server);
+      try { servers.push({ server: need.server, tools: await listConnectorTools(need.server), configDigest }); }
+      catch { servers.push({ server: need.server, tools: [], configDigest }); }
     }
     return { servers };
   }

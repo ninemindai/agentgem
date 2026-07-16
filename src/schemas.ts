@@ -1149,6 +1149,10 @@ export const PlayMcpCallRequestSchema = z.object({
   server: z.string(),               // connector gem display name
   tool: z.string(),
   input: z.unknown().optional(),    // JSON args; forwarded verbatim to the tool
+  // The digest the caller's consent was pinned to (D3/D7); a mismatch means the connector's config
+  // changed since approval and the controller must refuse BEFORE calling it. Omitted by non-console
+  // callers — the console always sends it.
+  expectedConfigDigest: z.string().optional(),
 });
 // A coded error rides the BODY (not an HTTP error) so the sealed-frame shim branches on `code`.
 // `MCP_ERROR_CODES` is the canonical union (PR-1, @agentgem/model); mirrored here as a wire enum,
@@ -1169,5 +1173,8 @@ export const PlayMcpServersResponseSchema = z.object({
       description: z.string().optional(),
       annotations: z.object({ readOnlyHint: z.boolean().optional(), destructiveHint: z.boolean().optional() }).optional(),
     })),
+    // The connector's live config digest (D3/D7) — present iff a matching gem is installed. The
+    // console pins consent to this value and re-sends it as `expectedConfigDigest` on every call.
+    configDigest: z.string().optional(),
   })),
 });

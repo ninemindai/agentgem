@@ -92,4 +92,31 @@ describe("GET /api/play/mcp/servers", () => {
     const res = await ctrl.mcpServers({ query: { name: "pulse" } });
     expect(res.servers).toEqual([{ server: "fake", tools: [] }]);
   });
+
+  it("returns a configDigest for an installed server", async () => {
+    const ctrl = new PlayController();
+    await ctrl.save({ body: { name: "pulse", html: mcpHtml(`window.agentgemApp.mcp.callTool("fake","read_thing")`), meta: { ...meta, mcpNeeds: [{ server: "fake", tools: ["read_thing"] }] } } });
+    __setConnectorReaderForTest(() => stdioGem("fake"));
+    const res = await ctrl.mcpServers({ query: { name: "pulse" } });
+    expect(res.servers[0].configDigest).toMatch(/^sha256:/);
+  });
+
+  it("rejects a call whose expectedConfigDigest no longer matches the live connector", async () => {
+    const ctrl = new PlayController();
+    await ctrl.save({ body: { name: "pulse", html: mcpHtml(`window.agentgemApp.mcp.callTool("fake","read_thing")`), meta: { ...meta, mcpNeeds: [{ server: "fake", tools: ["read_thing"] }] } } });
+    __setConnectorReaderForTest(() => stdioGem("fake"));
+    const res = await ctrl.mcpCall({ body: { name: "pulse", server: "fake", tool: "read_thing", input: {}, expectedConfigDigest: "sha256:deadbeef" } });
+    expect(res.ok).toBe(false);
+    expect(res.error?.code).toBe("server_config_changed");
+  });
+
+  it("allows a call whose expectedConfigDigest matches (or is omitted)", async () => {
+    const ctrl = new PlayController();
+    await ctrl.save({ body: { name: "pulse", html: mcpHtml(`window.agentgemApp.mcp.callTool("fake","read_thing")`), meta: { ...meta, mcpNeeds: [{ server: "fake", tools: ["read_thing"] }] } } });
+    __setConnectorReaderForTest(() => stdioGem("fake"));
+    const digest = (await ctrl.mcpServers({ query: { name: "pulse" } })).servers[0].configDigest!;
+    const res = await ctrl.mcpCall({ body: { name: "pulse", server: "fake", tool: "read_thing", input: { q: 1 }, expectedConfigDigest: digest } });
+    expect(res.ok).toBe(true);
+    expect(res.payload).toEqual({ echo: { q: 1 } });
+  });
 });
