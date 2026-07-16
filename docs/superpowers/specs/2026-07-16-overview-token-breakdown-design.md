@@ -34,9 +34,12 @@ Deriving client-side from `data.sessions` would silently truncate.
 Add to insight's `ObservePayload` interface and the aggregation loop in
 `aggregateObserve`:
 
-- `byProject: { name: string; sessions: number; tokens: number; tokensIn: number; tokensOut: number; tokensCache: number }[]`
-  — summed over the uncapped set, sorted desc by tokens.
-  `project === null` buckets as `"Unassigned"` (approved, 9A).
+- `byProject: { project: string | null; sessions: number; tokens: number; tokensIn: number; tokensOut: number; tokensCache: number }[]`
+  — summed over the uncapped set, sorted desc by tokens. **Row identity is
+  `project: string | null` (eng review, 6A)** — the `"Unassigned"` label and the
+  non-clickable affordance are derived AT RENDER from `project === null`, never
+  baked into the data. (`project` values are cwd basenames, so a real folder
+  named `Unassigned` must stay distinguishable from the null bucket.)
 - `topSessions: { agent: AgentId; sessionId: string; project: string | null; model: string | null; tokens: number; tokensIn: number; tokensOut: number; tokensCache: number; endMs: number }[]`
   — top 8 by `tokensOf(s)` from the uncapped `filtered` set.
 
@@ -48,12 +51,34 @@ tooltip (in/out/cache split), and the `· N%` share makes concentration legible.
 Mirror both fields in `ObservePayloadSchema` in
 `packages/console/src/api/routes.ts` (the two ObservePayload types — insight's
 interface and the routes `z.infer` — stay structurally compatible). The server's
-`/api/observe` route calls the same aggregator, so it returns the new fields with
-no server change.
+`/api/observe` route calls the same aggregator, so the new fields flow through at
+runtime automatically; the server's own schema copy is synced for contract
+honesty (next two sections).
 
-**Schema contract (approved, 2A):** both fields are `.default([])` in the Zod
-schema. A stale server payload (the known SPA-cached-at-boot trap) degrades to
-hidden cards — never a whole-payload validation failure.
+**Schema contract (approved, 2A; rationale corrected by eng review, 5A):** both
+fields are `.default([])` in the console Zod schema. Who this protects: consumers
+of `/api/observe` — SessionPicker and friends — whose client-side response parse
+would otherwise REJECT an old server's payload (missing required fields) under
+the known SPA-cached-at-boot version skew. The Overview cards themselves are
+never at risk: they are derived client-side from `/observe/raw` by the same
+bundle that defines the schema.
+
+**Server schema sync (eng review, 2A + 5A):** the THIRD schema copy lives in
+`src/gem.controller.ts` and is the OpenAPI contract; it has already drifted on
+BOTH endpoints. This change syncs both and exports them:
+
+- `ObservePayloadSchema` (`gem.controller.ts:26`): add the four pre-existing
+  missing fields (`byTool`/`bySkill`/`bySubagent`/`usageDaily`) plus
+  `byProject`/`topSessions`.
+- `SessionStatSchema` (`gem.controller.ts:37`, the `/observe/raw` contract): add
+  the optional `tools`/`skills`/`subagents`/`cwd` fields insight and the console
+  raw schema already declare.
+- **Export both** (currently module-private consts) so the drift-guard test can
+  import them.
+
+Runtime never depended on this (the server validates responses but never strips —
+`@agentback/rest` logs debug and returns the raw object), so this is contract
+honesty, not a behavior fix.
 
 ### UI changes (`packages/console/src/panels/Observe/Dashboard.tsx`)
 
@@ -78,26 +103,49 @@ bar + value) but with values formatted via `fmtTokens` instead of raw counts:
   select already uses.
 
   **Filter interaction (approved design, Variant B — facet-style):** `byProject`
-  is computed BEFORE the project filter is applied (the exact precedent `facets`
-  already uses in `aggregateObserve`; agent/model/minMsgs filters still apply).
+  is computed BEFORE the project filter is applied — a partial-filter aggregate
+  inspired by (not identical to) the `facets` pattern in `aggregateObserve`:
+  facets skip ALL attribute filters, while `byProject` applies
+  agent/model/minMsgs and skips only project (see the data-flow diagram below).
   So when a project is active, the card keeps the full ranking: the active row is
   highlighted (bold name + emerald bar via an `is-active` class), the card title
   gains a small "`<project> ✕`" clear chip, clicking the active row or the chip
   clears the filter, and clicking another row switches to it. All other cards and
   charts (including Top sessions) stay scoped by the global filter as usual.
 - **"Top sessions"** — `data.topSessions`, clicking a row deep-links to
-  `#/sessions/<agent>/<sessionId>` (the established drill-down route).
+  `#/sessions/<agent>/<sessionId>` (the established drill-down route), with
+  **both segments `encodeURIComponent`-encoded** (eng review, 7A — the existing
+  convention in `MomentCard.tsx:26` and `HygieneLeaderboard.tsx:25`).
 
 **Row presentation (approved, 5A):**
 
-- Project rows: value renders as `38.2M · 71%` — `fmtTokens` plus percent share
-  of the range's pulse total, tabular-nums, muted. Bars stay proportional to the
-  top row.
+- Project rows: value renders as `38.2M · 71%` — `fmtTokens` plus percent share.
+  **Denominator (eng review, 1A): `Σ byProject[].tokens`** — the same
+  pre-project-filter set as the ranking, NOT the pulse total (which shrinks under
+  an active project filter and would push other rows past 100%). Shares always
+  sum to ~100%; they intentionally diverge from the pulse stat while a project
+  filter is active. Guard: when `Σ tokens === 0` (all-zero-token sessions in
+  range) omit the `· N%` segment rather than render `NaN%` — covered by a test.
+  Tabular-nums, muted. Bars stay proportional to the top row.
+
+  Aggregation data flow (eng review):
+
+  ```
+  rangeStats (endMs ≥ since)
+        │
+  attrFiltered = rangeStats · agent/model/minMsgs   ← NO project filter
+        │                        │
+        │                        └─ filtered = attrFiltered · project
+        │                                │
+  byProject (ranking + share            everything else: pulse, daily, models,
+  denominator, "Unassigned" bucket)     byTool/bySkill/bySubagent, topSessions
+  ```
 - Session rows are TWO lines. Line 1: project basename (terracotta link) +
   right-aligned `fmtTokens` value. Line 2 (muted, smaller): `model · id-prefix ·
-  relative date` — 8-char sessionId prefix + `…`, relative date from `endMs`
-  ("2h ago" / "3d ago"). Null fallbacks: project → "Unassigned" text, model →
-  "—" (both existing conventions).
+  relative date` — 8-char sessionId prefix + `…`, relative date from `endMs` via
+  the EXISTING tested helper `util/timeAgo.ts` ("2h ago" / "3d ago") — do NOT
+  add a new `fmtAgo` (eng review, 7A). Null fallbacks: project → "Unassigned"
+  text, model → "—" (both existing conventions).
 - Value tooltip on both cards: `title="41.2M — 1.2M in · 890K out · 39.1M cache"`
   (requires `tokensIn/Out/Cache` on `byProject` rows and `topSessions` rows).
 
@@ -147,7 +195,11 @@ No session picker on Overview.
 persists to `sessionStorage` and rehydrates on mount, so the triage loop (click a
 top session → Sessions detail → back → next session) keeps its investigation
 context. sessionStorage (not localStorage) so a fresh browser session starts
-clean. The browser-verify checklist includes this round trip, and also confirms
+clean. **Rehydration is validated (eng review, 3A):** parse under try/catch;
+`range` accepted only from the 4-value enum; `minMsgs` only as a finite number;
+anything else falls back to the defaults (`"7d"`, `{ minMsgs: 100 }`) and is
+overwritten on next save. A stale persisted `project` passes through — the ✕
+clear chip is the recovery affordance. The browser-verify checklist includes this round trip, and also confirms
 that a project-row click's dashboard-wide rescope is perceivable from the cards'
 scroll position (the `is-updating` dim + chip are the feedback).
 
@@ -163,7 +215,22 @@ scroll position (the `is-updating` dim + chip are the feedback).
   click clears; session row click navigates to `#/sessions/<agent>/<id>`;
   Top sessions stays mounted with empty line under an active filter; range/filter
   rehydrate from sessionStorage.
-- Console tests do not run in CI — run locally.
+- **Eng-review additions (4A + mandatory regression):**
+  - share denominator = `Σ byProject[].tokens` while a project filter is ACTIVE
+    (shares of non-active rows stay ≤100% and sum to ~100%) — insight test;
+  - clicking the ACTIVE project row clears the filter (the other half of
+    Variant B) — console test;
+  - "Unassigned" row renders as a plain `<span>`, not a `<button>` — console;
+  - only-Unassigned data → project card hidden (3A degenerate state) — console;
+  - **drift-guard**: `aggregateObserve` output `safeParse`s cleanly against the
+    SERVER `ObservePayloadSchema` (gem.controller.ts) — root test; makes the
+    three-schema drift class unreproducible;
+  - old-payload fixture (no byProject/topSessions) parses via `.default([])`,
+    cards hidden — console (formalizes T2's verify);
+  - **CRITICAL regression**: fresh mount with empty sessionStorage keeps today's
+    defaults (`7d`, `minMsgs: 100`) — console.
+- Console tests do not run in CI — run locally (`tsc -b` first; root tests run
+  from `dist/`).
 - Verify styled rendering in a real browser (project verify skill), not just
   jsdom — including: the section reads correctly at the approved position, the
   filter round trip (Overview → Sessions → back) preserves range/filter, and the
@@ -178,8 +245,11 @@ scroll position (the `is-updating` dim + chip are the feedback).
 - `fmtTokens`, `fmtDuration` (`panels/Observe/data.ts`); `obs-usage-series-empty`
   (in-card empty-line precedent); the global `:focus-visible` ring idiom;
   `pending` pill + `.is-updating` dim for refresh states.
-- `facets`-before-attribute-filters precedent in `aggregateObserve` — the exact
-  pattern Variant B's pre-filter `byProject` computation follows.
+- `facets` in `aggregateObserve` — the pre-filter computation pattern that
+  inspired Variant B's `byProject` (a partial-filter variant: agent/model/minMsgs
+  still apply).
+- `util/timeAgo.ts` — existing tested relative-time helper; Top-sessions rows
+  reuse it (no new fmtAgo).
 - Lapidary Ledger tokens (`--paper/--raised/--line/--accent/--emerald/--muted`)
   — no new colors are introduced.
 
@@ -210,18 +280,19 @@ a specific finding above. Checkbox as you ship.
   - Surfaced by: original spec + Pass 7 (8A metric, 9A bucket) + Variant B
   - Files: `packages/insight/src/observeAggregate.ts` + its tests
   - Verify: insight tests incl. the >200-session cap case
-- [ ] **T2 (P1, human: ~20min / CC: ~3min)** — console API — mirror both fields
-      in `ObservePayloadSchema` with `.default([])`
-  - Surfaced by: Pass 2 issue 2 (2A schema contract)
-  - Files: `packages/console/src/api/routes.ts`
-  - Verify: old-payload fixture parses; cards hidden, dashboard alive
-- [ ] **T3 (P1, human: ~4h / CC: ~30min)** — console UI — `BreakdownCard`
+- [ ] **T2 (P1, human: ~45min / CC: ~8min)** — schemas — mirror both fields in
+      the console `ObservePayloadSchema` with `.default([])`; sync + export the
+      server `ObservePayloadSchema` and `SessionStatSchema` (2A + 5A)
+  - Surfaced by: Pass 2 issue 2 + eng review issues 2/5
+  - Files: `packages/console/src/api/routes.ts`, `src/gem.controller.ts`
+  - Verify: old-payload fixture parses; drift-guard test imports both server schemas
+- [ ] **T3 (P1, human: ~4h / CC: ~45min)** — console UI — `BreakdownCard`
       component + "Where tokens went" section at the 1B position, 5A row
       presentation, Variant B active-filter interaction, 9A Unassigned row,
       3A state handling
   - Surfaced by: Passes 1–5 (issues 1, 3, 5, 6) + Variant B
   - Files: `packages/console/src/panels/Observe/BreakdownCard.tsx` (new),
-    `Dashboard.tsx`, `data.ts` (relative-date helper)
+    `Dashboard.tsx` (reuse `util/timeAgo.ts` for relative dates — 7A)
   - Verify: Observe.test.tsx additions listed under Testing
 - [ ] **T4 (P1, human: ~1h / CC: ~10min)** — theme — author the five
       `.obs-breakdown-*` / `is-active` rules from existing tokens
@@ -247,7 +318,9 @@ a specific finding above. Checkbox as you ship.
   - Verify: project `verify` skill run
 
 _No new tasks from Pass 4 beyond T3's row presentation; no new tasks from the
-outside voices beyond those folded into T1–T4._
+outside voices beyond those folded into T1–T4. Eng review folded the schema-sync
+and test additions into T2/T6; whole-change effort recalibrated to ~2–3h CC
+(7A) — the original ~1h total was optimistic._
 
 ## Approved Mockups
 
@@ -260,13 +333,13 @@ outside voices beyond those folded into T1–T4._
 | Review | Trigger | Why | Runs | Status | Findings |
 |--------|---------|-----|------|--------|----------|
 | CEO Review | `/plan-ceo-review` | Scope & strategy | 0 | — | — |
-| Codex Review | `/codex review` | Independent 2nd opinion | 0 | — | (design-stage Codex voice ran inside this review) |
-| Eng Review | `/plan-eng-review` | Architecture & tests (required) | 0 | — | — |
+| Codex Review | `/codex review` | Independent 2nd opinion | 0 | — | (outside voices ran inside both reviews below) |
+| Eng Review | `/plan-eng-review` | Architecture & tests (required) | 1 | CLEAR (PLAN) | 8 issues, 0 critical gaps, all folded |
 | Design Review | `/plan-design-review` | UI/UX gaps | 1 | CLEAR (FULL) | score: 6/10 → 9/10, 10 decisions |
 | DX Review | `/plan-devex-review` | Developer experience gaps | 0 | — | — |
 
-- **CODEX:** design-stage outside voice (audit-trail: design-outside-voices) — 7 findings, all resolved into decisions 1B/5A/6A/8A/9A; hard-rejection (placement) fixed by 1B.
-- **CROSS-MODEL:** Codex and the independent Claude subagent converged on placement/section identity, "(no project)" handling, label density, and CSS enumeration — all four fixed in the plan.
-- **VERDICT:** DESIGN CLEARED — eng review required.
+- **CODEX:** outside voice ran in both reviews — design stage: 7 findings → decisions 1B/5A/6A/8A/9A; eng stage: 9 findings, 7 verified-and-folded (share denominator path, raw-endpoint schema drift, `project: string|null` row identity, encodeURIComponent convention, private-schema export, timeAgo reuse, estimate recalibration), 1 wording fix, 1 tension resolved keep-as-is (8B).
+- **CROSS-MODEL:** design stage converged on placement/labels/CSS; eng stage's one genuine tension (validate Unassigned prevalence before Variant B polish) was resolved for the current approach — projects derive from cwd, 9A TODO is the escalation.
+- **VERDICT:** DESIGN + ENG CLEARED — ready to implement.
 
 NO UNRESOLVED DECISIONS
