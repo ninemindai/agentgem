@@ -3,7 +3,7 @@
 // src/schemas.ts
 import { z } from "zod";
 import { RUNNER_REGISTRY } from "@agentgem/build";
-import { TARGET_REGISTRY } from "@agentgem/model";
+import { TARGET_REGISTRY, MCP_ERROR_CODES } from "@agentgem/model";
 import { deployTargetIds } from "@agentgem/deploy";
 import { flavorIds } from "@agentgem/testbed";
 import { CREDENTIAL_KEYS } from "@agentgem/capture";
@@ -1141,4 +1141,33 @@ export const PlayBlankRequestSchema = z.object({ title: z.string().min(1), promp
 export const PlaySessionDataSchema = z.object({
   meta: z.record(z.string(), z.unknown()),
   timeline: z.array(z.object({ role: z.string(), tsMs: z.number(), text: z.string() })),
+});
+
+// ---- Play MCP connectors (PR-2) ----
+export const PlayMcpCallRequestSchema = z.object({
+  name: z.string(),                 // the SAVED miniapp whose mcpNeeds manifest gates this call
+  server: z.string(),               // connector gem display name
+  tool: z.string(),
+  input: z.unknown().optional(),    // JSON args; forwarded verbatim to the tool
+});
+// A coded error rides the BODY (not an HTTP error) so the sealed-frame shim branches on `code`.
+// `MCP_ERROR_CODES` is the canonical union (PR-1, @agentgem/model); mirrored here as a wire enum,
+// drift-pinned by a test so the two never separate.
+export const McpErrorCodeEnum = z.enum(MCP_ERROR_CODES);
+export const PlayMcpCallResponseSchema = z.object({
+  ok: z.boolean(),
+  payload: z.unknown().optional(),                                   // present when ok
+  content: z.array(z.unknown()).optional(),                          // raw blocks, for images/multi-block
+  error: z.object({ code: McpErrorCodeEnum, message: z.string() }).optional(),  // present when !ok
+});
+export const PlayMcpServersQuerySchema = z.object({ name: z.string() });
+export const PlayMcpServersResponseSchema = z.object({
+  servers: z.array(z.object({
+    server: z.string(),
+    tools: z.array(z.object({
+      name: z.string(),
+      description: z.string().optional(),
+      annotations: z.object({ readOnlyHint: z.boolean().optional(), destructiveHint: z.boolean().optional() }).optional(),
+    })),
+  })),
 });

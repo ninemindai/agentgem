@@ -7,7 +7,9 @@ import {
   saveMiniapp, deleteMiniapp, listMiniapps, readMiniapp, miniappsRoot, setRemote, push, seedStudio, importStudio, blankStudio,
   compactTurns, resolveSessionRef, mcpAppFor, migrateAllMiniapps, INSPECTOR_HTML, INSPECTOR_META, type MiniappMeta,
   EMBER_HTML, EMBER_META, readMiniappShare,
+  callConnectorTool, listConnectorTools, resolveConnectorGem, ConnectorError,
 } from "@agentgem/play";
+import { derivePayload } from "@agentgem/model";
 import { defaultReaders } from "./play.readers.js";
 import { listActiveSessions } from "./watchSessions.js";
 import {
@@ -16,6 +18,7 @@ import {
   PlayStudioRequestSchema, PlayStudioResponseSchema, PlayImportRequestSchema, PlayBlankRequestSchema,
   PlayMiniappQuerySchema, PlayMiniappSchema, PlaySessionDataSchema, PlaySessionDataQuerySchema, PlayMcpAppSchema,
   PlayMigrateResponseSchema, PlayInspectorSchema,
+  PlayMcpCallRequestSchema, PlayMcpCallResponseSchema, PlayMcpServersQuerySchema, PlayMcpServersResponseSchema,
 } from "./schemas.js";
 
 @api({ basePath: "/api" })
@@ -170,5 +173,46 @@ export class PlayController {
       await push(root);
       return { ok: true };
     } catch (e) { throw new AgentError(`publish failed: ${(e as Error).message}`, { status: 400 }); }
+  }
+
+  @post("/play/mcp/call", { body: PlayMcpCallRequestSchema, response: PlayMcpCallResponseSchema })
+  async mcpCall(input: { body: z.infer<typeof PlayMcpCallRequestSchema> }): Promise<z.infer<typeof PlayMcpCallResponseSchema>> {
+    const { name, server, tool, input: args } = input.body;
+    // 404 for an unknown miniapp (an AgentError, not an envelope error — the CALLER is malformed).
+    let mcpNeeds;
+    try { mcpNeeds = readMiniapp(name).meta.mcpNeeds ?? []; }
+    catch (e) { throw new AgentError((e as Error).message, { status: 404 }); }
+    // THE SECURITY BOUNDARY: refuse any (server, tool) the SAVED manifest does not grant, before we
+    // ever touch the connector. The console consent gate (PR-3) is UX; this is enforcement.
+    const declared = mcpNeeds.find((n) => n.server === server);
+    if (!declared || !declared.tools.includes(tool)) {
+      return { ok: false, error: { code: "not_in_manifest", message: `"${server}"/"${tool}" is not in this miniapp's declared connectors` } };
+    }
+    try {
+      const result = await callConnectorTool(server, tool, args);
+      // callConnectorTool's content is unknown[] (the raw SDK content blocks); derivePayload only reads
+      // block.type/.text, matching McpContentBlock's shape at runtime.
+      return { ok: true, payload: derivePayload(result as Parameters<typeof derivePayload>[0]), content: result.content };
+    } catch (e) {
+      if (e instanceof ConnectorError) return { ok: false, error: { code: e.code, message: e.message } };
+      return { ok: false, error: { code: "upstream_error", message: (e as Error).message } };
+    }
+  }
+
+  @get("/play/mcp/servers", { query: PlayMcpServersQuerySchema, response: PlayMcpServersResponseSchema })
+  async mcpServers(input: { query: z.infer<typeof PlayMcpServersQuerySchema> }): Promise<z.infer<typeof PlayMcpServersResponseSchema>> {
+    let mcpNeeds;
+    try { mcpNeeds = readMiniapp(input.query.name).meta.mcpNeeds ?? []; }
+    catch (e) { throw new AgentError((e as Error).message, { status: 404 }); }
+    const servers = [];
+    for (const need of mcpNeeds) {
+      // A declared server with no matching installed gem lists with EMPTY tools (the not-connected
+      // shape). A failed listTools (connect error) also degrades to empty tools rather than failing
+      // the whole route — one connector down must not blind the app to the others.
+      if (!resolveConnectorGem(need.server)) { servers.push({ server: need.server, tools: [] }); continue; }
+      try { servers.push({ server: need.server, tools: await listConnectorTools(need.server) }); }
+      catch { servers.push({ server: need.server, tools: [] }); }
+    }
+    return { servers };
   }
 }
