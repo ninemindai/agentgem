@@ -80,3 +80,51 @@ written law instead of oral tradition; onboarding aid.
 system already behaves like a design system; it's just undocumented.
 
 **Depends on / blocked by:** Nothing.
+
+## Multi-instance connectors (connector type vs installed gem instance)
+
+**What:** Let a miniapp declare a connector TYPE and let the viewer bind which installed
+`mcp_server` gem instance satisfies it (alias/binding UI + a `selection_required`-style
+pending state), instead of the manifest hard-naming one gem.
+
+**Why:** Real users run two Slack workspaces or work+personal GitHub. v1 mcpNeeds
+name-address a single installed gem, so a second instance needs a differently-named gem
+the miniapp can't reach without editing its manifest.
+
+**Pros:** Unlocks multi-account reality; the mirrored claude.ai contract already sketches
+the UX (`selection_required`, per-view name binding via an additive options hint — never
+per-call resolution).
+
+**Cons:** A binding layer, per-viewer state, and selection UI — real scope for a need no
+user has voiced yet.
+
+**Context:** From the Codex outside voice during the 2026-07-15 eng review of the miniapp
+MCP connectors design (finding #10). v1 ships name-addressed manifests with hash-pinned
+consent (D9); `server_not_connected` copy should hint at the install/rename workaround.
+Evolution path: additive options hint narrowing the single per-view name binding, exactly
+as the claude contract documents its own future.
+
+**Depends on / blocked by:** MCP connectors v1 (model + console consent). Nothing else.
+
+## Marketplace install-time connector disclosure (read/action badges)
+
+**What:** Persist tool annotation hints (readOnlyHint/destructiveHint) alongside mcpNeeds
+at publish so game cards can show "GitHub — 3 read tools" vs "Slack — posts messages"
+before install, not just the connector-name chip.
+
+**Why:** Install-time is when users weigh risk (Codex outside-voice finding #14); the v1
+chip names connectors but not whether the app only reads or can act.
+
+**Pros:** Honest risk signal at the decision moment; the watch-gate work (D11) already
+plumbs annotations at runtime — this persists them at publish.
+
+**Cons:** Annotations are UNVERIFIED connector self-description captured at author time;
+they can drift from the viewer's actual gem. Must be framed advisory, never authoritative.
+Publish wire schema grows.
+
+**Context:** From the 2026-07-15 eng review of the miniapp MCP connectors design. v1
+covers the security moment with the run-time consent card (lists declared tools); this is
+the v1.1 install-time enrichment. Beware treating author-time hints as verified data.
+
+**Depends on / blocked by:** MCP connectors PR-1 (publish wire schema) + D11 annotation
+handling.
