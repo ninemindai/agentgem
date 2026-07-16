@@ -9,6 +9,7 @@
 // lines degrade to empty/skip, never throw.
 import { readdirSync } from "node:fs";
 import { join, basename } from "node:path";
+import { normalizeProjectRoot } from "@agentgem/model";
 import { BUILTIN_SOURCES, type SourceSpec, clearParseCache } from "./sources.js";
 import { transcriptToken } from "./analysisCache.js";
 // The pure aggregation half (SessionStat + aggregateObserve + payload types) lives
@@ -54,6 +55,14 @@ const usageFields = (tools: Record<string, number>, skills: Record<string, numbe
   ...(Object.keys(subagents).length ? { subagents } : {}),
 });
 
+// Project = the git checkout containing the session cwd (worktrees and
+// subdirectories fold into the main checkout), by name; raw cwd stays on the
+// stat for attribution. Resolution walks the live filesystem, so cwds whose
+// checkout is gone (e.g. a removed worktree) fall back to their own basename.
+function projectLabel(cwd: string | null): string | null {
+  return cwd ? basename(normalizeProjectRoot(cwd)) : null;
+}
+
 export function parseClaudeTranscript(text: string, path: string): SessionStat | null {
   // Fix 1: canonical sessionId comes from the transcript filename (the UUID), not inline record fields.
   // Subagent/sidechain records carry a shared parent sessionId which would cause collisions.
@@ -92,7 +101,7 @@ export function parseClaudeTranscript(text: string, path: string): SessionStat |
     }
   }
   if (!sessionId || endMs < startMs) return null;
-  return { agent: "claude", sessionId, project: cwd ? basename(cwd) : null, cwd, model, gitBranch, startMs, endMs, msgs, tokensIn, tokensOut, tokensCache, ...usageFields(tools, skills, subagents) };
+  return { agent: "claude", sessionId, project: projectLabel(cwd), cwd, model, gitBranch, startMs, endMs, msgs, tokensIn, tokensOut, tokensCache, ...usageFields(tools, skills, subagents) };
 }
 
 export function parseCodexTranscript(text: string, path: string): SessionStat | null {
@@ -123,7 +132,7 @@ export function parseCodexTranscript(text: string, path: string): SessionStat | 
   const input = total?.input_tokens ?? 0, cached = total?.cached_input_tokens ?? 0;
   const tokensIn = Math.max(0, input - cached);
   const tokensOut = (total?.output_tokens ?? 0) + (total?.reasoning_output_tokens ?? 0);
-  return { agent: "codex", sessionId, project: cwd ? basename(cwd) : null, cwd, model, gitBranch: null, startMs, endMs, msgs, tokensIn, tokensOut, tokensCache: cached, ...usageFields(tools, {}, {}) };
+  return { agent: "codex", sessionId, project: projectLabel(cwd), cwd, model, gitBranch: null, startMs, endMs, msgs, tokensIn, tokensOut, tokensCache: cached, ...usageFields(tools, {}, {}) };
 }
 
 // Files the default-path scan reads, across every enumerable source. This is the

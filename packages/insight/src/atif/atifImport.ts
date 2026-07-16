@@ -7,6 +7,7 @@
 // Timestamps are optional in ATIF: absent → startMs/endMs are 0 and the
 // SourceSpec scanner backfills file mtime (parsers are fs-free).
 import { basename } from "node:path";
+import { normalizeProjectRoot } from "@agentgem/model";
 import { scrubTruncate } from "../scrub.js";
 import type { SessionStat } from "../observeAggregate.js";
 import type { SessionEvent, SessionEventSpan } from "../inspectSession.js";
@@ -49,7 +50,10 @@ export function parseAtifMeta(text: string, path: string): SessionStat | null {
   return {
     agent: "atif",
     sessionId: atifSessionId(doc, path),
-    project: typeof cwd === "string" ? basename(cwd) : null,
+    // Same project normalization as the claude/codex parsers: fold to the git
+    // checkout when the cwd exists locally; imported foreign cwds fall back to
+    // their own basename (normalizeProjectRoot never touches transcript text).
+    project: typeof cwd === "string" ? basename(normalizeProjectRoot(cwd)) : null,
     cwd: typeof cwd === "string" ? cwd : null,   // SessionStat.cwd (repo-owner attribution parity)
     model: doc.agent.model_name ?? null,
     gitBranch: null,

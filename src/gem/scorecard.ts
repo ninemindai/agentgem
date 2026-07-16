@@ -10,7 +10,7 @@
 // "high"); portable = mature AND general enough to travel beyond its origin repo.
 import { basename } from "node:path";
 import { discoverProjects } from "@agentgem/testbed";
-import { resolveDirs, resolveProject } from "@agentgem/model";
+import { normalizeProjectRoot, resolveDirs, resolveProject } from "@agentgem/model";
 import { introspectProject, introspectConfig } from "@agentgem/capture";
 import { claudeTranscriptsForCwd, scanWorkflow, bucketTranscriptsByCwd } from "@agentgem/insight";
 import { extractCandidates, transcriptToken, readAnalysisCache, writeAnalysisCache } from "@agentgem/insight";
@@ -179,7 +179,9 @@ export const defaultScorecardDeps: ScorecardDeps = {
 };
 
 export function selectScorecardRoots(dir: string | undefined, projects: string[] | undefined, deps: ScorecardDeps = defaultScorecardDeps): string[] {
-  if (projects?.length) return projects;
+  // Explicit roots may be worktree/subdir paths (e.g. from recents); fold each to
+  // its git checkout so they match the normalized transcript buckets, and dedup.
+  if (projects?.length) return [...new Set(projects.map(normalizeProjectRoot))];
   const discovered = [...deps.discover(dir)].sort((a, b) => (b.lastUsed ?? "").localeCompare(a.lastUsed ?? ""));
   if (discovered.length > MAX_PROJECTS) {
     log.warn("[scorecard] %d projects discovered; scanning the %d most recent (perf bound).", discovered.length, MAX_PROJECTS);

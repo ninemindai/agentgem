@@ -9,7 +9,7 @@
 // (the ACP recommender, the UI) only ranks/explains what this produced.
 import { readdirSync, readFileSync, statSync, openSync, readSync, closeSync } from "node:fs";
 import { join } from "node:path";
-import type { ArtifactType, ProjectInventory, HookArtifact } from "@agentgem/model";
+import { normalizeProjectRoot, type ArtifactType, type ProjectInventory, type HookArtifact } from "@agentgem/model";
 import { scrubStep, scrubProse, type ScrubbedStep } from "./scrub.js";
 
 export interface ArtifactUsage {
@@ -121,15 +121,30 @@ function sessionCwd(file: string): string | null {
   } catch { return null; } finally { closeSync(fd); }
 }
 
+// Per-call memo for normalizeProjectRoot: sessions share few distinct cwds, and
+// each distinct one costs a handful of statSync calls walking up to the checkout.
+function makeRootNormalizer(): (p: string) => string {
+  const memo = new Map<string, string>();
+  return (p) => {
+    let root = memo.get(p);
+    if (root === undefined) { root = normalizeProjectRoot(p); memo.set(p, root); }
+    return root;
+  };
+}
+
 /**
- * Every Claude transcript whose session cwd === `cwd`. The folder-name encoding
- * under ~/.claude/projects is lossy, so we scan ALL folders and filter by the
- * real cwd parsed from each session (not by folder name).
+ * Every Claude transcript whose session belongs to the project at `cwd`. The
+ * folder-name encoding under ~/.claude/projects is lossy, so we scan ALL folders
+ * and filter by the real cwd parsed from each session (not by folder name).
+ * Both sides are normalized to their git checkout root, so sessions run in
+ * worktrees or subdirectories count toward the main checkout.
  */
 export function claudeTranscriptsForCwd(claudeDir: string, cwd: string): string[] {
   const projectsDir = join(claudeDir, "projects");
   let folders: import("node:fs").Dirent[];
   try { folders = readdirSync(projectsDir, { withFileTypes: true }); } catch { return []; }
+  const norm = makeRootNormalizer();
+  const target = norm(cwd);
   const out: string[] = [];
   for (const folder of folders) {
     if (!folder.isDirectory()) continue;
@@ -139,22 +154,26 @@ export function claudeTranscriptsForCwd(claudeDir: string, cwd: string): string[
     for (const f of files) {
       if (!f.endsWith(".jsonl")) continue;
       const path = join(dir, f);
-      if (sessionCwd(path) === cwd) out.push(path);
+      const sessCwd = sessionCwd(path);
+      if (sessCwd !== null && norm(sessCwd) === target) out.push(path);
     }
   }
   return out;
 }
 
-/** One pass over the whole store: map each transcript to its session cwd. Lets a
- * multi-project scan read every transcript's cwd ONCE instead of per project. */
+/** One pass over the whole store: map each transcript to its project root (its
+ * session cwd normalized to the git checkout). Lets a multi-project scan read
+ * every transcript's cwd ONCE instead of per project. */
 export function bucketTranscriptsByCwd(claudeDir: string): Map<string, string[]> {
+  const norm = makeRootNormalizer();
   const out = new Map<string, string[]>();
   for (const path of allClaudeTranscripts(claudeDir)) {
     const cwd = sessionCwd(path);
     if (cwd === null) continue;
-    const list = out.get(cwd) ?? [];
+    const root = norm(cwd);
+    const list = out.get(root) ?? [];
     list.push(path);
-    out.set(cwd, list);
+    out.set(root, list);
   }
   return out;
 }

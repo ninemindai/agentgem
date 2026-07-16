@@ -1,4 +1,7 @@
 import { describe, it, expect, vi, beforeAll, afterAll } from "vitest";
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { isPortable, scoreProject, aggregateScorecard, collectScorecard, selectScorecardRoots, type ProjectLoad, type ScorecardDeps, type ScorecardProgress } from "../scorecard.js";
 import type { ProcedureCandidate } from "@agentgem/insight";
 import type { WorkflowSignal } from "@agentgem/insight";
@@ -86,6 +89,26 @@ describe("selectScorecardRoots", () => {
     };
     const roots = Array.from({ length: 15 }, (_, i) => `/r/e${i}`);
     expect(selectScorecardRoots(undefined, roots, deps)).toEqual(roots);
+  });
+
+  it("normalizes explicit worktree roots to the main checkout and dedups", () => {
+    const deps: ScorecardDeps = {
+      discover: () => [],
+      loadProject: () => null,
+      transcriptsFor: () => [],
+      bucketTranscripts: () => new Map(),
+    };
+    const base = mkdtempSync(join(tmpdir(), "agentgem-scorecard-root-"));
+    try {
+      const main = join(base, "repo");
+      mkdirSync(join(main, ".git"), { recursive: true });
+      const worktree = join(base, "repo-worktrees", "task");
+      mkdirSync(worktree, { recursive: true });
+      writeFileSync(join(worktree, ".git"), `gitdir: ${join(main, ".git", "worktrees", "task")}\n`);
+      expect(selectScorecardRoots(undefined, [worktree, main], deps)).toEqual([main]);
+    } finally {
+      rmSync(base, { recursive: true, force: true });
+    }
   });
 
   it("caps discover path to the 12 most-recently-used", () => {
