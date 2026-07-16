@@ -11,7 +11,9 @@
   "dependencies": {
     "@agentgem/archive": "workspace:*",
     "@agentgem/base": "workspace:*",
+    "@agentgem/capture": "workspace:*",
     "@agentgem/model": "workspace:*",
+    "@modelcontextprotocol/sdk": "^1.29.0",
     "jsdom": "^29"
   },
   "devDependencies": {
