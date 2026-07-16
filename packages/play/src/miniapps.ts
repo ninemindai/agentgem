@@ -15,10 +15,11 @@ import { assertPortable } from "./portability.js";
 import { ensureRepo, commitWithLock } from "./git.js";
 import { migrateMiniappHtml, ensureClientShim, type MigrateOutcome } from "./migrate.js";
 import { MCP_CLIENT_MARKER } from "./mcpAppClient.js";
-import { reconcileNeeds, deriveNeeds, hasDynamicToolCall } from "./capabilityScan.js";
+import { reconcileNeeds, deriveNeeds, hasDynamicToolCall, deriveMcpNeeds, mergeMcpNeeds, mcpUsageWarnings } from "./capabilityScan.js";
 
 export interface MiniappMeta {
-  title: string; genre: GameGenre; createdFrom: GameSource; engineVersion: string; needs?: GameCapability[]; mcpNeeds?: McpNeed[];
+  title: string; genre: GameGenre; createdFrom: GameSource; engineVersion: string; needs?: GameCapability[];
+  mcpNeeds?: McpNeed[];   // declared-authoritative (D10) — merged with derived literals at save, never pruned
 }
 export interface SaveMiniappInput { name: string; html: string; meta: MiniappMeta }
 export interface SaveMiniappResult { name: string; commit: string | null; prunedNeeds: GameCapability[]; mcpWarnings: string[] }
@@ -87,6 +88,7 @@ function writeGameGem(name: string, html: string, meta: MiniappMeta): void {
     type: "game", name, title: meta.title, genre: meta.genre,
     html, createdFrom: meta.createdFrom, engineVersion: meta.engineVersion,
     ...(meta.needs ? { needs: meta.needs } : {}),
+    ...(meta.mcpNeeds ? { mcpNeeds: meta.mcpNeeds } : {}),
   };
   const gem: Gem = { name, createdFrom: "play", artifacts: [artifact], checks: [], requiredSecrets: [] };
   const wdir = workspaceDir(name);
@@ -136,14 +138,24 @@ export async function saveMiniapp(input: SaveMiniappInput): Promise<SaveMiniappR
   const meta: MiniappMeta = { ...input.meta };
   if (rec.needs.length) meta.needs = rec.needs; else delete meta.needs;
 
+  // MCP connectors are the OTHER reconciliation policy (spec D10): declared-authoritative. The
+  // scan auto-fills literal calls (a convenience, mirroring how a claude.ai artifact's manifest is
+  // authored), warnings surface what it cannot verify, and nothing is ever pruned or blocked —
+  // the /api/play/mcp/call manifest check is the boundary that actually holds.
+  const mcpNeeds = mergeMcpNeeds(input.meta.mcpNeeds, deriveMcpNeeds(html));
+  const mcpWarnings = mcpUsageWarnings(html, input.meta.mcpNeeds);
+  if (mcpNeeds.length) meta.mcpNeeds = mcpNeeds; else delete meta.mcpNeeds;
+
   // `needs` is what the HOST grants: the Runner only attaches a host when it is non-empty, and answers
   // ui/initialize with the tool list it selects. So a bundle that declares needs and carries no shim is
   // one the host talks to and that cannot answer — it degrades in silence to its baked data. The
   // normalization above makes this unreachable for any bundle that names `window.agentgemApp`; what is
   // left is the bundle that trips deriveNeeds on a bare tool-name string without ever holding a bridge
   // reference. That would store an over-granting miniapp, so fail loudly rather than ship it mute.
-  if (meta.needs?.length && !html.includes(MCP_CLIENT_MARKER)) {
-    throw new Error(`miniapp declares capabilities (${meta.needs.join(", ")}) but never references window.agentgemApp — it cannot reach the host`);
+  // A connector app with no bridge is just as unreachable, so mcpNeeds widens the same check.
+  if ((meta.needs?.length || meta.mcpNeeds?.length) && !html.includes(MCP_CLIENT_MARKER)) {
+    const declared = [...(meta.needs ?? []), ...(meta.mcpNeeds ?? []).map((n) => `mcp:${n.server}`)];
+    throw new Error(`miniapp declares capabilities (${declared.join(", ")}) but never references window.agentgemApp — it cannot reach the host`);
   }
 
   const port = assertPortable(html, meta.needs);
@@ -156,7 +168,7 @@ export async function saveMiniapp(input: SaveMiniappInput): Promise<SaveMiniappR
   const note = rec.pruned.length ? ` (pruned unused capability: ${rec.pruned.join(", ")})` : "";
   const commit = await commitWithLock(root, `save miniapp ${safe}${note}`);
   writeGameGem(safe, html, meta);                  // the PRUNED meta — a phantom cap must not reach the gem
-  return { name: safe, commit, prunedNeeds: rec.pruned, mcpWarnings: [] };
+  return { name: safe, commit, prunedNeeds: rec.pruned, mcpWarnings };
 }
 
 // Remove the dual-written game gem — but ONLY the one WE wrote. workspaceDir() is a shared, name-keyed
