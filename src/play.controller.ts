@@ -113,7 +113,11 @@ export class PlayController {
       const share = readMiniappShare(input.query.name);
       return {
         name: r.name, html: r.html,
-        meta: { title: r.meta.title, genre: r.meta.genre, createdFrom: r.meta.createdFrom, engineVersion: r.meta.engineVersion, ...(r.meta.needs ? { needs: r.meta.needs } : {}) },
+        meta: {
+          title: r.meta.title, genre: r.meta.genre, createdFrom: r.meta.createdFrom, engineVersion: r.meta.engineVersion,
+          ...(r.meta.needs ? { needs: r.meta.needs } : {}),
+          ...(r.meta.mcpNeeds ? { mcpNeeds: r.meta.mcpNeeds } : {}),
+        },
         ...(share ? { share } : {}),
       };
     } catch (e) { throw new AgentError((e as Error).message, { status: 404 }); }
