@@ -6,7 +6,7 @@
 // Introspection is flavor-agnostic (introspectProject reads whatever project config is present).
 import { closeSync, existsSync, mkdirSync, openSync, readdirSync, readFileSync, readSync, statSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
-import { parseTomlMcpServers, tomlMcpServers } from "@agentgem/model";
+import { normalizeProjectRoot, parseTomlMcpServers, tomlMcpServers } from "@agentgem/model";
 import type { McpServerArtifact } from "@agentgem/model";
 import type { resolveDirs } from "@agentgem/model";
 
@@ -181,15 +181,24 @@ export interface ProjectCandidate {
   exists: boolean;
 }
 
-// Union of every flavor's discovered projects: dedup per (flavor, path) keeping
-// the most recent hit, validate the path still exists, sort newest-first.
+// Union of every flavor's discovered projects: normalize each session cwd to its
+// git checkout (worktrees/subdirs fold into the main root), dedup per
+// (flavor, root) keeping the most recent hit, validate the path still exists,
+// sort newest-first.
 export function discoverProjects(dirs: DiscoveryDirs): ProjectCandidate[] {
+  const rootMemo = new Map<string, string>();
+  const norm = (p: string): string => {
+    let root = rootMemo.get(p);
+    if (root === undefined) { root = normalizeProjectRoot(p); rootMemo.set(p, root); }
+    return root;
+  };
   const best = new Map<string, RawProject & { flavor: TestbedFlavorId }>();
   for (const id of flavorIds()) {
     for (const proj of TESTBED_FLAVORS[id].discoverProjects(dirs)) {
-      const key = `${id} ${proj.path}`;
+      const path = norm(proj.path);
+      const key = `${id} ${path}`;
       const prev = best.get(key);
-      if (!prev || proj.lastUsedMs > prev.lastUsedMs) best.set(key, { ...proj, flavor: id });
+      if (!prev || proj.lastUsedMs > prev.lastUsedMs) best.set(key, { ...proj, path, flavor: id });
     }
   }
   return [...best.values()]

@@ -13,7 +13,8 @@
   },
   "files": ["dist"],
   "scripts": {
-    "build": "tsc -b"
+    "build": "tsc -b",
+    "test": "vitest run"
   },
   "dependencies": {
     "@agentgem/model": "workspace:*"
