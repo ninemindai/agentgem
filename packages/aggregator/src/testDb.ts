@@ -5,7 +5,7 @@ import { drizzle } from "drizzle-orm/pglite";
 import { schema, ensureSchema, type AppDb } from "./schema.js";
 
 export async function makeTestDb(): Promise<AppDb> {
-  const db = drizzle(new PGlite(), { schema }) as unknown as AppDb;
+  const db: AppDb = drizzle(new PGlite(), { schema });
   await ensureSchema(db);
   return db;
 }
