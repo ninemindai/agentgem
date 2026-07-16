@@ -23,25 +23,40 @@ const ObserveQuerySchema = z.object({
   minMsgs: z.coerce.number().int().nonnegative().optional(),
   refresh: z.coerce.boolean().optional(),   // ?refresh=true forces a re-scan past the 5min scan cache
 });
-const ObservePayloadSchema = z.object({
+export const ObservePayloadSchema = z.object({
   pulse: z.object({ sessions: z.number(), msgs: z.number(), tokens: z.number(), activeMs: z.number() }),
   daily: z.array(z.object({ date: z.string(), sessions: z.number(), msgs: z.number(), tokensIn: z.number(), tokensOut: z.number(), tokensCache: z.number() })),
   sessions: z.array(z.object({ agent: z.string(), sessionId: z.string(), project: z.string().nullable(), model: z.string().nullable(), startMs: z.number(), endMs: z.number(), durationMs: z.number(), msgs: z.number(), tokens: z.number(), tokensIn: z.number(), tokensOut: z.number(), tokensCache: z.number(), gitBranch: z.string().nullable() })),
   models: z.array(z.object({ model: z.string(), agent: z.string(), sessions: z.number(), tokens: z.number() })),
+  byTool: z.array(z.object({ name: z.string(), count: z.number() })),
+  bySkill: z.array(z.object({ name: z.string(), count: z.number() })),
+  bySubagent: z.array(z.object({ name: z.string(), count: z.number() })),
+  usageDaily: z.array(z.object({
+    date: z.string(),
+    tools: z.record(z.string(), z.number()),
+    skills: z.record(z.string(), z.number()),
+    subagents: z.record(z.string(), z.number()),
+  })),
+  byProject: z.array(z.object({ project: z.string().nullable(), sessions: z.number(), tokens: z.number(), tokensIn: z.number(), tokensOut: z.number(), tokensCache: z.number() })),
+  topSessions: z.array(z.object({ agent: z.string(), sessionId: z.string(), project: z.string().nullable(), model: z.string().nullable(), tokens: z.number(), tokensIn: z.number(), tokensOut: z.number(), tokensCache: z.number(), endMs: z.number() })),
   facets: z.object({ agents: z.array(z.string()), projects: z.array(z.string()), models: z.array(z.string()) }),
   range: z.enum(["today", "7d", "30d", "all"]),
 });
 // Raw scan output: the uncapped SessionStat[] the console fetches once, then
 // aggregates per range/filter client-side (sharing @agentgem/insight's
 // aggregateObserve). /observe still serves the server-aggregated payload.
-const SessionStatSchema = z.object({
+export const SessionStatSchema = z.object({
   agent: z.string(),
   sessionId: z.string(),
   project: z.string().nullable(),
+  cwd: z.string().nullable().optional(),
   model: z.string().nullable(),
   gitBranch: z.string().nullable(),
   startMs: z.number(), endMs: z.number(), msgs: z.number(),
   tokensIn: z.number(), tokensOut: z.number(), tokensCache: z.number(),
+  tools: z.record(z.string(), z.number()).optional(),
+  skills: z.record(z.string(), z.number()).optional(),
+  subagents: z.record(z.string(), z.number()).optional(),
 });
 const ObserveRawQuerySchema = z.object({ refresh: z.coerce.boolean().optional() });
 const ObserveRawSchema = z.object({ sessions: z.array(SessionStatSchema) });
