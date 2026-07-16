@@ -11,7 +11,7 @@ describe("MCP_ERROR_CODES", () => {
     // v1 emits a subset (server_not_connected/server_unavailable/not_in_manifest/tool_error/
     // bad_request); the union is the FULL claude-contract set so consumers can branch on codes
     // that arrive later without a wire change.
-    for (const c of ["server_not_connected", "server_unavailable", "not_in_manifest", "tool_error", "bad_request", "not_granted", "capability_disabled"]) {
+    for (const c of ["server_not_connected", "server_unavailable", "not_in_manifest", "tool_error", "bad_request", "not_granted", "capability_disabled", "server_config_changed"]) {
       expect(MCP_ERROR_CODES).toContain(c);
     }
   });
