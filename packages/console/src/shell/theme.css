@@ -622,6 +622,9 @@ body::before {
 .play-cap-row { display: flex; align-items: center; gap: 10px; }
 .play-cap { font: 700 11px var(--font-ui); letter-spacing: .11em; text-transform: uppercase; color: var(--muted); }
 .play-cap__rule { flex: 1; height: 1px; background: var(--line-soft); }
+.play-cap-btn { font: 600 13px var(--font-ui); line-height: 1; padding: 3px 8px; border-radius: 6px;
+  border: 1px solid var(--line); background: transparent; color: var(--ink-soft); cursor: pointer; transition: .14s; }
+.play-cap-btn:hover { color: var(--accent); border-color: var(--accent); }
 /* Paper mat around the miniapp, so the black canvas reads as a print mounted on the page. */
 .play-plate { padding: 7px; border-radius: 12px; border: 1px solid var(--line); background: var(--paper-2);
   box-shadow: var(--shadow-sm), inset 0 1px 2px rgba(60, 44, 20, .07); }

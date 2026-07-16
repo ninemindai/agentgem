@@ -1,6 +1,6 @@
 // packages/console/src/panels/Play/Studio.tsx
 import { useEffect, useRef, useState } from "react";
-import { makeClient, playMiniappRoute, playSaveRoute, playPublishRoute, publishSetupRoute, publishStatusRoute, reviewGroupsRoute, reviewRequestRoute } from "../../api/routes.js";
+import { makeClient, playMiniappRoute, playSaveRoute, publishSetupRoute, publishStatusRoute, reviewGroupsRoute, reviewRequestRoute } from "../../api/routes.js";
 import { AgentSelector, type PlayAgent } from "./AgentSelector.js";
 import { CapabilityStrip } from "./CapabilityStrip.js";
 import { RequestReviewModal } from "./RequestReviewModal.js";
@@ -59,6 +59,10 @@ export function Studio({
   const [busy, setBusy] = useState(false);
   const [working, setWorking] = useState("");
   const [html, setHtml] = useState("");
+  // Remount generation for the preview Runner: the reload control bumps it so a wedged
+  // miniapp (e.g. one whose host handshake never completed) gets a true unmount/remount,
+  // not just fresh html state.
+  const [runnerGen, setRunnerGen] = useState(0);
   const [loadErr, setLoadErr] = useState<string | null>(null);   // preview fetch failed → say so, don't fake it
   const [meta, setMeta] = useState<{ title: string; genre: string; needs?: string[] } | null>(null);
   const [pruned, setPruned] = useState<string[]>([]);
@@ -299,12 +303,6 @@ export function Studio({
     }
   }
 
-  async function pushGit() {
-    setStatus("pushing…");
-    try { await playPublishRoute.call(makeClient(apiBase), { body: {} }); setStatus("pushed to git ✓"); }
-    catch (e) { setStatus(`push failed: ${(e as Error).message}`); }
-  }
-
   // The actual publish. Takes `login` explicitly (see the onBound comment above) and
   // deliberately does NOT save: the caller already did, and the workspace + seal exist.
   async function publishWorkspace(login: string, version: string, visibility: "public" | "unlisted" | "private") {
@@ -513,9 +511,7 @@ export function Studio({
         <span className="play-pill"><span className="play-pill__dot" style={{ background: g.tint }} />{g.icon} {g.label}</span>
         <span className="sp" />
         {status && <span className="play-intro" style={{ margin: 0 }}>{status}</span>}
-        <button className="play-btn" onClick={save}>Save</button>
         {(busy || chatId) && <button className="play-btn play-btn--ghost" onClick={stop} title="kill the agent session">Stop</button>}
-        <button className="play-btn play-btn--ghost" onClick={pushGit} title="git push the miniapps registry to your git remote">Push to git</button>
         <button className="play-btn play-btn--primary" onClick={shareToExplore} title="Share to app.agentgem.ai">Share</button>
         <button className="play-btn play-btn--ghost" onClick={requestReview}>Request review</button>
       </div>
@@ -633,9 +629,12 @@ export function Studio({
         style={split.containerProps.style}
       >
         <div className="play-stage">
-          <div className="play-cap-row"><span className="play-cap">Preview</span><span className="play-cap__rule" /></div>
+          <div className="play-cap-row"><span className="play-cap">Preview</span><span className="play-cap__rule" />
+            <button className="play-cap-btn" title="Reload the preview" aria-label="Reload the preview"
+              onClick={() => { setRunnerGen((g) => g + 1); void refresh(); }}>↻</button>
+          </div>
           <div className="play-plate" ref={plateRef}>
-            {html ? <Runner ref={runnerRef} html={html} name={name} apiBase={apiBase} needs={meta?.needs} maxHeight={plateMax} />
+            {html ? <Runner key={runnerGen} ref={runnerRef} html={html} name={name} apiBase={apiBase} needs={meta?.needs} maxHeight={plateMax} />
               : loadErr ? (
                 <div className="play-plate__state">
                   <b>Couldn't load the preview</b>
