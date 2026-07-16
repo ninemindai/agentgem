@@ -12,7 +12,7 @@ export async function resolveAggregatorDb(): Promise<{ db: AppDb; onStop: () => 
     const { Pool } = await import("pg");
     const { drizzle } = await import("drizzle-orm/node-postgres");
     const pool = new Pool({ connectionString: url });
-    const db = drizzle(pool, { schema }) as unknown as AppDb;
+    const db: AppDb = drizzle(pool, { schema });
     await ensureSchema(db);
     return { db, onStop: () => pool.end(), mode: "postgres" };
   }
@@ -24,9 +24,11 @@ export async function resolveAggregatorDb(): Promise<{ db: AppDb; onStop: () => 
   // instance, right before the first real query.
   const { drizzle } = await import("drizzle-orm/pglite");
   const lazy = lazyPgliteClient(async (pg) => {
-    await ensureSchema(drizzle(pg, { schema }) as unknown as AppDb);
+    await ensureSchema(drizzle(pg, { schema }));
   });
-  const db = drizzle(lazy as unknown as PGlite, { schema }) as unknown as AppDb;
+  // The lazy client only implements the three members the pglite driver actually calls, so the
+  // cast to the full PGlite class is confined to this one construction site.
+  const db: AppDb = drizzle(lazy as PGlite, { schema });
   return { db, onStop: () => lazy.close(), mode: "pglite" };
 }
 
@@ -35,7 +37,7 @@ export async function resolveAggregatorDb(): Promise<{ db: AppDb; onStop: () => 
 // transaction() per statement and close() on teardown, so those are all we wrap.
 // The boot promise is memoized, so concurrent first-queries share one instance
 // and ensureSchema runs exactly once.
-function lazyPgliteClient(init: (pg: PGlite) => Promise<void>) {
+function lazyPgliteClient(init: (pg: PGlite) => Promise<void>): Pick<PGlite, "query" | "transaction" | "close"> {
   let ready: Promise<PGlite> | null = null;
   const boot = (): Promise<PGlite> =>
     (ready ??= (async () => {
