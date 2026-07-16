@@ -22,7 +22,7 @@
 //
 // Diagram maintenance is part of the change: if a future edit adds another invalidation trigger,
 // update the state machine above `doSync` in the same commit.
-import { DatabaseSync } from "node:sqlite";
+import { DatabaseSync, type StatementSync } from "node:sqlite";
 import { statSync, mkdirSync } from "node:fs";
 import { join, dirname } from "node:path";
 import { createLogger } from "@agentgem/base";
@@ -106,6 +106,11 @@ export async function openTranscriptIndex(dataDir?: string): Promise<TranscriptI
   const file = dir === "memory://" ? ":memory:" : dir;
   if (file !== ":memory:") mkdirSync(dirname(file), { recursive: true });
   const db = new DatabaseSync(file);
+  // WAL + a short busy wait so overlapping handles (the warm-pass writer, route/MCP readers —
+  // separate openTranscriptIndex calls on the same file) wait up to 5s on a lock instead of
+  // throwing SQLITE_BUSY immediately — the same hardening recallIndex and artifactOutcomesStore
+  // carry. Skipped for :memory: (per-connection, no shared file, WAL is a no-op there).
+  if (file !== ":memory:") db.exec("PRAGMA journal_mode = WAL; PRAGMA busy_timeout = 5000;");
   db.exec(`CREATE TABLE IF NOT EXISTS meta (key TEXT PRIMARY KEY, value TEXT);`);
 
   // Schema-version guard: a bump means the on-disk layout may be incompatible (transcript_file
@@ -149,6 +154,10 @@ export async function openTranscriptIndex(dataDir?: string): Promise<TranscriptI
     );
   `);
 
+  // Hot-path statements, prepared once per open: writeFileRows runs them per row per changed
+  // file, and a cold build used to re-run db.prepare on the same SQL for every row.
+  const stmts = prepareWriteStmts(db);
+
   // Single-flight: the SWR caller can fire overlapping syncs; serialize them so two passes
   // never interleave writes to the same rows.
   let chain: Promise<unknown> = Promise.resolve();
@@ -156,7 +165,7 @@ export async function openTranscriptIndex(dataDir?: string): Promise<TranscriptI
 
   return {
     syncUsage(paths, hookDigest, parseFile, offThreadParse, hooks) {
-      const run = chain.then(() => doSyncRouted(db, paths, hookDigest, parseFile, offThreadParse, hooks ?? []));
+      const run = chain.then(() => doSyncRouted(db, stmts, paths, hookDigest, parseFile, offThreadParse, hooks ?? []));
       chain = run.catch(() => {}); // keep the chain alive past a failed sync
       return run;
     },
@@ -204,36 +213,50 @@ function planSync(
   return { existing, changed, seen, pendingBytes };
 }
 
+/** The write/prune statements, prepared once per open — writeFileRows runs them per row per
+ *  changed file, so preparing here (not inside the loops) is what keeps a cold build cheap. */
+interface WriteStmts {
+  delRaw: StatementSync; delHook: StatementSync; delFile: StatementSync;
+  insRaw: StatementSync; insHook: StatementSync; upFile: StatementSync;
+}
+function prepareWriteStmts(db: DatabaseSync): WriteStmts {
+  return {
+    delRaw: db.prepare("DELETE FROM raw_usage WHERE path = ?1"),
+    delHook: db.prepare("DELETE FROM hook_usage WHERE path = ?1"),
+    delFile: db.prepare("DELETE FROM transcript_file WHERE path = ?1"),
+    insRaw: db.prepare(
+      `INSERT INTO raw_usage(path, kind, token, invocations) VALUES(?1, ?2, ?3, ?4)
+       ON CONFLICT(path, kind, token) DO UPDATE SET invocations = ?4`),
+    insHook: db.prepare(
+      `INSERT INTO hook_usage(path, name, invocations) VALUES(?1, ?2, ?3)
+       ON CONFLICT(path, name) DO UPDATE SET invocations = ?3`),
+    upFile: db.prepare(
+      `INSERT INTO transcript_file(path, mtime_ms, size, hook_digest) VALUES(?1, ?2, ?3, ?4)
+       ON CONFLICT(path) DO UPDATE SET mtime_ms = ?2, size = ?3, hook_digest = ?4`),
+  };
+}
+
 /** One changed file's rows: replace its raw/hook rows and (re)record it in transcript_file. Caller
  *  wraps in a transaction. Must run only for a successful, non-`failed` parse. */
-function writeFileRows(db: DatabaseSync, path: string, mtime: number, size: number, hookDigest: string, usage: FileUsage): void {
-  db.prepare("DELETE FROM raw_usage WHERE path = ?1").run(path);
-  db.prepare("DELETE FROM hook_usage WHERE path = ?1").run(path);
+function writeFileRows(stmts: WriteStmts, path: string, mtime: number, size: number, hookDigest: string, usage: FileUsage): void {
+  stmts.delRaw.run(path);
+  stmts.delHook.run(path);
   for (const r of usage.raw) {
-    db.prepare(
-      `INSERT INTO raw_usage(path, kind, token, invocations) VALUES(?1, ?2, ?3, ?4)
-       ON CONFLICT(path, kind, token) DO UPDATE SET invocations = ?4`,
-    ).run(path, r.kind, r.token, r.invocations);
+    stmts.insRaw.run(path, r.kind, r.token, r.invocations);
   }
   for (const h of usage.hooks) {
-    db.prepare(
-      `INSERT INTO hook_usage(path, name, invocations) VALUES(?1, ?2, ?3)
-       ON CONFLICT(path, name) DO UPDATE SET invocations = ?3`,
-    ).run(path, h.name, h.invocations);
+    stmts.insHook.run(path, h.name, h.invocations);
   }
-  db.prepare(
-    `INSERT INTO transcript_file(path, mtime_ms, size, hook_digest) VALUES(?1, ?2, ?3, ?4)
-     ON CONFLICT(path) DO UPDATE SET mtime_ms = ?2, size = ?3, hook_digest = ?4`,
-  ).run(path, mtime, size, hookDigest);
+  stmts.upFile.run(path, mtime, size, hookDigest);
 }
 
 /** Delete every file recorded in `existing` that this sync did not `seen`. Caller wraps in a txn. */
-function pruneVanished(db: DatabaseSync, existing: Map<string, unknown>, seen: Set<string>): void {
+function pruneVanished(stmts: WriteStmts, existing: Map<string, unknown>, seen: Set<string>): void {
   for (const path of existing.keys()) {
     if (seen.has(path)) continue;
-    db.prepare("DELETE FROM raw_usage WHERE path = ?1").run(path);
-    db.prepare("DELETE FROM hook_usage WHERE path = ?1").run(path);
-    db.prepare("DELETE FROM transcript_file WHERE path = ?1").run(path);
+    stmts.delRaw.run(path);
+    stmts.delHook.run(path);
+    stmts.delFile.run(path);
   }
 }
 
@@ -275,6 +298,7 @@ function readbackRows(db: DatabaseSync): { raw: StoredRawRow[]; hooks: StoredHoo
 // single-flight `chain` (see openTranscriptIndex), so an overlapping sync never interleaves writes.
 async function doSyncRouted(
   db: DatabaseSync,
+  stmts: WriteStmts,
   paths: string[],
   hookDigest: string,
   parseFile: (path: string) => FileUsage,
@@ -299,9 +323,9 @@ async function doSyncRouted(
         catch (e) { log.warn("parseFile threw for transcript, will retry next sync: %s: %s", c.path, e); seen.add(c.path); continue; }
         if (u.failed) { log.warn("failed to read transcript, will retry next sync: %s", c.path); seen.add(c.path); continue; }
         seen.add(c.path);
-        writeFileRows(db, c.path, c.mtime, c.size, hookDigest, u);
+        writeFileRows(stmts, c.path, c.mtime, c.size, hookDigest, u);
       }
-      pruneVanished(db, existing, seen);
+      pruneVanished(stmts, existing, seen);
       db.exec("COMMIT");
     } catch (e) {
       try { db.exec("ROLLBACK"); } catch { /* keep the original error */ }
@@ -323,7 +347,7 @@ async function doSyncRouted(
       for (const r of results) {
         seen.add(r.path); // protect from prune regardless of outcome (mirror inline branch)
         if (r.usage.failed) { log.warn("failed to read transcript (worker), will retry next sync: %s", r.path); continue; }
-        writeFileRows(db, r.path, r.mtime, r.size, hookDigest, r.usage);
+        writeFileRows(stmts, r.path, r.mtime, r.size, hookDigest, r.usage);
       }
       db.exec("COMMIT");
     } catch (e) {
@@ -335,7 +359,7 @@ async function doSyncRouted(
   for (const p of parsedSeen) seen.add(p);
   db.exec("BEGIN");
   try {
-    pruneVanished(db, existing, seen);
+    pruneVanished(stmts, existing, seen);
     db.exec("COMMIT");
   } catch (e) {
     try { db.exec("ROLLBACK"); } catch { /* keep the original error */ }
