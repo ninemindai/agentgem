@@ -140,6 +140,7 @@ export function writeGemArchive(gem: Gem, opts: { version?: string; dependencies
       const body: Record<string, unknown> = { title: a.title, genre: a.genre, createdFrom: a.createdFrom, engineVersion: a.engineVersion };
       if (a.poster !== undefined) body.poster = a.poster;
       if (a.needs !== undefined) body.needs = a.needs;
+      if (a.mcpNeeds !== undefined) body.mcpNeeds = a.mcpNeeds;
       if (a.meta !== undefined) body.meta = a.meta;
       if (place(path, a.html, a.name, "game")) {
         artifacts.push({ type: "game", name: a.name, path, metadata: JSON.stringify(body, null, 2) });
@@ -304,7 +305,7 @@ export function readGemArchive(files: FileTree): Gem {
     if (e.type === "game") {
       const m = JSON.parse(e.metadata ?? "{}") as {
         title?: string; genre?: string; createdFrom?: unknown; engineVersion?: string;
-        poster?: string; needs?: GameArtifact["needs"]; meta?: GameArtifact["meta"];
+        poster?: string; needs?: GameArtifact["needs"]; mcpNeeds?: GameArtifact["mcpNeeds"]; meta?: GameArtifact["meta"];
       };
       if (m.createdFrom === undefined || m.createdFrom === null) {
         throw new Error(`game artifact '${e.name}' has no createdFrom in manifest`);
@@ -325,6 +326,7 @@ export function readGemArchive(files: FileTree): Gem {
       };
       if (m.poster !== undefined) a.poster = m.poster;
       if (m.needs !== undefined) a.needs = m.needs;
+      if (m.mcpNeeds !== undefined) a.mcpNeeds = m.mcpNeeds;
       if (m.meta !== undefined) a.meta = m.meta;
       return a;
     }
