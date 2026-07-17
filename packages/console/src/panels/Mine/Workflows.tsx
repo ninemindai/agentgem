@@ -110,7 +110,7 @@ export function MineWorkflows({ data, onBuild, building, result, error, apiBase,
 
   return (
     <section className="mine-workflows" aria-label="Discovered workflows">
-      <h3>Pick workflows to distill into a Gem</h3>
+      <h3>Your workflows</h3>
       {building && <p className="mine-build-result">Building…</p>}
       {result && (
         <p className="mine-build-result">
