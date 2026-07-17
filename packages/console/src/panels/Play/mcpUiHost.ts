@@ -43,6 +43,12 @@ export interface UiHost {
   pushHostContext(partial: Record<string, unknown>): void;  // host-initiated host-context-changed push (fullscreen toggle)
 }
 
+// A tool as loadServers() reports it: name plus the annotations D11's readOnlyHint gate reads (Task 3).
+interface McpServerTool {
+  name: string;
+  annotations?: { readOnlyHint?: boolean; destructiveHint?: boolean };
+}
+
 interface RpcMessage {
   jsonrpc?: string; id?: number; method?: string;
   params?: { name?: string; arguments?: Record<string, unknown>; url?: string } & Record<string, unknown>;
@@ -218,9 +224,9 @@ export function createUiHost(deps: UiHostDeps): UiHost {
   // Refresh the router's view of every declared connector: install state (configDigest present/absent)
   // and its live tool list. Called before every consent decision — never cached across calls — so a
   // connector uninstalled or reconfigured mid-session is caught rather than trusted from a stale read.
-  async function loadServers(): Promise<Map<string, { tools: { name: string }[]; configDigest?: string }>> {
+  async function loadServers(): Promise<Map<string, { tools: McpServerTool[]; configDigest?: string }>> {
     const res = await playMcpServersRoute.call(makeClient(deps.apiBase), { query: { name: deps.name } });
-    const map = new Map<string, { tools: { name: string }[]; configDigest?: string }>();
+    const map = new Map<string, { tools: McpServerTool[]; configDigest?: string }>();
     for (const s of res.servers) {
       map.set(s.server, { tools: s.tools, configDigest: s.configDigest });
       mcpDigests.set(s.server, s.configDigest);
@@ -240,7 +246,7 @@ export function createUiHost(deps: UiHostDeps): UiHost {
   // exists purely to pin consent, not to be forwarded to the sealed iframe.
   async function handleMcpList(d: RpcMessage): Promise<void> {
     const gen = generation;
-    let serverMap: Map<string, { tools: { name: string }[]; configDigest?: string }>;
+    let serverMap: Map<string, { tools: McpServerTool[]; configDigest?: string }>;
     try {
       serverMap = await loadServers();
     } catch {
