@@ -14,11 +14,12 @@ const meta = { title: "Pulse", genre: "project-fun" as const, createdFrom: { kin
 describe("POST /api/play/save with mcpNeeds", () => {
   it("persists the declared manifest and reports scan warnings through the route", async () => {
     const ctrl = new PlayController();
-    // Guarded like Task 4's mcpHtml fixtures (miniappsMcp.test.ts): gameGate's jsdom load-smoke has no
-    // client shim, so `window.agentgemApp.mcp` is undefined there and the guard keeps the body — including
-    // the never-invoked `c("github", pick())` call — from executing at gate time. The non-literal
-    // `callTool(s, t)` text is still present for capabilityScan's static regex to flag as a warning.
-    const html = `<!doctype html><body><canvas></canvas><script>if (window.agentgemApp && window.agentgemApp.mcp) { const c = (s, t) => window.agentgemApp.mcp.callTool(s, t); c("github", pick()); }</script></body>`;
+    // PR-3a's shim arm makes `window.agentgemApp.mcp` unconditional (mcpAppClient.ts), so this guard
+    // now DOES execute at gate time — sendRequest() just queues an unresolved promise in jsdom (no
+    // host to reply), it never throws. `pick()` has to be a real function so the call doesn't
+    // ReferenceError; it still passes a non-literal (computed) tool name, which is all
+    // capabilityScan's static regex needs to flag the "non-literal" warning below.
+    const html = `<!doctype html><body><canvas></canvas><script>function pick() { return "list_pull_requests"; } if (window.agentgemApp && window.agentgemApp.mcp) { const c = (s, t) => window.agentgemApp.mcp.callTool(s, t); c("github", pick()); }</script></body>`;
     const declared = [{ server: "github", tools: ["list_pull_requests"] }];
     const saved = await ctrl.save({ body: { name: "pulse", html, meta: { ...meta, mcpNeeds: declared } } });
     expect(saved.mcpWarnings).toHaveLength(1);
