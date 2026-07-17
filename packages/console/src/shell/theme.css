@@ -1862,6 +1862,14 @@ button.scorecard-intent { line-height: 1.4; }
 .mine-group-hint { font: 400 12px var(--font-ui); color: var(--muted); }
 .mine-gaps-row { border: 1px solid var(--line); border-radius: var(--radius); padding: 0.5rem 0.75rem; margin-bottom: 0.4rem; color: var(--ink-soft); font-size: 0.875rem; }
 .mine-build-result { margin: 0 0 0.75rem; color: var(--emerald); font-size: 0.875rem; }
+.mine-build-result__line { margin: 0 0 0.4rem; }
+.mine-build-result__skill { font: inherit; color: var(--accent); background: none; border: none; padding: 0; cursor: pointer; text-decoration: underline; text-underline-offset: 2px; }
+.mine-build-result__skill:hover { color: var(--accent-2); }
+.mine-build-result__panel { margin: 0 0 0.75rem; border: 1px solid var(--line); border-radius: 8px; background: var(--raised); padding: 10px 12px; }
+.mine-build-result__panel-head { display: flex; align-items: center; gap: 8px; color: var(--ink); }
+.mine-build-result__desc { color: var(--ink-soft); font-size: 0.8125rem; }
+.mine-build-result__acts { margin-left: auto; display: flex; gap: 7px; }
+.mine-build-result__md { margin: 8px 0 0; max-height: 320px; overflow: auto; font-size: 0.75rem; line-height: 1.5; color: var(--ink); white-space: pre-wrap; }
 
 /* Value cross-filter chips, shown under Type/Maturity grouping only (see
    VALUE_FILTERS in Workflows.tsx) — echoes .play-seg's active-state look as a

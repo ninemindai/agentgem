@@ -5,6 +5,7 @@ import { groupInventory, mergeUsage, type LedgerGroup } from "../shared/ledgerMo
 import { ScorecardHero, ScorecardHeroSkeleton, ScorecardScanning } from "./Scorecard.js";
 import { openScorecardStream, type ScorecardStreamEvent } from "./scorecardStream.js";
 import { MineWorkflows } from "./Workflows.js";
+import type { DistilledSkillView } from "./BuildResult.js";
 import { GemCardSkeleton } from "./GemCardSkeleton.js";
 import { PROJECT_HYGIENE_SHORTCUT, launchRubricRun } from "../../rubricShortcuts.js";
 import type { Miniapp } from "./unifiedGems.js";
@@ -90,7 +91,7 @@ export function WorkflowsView({ apiBase, scope, openStream = openScorecardStream
   const [revalidating, setRevalidating] = useState(false);
   const [failMessage, setFailMessage] = useState<string | null>(null);
   const [building, setBuilding] = useState(false);
-  const [buildResult, setBuildResult] = useState<{ name: string; skills: string[] } | null>(null);
+  const [buildResult, setBuildResult] = useState<{ name: string; skills: DistilledSkillView[] } | null>(null);
   const [buildError, setBuildError] = useState<string | null>(null);
   const [reloadKey, setReloadKey] = useState(0);
   // A manual re-scan opens the stream with ?refresh=true to bypass the cached
@@ -165,7 +166,11 @@ export function WorkflowsView({ apiBase, scope, openStream = openScorecardStream
     setBuildError(null);
     try {
       const gem = await scorecardBuildRoute.call(makeClient(apiBase), { body: { selections, name } });
-      const skills = gem.artifacts.filter((a) => a.type === "skill").map((a) => a.name);
+      // Keep description + content: the gem is never persisted, so the result banner's
+      // inline SKILL.md viewer is the only place the distilled draft can be seen.
+      const skills = gem.artifacts
+        .filter((a) => a.type === "skill")
+        .map((a) => ({ name: a.name, description: a.description, content: a.content }));
       setBuildResult({ name: gem.name, skills });
     } catch (err) {
       setBuildError(err instanceof Error ? err.message : "Build failed");

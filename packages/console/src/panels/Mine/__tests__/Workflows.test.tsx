@@ -106,10 +106,56 @@ describe("MineWorkflows", () => {
   });
 
   it("renders the build result in an inline banner", () => {
-    render(<MineWorkflows {...defaultProps} result={{ name: "my-gem", skills: ["deploy", "lint"] }} />);
+    render(<MineWorkflows {...defaultProps} result={{ name: "my-gem", skills: [{ name: "deploy" }, { name: "lint" }] }} />);
     expect(screen.getByText(/built/i)).toBeTruthy();
     expect(screen.getByText("my-gem")).toBeTruthy();
     expect(screen.getByText(/2 skills/i)).toBeTruthy();
+  });
+
+  describe("distilled skill viewer", () => {
+    const SKILL_MD = "---\nname: deploy\n---\n\n# deploy\n\nSteps to ship.";
+    const resultWithContent = {
+      name: "my-gem",
+      skills: [{ name: "deploy", description: "ship it safely", content: SKILL_MD }],
+    };
+
+    it("expands a skill to show its SKILL.md draft, and toggles it closed", () => {
+      render(<MineWorkflows {...defaultProps} result={resultWithContent} />);
+      expect(screen.queryByText(/# deploy/)).toBeNull(); // collapsed until asked
+      fireEvent.click(screen.getByRole("button", { name: "deploy" }));
+      expect(screen.getByText(/# deploy/)).toBeTruthy();
+      expect(screen.getByText("ship it safely")).toBeTruthy();
+      fireEvent.click(screen.getByRole("button", { name: "deploy" }));
+      expect(screen.queryByText(/# deploy/)).toBeNull();
+    });
+
+    it("copies the draft to the clipboard", () => {
+      const writeText = vi.fn().mockResolvedValue(undefined);
+      Object.defineProperty(navigator, "clipboard", { value: { writeText }, configurable: true });
+      render(<MineWorkflows {...defaultProps} result={resultWithContent} />);
+      fireEvent.click(screen.getByRole("button", { name: "deploy" }));
+      fireEvent.click(screen.getByRole("button", { name: /copy/i }));
+      expect(writeText).toHaveBeenCalledWith(SKILL_MD);
+    });
+
+    it("downloads the draft as a SKILL.md file", () => {
+      const createObjectURL = vi.fn().mockReturnValue("blob:mock");
+      const revokeObjectURL = vi.fn();
+      vi.stubGlobal("URL", { createObjectURL, revokeObjectURL });
+      try {
+        render(<MineWorkflows {...defaultProps} result={resultWithContent} />);
+        fireEvent.click(screen.getByRole("button", { name: "deploy" }));
+        fireEvent.click(screen.getByRole("button", { name: /download/i }));
+        expect(createObjectURL).toHaveBeenCalled();
+        expect(revokeObjectURL).toHaveBeenCalledWith("blob:mock");
+      } finally { vi.unstubAllGlobals(); }
+    });
+
+    it("renders a content-less skill as plain text, not a dead toggle", () => {
+      render(<MineWorkflows {...defaultProps} result={{ name: "g", skills: [{ name: "bare" }] }} />);
+      expect(screen.queryByRole("button", { name: "bare" })).toBeNull();
+      expect(screen.getByText(/bare/)).toBeTruthy();
+    });
   });
 
   it("renders the build error in an inline banner", () => {

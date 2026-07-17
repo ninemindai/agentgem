@@ -3,6 +3,7 @@ import type { Scorecard, WorkflowDetail } from "../../api/routes.js";
 import { scorecardWorkflowRoute, createGemShareRoute, makeClient } from "../../api/routes.js";
 import type { WorkflowCardModel } from "./groupWorkflows.js";
 import { GemCard, type GemScore } from "./GemCard.js";
+import { BuildResult, type DistilledSkillView } from "./BuildResult.js";
 import { toUnifiedGems, groupGemsByValue, groupGemsByType, groupGemsByMaturity, type UnifiedGem, type ValueBucket, type Miniapp } from "./unifiedGems.js";
 import type { LedgerGroup } from "../shared/ledgerModel.js";
 import { ShareLinks } from "./ShareLinks.js";
@@ -28,7 +29,7 @@ export function MineWorkflows({ data, onBuild, building, result, error, apiBase,
   data: Scorecard;
   onBuild: (selections: { root: string; keys: string[] }[], name: string) => void;
   building: boolean;
-  result: { name: string; skills: string[] } | null;
+  result: { name: string; skills: DistilledSkillView[] } | null;
   error: string | null;
   apiBase: string;
   createGemShare?: CreateGemShare;
@@ -205,11 +206,7 @@ export function MineWorkflows({ data, onBuild, building, result, error, apiBase,
     <section className="mine-workflows" aria-label="Discovered workflows">
       <h3>Your workflows</h3>
       {building && <p className="mine-build-result">Building…</p>}
-      {result && (
-        <p className="mine-build-result">
-          ✓ Built <strong>{result.name}</strong> — {result.skills.length} skill{result.skills.length === 1 ? "" : "s"}: {result.skills.join(", ")}
-        </p>
-      )}
+      {result && <BuildResult name={result.name} skills={result.skills} />}
       {error && <p className="obs-error">{error}</p>}
       {group !== "value" && (
         <div className="mine-filter-bar" role="group" aria-label="Filter by value">
