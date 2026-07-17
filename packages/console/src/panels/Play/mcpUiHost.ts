@@ -9,11 +9,13 @@
 // mcpHostTools (Task 1). Consent, remembered choices, and thumbnail suppression stay OUT of here — the
 // router calls the injected `requestConsent(cap)` for gated caps (AUTO caps bypass it); the Runner (PR D)
 // supplies that callback. This module is inert: nothing imports it yet.
-import { AUTO_CAPS } from "./consent.js";
+import type { McpNeed } from "@agentgem/model";
+import { AUTO_CAPS, getMcpConsent, setMcpConsent, clearMcpConsent } from "./consent.js";
 import {
   getSessionData, getInventory, subscribeSessions, subscribeHygiene, openNeutralChat, invokeAgent,
   CAP_TOOL, TOOL_CAP, HOST_TOOLS, type StreamHandle,
 } from "./mcpHostTools.js";
+import { playMcpCallRoute, playMcpServersRoute, makeClient } from "../../api/routes.js";
 
 // The MCP Apps extension's protocol revision this host implements (ext-apps MVP, 2026-01-26).
 const PROTOCOL_VERSION = "2026-01-26";
@@ -29,6 +31,7 @@ export interface UiHostDeps {
   onDisplayMode?: (mode: string) => string;          // PR 3: Runner applies/refuses; returns the mode ACTUALLY applied
   openExternal?: (url: string) => void;              // 3.4: open-link's actual browser navigation, injected by the Runner
   copyText?: (text: string) => void;                 // copy-command's actual clipboard write, injected by the Runner
+  mcpNeeds?: McpNeed[];                               // declared connector manifest (Runner, Task 6); absent = no connectors
 }
 
 export interface UiHost {
@@ -56,6 +59,10 @@ export function createUiHost(deps: UiHostDeps): UiHost {
   let chatId: string | null = null;                  // reused neutral chat session
   let chatPromise: Promise<string> | null = null;    // in-flight chat-open (serialize concurrent invokes)
   let feeding = false;                                // one in-flight feedSessionData at a time (mirrors Runner's feedingRef)
+  const mcpNeeds = deps.mcpNeeds ?? [];               // declared-authoritative connector manifest, resolved once
+  // server -> last-seen configDigest; `undefined` means "not installed". Refreshed by loadServers() before
+  // every consent decision so a swapped/uninstalled connector is caught even mid-session.
+  const mcpDigests = new Map<string, string | undefined>();
 
   const post = (msg: unknown) => deps.target.postMessage(msg, "*");
   const stale = (gen: number) => gen !== generation;
@@ -208,6 +215,94 @@ export function createUiHost(deps: UiHostDeps): UiHost {
     replyError(d.id, -32601, "unsupported by this host");
   }
 
+  // Refresh the router's view of every declared connector: install state (configDigest present/absent)
+  // and its live tool list. Called before every consent decision — never cached across calls — so a
+  // connector uninstalled or reconfigured mid-session is caught rather than trusted from a stale read.
+  async function loadServers(): Promise<Map<string, { tools: { name: string }[]; configDigest?: string }>> {
+    const res = await playMcpServersRoute.call(makeClient(deps.apiBase), { query: { name: deps.name } });
+    const map = new Map<string, { tools: { name: string }[]; configDigest?: string }>();
+    for (const s of res.servers) {
+      map.set(s.server, { tools: s.tools, configDigest: s.configDigest });
+      mcpDigests.set(s.server, s.configDigest);
+    }
+    return map;
+  }
+
+  // The consent-card detail string the Runner's modal renders (Task 6) — names the server and every tool
+  // the miniapp declared against it, so the viewer approves the whole grant, not a single blind call.
+  function mcpDetail(server: string): string {
+    const need = mcpNeeds.find((n) => n.server === server);
+    return `${server} (tools: ${need?.tools.join(", ") ?? ""})`;
+  }
+
+  // mcp/list: a NON-prompting status readout for the miniapp's declared connectors (Task 6's picker UI).
+  // Never calls requestConsent — only getMcpConsent — and never puts the configDigest in the reply; it
+  // exists purely to pin consent, not to be forwarded to the sealed iframe.
+  async function handleMcpList(d: RpcMessage): Promise<void> {
+    const gen = generation;
+    const serverMap = await loadServers();
+    if (stale(gen)) return;
+    const servers = mcpNeeds.map((need) => {
+      const digest = serverMap.get(need.server)?.configDigest;
+      if (digest === undefined) return { server: need.server, tools: [] as string[], status: "unavailable" as const };
+      const c = getMcpConsent(deps.name, need.server);
+      if (c?.decision === "granted" && c.digest === digest) {
+        const connectorTools = new Set((serverMap.get(need.server)?.tools ?? []).map((t) => t.name));
+        return { server: need.server, tools: need.tools.filter((t) => connectorTools.has(t)), status: "granted" as const };
+      }
+      const status = c?.decision === "denied" && c.digest === digest ? "denied" as const : "needsConsent" as const;
+      return { server: need.server, tools: [] as string[], status };
+    });
+    reply(d.id, { servers });
+  }
+
+  // mcp/call: THE consent decision lives here (the router holds the digest a card must pin to);
+  // requestConsent stays a dumb yes/no modal. Order matters — manifest fast-reject before any network
+  // call or prompt, then the digest refresh, then the single consent gate every outcome funnels through.
+  async function handleMcpCall(d: RpcMessage): Promise<void> {
+    const server = d.params?.server as string | undefined;
+    const tool = d.params?.tool as string | undefined;
+    const input = d.params?.input;
+    const gen = generation;
+    const need = mcpNeeds.find((n) => n.server === server);
+    if (!server || !tool || !need || !need.tools.includes(tool)) {
+      reply(d.id, { ok: false, error: { code: "not_in_manifest", message: `"${server}"/"${tool}" is not in this miniapp's declared connectors` } });
+      return;
+    }
+    await loadServers();
+    if (stale(gen)) return;
+    const digest = mcpDigests.get(server);
+    if (digest === undefined) {
+      reply(d.id, { ok: false, error: { code: "server_not_connected", message: `MCP server "${server}" is not installed` } });
+      return;
+    }
+    const c = getMcpConsent(deps.name, server);
+    if (c?.decision === "granted" && c.digest === digest) {
+      // proceed — matching-digest grant already on file
+    } else if (c?.decision === "denied" && c.digest === digest) {
+      reply(d.id, { ok: false, error: { code: "not_granted", message: "consent denied" } });
+      return;
+    } else {
+      // No decision on file, or one pinned to a digest that no longer matches (reconfigured connector) —
+      // re-prompt. This is the ONLY path to playMcpCallRoute below; there is no bypass.
+      const ok = await deps.requestConsent("mcp:" + server, mcpDetail(server));
+      if (stale(gen)) return;
+      setMcpConsent(deps.name, server, ok ? "granted" : "denied", digest);
+      if (!ok) { reply(d.id, { ok: false, error: { code: "not_granted", message: "consent denied" } }); return; }
+    }
+    const res = await playMcpCallRoute.call(makeClient(deps.apiBase), {
+      body: { name: deps.name, server, tool, input, expectedConfigDigest: digest },
+    });
+    if (stale(gen)) return;
+    if (!res.ok && res.error?.code === "server_config_changed") {
+      // The server re-derived a different digest since we last read it — the grant no longer means
+      // anything. Drop both caches so the NEXT call re-prompts against the new config; don't auto-retry.
+      mcpDigests.delete(server);
+      clearMcpConsent(deps.name, server);
+    }
+    reply(d.id, res);
+  }
+
   function handleMessage(e: MessageEvent): void {
     if (e.source !== deps.target) return;            // only our own sealed iframe — the security boundary
     const d = e.data as RpcMessage | null;
@@ -233,6 +328,8 @@ export function createUiHost(deps: UiHostDeps): UiHost {
       return;
     }
     if (d.method === "tools/call") { void handleCall(d); return; }
+    if (d.method === "mcp/call") { void handleMcpCall(d); return; }
+    if (d.method === "mcp/list") { void handleMcpList(d); return; }
     if (d.method === "ui/open-link") { void handleOpenLink(d); return; }
     if (d.method === "ui/copy-command") { void handleCopy(d); return; }
     if (d.method === "ui/message") { handleUnsupportedAction(d, "send-message"); return; }
@@ -290,6 +387,7 @@ export function createUiHost(deps: UiHostDeps): UiHost {
     chatId = null;
     chatPromise = null;
     feeding = false;
+    mcpDigests.clear();
   }
 
   return { handleMessage, dispose, bumpGeneration, feedSessionData, rebindHygiene, pushHostContext };
