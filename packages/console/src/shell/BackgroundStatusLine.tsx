@@ -8,13 +8,18 @@
 import { useState, type ReactElement } from "react";
 import type { BackgroundJobs } from "./useBackgroundJobs.js";
 
-function copyFor(mode: BackgroundJobs["mode"], count: number): string {
-  if (mode === "active") return `Working in the background: ${count} jobs`;
+// The header's count must match what the expanded list actually shows — `jobs.length`,
+// not `count` (which only tallies RUNNING signals). A finished-warm-cache row or a
+// queued-dream row still shows up in the list while not counting as "running", so
+// using `count` here could read "Working in the background: 1 jobs" while the list
+// underneath shows 2 rows. Singular/plural handled explicitly ("1 job", not "1 jobs").
+function copyFor(mode: BackgroundJobs["mode"], jobCount: number): string {
+  if (mode === "active") return `Working in the background: ${jobCount} job${jobCount === 1 ? "" : "s"}`;
   if (mode === "off") return "Background jobs off — enable in Settings";
   return "Background jobs idle";
 }
 
-export function BackgroundStatusLine({ mode, count, jobs }: BackgroundJobs): ReactElement {
+export function BackgroundStatusLine({ mode, jobs }: BackgroundJobs): ReactElement {
   const [expanded, setExpanded] = useState(false);
   // "off" has nothing to expand — warming never started, so there's no last-known
   // job for it to carry — the label itself is the call to action straight to Settings.
@@ -34,7 +39,7 @@ export function BackgroundStatusLine({ mode, count, jobs }: BackgroundJobs): Rea
         onClick={onClick}
       >
         <span className="bg-status-dot" aria-hidden="true" />
-        <span className="bg-status-label">{copyFor(mode, count)}</span>
+        <span className="bg-status-label">{copyFor(mode, jobs.length)}</span>
         {expandable && <span className="bg-status-caret" aria-hidden="true">{expanded ? "▾" : "▸"}</span>}
       </button>
       {expandable && expanded && (

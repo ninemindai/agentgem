@@ -248,9 +248,14 @@ function RevealContent({ mode, onDismiss, data, apiBase }: { mode: RevealMode; o
   // Guard against a stale selection outliving the scorecard it was chosen from
   // (e.g. a background rescan lands while the picker is open) — fall back to the
   // default top pick rather than target a workflow that's no longer offered.
-  const candidate = selectedCandidate && candidates.some((c) => c.root === selectedCandidate.root && c.key === selectedCandidate.key)
-    ? selectedCandidate
-    : topCandidate;
+  const candidateStillOffered = !!selectedCandidate
+    && candidates.some((c) => c.root === selectedCandidate.root && c.key === selectedCandidate.key);
+  const candidate = candidateStillOffered ? selectedCandidate : topCandidate;
+  // Clear the held selection too, not just fall back for this render — otherwise a
+  // LATER rescan that happens to reintroduce a candidate at the same {root,key}
+  // would silently reactivate a selection the user never re-made. Safe to call
+  // during render: the condition flips false on the very next render once cleared.
+  if (selectedCandidate && !candidateStillOffered) setSelectedCandidate(null);
 
   const usage = summary?.usage ?? { sessions: 0, spanDays: 0, activeMs: 0, tokensIn: 0, tokensOut: 0, tokensCache: 0 };
   const activeHours = Math.round(usage.activeMs / 3_600_000);
@@ -317,6 +322,11 @@ function RevealContent({ mode, onDismiss, data, apiBase }: { mode: RevealMode; o
   return (
     <div className="reveal">
       <Masthead label={mode === "ceremony" ? "Welcome back" : "First reading"} />
+      {mode === "ceremony" && !ceremonyShowing && (
+        <p className="reveal-migration-headline">
+          AgentGem has a new home screen — here&#39;s what your sessions add up to.
+        </p>
+      )}
       {body}
       {mode === "ceremony" && !ceremonyShowing && (
         <button type="button" className="reveal-dismiss" onClick={onDismiss}>Take me to my console</button>
@@ -336,7 +346,7 @@ function RevealContent({ mode, onDismiss, data, apiBase }: { mode: RevealMode; o
  *  behind a hard consent gate (zero fetches until "Scan my sessions" is
  *  clicked); existing users skip the gate — their prior use implies consent —
  *  and land straight in the fetched-state machine as a one-time "what's
- *  changed" ceremony (Task 8 finalizes its copy) with a dismiss button. */
+ *  changed" ceremony (migration headline + "Take me to my console" dismiss). */
 export function Reveal({
   apiBase, mode, onDismiss, openStream,
 }: { apiBase: string; mode: RevealMode; onDismiss: () => void; openStream?: typeof openScorecardStream }) {
