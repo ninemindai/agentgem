@@ -12,11 +12,18 @@ const LOCKED: HomeState = { unlocked: false, existingUser: false, revealSeen: fa
  *  never reverts unlocked→false, so there's no local "lock" path to support. */
 export function useHomeState(apiBase: string) {
   const [state, setState] = useState<HomeState>(LOCKED);
+  // The rail treats "locked" as its own loading placeholder (see useHomeState's
+  // module doc), but the reveal panel needs to tell "still fetching" apart from
+  // "genuinely a first-run visitor" — a race would otherwise let the pre-consent
+  // screen flash then get replaced by the ceremony/returning mode. `loading` flips
+  // false once the one GET settles, success or failure, same as `state` itself.
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     homeStateRoute.call(makeClient(apiBase))
       .then(setState)
-      .catch(() => { /* best-effort — stays locked */ });
+      .catch(() => { /* best-effort — stays locked */ })
+      .finally(() => setLoading(false));
   }, [apiBase]);
 
   const setUnlocked = useCallback((unlocked: true) => {
@@ -31,5 +38,5 @@ export function useHomeState(apiBase: string) {
       .catch(() => { /* best-effort */ });
   }, [apiBase]);
 
-  return { ...state, setUnlocked, setRevealSeen };
+  return { ...state, loading, setUnlocked, setRevealSeen };
 }

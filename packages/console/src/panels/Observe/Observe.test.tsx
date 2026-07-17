@@ -9,6 +9,34 @@ import { ObservePayloadSchema, type ObservePayload } from "../../api/routes.js";
 const res = (body: unknown) =>
   ({ ok: true, status: 200, text: async () => JSON.stringify(body) }) as unknown as Response;
 
+const sse = (items: unknown[]) =>
+  ({
+    ok: true, status: 200,
+    headers: new Headers({ "content-type": "text/event-stream" }),
+    text: async () => items.map((i) => `data: ${JSON.stringify(i)}\n\n`).join(""),
+  }) as unknown as Response;
+
+// Home/reveal (this Observe panel's 3-mode switch) stubs the same three
+// endpoints every real load hits: home/state (mode selection), scorecard/stream
+// (SSE — used by both Reveal and the returning-mode masthead scoreboard), and
+// observe/raw (the Overview dashboard beneath). Each test below only cares
+// about one or two of them, so the default is the cheapest legal response.
+function stubHomeFetch(opts: {
+  home?: unknown; scorecard?: unknown[]; observeRaw?: unknown;
+} = {}) {
+  const homeCalls: string[] = [];
+  const fetchMock = vi.fn(async (url: string | URL) => {
+    const u = String(url);
+    if (u.includes("/api/home/state")) { homeCalls.push(u); return res(opts.home ?? {}); }
+    if (u.includes("/api/scorecard/stream")) return sse(opts.scorecard ?? [{ type: "failed", message: "n/a" }]);
+    if (u.includes("/api/observe/raw")) return res(opts.observeRaw ?? { sessions: [] });
+    if (u.includes("/api/home/summary")) return res(opts.home ?? {});
+    return res({});
+  });
+  vi.stubGlobal("fetch", fetchMock);
+  return { fetchMock, homeCalls };
+}
+
 const payload: ObservePayload = {
   pulse: { sessions: 2, msgs: 12, tokens: 1_200_000, activeMs: 2.1 * 3_600_000 },
   daily: [{ date: "2026-06-28", sessions: 2, msgs: 12, tokensIn: 800_000, tokensOut: 300_000, tokensCache: 100_000 }],
@@ -119,12 +147,46 @@ describe("Observe Dashboard", () => {
   });
 });
 
-describe("Observe first-run", () => {
-  it("shows an oriented signpost when the local session log is empty", async () => {
+// The home/reveal 3-mode switch: loading → (first-run consent | ceremony | returning).
+// See Reveal.test.tsx for the fetched-state machine's own branches (cold/Codex-heavy/
+// rich/hard-failure) — these tests only cover mode SELECTION at the Observe level.
+describe("Observe — mode selection", () => {
+  it("renders the masthead skeleton only while home state is loading (before the fetch resolves)", () => {
     window.location.hash = "#/overview";
-    vi.stubGlobal("fetch", vi.fn(async (url: string | URL) =>
-      String(url).includes("/api/observe/raw") ? res({ sessions: [] }) : res({}),
-    ));
+    // A fetch that never resolves keeps useHomeState in its `loading` state.
+    vi.stubGlobal("fetch", vi.fn(() => new Promise(() => {})));
+    render(<Observe apiBase="" />);
+    expect(screen.getByLabelText("Loading your session reveal")).toBeTruthy();
+    expect(screen.queryByText(/Scan my sessions/)).toBeNull();
+    expect(screen.queryByText(/goldmine/i)).toBeNull();
+  });
+
+  it("first-run visitor (existingUser=false, revealSeen=false): the consent gate, zero summary/scorecard/observe fetches", async () => {
+    window.location.hash = "#/overview";
+    const { fetchMock } = stubHomeFetch({ home: { existingUser: false, revealSeen: false, unlocked: false } });
+    render(<Observe apiBase="" />);
+    expect(await screen.findByRole("button", { name: "Scan my sessions" })).toBeTruthy();
+    const calledUrls = fetchMock.mock.calls.map((c) => String(c[0]));
+    expect(calledUrls.some((u) => u.includes("/api/home/state"))).toBe(true);
+    expect(calledUrls.some((u) => u.includes("/api/home/summary"))).toBe(false);
+    expect(calledUrls.some((u) => u.includes("/api/scorecard/stream"))).toBe(false);
+    expect(calledUrls.some((u) => u.includes("/api/observe/raw"))).toBe(false);
+  });
+
+  it("existing user (existingUser=true, revealSeen=false): the ceremony, fetching immediately with no consent gate", async () => {
+    window.location.hash = "#/overview";
+    stubHomeFetch({ home: { existingUser: true, revealSeen: false, unlocked: true } });
+    render(<Observe apiBase="" />);
+    expect(screen.queryByText(/Scan my sessions/)).toBeNull();
+    expect(await screen.findByRole("button", { name: "Take me to my console" })).toBeTruthy();
+  });
+
+  it("returning user (revealSeen=true): the condensed masthead scoreboard + the Overview dashboard beneath, with the pre-existing empty-log signpost preserved", async () => {
+    window.location.hash = "#/overview";
+    stubHomeFetch({
+      home: { existingUser: true, revealSeen: true, unlocked: true },
+      observeRaw: { sessions: [] },
+    });
     render(<Observe apiBase="" />);
     expect(await screen.findByText(/nothing to inspect yet/i)).toBeTruthy();
   });
