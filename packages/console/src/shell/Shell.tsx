@@ -1,9 +1,8 @@
 import { useEffect, useState } from "react";
-import { phaseGroups, footerPages, sortedPages, normalizeHash, type ConsolePage, type Phase, type ArtifactCategory } from "../registry.js";
+import { footerPages, railModel, sortedPages, normalizeHash, type ConsolePage, type Phase } from "../registry.js";
 import { ActiveGemSwitcher } from "./ActiveGemSwitcher.js";
 import { useActiveGem } from "../activeGem.js";
 import { WarmingPill } from "../components/WarmingPill.js";
-import { useRovingTabIndex } from "./useRovingTabIndex.js";
 import { ToastProvider } from "./Toast.js";
 import { NotificationsProvider } from "../notify/NotificationsProvider.js";
 import { ActivityProvider } from "../notify/ActivityProvider.js";
@@ -11,20 +10,10 @@ import { ActivityMenu } from "../notify/ActivityMenu.js";
 import { IdentityProvider } from "../identity/IdentityProvider.js";
 import { IdentityChip } from "../identity/IdentityChip.js";
 import { useSidebar } from "./sidebar.js";
-import { useReviewUnread } from "../panels/Reviews/badge.js";
+import { useHomeState } from "./useHomeState.js";
 
-const PHASES: { id: Phase; label: string }[] = [
-  { id: "observe", label: "Observe" },
-  { id: "build", label: "Build" },
-];
-const CATEGORY_LABEL: Record<ArtifactCategory, string> = {
-  setup: "Configuration",
-  sessions: "Sessions",
-  projects: "Projects",
-  usage: "Usage",
-};
-const LS_ACTIVE = "agentgem.console.lastActive";
-const LS_ROUTE = "agentgem.console.lastRoute";
+const LS_ACTIVE = "agentgem.console.lastActive"; // last phased route visited (drives ActiveGemSwitcher's phase gate on footer pages)
+const GROUPS_KEY = "agentgem.console.groups"; // per-disclosure-group expanded state
 
 function readLastActive(routes: Set<string>): string | undefined {
   try {
@@ -34,19 +23,16 @@ function readLastActive(routes: Set<string>): string | undefined {
     return undefined;
   }
 }
-function readLastRoute(routes: Set<string>): Partial<Record<Phase, string>> {
+
+function loadGroupState(): Record<string, boolean> {
   try {
-    const parsed: unknown = JSON.parse(localStorage.getItem(LS_ROUTE) ?? "{}");
-    const map = (parsed && typeof parsed === "object" ? parsed : {}) as Record<string, unknown>;
-    const out: Partial<Record<Phase, string>> = {};
-    for (const ph of ["observe", "build"] as const) {
-      const r = map[ph];
-      if (typeof r === "string" && routes.has(r)) out[ph] = r;
-    }
-    return out;
-  } catch {
-    return {};
-  }
+    const raw: unknown = JSON.parse(localStorage.getItem(GROUPS_KEY) ?? "");
+    if (raw && typeof raw === "object") return raw as Record<string, boolean>;
+  } catch { /* absent or malformed → defaults (all collapsed) */ }
+  return {};
+}
+function saveGroupState(s: Record<string, boolean>): void {
+  try { localStorage.setItem(GROUPS_KEY, JSON.stringify(s)); } catch { /* storage unavailable */ }
 }
 
 export function Shell({ pages, apiBase }: { pages: ConsolePage[]; apiBase: string }) {
@@ -54,21 +40,14 @@ export function Shell({ pages, apiBase }: { pages: ConsolePage[]; apiBase: strin
   const routes = new Set(ordered.map((p) => p.route));
   const phaseOf = (route: string | undefined): Phase | undefined =>
     ordered.find((p) => p.route === route)?.phase;
-  const firstRouteOf = (ph: Phase): string | undefined =>
-    phaseGroups(pages, ph).flatMap((g) => g.pages)[0]?.route;
+  const overviewRoute = ordered.find((p) => p.id === "overview")?.route;
 
   // Drives the dimming of gem-scoped build stages — one subscription so the lock
   // state of Build items tracks the active gem.
   const { keys } = useActiveGem();
   const hasGem = keys.size > 0;
   const sidebar = useSidebar();
-
-  // Mounted unconditionally (like NotificationsProvider) so the review-unread signal
-  // keeps polling regardless of the active phase — the Reviews nav item only renders
-  // (and thus only polls) while Build is active, so without this the badge is
-  // invisible the whole time the user is in Observe. Feeds the Build phase switcher's
-  // cross-phase indicator below.
-  const reviewUnread = useReviewUnread(apiBase);
+  const home = useHomeState(apiBase);
   const [hash, setHash] = useState(() => normalizeHash(window.location.hash));
 
   // Route normalization lives in ONE place: legacy routes (#/your-gems, #/get-gems?…)
@@ -88,54 +67,58 @@ export function Shell({ pages, apiBase }: { pages: ConsolePage[]; apiBase: strin
 
   // Exact match first; otherwise the longest route that is a prefix of the hash, so a
   // drill-down sub-route (e.g. #/inspect/<id>) still resolves to its page. Empty/unknown
-  // hash falls back to the Observe-first default (not "lowest global order").
+  // hash falls back to the Overview route explicitly — there's no phase-scoped default
+  // once the Observe/Build toggle retires from the rail.
   const base = hash.split("?")[0];
   const active =
     ordered.find((p) => p.route === base) ??
     [...ordered].filter((p) => base.startsWith(p.route + "/")).sort((a, b) => b.route.length - a.route.length)[0] ??
-    ordered.find((p) => p.route === firstRouteOf("observe")) ??
+    ordered.find((p) => p.route === overviewRoute) ??
     ordered[0];
 
   // Phase is DERIVED, never stored: the active page's phase, else the phase of the last
   // phased route we persisted (so footer pages like Settings keep the current phase and
-  // don't snap to Observe), else Observe.
+  // don't snap to Observe), else Observe. The toggle no longer renders in the rail, but
+  // pages keep their phase metadata, and it still gates the ActiveGemSwitcher below.
   const phase: Phase = active?.phase ?? phaseOf(readLastActive(routes)) ?? "observe";
 
-  // Persist the last phased route (for reload) and per-phase last route (for the switch).
-  // Footer visits (no phase) never overwrite it. Validation happens on read.
+  // Persist the last phased route (reload + the footer-stickiness above). Footer visits
+  // (no phase) never overwrite it. Validation happens on read.
   useEffect(() => {
     if (!active?.phase) return;
     try {
       localStorage.setItem(LS_ACTIVE, active.route);
-      const parsed: unknown = JSON.parse(localStorage.getItem(LS_ROUTE) ?? "{}");
-      const map = (parsed && typeof parsed === "object" ? parsed : {}) as Record<string, string>;
-      map[active.phase] = active.route;
-      localStorage.setItem(LS_ROUTE, JSON.stringify(map));
     } catch {
       /* storage unavailable — nav still works, just no memory */
     }
   }, [active?.route, active?.phase]);
-
-  const goPhase = (target: Phase) => {
-    if (target === phase) return;
-    const dest = readLastRoute(routes)[target] ?? firstRouteOf(target);
-    if (dest) window.location.hash = dest;
-  };
 
   // Render the active page as a real element (not `active.component({...})`). Calling it
   // as a function inlines the page's hooks into Shell's own hook list, so switching pages
   // changes Shell's hook count and React throws "rendered fewer hooks than expected". An
   // element gives each page its own fiber.
   const ActivePage = active?.component;
-  const groups = phaseGroups(pages, phase);
+  const { foreground, groups } = railModel(pages, home.unlocked);
   const footer = footerPages(pages);
 
-  const selectedPhaseIdx = PHASES.findIndex((p) => p.id === phase);
-  const roving = useRovingTabIndex({
-    count: PHASES.length,
-    selectedIndex: selectedPhaseIdx,
-    onSelect: (i) => goPhase(PHASES[i].id),
-  });
+  // Collapsed by default (progressive disclosure); persisted per group key so a reload
+  // doesn't re-collapse a group the user opened.
+  const [expanded, setExpanded] = useState<Record<string, boolean>>(() => loadGroupState());
+  useEffect(() => { saveGroupState(expanded); }, [expanded]);
+  const toggleGroup = (key: string) => setExpanded((e) => ({ ...e, [key]: !e[key] }));
+
+  // "Show everything" (footer, locked-only): unlock AND expand every group that will
+  // exist once unlocked, so the reveal doesn't leave the user looking at closed headers.
+  // railModel(pages, true) computes that full set regardless of the current lock state.
+  const showEverything = () => {
+    const unlockedGroups = railModel(pages, true).groups;
+    setExpanded((e) => {
+      const next = { ...e };
+      for (const g of unlockedGroups) next[g.key] = true;
+      return next;
+    });
+    home.setUnlocked(true);
+  };
 
   const item = (p: ConsolePage) => (
     <button
@@ -172,36 +155,32 @@ export function Shell({ pages, apiBase }: { pages: ConsolePage[]; apiBase: strin
             AgentGem
           </div>
           <WarmingPill apiBase={apiBase} />
-          <div className="console-phase-switch" role="radiogroup" aria-label="Phase" {...roving.containerProps}>
-            {PHASES.map((p, i) => (
-              <button
-                key={p.id}
-                type="button"
-                role="radio"
-                data-short={p.label[0]}
-                aria-label={p.label}
-                aria-checked={p.id === phase}
-                className={"console-phase-btn" + (p.id === phase ? " is-active" : "")}
-                {...roving.getTabProps(i)}
-                onClick={() => goPhase(p.id)}
-              >
-                {p.label}
-                {p.id === "build" && reviewUnread > 0 && phase !== "build" && (
-                  <span className="console-phase-btn__unread" aria-label={`${reviewUnread} unread review${reviewUnread === 1 ? "" : "s"}`}>
-                    {reviewUnread}
-                  </span>
-                )}
-              </button>
-            ))}
-          </div>
           {phase === "build" ? <ActiveGemSwitcher apiBase={apiBase} /> : null}
+          {foreground.map(item)}
           {groups.map((g) => (
-            <div key={g.category} className="console-group">
-              <div className="console-group-label">{CATEGORY_LABEL[g.category]}</div>
-              {g.pages.map(item)}
+            <div key={g.key} className="console-rail-group">
+              <button
+                type="button"
+                className="console-rail-group-header"
+                aria-expanded={expanded[g.key] === true}
+                onClick={() => toggleGroup(g.key)}
+              >
+                <span className="console-rail-group-caret" aria-hidden="true">{expanded[g.key] ? "▾" : "▸"}</span>
+                {g.label}
+              </button>
+              {expanded[g.key] && g.pages.map(item)}
             </div>
           ))}
-          <div className="console-footer"><ActivityMenu />{footer.map(item)}<IdentityChip apiBase={apiBase} /></div>
+          <div className="console-footer">
+            <ActivityMenu />
+            {!home.unlocked && (
+              <button type="button" className="console-show-everything" onClick={showEverything}>
+                Show everything
+              </button>
+            )}
+            {footer.map(item)}
+            <IdentityChip apiBase={apiBase} />
+          </div>
         </nav>
         <main className={"console-main" + (active?.fullWidth ? " console-main--wide" : "")}>{ActivePage ? <ActivePage apiBase={apiBase} /> : null}</main>
         <NotificationsProvider apiBase={apiBase} />

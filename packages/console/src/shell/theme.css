@@ -111,10 +111,9 @@ body::before {
 .console.is-rail .console-collapse { font-size: 13px; }
 .console.is-rail .console-nav-item { justify-content: center; padding-left: 0; padding-right: 0; font-size: 0; gap: 0; }
 .console.is-rail .console-nav-icon { font-size: 15px; width: auto; }
-.console.is-rail .console-group-label { display: none; }
+.console.is-rail .console-rail-group-header { display: none; }
 .console.is-rail .console-switcher { display: none; }         /* ActiveGemSwitcher — widen to use */
-.console.is-rail .console-phase-btn { font-size: 0; }
-.console.is-rail .console-phase-btn::before { content: attr(data-short); font-size: 12px; font-weight: 600; }
+.console.is-rail .console-show-everything { display: none; }
 /* Footer chips shed their text in the rail: the identity chip keeps just its
    avatar, and the warming pill collapses to a single accent dot (it only shows
    while precompute is running, so the dot is enough of a signal). */
@@ -200,34 +199,28 @@ body::before {
 }
 .console.is-rail .nav-badge { display: none; }
 
-/* Phase switch — segmented control (Observe | Build) at the top of the rail. Reuses
-   the paper/terracotta pill language of the active-gem switcher. */
-.console-phase-switch {
-  display: flex; gap: 3px; padding: 3px; margin-bottom: 10px;
-  background: var(--paper-2); border: 1px solid var(--line); border-radius: 8px;
+/* Disclosure-group headers in the cold-console rail (Make/Evidence/Background/Power
+   tools) — a collapsible section header, not the old plain artifact-category label:
+   a hairline separator (::after) and a caret that flips on expand. */
+.console-rail-group { display: contents; }
+.console-rail-group-header {
+  display: flex; align-items: center; gap: 8px; width: 100%; margin: 14px 0 4px;
+  padding: 0; border: 0; background: none; cursor: pointer;
+  font: 600 14px/1.4 var(--font-ui); text-transform: uppercase; letter-spacing: .1em;
+  color: var(--muted); transition: color .15s ease;
 }
-.console-phase-btn {
-  position: relative;
-  flex: 1; min-height: 30px; padding: 7px 10px; border: 0; border-radius: 6px;
-  background: transparent; color: var(--muted); cursor: pointer;
-  font: 600 12px/1 var(--font-ui); letter-spacing: .01em;
-  transition: background .15s ease, color .15s ease;
+.console-rail-group-header:hover { color: var(--ink-soft); }
+.console-rail-group-header::after { content: ""; flex: 1; height: 1px; background: var(--line-soft); }
+.console-rail-group-caret { font-size: 10px; line-height: 1; opacity: .8; }
+/* Footer CTA (locked-only): expands every group and unlocks the console. Reuses the
+   nav-item look so it reads as part of the rail, not a separate widget. */
+.console-show-everything {
+  display: flex; align-items: center; width: 100%; margin-bottom: 4px;
+  background: none; border: 0; text-align: left; padding: 9px 11px; border-radius: 7px;
+  color: var(--accent); cursor: pointer; font: 600 13.5px/1 var(--font-ui);
+  transition: background .16s ease;
 }
-.console-phase-btn:hover { color: var(--ink-soft); }
-.console-phase-btn.is-active {
-  background: var(--raised); color: var(--accent);
-  box-shadow: 0 1px 2px rgba(60, 44, 20, .12);
-}
-.console-phase-btn:focus-visible { outline: none; box-shadow: var(--ring); }
-/* Cross-phase signal on the Build switcher (e.g. an unread review) — visible from Observe,
-   where the Reviews nav item (and its own badge) isn't mounted to poll/show it. */
-.console-phase-btn__unread {
-  position: absolute; top: 2px; right: 4px;
-  min-width: 14px; height: 14px; padding: 0 3px; text-align: center;
-  font: 700 9px/14px var(--font-ui); font-feature-settings: "tnum";
-  color: #fff; background: var(--accent); border-radius: 999px;
-}
-.console-group { display: contents; }
+.console-show-everything:hover { background: rgba(154, 51, 36, .06); }
 
 /* Gems screen tab bar (Yours | Received | Get more) — sub-routed tabs. */
 /* Shared deep-linkable tab bar (Gems, Setup) — see useSubRouteTabs. */
@@ -293,9 +286,6 @@ body::before {
 .console-switcher-item:hover .console-switcher-meta { background: rgba(154, 51, 36, .12); color: var(--accent); }
 .console-switcher-item.is-action { color: var(--ink-soft); font-weight: 600; }
 .console-switcher-sep { height: 1px; margin: 5px 4px; background: var(--line-soft); }
-.console-group-label { margin: 14px 8px 4px; font: 700 10px/1 var(--font-ui);
-  text-transform: uppercase; letter-spacing: .16em; color: var(--muted); }
-.console-group-label:first-of-type { margin-top: 6px; }
 .console-footer { margin-top: auto; padding-top: 8px; border-top: 1px solid var(--line-soft); }
 
 .console-main { padding: 30px 36px 56px; max-width: 1100px; animation: fade .5s ease both; }

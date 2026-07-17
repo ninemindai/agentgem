@@ -6,11 +6,11 @@ export const REVIEW_POLL_MS = 45_000;
 
 interface ReviewRequestSummary { unread: boolean }
 
-// Drives the review-unread signal: the count pill on the Reviews nav item AND (lifted
-// into Shell) the cross-phase indicator on the Build phase switcher, so the signal is
-// visible even while the user is in Observe. Polls the inbox on mount + every
-// REVIEW_POLL_MS, following the NotificationsProvider setInterval/alive idiom.
-// Best-effort: a failed poll just leaves the last count in place.
+// Drives the review-unread signal: the count pill on the Reviews nav item (via
+// ConsolePage.badge below). Used to also feed a cross-phase indicator on Shell's now-
+// retired phase switcher; that's gone, so this pill is the signal's only home. Polls
+// the inbox on mount + every REVIEW_POLL_MS, following the NotificationsProvider
+// setInterval/alive idiom. Best-effort: a failed poll just leaves the last count in place.
 export function useReviewUnread(apiBase: string): number {
   const [count, setCount] = useState(0);
 
