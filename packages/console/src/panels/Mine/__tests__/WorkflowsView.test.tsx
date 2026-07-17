@@ -4,8 +4,24 @@ import { render, screen, fireEvent, cleanup } from "@testing-library/react";
 afterEach(cleanup);
 import { WorkflowsView } from "../WorkflowsView.js";
 import type { ScorecardStreamEvent } from "../scorecardStream.js";
-import type { Scorecard } from "../../../api/routes.js";
+import type { Scorecard, Inventory, Usage } from "../../../api/routes.js";
+import * as routes from "../../../api/routes.js";
 import * as rubricShortcuts from "../../../rubricShortcuts.js";
+
+const EMPTY_INVENTORY: Inventory = { skills: [], subagents: [], mcpServers: [], instructions: [], hooks: [], rubrics: [] };
+const EMPTY_USAGE: Usage = { artifacts: [] };
+
+// Every WorkflowsView render now also fetches inventory + usage + miniapps
+// (composed client-side alongside the scorecard's workflows). Default them to
+// empty so tests that don't care about the extra sources see the same behavior
+// as before; tests that DO care override the mock per-test.
+function stubUnifiedSources(overrides: { inventory?: Inventory; usage?: Usage; miniapps?: { name: string; title: string; genre: string }[] } = {}) {
+  vi.spyOn(routes.inventoryRoute, "call").mockResolvedValue(overrides.inventory ?? EMPTY_INVENTORY);
+  vi.spyOn(routes.usageRoute, "call").mockResolvedValue(overrides.usage ?? EMPTY_USAGE);
+  vi.spyOn(routes.playMiniappsRoute, "call").mockResolvedValue({
+    miniapps: (overrides.miniapps ?? []).map((m) => ({ ...m, needs: [] })),
+  });
+}
 
 const FAKE_SCORECARD: Scorecard = {
   breadth: 10, battleTested: 5, portable: 3,
@@ -44,8 +60,8 @@ function syncStream(events: ScorecardStreamEvent[]) {
 
 describe("WorkflowsView", () => {
   const ORIGINAL_HASH = window.location.hash;
-  beforeEach(() => { window.location.hash = ""; });
-  afterEach(() => { window.location.hash = ORIGINAL_HASH; });
+  beforeEach(() => { window.location.hash = ""; stubUnifiedSources(); });
+  afterEach(() => { window.location.hash = ORIGINAL_HASH; vi.restoreAllMocks(); });
 
   it("shows the scoring skeleton before any event", () => {
     render(<WorkflowsView apiBase="http://localhost:0" scope="*" openStream={silentStream} />);
@@ -161,11 +177,37 @@ describe("WorkflowsView", () => {
     expect(value.getAttribute("aria-pressed")).toBe("true");
   });
 
-  it("does not render Type or Maturity segments in PR-1", () => {
+  it("renders all three Group by segments (Value/Type/Maturity)", () => {
     const stream = syncStream([{ type: "done", scorecard: SCORECARD_WITH_WORKFLOWS, cached: false, updatedAt: null }]);
     render(<WorkflowsView apiBase="http://localhost:0" scope="*" openStream={stream} />);
-    expect(screen.queryByRole("button", { name: /^type$/i })).toBeNull();
-    expect(screen.queryByRole("button", { name: /^maturity$/i })).toBeNull();
+    expect(screen.getByRole("button", { name: "Value" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Type" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Maturity" })).toBeTruthy();
+  });
+
+  it("clicking Type sets ?group=type and re-groups the unified set by type", async () => {
+    stubUnifiedSources({
+      inventory: { ...EMPTY_INVENTORY, skills: [{ name: "pdf-skill" }] },
+      usage: { artifacts: [{ type: "skill", name: "pdf-skill", invocations: 2, lastUsedMs: 10 }] },
+    });
+    const stream = syncStream([{ type: "done", scorecard: SCORECARD_WITH_WORKFLOWS, cached: false, updatedAt: null }]);
+    render(<WorkflowsView apiBase="http://localhost:0" scope="*" openStream={stream} />);
+    // The unified-sources fetch is async; wait for the skill gem to fold in before switching axes.
+    await screen.findByText("pdf-skill");
+
+    fireEvent.click(screen.getByRole("button", { name: "Type" }));
+
+    expect(window.location.hash).toContain("group=type");
+    expect(screen.getByText("Workflows")).toBeTruthy();
+    expect(screen.getByText("Skills")).toBeTruthy();
+  });
+
+  it("Mine is not empty when only inventory/miniapps are present (no workflows)", async () => {
+    stubUnifiedSources({ miniapps: [{ name: "wordle-clone", title: "Wordle Clone", genre: "puzzle" }] });
+    const stream = syncStream([{ type: "done", scorecard: EMPTY_SCORECARD, cached: false, updatedAt: null }]);
+    render(<WorkflowsView apiBase="http://localhost:0" scope="*" openStream={stream} />);
+    expect(await screen.findByText("wordle-clone")).toBeTruthy();
+    expect(screen.queryByText(/no gems mined here yet/i)).toBeNull();
   });
 
   it("does not render the Group by switcher in the empty doorway state", () => {
