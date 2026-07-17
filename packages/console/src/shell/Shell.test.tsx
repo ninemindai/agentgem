@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, afterEach } from "vitest";
 import { useState } from "react";
-import { render, screen, cleanup, fireEvent, act, within, waitFor } from "@testing-library/react";
+import { render, screen, cleanup, fireEvent, act, waitFor } from "@testing-library/react";
 import { Shell } from "./Shell.js";
 import { defineConsolePage, type ConsolePage } from "../registry.js";
 import { setKeys, setName, resetGem } from "../activeGem.js";
@@ -24,13 +24,19 @@ const p = (o: P): ConsolePage =>
     ...o,
   } as ConsolePage);
 
-// A small two-phase registry used by most tests.
+// Mirrors the shape of the real registry (see pages.tsx / pages.test.ts): three
+// always-visible foreground pages (no group), one grouped-and-gated page per
+// disclosure group, a hidden (never-in-rail) page, and a footer page.
 const pages = [
-  p({ id: "overview", phase: "observe", category: "usage", order: 10 }), // Usage leads Observe
-  p({ id: "watch", phase: "observe", category: "sessions", order: 10 }),
-  p({ id: "rubrics", phase: "observe", category: "setup", order: 10 }), // Configuration, last
+  p({ id: "overview", phase: "observe", category: "usage", order: 10 }),
   p({ id: "curate", phase: "build", category: "setup", order: 10 }),
-  p({ id: "deploy", phase: "build", category: "projects", order: 10, requiresGem: true }),
+  p({ id: "gems", phase: "build", category: "setup", order: 20 }),
+  p({ id: "deploy", phase: "build", category: "projects", order: 10, group: "make", hiddenUntilUnlock: true, requiresGem: true }),
+  p({ id: "rubrics", phase: "observe", category: "setup", order: 10, group: "evidence", hiddenUntilUnlock: true }),
+  p({ id: "watch", phase: "observe", category: "sessions", order: 10, group: "background", hiddenUntilUnlock: true }),
+  p({ id: "optimize", phase: "observe", category: "projects", order: 20, group: "background", hiddenUntilUnlock: true }),
+  p({ id: "reviews", phase: "build", category: "projects", order: 40, group: "power", hiddenUntilUnlock: true }),
+  p({ id: "publish", phase: "build", category: "projects", order: 30, hidden: true }),
   p({ id: "settings", footer: true }),
 ];
 
@@ -40,65 +46,53 @@ const goHash = (h: string) =>
     window.dispatchEvent(new HashChangeEvent("hashchange"));
   });
 
-describe("Shell — phase-primary nav", () => {
-  it("defaults to the Observe phase and renders its first panel", () => {
+// Home-state mocks: the hook (useHomeState) fetches GET /api/home/state on mount and
+// POSTs one-way through setHomeStateRoute. Tests that care about unlock state mock
+// homeStateRoute.call; tests that don't leave it unmocked (the real fetch fails
+// against no server, same "degrades to the locked default" pattern as the identity
+// chip tests below) — that default is exactly what most of these tests want anyway,
+// since foreground pages render regardless of lock state.
+const mockHomeState = (state: Partial<routes.HomeState>) =>
+  vi.spyOn(routes.homeStateRoute, "call").mockResolvedValue({
+    unlocked: false, existingUser: false, revealSeen: false, ...state,
+  } as never);
+
+describe("Shell — route resolution + foreground nav", () => {
+  it("renders the Overview panel by default", () => {
     render(<Shell pages={pages} apiBase="" />);
     expect(screen.getByText("panel-overview")).toBeTruthy();
-    expect(screen.getByRole("radio", { name: "Observe" }).getAttribute("aria-checked")).toBe("true");
   });
 
-  it("renders artifact category labels for the active phase", () => {
+  // (a) REGRESSION: default/unknown hash lands on Overview, not "first page of some
+  // implicit phase order" (the retired firstRouteOf("observe") semantics).
+  it("(a) an empty or unknown hash falls back to the Overview route", () => {
+    window.location.hash = "#/this-route-does-not-exist";
     render(<Shell pages={pages} apiBase="" />);
-    expect(screen.getByText("Configuration")).toBeTruthy();
-    expect(screen.getByText("Sessions")).toBeTruthy();
-    // Build-only categories are not shown while in Observe
-    expect(screen.queryByText("Projects")).toBeNull();
+    expect(screen.getByText("panel-overview")).toBeTruthy();
   });
 
-  it("only shows the active phase's pages", () => {
-    render(<Shell pages={pages} apiBase="" />);
-    expect(screen.getByRole("button", { name: "watch" })).toBeTruthy();
-    expect(screen.queryByRole("button", { name: "curate" })).toBeNull();
+  // (b) REGRESSION: hiddenUntilUnlock / hidden pages stay reachable by direct hash
+  // even though they never render in the rail while locked.
+  it("(b) deep links to optimize/watch/publish resolve to their panels while hidden from the rail", () => {
+    for (const id of ["optimize", "watch", "publish"]) {
+      window.location.hash = `#/${id}`;
+      const { unmount } = render(<Shell pages={pages} apiBase="" />);
+      expect(screen.getByText(`panel-${id}`)).toBeTruthy();
+      expect(screen.queryByRole("button", { name: id })).toBeNull();
+      unmount();
+    }
   });
 
-  it("switching to Build shows Build pages and navigates to the first one", () => {
+  it("navigates when a foreground nav button is clicked", () => {
     render(<Shell pages={pages} apiBase="" />);
-    act(() => { fireEvent.click(screen.getByRole("radio", { name: "Build" })); });
+    fireEvent.click(screen.getByRole("button", { name: "curate" }));
     expect(window.location.hash).toBe("#/curate");
-    goHash("#/curate");
-    expect(screen.getByRole("button", { name: "curate" })).toBeTruthy();
-    expect(screen.queryByRole("button", { name: "watch" })).toBeNull();
   });
 
-  it("derives the phase from the route: deep-linking a Build route opens in Build", () => {
-    window.location.hash = "#/deploy";
+  it("resolves a drill-down sub-route via longest-prefix match", () => {
+    window.location.hash = "#/overview/claude/abc-123";
     render(<Shell pages={pages} apiBase="" />);
-    expect(screen.getByRole("radio", { name: "Build" }).getAttribute("aria-checked")).toBe("true");
-    expect(screen.getByText("panel-deploy")).toBeTruthy();
-  });
-
-  it("footer Settings keeps the current phase (does not snap to Observe)", () => {
-    window.location.hash = "#/deploy"; // Build
-    render(<Shell pages={pages} apiBase="" />);
-    goHash("#/settings");
-    // Sidebar stays in Build even though Settings has no phase
-    expect(screen.getByRole("radio", { name: "Build" }).getAttribute("aria-checked")).toBe("true");
-    expect(screen.getByText("panel-settings")).toBeTruthy();
-  });
-
-  it("remembers the last screen per phase across a switch", () => {
-    const multi = [
-      p({ id: "overview", phase: "observe", category: "setup", order: 10 }),
-      p({ id: "curate", phase: "build", category: "setup", order: 10 }),
-      p({ id: "deploy", phase: "build", category: "projects", order: 20 }),
-    ];
-    window.location.hash = "#/deploy"; // land in Build on deploy
-    render(<Shell pages={multi} apiBase="" />);
-    // switch to Observe, then back to Build → should restore #/deploy, not the first build page
-    act(() => { fireEvent.click(screen.getByRole("radio", { name: "Observe" })); });
-    goHash(window.location.hash);
-    act(() => { fireEvent.click(screen.getByRole("radio", { name: "Build" })); });
-    expect(window.location.hash).toBe("#/deploy");
+    expect(screen.getByText("panel-overview")).toBeTruthy();
   });
 
   it("normalizes a legacy route on cold start (#/your-gems → #/gems)", () => {
@@ -112,18 +106,6 @@ describe("Shell — phase-primary nav", () => {
     expect(screen.getByText("panel-gems")).toBeTruthy();
   });
 
-  it("navigates when a nav button is clicked", () => {
-    render(<Shell pages={pages} apiBase="" />);
-    fireEvent.click(screen.getByRole("button", { name: "watch" }));
-    expect(window.location.hash).toBe("#/watch");
-  });
-
-  it("resolves a drill-down sub-route via longest-prefix match", () => {
-    window.location.hash = "#/overview/claude/abc-123";
-    render(<Shell pages={pages} apiBase="" />);
-    expect(screen.getByText("panel-overview")).toBeTruthy();
-  });
-
   it("isolates page hooks across different hook counts", () => {
     const Hooky = () => { useState(0); useState(0); return <p>hooky</p>; };
     const hookPages = [
@@ -135,38 +117,72 @@ describe("Shell — phase-primary nav", () => {
     goHash("#/b");
     expect(screen.getByText("panel-b")).toBeTruthy();
   });
+});
 
-  it("dims a requiresGem stage until a gem is active", () => {
-    window.location.hash = "#/curate"; // Build phase so the gem-scoped stage shows
-    const { rerender } = render(<Shell pages={pages} apiBase="" />);
-    expect(screen.getByText("deploy").classList.contains("is-locked")).toBe(true);
-    act(() => { setKeys(new Set(["x"])); });
-    rerender(<Shell pages={pages} apiBase="" />);
-    expect(screen.getByText("deploy").classList.contains("is-locked")).toBe(false);
+describe("Shell — grouped rail (cold console)", () => {
+  // (d) REGRESSION: locked rail shows exactly the foreground pages + footer.
+  it("(d) locked rail shows exactly the foreground pages, no group headers, plus the footer and Show everything", () => {
+    render(<Shell pages={pages} apiBase="" />);
+    expect(screen.getByRole("button", { name: "overview" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "curate" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "gems" })).toBeTruthy();
+    for (const label of ["Make", "Evidence", "Background", "Power tools"]) {
+      expect(screen.queryByText(label)).toBeNull();
+    }
+    expect(screen.queryByRole("button", { name: "deploy" })).toBeNull();
+    expect(screen.getByRole("button", { name: "settings" })).toBeTruthy();
+    expect(screen.getByText("Show everything")).toBeTruthy();
   });
 
-  it("shows the active-gem switcher only in the Build phase", () => {
-    render(<Shell pages={pages} apiBase="" />); // Observe
-    expect(screen.queryByText("New Gem")).toBeNull();
-    goHash("#/curate"); // Build
-    expect(screen.getByText("New Gem")).toBeTruthy();
+  // (e) REGRESSION: unlocked rail shows the four disclosure-group headers.
+  it("(e) unlocked rail shows the four groups and drops Show everything", async () => {
+    mockHomeState({ unlocked: true });
+    render(<Shell pages={pages} apiBase="" />);
+    expect(await screen.findByText("Make")).toBeTruthy();
+    expect(screen.getByText("Evidence")).toBeTruthy();
+    expect(screen.getByText("Background")).toBeTruthy();
+    expect(screen.getByText("Power tools")).toBeTruthy();
+    expect(screen.queryByText("Show everything")).toBeNull();
   });
 
-  it("shows the active gem name in the switcher when set (Build phase)", () => {
-    setName("My Gem"); setKeys(new Set(["a"]));
+  // (c) REGRESSION: requiresGem dimming still applies once a grouped page is
+  // visible (unlocked + expanded), composing with the disclosure groups.
+  it("(c) requiresGem still dims a grouped page post-unlock, until a gem is active", async () => {
+    mockHomeState({ unlocked: true });
     window.location.hash = "#/curate";
     render(<Shell pages={pages} apiBase="" />);
-    expect(screen.getByText("My Gem")).toBeTruthy();
+    fireEvent.click(await screen.findByText("Make")); // expand to reveal deploy
+    const deployBtn = () => screen.getByRole("button", { name: "deploy" });
+    expect(deployBtn().classList.contains("is-locked")).toBe(true);
+    act(() => { setKeys(new Set(["x"])); });
+    expect(deployBtn().classList.contains("is-locked")).toBe(false);
   });
 
-  it("renders the report-activity menu in the footer", () => {
+  // (f) REGRESSION: Show everything unlocks (POST fires) and expands every group.
+  it("(f) Show everything unlocks the console and expands every group", async () => {
+    mockHomeState({ unlocked: false });
+    const setSpy = vi.spyOn(routes.setHomeStateRoute, "call").mockResolvedValue({
+      unlocked: true, existingUser: false, revealSeen: false,
+    } as never);
     render(<Shell pages={pages} apiBase="" />);
-    expect(screen.getByRole("button", { name: /report activity/i })).toBeTruthy();
+    fireEvent.click(await screen.findByText("Show everything"));
+    expect(setSpy).toHaveBeenCalledWith(expect.anything(), { body: { unlocked: true } });
+    await waitFor(() => expect(screen.getByText("Make")).toBeTruthy());
+    // Expanded immediately alongside the unlock — no extra click needed to see deploy.
+    expect(screen.getByRole("button", { name: "deploy" })).toBeTruthy();
   });
 
-  it("renders the identity chip in the footer, unbound when the daemon is unreachable", async () => {
+  // (g) REGRESSION: per-group expansion persists across a remount via localStorage.
+  it("(g) group expansion persists across remount", async () => {
+    mockHomeState({ unlocked: true });
+    const { unmount } = render(<Shell pages={pages} apiBase="" />);
+    fireEvent.click(await screen.findByText("Make"));
+    expect(screen.getByRole("button", { name: "deploy" })).toBeTruthy();
+    unmount();
+
     render(<Shell pages={pages} apiBase="" />);
-    expect(await screen.findByRole("button", { name: /sign in/i })).toBeTruthy();
+    await screen.findByText("Make");
+    expect(screen.getByRole("button", { name: "deploy" })).toBeTruthy();
   });
 });
 
@@ -190,46 +206,54 @@ describe("Shell — collapsible sidebar", () => {
   });
 });
 
+describe("Shell — active-gem switcher (build phase)", () => {
+  it("shows the active-gem switcher only on Build-phase routes", () => {
+    render(<Shell pages={pages} apiBase="" />); // Overview — Observe
+    expect(screen.queryByText("New Gem")).toBeNull();
+    goHash("#/curate"); // Build
+    expect(screen.getByText("New Gem")).toBeTruthy();
+  });
+
+  it("shows the active gem name in the switcher when set (Build phase)", () => {
+    setName("My Gem"); setKeys(new Set(["a"]));
+    window.location.hash = "#/curate";
+    render(<Shell pages={pages} apiBase="" />);
+    expect(screen.getByText("My Gem")).toBeTruthy();
+  });
+
+  it("footer Settings keeps the Build-phase switcher visible (does not snap to Observe)", () => {
+    window.location.hash = "#/curate"; // Build
+    render(<Shell pages={pages} apiBase="" />);
+    goHash("#/settings");
+    expect(screen.getByText("New Gem")).toBeTruthy();
+  });
+});
+
+describe("Shell — footer + identity", () => {
+  it("renders the report-activity menu in the footer", () => {
+    render(<Shell pages={pages} apiBase="" />);
+    expect(screen.getByRole("button", { name: /report activity/i })).toBeTruthy();
+  });
+
+  it("renders the identity chip in the footer, unbound when the daemon is unreachable", async () => {
+    render(<Shell pages={pages} apiBase="" />);
+    expect(await screen.findByRole("button", { name: /sign in/i })).toBeTruthy();
+  });
+});
+
 describe("Shell — nav item badge slot", () => {
   const badged = p({
-    id: "reviews", title: "Reviews", phase: "build", category: "projects", order: 20,
+    id: "reviewsbadge", title: "Reviews", phase: "build", category: "projects", order: 20,
     badge: (apiBase) => <span>badge-for-{apiBase || "root"}</span>,
   });
   it("renders a page's badge render-prop next to its title, passing apiBase through", () => {
     render(<Shell pages={[...pages, badged]} apiBase="root" />);
-    goHash("#/reviews");
+    goHash("#/reviewsbadge");
     expect(screen.getByText("badge-for-root")).toBeTruthy();
   });
   it("renders nothing extra for pages without a badge", () => {
     render(<Shell pages={pages} apiBase="" />);
     expect(screen.queryByText(/badge-for-/)).toBeNull();
-  });
-});
-
-describe("Shell — cross-phase review unread signal", () => {
-  it("shows an unread indicator on the Build phase button even while Observe is active", async () => {
-    vi.spyOn(routes.reviewInboxRoute, "call").mockResolvedValue({
-      requests: [{ id: "1", unread: true }, { id: "2", unread: true }, { id: "3", unread: false }],
-    } as never);
-
-    render(<Shell pages={pages} apiBase="" />); // defaults to Observe
-    expect(screen.getByRole("radio", { name: "Observe" }).getAttribute("aria-checked")).toBe("true");
-
-    const build = screen.getByRole("radio", { name: "Build" });
-    expect(await within(build).findByText("2")).toBeTruthy();
-  });
-
-  it("does not show the indicator once Build is the active phase", async () => {
-    const inbox = vi.spyOn(routes.reviewInboxRoute, "call").mockResolvedValue({
-      requests: [{ id: "1", unread: true }],
-    } as never);
-
-    window.location.hash = "#/curate"; // Build
-    render(<Shell pages={pages} apiBase="" />);
-
-    const build = await screen.findByRole("radio", { name: "Build" });
-    await waitFor(() => expect(inbox).toHaveBeenCalled());
-    expect(within(build).queryByText("1")).toBeNull();
   });
 });
 
