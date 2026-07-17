@@ -288,6 +288,36 @@ body::before {
 .console-switcher-sep { height: 1px; margin: 5px 4px; background: var(--line-soft); }
 .console-footer { margin-top: auto; padding-top: 8px; border-top: 1px solid var(--line-soft); }
 
+/* Rail-footer status line — composes warm cache + dream pass into one line above
+   the footer pages (Settings/Memory). Reuses the nav-item look (rise-in aside, since
+   it's not a static ConsolePage) and the existing `pulse` opacity keyframe (line 504)
+   for the "active" dot — never animates color. */
+.bg-status { margin-bottom: 2px; }
+.bg-status-toggle {
+  display: flex; align-items: center; gap: 10px; width: 100%;
+  background: none; border: 0; text-align: left; padding: 9px 11px; border-radius: 7px;
+  color: var(--ink-soft); cursor: pointer; font: 500 13px/1.3 var(--font-ui); letter-spacing: .005em;
+  transition: background .16s ease, color .16s ease;
+}
+.bg-status-toggle:hover { background: rgba(154, 51, 36, .06); color: var(--ink); }
+.bg-status-dot { width: 8px; height: 8px; border-radius: 50%; flex: 0 0 auto; background: var(--muted); opacity: .5; }
+.bg-status[data-mode="active"] .bg-status-dot { background: var(--accent); opacity: 1; animation: pulse 1.4s ease-in-out infinite; }
+.bg-status[data-mode="off"] .bg-status-dot { opacity: .3; }
+@media (prefers-reduced-motion: reduce) { .bg-status[data-mode="active"] .bg-status-dot { animation: none; } }
+.bg-status-label { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.bg-status-caret { font-size: 10px; line-height: 1; opacity: .8; }
+.bg-status-jobs { list-style: none; margin: 0 0 6px; padding: 0; display: flex; flex-direction: column; gap: 2px; }
+.bg-status-job {
+  display: block; width: 100%; text-align: left; background: none; border: 0; cursor: pointer;
+  padding: 6px 11px 6px 27px; border-radius: 6px; color: var(--ink-soft); font: 500 12.5px/1.3 var(--font-ui);
+  transition: background .13s ease, color .13s ease;
+}
+.bg-status-job:hover { background: rgba(154, 51, 36, .06); color: var(--ink); }
+.bg-status-empty { margin: 0 0 6px; padding: 4px 11px 6px 27px; color: var(--ink-soft); font-size: 12.5px; font-style: italic; }
+.console.is-rail .bg-status-label, .console.is-rail .bg-status-caret { display: none; }
+.console.is-rail .bg-status-toggle { justify-content: center; gap: 0; padding-left: 0; padding-right: 0; }
+.console.is-rail .bg-status-jobs, .console.is-rail .bg-status-empty { display: none; }
+
 .console-main { padding: 30px 36px 56px; max-width: 1100px; animation: fade .5s ease both; }
 .console-main--wide { max-width: none; }
 

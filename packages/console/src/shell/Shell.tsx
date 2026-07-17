@@ -11,6 +11,9 @@ import { IdentityProvider } from "../identity/IdentityProvider.js";
 import { IdentityChip } from "../identity/IdentityChip.js";
 import { useSidebar } from "./sidebar.js";
 import { useHomeState } from "./useHomeState.js";
+import { useBackgroundJobs } from "./useBackgroundJobs.js";
+import { BackgroundStatusLine } from "./BackgroundStatusLine.js";
+import { ReviewInboxItem } from "./ReviewInboxItem.js";
 
 const LS_ACTIVE = "agentgem.console.lastActive"; // last phased route visited (drives ActiveGemSwitcher's phase gate on footer pages)
 const GROUPS_KEY = "agentgem.console.groups"; // per-disclosure-group expanded state
@@ -48,6 +51,7 @@ export function Shell({ pages, apiBase }: { pages: ConsolePage[]; apiBase: strin
   const hasGem = keys.size > 0;
   const sidebar = useSidebar();
   const home = useHomeState(apiBase);
+  const bg = useBackgroundJobs(apiBase);
   const [hash, setHash] = useState(() => normalizeHash(window.location.hash));
 
   // Route normalization lives in ONE place: legacy routes (#/your-gems, #/get-gems?…)
@@ -157,6 +161,7 @@ export function Shell({ pages, apiBase }: { pages: ConsolePage[]; apiBase: strin
           <WarmingPill apiBase={apiBase} />
           {phase === "build" ? <ActiveGemSwitcher apiBase={apiBase} /> : null}
           {foreground.map(item)}
+          <ReviewInboxItem count={bg.inboxCount} active={active?.route === "#/dreaming"} />
           {groups.map((g) => (
             <div key={g.key} className="console-rail-group">
               <button
@@ -172,6 +177,7 @@ export function Shell({ pages, apiBase }: { pages: ConsolePage[]; apiBase: strin
             </div>
           ))}
           <div className="console-footer">
+            <BackgroundStatusLine {...bg} />
             <ActivityMenu />
             {!home.unlocked && (
               <button type="button" className="console-show-everything" onClick={showEverything}>
