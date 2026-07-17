@@ -243,3 +243,31 @@ the <60s reveal budget; cap exists for a reason today.
 The reveal's subline labels the scope until this lands.
 
 **Depends on / blocked by:** P0 reveal (ships with the label); scorecard cache/incremental scan.
+
+## Server-side wedged-turn watchdog for chat sessions
+
+**What:** A core-side timeout in `ChatManager` that detects a turn whose agent
+`prompt()` never resolves (hung agent process) and force-fails it, releasing
+`running` so every client recovers without the user pressing Stop.
+
+**Why:** The Studio resume live-progress work (PR #469) makes a running turn
+visible and keeps Stop as the guaranteed recovery, and its degraded label admits
+when the server is unreachable — but a genuinely wedged agent still holds the
+chat's `busy` lock until a human intervenes. Both the eng review and the Codex
+outside-voice pass flagged this as the last remaining permanent-lock class.
+
+**Pros:** Closes the wedged-turn lock at the source; benefits every client
+(console today, any future tab/attach consumers), not just Studio.
+
+**Cons:** Touches `chatSession.ts`'s background-completion guarantee (R1) — the
+riskiest core code; timeout semantics need care because long turns are
+legitimate (a naive cap would recreate the old give-up bug server-side).
+
+**Context:** `packages/run/src/chatSession.ts:151-166` — `sendMessage` bridges
+`prompt()` push-callbacks into the event generator and awaits `settled`; a
+watchdog would race an inactivity timer (no delta/tool events for N minutes)
+against that promise, then dispose the handle so the `finally` at :171-173
+releases `running`. Land after PR #469's transcript-poll UX proves out.
+
+**Depends on / blocked by:** Nothing hard; sequence after the Studio resume
+live-progress implementation PR.
