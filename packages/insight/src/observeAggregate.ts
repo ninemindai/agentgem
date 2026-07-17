@@ -47,7 +47,7 @@ export interface ObservePayload {
   // Per-day usage series for charting. Each day holds only the top-6 names of each
   // dimension (bounded payload); same UTC-date axis as `daily`.
   usageDaily: { date: string; tools: Record<string, number>; skills: Record<string, number>; subagents: Record<string, number> }[];
-  // Token attribution over the UNCAPPED filtered set (the `sessions` array below is
+  // Token attribution over the UNCAPPED filtered set (the `sessions` array above is
   // recency-capped at 200 — deriving these client-side from it would silently
   // truncate). byProject is a PARTIAL-FILTER aggregate: agent/model/minMsgs apply,
   // the project filter does NOT — the Tokens-by-project card keeps its full ranking

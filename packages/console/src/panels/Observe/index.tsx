@@ -13,8 +13,8 @@ const VIEW_RANGES: ObserveRange[] = ["today", "7d", "30d", "all"];
 
 /** 4A + 3A: validated sessionStorage rehydration. Garbage, old-build values, or
  *  wrong types fall back to the defaults; a stale `project` passes through (the
- *  card's ✕ chip is the recovery affordance). Exported for tests. */
-export function loadObserveView(): { range: ObserveRange; filter: ObserveFilter } {
+ *  card's ✕ chip is the recovery affordance). */
+function loadObserveView(): { range: ObserveRange; filter: ObserveFilter } {
   const fallback: { range: ObserveRange; filter: ObserveFilter } = { range: "7d", filter: { minMsgs: 100 } };
   try {
     const raw = sessionStorage.getItem(VIEW_KEY);
