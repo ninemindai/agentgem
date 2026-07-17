@@ -184,6 +184,48 @@ describe("Shell — grouped rail (cold console)", () => {
     await screen.findByText("Make");
     expect(screen.getByRole("button", { name: "deploy" })).toBeTruthy();
   });
+
+  // (h) Task 8: a LIVE locked→unlocked transition (Show everything, same as (f))
+  // gets the unlock choreography — an entrance class on the newly-revealed group
+  // headers, and an aria-live announcement naming how many groups appeared. The
+  // fixture has exactly four disclosure groups, matching the brief's own example copy.
+  it("(h) Show everything triggers the unlock choreography: entrance class + aria-live announcement", async () => {
+    mockHomeState({ unlocked: false });
+    vi.spyOn(routes.setHomeStateRoute, "call").mockResolvedValue({
+      unlocked: true, existingUser: false, revealSeen: false,
+    } as never);
+    render(<Shell pages={pages} apiBase="" />);
+    fireEvent.click(await screen.findByText("Show everything"));
+    // Flush the setUnlocked promise via `act` rather than `waitFor`'s real-timer
+    // polling — `justUnlocked` self-clears after 260ms (real timer too), so a slow
+    // poll interval could otherwise race past the assertion window.
+    await act(async () => {});
+
+    expect(screen.getByText("Make")).toBeTruthy();
+    expect(screen.getByText("Make").closest("button")?.classList.contains("rail-enter")).toBe(true);
+    expect(screen.getByText("Console unlocked — 4 new groups.")).toBeTruthy();
+  });
+
+  // (i) Task 8 sweep item 5: a locally-cached "unlocked" render-hint shows the groups
+  // on the very first paint, ahead of the real fetch settling — and the server's
+  // answer always wins outright, correcting a stale hint back to locked.
+  it("(i) a cached unlocked hint renders groups before the fetch resolves; the server's answer corrects it", async () => {
+    localStorage.setItem("agentgem.console.homeState.hint", "unlocked");
+    let resolveFetch!: (v: routes.HomeState) => void;
+    const pending = new Promise<routes.HomeState>((r) => { resolveFetch = r; });
+    vi.spyOn(routes.homeStateRoute, "call").mockReturnValue(pending as never);
+
+    render(<Shell pages={pages} apiBase="" />);
+    // Hinted render — the real fetch hasn't resolved yet.
+    expect(screen.getByText("Make")).toBeTruthy();
+
+    await act(async () => {
+      resolveFetch({ unlocked: false, existingUser: false, revealSeen: false });
+      await pending;
+    });
+    // Server truth (locked) wins outright and corrects the hinted render.
+    expect(screen.queryByText("Make")).toBeNull();
+  });
 });
 
 describe("Shell — collapsible sidebar", () => {

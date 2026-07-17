@@ -1,4 +1,4 @@
-import { describe, it, expect, afterEach, vi } from "vitest";
+import { describe, it, expect, afterEach } from "vitest";
 import { render, screen, cleanup, fireEvent } from "@testing-library/react";
 import { BackgroundStatusLine } from "./BackgroundStatusLine.js";
 import type { BackgroundJobs } from "./useBackgroundJobs.js";
@@ -29,6 +29,25 @@ describe("BackgroundStatusLine", () => {
       { id: "dream", label: "Dreaming — DEEP", route: "#/dreaming" },
     ]} />);
     expect(screen.getByText("Working in the background: 2 jobs")).toBeTruthy();
+  });
+
+  // REGRESSION: the header count must reflect what the expanded list shows
+  // (jobs.length), not the running-only `count` tally — a finished-warm +
+  // running-dream mix has count=1 but jobs.length=2, and the header must say "2".
+  it("active: the header count matches jobs.length even when `count` only tallies running signals", () => {
+    render(<BackgroundStatusLine {...base} mode="active" count={1} jobs={[
+      { id: "warm", label: "Background caches warm", route: "#/optimize" },
+      { id: "dream", label: "Dreaming — DEEP", route: "#/dreaming" },
+    ]} />);
+    expect(screen.getByText("Working in the background: 2 jobs")).toBeTruthy();
+  });
+
+  // REGRESSION: singular "1 job", never "1 jobs".
+  it("active: pluralizes correctly for exactly one job", () => {
+    render(<BackgroundStatusLine {...base} mode="active" count={1} jobs={[
+      { id: "dream", label: "Dreaming — DEEP", route: "#/dreaming" },
+    ]} />);
+    expect(screen.getByText("Working in the background: 1 job")).toBeTruthy();
   });
 
   it("expand shows the job rows, and a row deep-links via the hash", () => {

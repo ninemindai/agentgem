@@ -212,6 +212,20 @@ body::before {
 .console-rail-group-header:hover { color: var(--ink-soft); }
 .console-rail-group-header::after { content: ""; flex: 1; height: 1px; background: var(--line-soft); }
 .console-rail-group-caret { font-size: 10px; line-height: 1; opacity: .8; }
+
+/* Unlock choreography (Task 8): the one-shot entrance for group headers/items the
+   instant the rail transitions locked → unlocked (post first-gem ceremony or "Show
+   everything") — reuses the existing `rise` keyframe (see below). Shell.tsx applies
+   this class only for the ~260ms transition window, so it never re-fires on a later
+   manual group expand/collapse. */
+.console-rail-group-header.rail-enter,
+.console-nav-item.rail-enter {
+  animation: rise .2s ease both;
+}
+@media (prefers-reduced-motion: reduce) {
+  .console-rail-group-header.rail-enter,
+  .console-nav-item.rail-enter { animation: none; }
+}
 /* Footer CTA (locked-only): expands every group and unlocks the console. Reuses the
    nav-item look so it reads as part of the rail, not a separate widget. */
 .console-show-everything {
@@ -1266,6 +1280,11 @@ body::before {
 .reveal-rule-1 { border: 0; border-top: 1px solid var(--line); margin: 4px 0 0; }
 
 .reveal-consent-text { font: 400 16px/1.55 var(--font-ui); color: var(--ink-soft); max-width: 560px; margin: 34px 0 22px; }
+
+/* Existing-user migration ceremony (Task 8): the one-time "here's what changed"
+   headline, above the same fetched-state body a returning visit would otherwise show. */
+.reveal-migration-headline { font: 400 26px/1.35 var(--font-display); font-optical-sizing: auto;
+  color: var(--ink); max-width: 640px; margin: 20px 0 0; }
 .reveal-cta { display: inline-block; font: 600 15px/1 var(--font-ui); color: #fff;
   background: linear-gradient(180deg, var(--accent-2), var(--accent)); border: 1px solid var(--accent);
   border-radius: var(--radius); padding: 13px 24px; cursor: pointer; box-shadow: var(--shadow-md);

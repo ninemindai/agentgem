@@ -98,6 +98,19 @@ describe("Reveal — ceremony (existing user)", () => {
     fireEvent.click(await screen.findByRole("button", { name: "Take me to my console" }));
     expect(onDismiss).toHaveBeenCalledTimes(1);
   });
+
+  it("renders the migration headline, but never in first-run mode", async () => {
+    vi.spyOn(routes.homeSummaryRoute, "call").mockResolvedValue(SUMMARY);
+    const openStream = doneStream(SCORECARD);
+    render(<Reveal apiBase="" mode="ceremony" onDismiss={() => {}} openStream={openStream} />);
+    expect(await screen.findByText(
+      "AgentGem has a new home screen — here's what your sessions add up to.",
+    )).toBeTruthy();
+
+    cleanup();
+    render(<Reveal apiBase="" mode="first-run" onDismiss={() => {}} openStream={openStream} />);
+    expect(screen.queryByText(/new home screen/)).toBeNull();
+  });
 });
 
 describe("Reveal — fire-gate branches", () => {

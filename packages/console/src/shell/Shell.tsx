@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { footerPages, railModel, sortedPages, normalizeHash, type ConsolePage, type Phase } from "../registry.js";
 import { ActiveGemSwitcher } from "./ActiveGemSwitcher.js";
 import { useActiveGem } from "../activeGem.js";
@@ -105,6 +105,28 @@ export function Shell({ pages, apiBase }: { pages: ConsolePage[]; apiBase: strin
   const { foreground, groups } = railModel(pages, home.unlocked);
   const footer = footerPages(pages);
 
+  // Unlock choreography (Task 8): a one-shot entrance + announcement the instant the
+  // rail actually transitions locked→unlocked (post first-gem ceremony or "Show
+  // everything") — never on the ordinary "was already unlocked, still loading its
+  // first fetch" cold-start settle. `prevUnlockedRef` starts at `null` (not yet
+  // observed); the first post-settle value is just recorded, not treated as a
+  // transition. `justUnlocked` self-clears after the transition duration so it
+  // doesn't linger and re-animate a later manual group expand/collapse.
+  const prevUnlockedRef = useRef<boolean | null>(null);
+  const [justUnlocked, setJustUnlocked] = useState(false);
+  const [unlockAnnouncement, setUnlockAnnouncement] = useState("");
+  useEffect(() => {
+    if (home.loading) return;
+    const wasLocked = prevUnlockedRef.current === false;
+    prevUnlockedRef.current = home.unlocked;
+    if (wasLocked && home.unlocked) {
+      setJustUnlocked(true);
+      setUnlockAnnouncement(`Console unlocked — ${groups.length} new group${groups.length === 1 ? "" : "s"}.`);
+      const t = setTimeout(() => setJustUnlocked(false), 260);
+      return () => clearTimeout(t);
+    }
+  }, [home.loading, home.unlocked, groups.length]);
+
   // Collapsed by default (progressive disclosure); persisted per group key so a reload
   // doesn't re-collapse a group the user opened.
   const [expanded, setExpanded] = useState<Record<string, boolean>>(() => loadGroupState());
@@ -124,11 +146,11 @@ export function Shell({ pages, apiBase }: { pages: ConsolePage[]; apiBase: strin
     home.setUnlocked(true);
   };
 
-  const item = (p: ConsolePage) => (
+  const item = (p: ConsolePage, enter?: boolean) => (
     <button
       key={p.id}
       title={p.title}
-      className={"console-nav-item" + (p === active ? " is-active" : "") + (p.requiresGem && !hasGem ? " is-locked" : "")}
+      className={"console-nav-item" + (enter ? " rail-enter" : "") + (p === active ? " is-active" : "") + (p.requiresGem && !hasGem ? " is-locked" : "")}
       onClick={() => { window.location.hash = p.route; }}
     >
       {p.icon ? <span className="console-nav-icon">{p.icon}</span> : null}
@@ -160,22 +182,23 @@ export function Shell({ pages, apiBase }: { pages: ConsolePage[]; apiBase: strin
           </div>
           <WarmingPill apiBase={apiBase} />
           {phase === "build" ? <ActiveGemSwitcher apiBase={apiBase} /> : null}
-          {foreground.map(item)}
+          {foreground.map((p) => item(p))}
           <ReviewInboxItem count={bg.inboxCount} active={active?.route === "#/dreaming"} />
           {groups.map((g) => (
             <div key={g.key} className="console-rail-group">
               <button
                 type="button"
-                className="console-rail-group-header"
+                className={"console-rail-group-header" + (justUnlocked ? " rail-enter" : "")}
                 aria-expanded={expanded[g.key] === true}
                 onClick={() => toggleGroup(g.key)}
               >
                 <span className="console-rail-group-caret" aria-hidden="true">{expanded[g.key] ? "▾" : "▸"}</span>
                 {g.label}
               </button>
-              {expanded[g.key] && g.pages.map(item)}
+              {expanded[g.key] && g.pages.map((p) => item(p, justUnlocked))}
             </div>
           ))}
+          <p className="sr-only" aria-live="polite">{unlockAnnouncement}</p>
           <div className="console-footer">
             <BackgroundStatusLine {...bg} />
             <ActivityMenu />
@@ -184,7 +207,7 @@ export function Shell({ pages, apiBase }: { pages: ConsolePage[]; apiBase: strin
                 Show everything
               </button>
             )}
-            {footer.map(item)}
+            {footer.map((p) => item(p))}
             <IdentityChip apiBase={apiBase} />
           </div>
         </nav>

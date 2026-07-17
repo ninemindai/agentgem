@@ -203,7 +203,7 @@ export const buildGemRoute = defineRoute("POST", "/api/gem", {
 export const ScorecardBuildRequestSchema = z.object({
   dir: z.string().optional(),
   name: z.string().optional(),
-  selections: z.array(z.object({ root: z.string(), keys: z.array(z.string()) })),
+  selections: z.array(z.object({ root: z.string(), keys: z.array(z.string()).min(1) })).min(1),
 });
 export const scorecardBuildRoute = defineRoute("POST", "/api/scorecard/build", {
   body: ScorecardBuildRequestSchema,
