@@ -110,7 +110,7 @@ describe("Watch panel", () => {
     stubWatchFetch([SESSION, SESSION2], []);
     render(<Watch apiBase="" />);
     await screen.findByText("site");
-    const bells = screen.getAllByRole("button", { name: "Toggle alerts for this session" });
+    const bells = screen.getAllByRole("button", { name: /^Toggle alerts for / });
     fireEvent.click(bells[0]); // mute sess-1
     expect(readWatchAlertPrefs()).toEqual({ mode: "selected", files: [SESSION2.file] });
   });

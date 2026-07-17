@@ -171,7 +171,7 @@ export function Watch({ apiBase }: { apiBase: string }) {
                   </div>
                 </button>
                 <button type="button" className={"watch-bell" + (enrolled.has(s.file) ? " is-on" : "")}
-                  aria-label="Toggle alerts for this session" aria-pressed={enrolled.has(s.file)}
+                  aria-label={`Toggle alerts for ${s.project ?? s.id.slice(0, 8)}`} aria-pressed={enrolled.has(s.file)}
                   title={enrolled.has(s.file) ? "Alerts on — click to mute this session" : "Alerts off — click to enable"}
                   onClick={() => toggleBell(s.file)}>
                   {enrolled.has(s.file) ? "🔔" : "🔕"}

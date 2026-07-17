@@ -27,18 +27,30 @@ export interface AttentionInfo {
 /** A transcript unwritten for this long with an open tool_call counts as pending. */
 export const STALL_MS = 25_000;
 
-export function computeAttention(events: SessionEvent[], mtimeMs: number, now: number): AttentionInfo {
+interface OpenCallFold { openCount: number; firstIndex: number | null; firstName: string | null }
+
+/** Fold events down to the unmatched tool_calls: how many are open, and which came first. */
+function foldOpenCalls(events: SessionEvent[]): OpenCallFold {
   const open = new Map<string, { index: number; name: string }>();
   for (let i = 0; i < events.length; i++) {
     const span = events[i].span;
     if (span.kind === "tool_call" && span.toolId) open.set(span.toolId, { index: i, name: span.name });
     else if (span.kind === "tool_result" && span.toolId) open.delete(span.toolId);
   }
-  const stalledMs = Math.max(0, now - mtimeMs);
-  if (open.size === 0) return { state: "idle", pendingKey: null, pendingToolName: null, stalledMs };
-  if (stalledMs < STALL_MS) return { state: "busy", pendingKey: null, pendingToolName: null, stalledMs };
+  if (open.size === 0) return { openCount: 0, firstIndex: null, firstName: null };
   const first = [...open.values()].reduce((a, b) => (a.index <= b.index ? a : b));
-  return { state: "pending", pendingKey: first.index, pendingToolName: first.name, stalledMs };
+  return { openCount: open.size, firstIndex: first.index, firstName: first.name };
+}
+
+function attentionFromFold(fold: OpenCallFold, mtimeMs: number, now: number): AttentionInfo {
+  const stalledMs = Math.max(0, now - mtimeMs);
+  if (fold.openCount === 0) return { state: "idle", pendingKey: null, pendingToolName: null, stalledMs };
+  if (stalledMs < STALL_MS) return { state: "busy", pendingKey: null, pendingToolName: null, stalledMs };
+  return { state: "pending", pendingKey: fold.firstIndex, pendingToolName: fold.firstName, stalledMs };
+}
+
+export function computeAttention(events: SessionEvent[], mtimeMs: number, now: number): AttentionInfo {
+  return attentionFromFold(foldOpenCalls(events), mtimeMs, now);
 }
 
 export interface AttentionSession {
@@ -52,7 +64,7 @@ export interface AttentionSession {
   stalledMs: number;
 }
 
-interface FoldCacheEntry { mtimeMs: number; events: SessionEvent[] }
+interface FoldCacheEntry { mtimeMs: number; openCount: number; firstIndex: number | null; firstName: string | null }
 
 /**
  * Per-instance lister (cache lives in the closure — no module-scoped state).
@@ -79,11 +91,12 @@ export function createAttentionLister(): (opts?: ListOpts) => AttentionSession[]
       if (!entry || entry.mtimeMs !== mtimeMs) {
         let text: string;
         try { text = readFileSync(s.file, "utf8"); } catch { continue; }
-        entry = { mtimeMs, events: spec.detectEvents(text, s.file) };
+        const fold = foldOpenCalls(spec.detectEvents(text, s.file));
+        entry = { mtimeMs, ...fold };
         cache.set(s.file, entry);
       }
 
-      const info = computeAttention(entry.events, mtimeMs, now);
+      const info = attentionFromFold(entry, mtimeMs, now);
       out.push({ id: s.id, file: s.file, agent: s.agent, project: s.project, ...info });
     }
 
