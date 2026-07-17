@@ -123,7 +123,11 @@ written law instead of oral tradition; onboarding aid.
 
 **Context:** Flagged during /plan-design-review of
 `docs/superpowers/specs/2026-07-15-studio-toolbar-declutter-design.md`. The token
-system already behaves like a design system; it's just undocumented.
+system already behaves like a design system; it's just undocumented. The 2026-07-16
+app-redesign design review produced a token-pinned visual spec for the reveal screen
+(app-redesign-proposal §3.7, in agentgem-biz) — use it as seed content, including the
+muted-ink contrast rule (`--muted` fails 4.5:1 at body sizes on paper; body text uses
+`--ink-soft`).
 
 **Depends on / blocked by:** Nothing.
 
@@ -196,3 +200,46 @@ ride-to-PR-4. `packages/play/src/mcpConnectors.ts` http/sse branch. Natural home
 alongside the Repo Pulse demo + verify-skill E2E.
 
 **Depends on / blocked by:** Nothing. Belongs with PR-4.
+
+## Instrument the first-run funnel metrics (wow < 60s · first gem < 3 min)
+
+**What:** Emit timing events for the two design-reviewed success metrics of the app
+redesign: time-to-reveal-rendered (target < 60s) and time-to-first-gem (target < 3 min),
+plus the fire-gate outcome (reveal vs "prospecting" fallback).
+
+**Why:** The redesign's success criteria were split into two instrumented metrics during
+the 2026-07-16 design review (the old single "< 60s" test failed arithmetic — distill
+alone is ~50s). Without events, P0 can't prove the wow works or catch cold-scan latency
+regressions on real histories.
+
+**Pros:** Makes the redesign's core promise measurable; catches slow-cold-scan
+regressions; cheap (local timing, no telemetry plane needed — log lines suffice for v1).
+
+**Cons:** Small scope creep on P0; needs a decision on where timings land (local log vs
+usage reporter).
+
+**Context:** From /plan-design-review of agentgem-biz/strategy/app-redesign-proposal.md
+(finding: the 60-second success test conflated reveal-time with gem-time). The metrics
+are defined in the proposal §3.5/§7.
+
+**Depends on / blocked by:** P0 reveal implementation.
+
+## Lift the scorecard's 12-recent-projects discovery cap
+
+**What:** Remove or raise the silent cap in `src/gem/scorecard.ts:33` that limits goldmine
+discovery to the 12 most recent projects, or make it configurable with an incremental scan.
+
+**Why:** The redesigned reveal presents scorecard numbers as the user's goldmine; the cap
+undercounts heavy users' actual history. P0 ships an honest scope label ("across your 12 most
+recent projects" — eng review 2026-07-16), but the right fix is scanning everything.
+
+**Pros:** Trophy numbers become true globally; removes a caveat from the product's signature
+screen.
+
+**Cons:** Unbounded scan cost on large histories — needs the incremental/cached scan path to keep
+the <60s reveal budget; cap exists for a reason today.
+
+**Context:** Outside-voice (Codex) catch during /plan-eng-review of the app-redesign proposal.
+The reveal's subline labels the scope until this lands.
+
+**Depends on / blocked by:** P0 reveal (ships with the label); scorecard cache/incremental scan.
