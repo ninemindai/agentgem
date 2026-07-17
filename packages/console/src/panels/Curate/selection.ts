@@ -1,4 +1,4 @@
-import type { LedgerGroup } from "./data.js";
+import type { LedgerGroup } from "../shared/ledgerModel.js";
 
 /** A selection entry keys an item by its group + name (names can repeat across groups). */
 export const selKey = (groupKey: string, name: string): string => `${groupKey}::${name}`;

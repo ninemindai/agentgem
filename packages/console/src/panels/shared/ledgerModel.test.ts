@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { groupInventory, mergeUsage, applyView, sortGroupItems, relativeTime, formatSource, type LedgerGroup } from "./data.js";
+import { groupInventory, mergeUsage, applyView, sortGroupItems, relativeTime, formatSource, type LedgerGroup } from "./ledgerModel.js";
 import type { Inventory } from "../../api/routes.js";
 
 describe("formatSource", () => {

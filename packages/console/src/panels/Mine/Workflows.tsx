@@ -1,14 +1,30 @@
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import type { Scorecard, WorkflowDetail } from "../../api/routes.js";
 import { scorecardWorkflowRoute, createGemShareRoute, makeClient } from "../../api/routes.js";
-import { groupWorkflowsByValue, type WorkflowCardModel } from "./groupWorkflows.js";
-import { GemCard } from "./GemCard.js";
+import type { WorkflowCardModel } from "./groupWorkflows.js";
+import { GemCard, type GemScore } from "./GemCard.js";
+import { toUnifiedGems, groupGemsByValue, groupGemsByType, groupGemsByMaturity, type UnifiedGem, type ValueBucket, type Miniapp } from "./unifiedGems.js";
+import type { LedgerGroup } from "../shared/ledgerModel.js";
 import { ShareLinks } from "./ShareLinks.js";
 import { PROJECT_HYGIENE_SHORTCUT, launchRubricRun } from "../../rubricShortcuts.js";
+import type { ProjectHygiene } from "./useHygieneScores.js";
 
 type CreateGemShare = (body: { kind: "gem"; name: string; provenance: string; generatedAtMs: number }) => Promise<{ id: string; url: string }>;
 
-export function MineWorkflows({ data, onBuild, building, result, error, apiBase, createGemShare }: {
+// Stable empty fallback for callers (mainly tests) that omit `hygiene` — avoids a
+// fresh Map allocation on every render when no hygiene prop is supplied.
+const EMPTY_HYGIENE: Map<string, ProjectHygiene> = new Map();
+
+// The cross-filter chip row shown under Type/Maturity grouping (hidden under Value,
+// since the value axis's own group headers already carry that dimension).
+const VALUE_FILTERS: { key: ValueBucket | "all"; label: string }[] = [
+  { key: "all", label: "All" },
+  { key: "battle-tested", label: "Battle-tested" },
+  { key: "worth-sharing", label: "Worth sharing" },
+  { key: "reusable", label: "Reusable" },
+];
+
+export function MineWorkflows({ data, onBuild, building, result, error, apiBase, createGemShare, group, inventory, miniapps, hygiene }: {
   data: Scorecard;
   onBuild: (selections: { root: string; keys: string[] }[], name: string) => void;
   building: boolean;
@@ -16,6 +32,12 @@ export function MineWorkflows({ data, onBuild, building, result, error, apiBase,
   error: string | null;
   apiBase: string;
   createGemShare?: CreateGemShare;
+  group: "value" | "type" | "maturity";
+  inventory: LedgerGroup[];
+  miniapps: Miniapp[];
+  // Optional: WorkflowsView is the only real caller and always supplies it; defaults to
+  // empty so existing tests that don't care about hygiene scores don't need updating.
+  hygiene?: Map<string, ProjectHygiene>;
 }) {
   const [expanded, setExpanded] = useState<Record<string, boolean>>({});
   const [details, setDetails] = useState<Record<string, WorkflowDetail>>({});
@@ -24,6 +46,8 @@ export function MineWorkflows({ data, onBuild, building, result, error, apiBase,
   const [shareUrls, setShareUrls] = useState<Record<string, string>>({});
   const [shareErrors, setShareErrors] = useState<Record<string, string>>({});
   const [sharing, setSharing] = useState<Set<string>>(new Set());
+  // Cross-filter chip state (Type/Maturity grouping only — see VALUE_FILTERS above).
+  const [valueFilter, setValueFilter] = useState<ValueBucket | "all">("all");
 
   const doCreateGemShare: CreateGemShare = createGemShare ??
     ((body) => createGemShareRoute.call(makeClient(apiBase), { body }));
@@ -78,10 +102,79 @@ export function MineWorkflows({ data, onBuild, building, result, error, apiBase,
     }
   };
 
-  const groups = groupWorkflowsByValue(data);
+  // Recomputing this flatten + compose is the expensive part (scales with total gem
+  // count), so it's memoized on the inputs that actually change it — not on unrelated
+  // state like filter-chip toggles, expand/collapse, or share progress.
+  const gems = useMemo(() => {
+    const workflows: WorkflowCardModel[] = data.projects.flatMap((p) =>
+      p.workflows.map((w) => ({
+        root: p.root, projectLabel: p.label,
+        key: w.key, name: w.name, confidence: w.confidence, portable: w.portable,
+        sessions: w.sessions, lastSeenMs: w.lastSeenMs,
+      })),
+    );
+    // publishedNames not yet fed — "Shared" maturity + shared badge stay dormant until a
+    // publish-status source lands (follow-up).
+    return toUnifiedGems({ workflows, inventory, miniapps });
+  }, [data, inventory, miniapps]);
+  // The value cross-filter only applies under Type/Maturity — the value axis's own
+  // group headers already carry that dimension, and its chip row is hidden there.
+  const filteredGems = group !== "value" && valueFilter !== "all"
+    ? gems.filter((g) => g.value === valueFilter)
+    : gems;
+  const groups = group === "value"
+    ? groupGemsByValue(filteredGems, data.gaps)
+    : group === "type"
+    ? groupGemsByType(filteredGems)
+    : groupGemsByMaturity(filteredGems);
 
-  const renderDetail = (card: WorkflowCardModel) => {
-    const cacheKey = `${card.root}:${card.key}`;
+  // Only workflow gems have a `root`/`key` and drive the detail-expand / share-mint
+  // state above; other gem types never collide with those maps because they never
+  // produce a cache key.
+  const workflowCacheKey = (gem: UnifiedGem): string | undefined =>
+    gem.type === "workflow" ? `${gem.root}:${gem.key}` : undefined;
+
+  // Only workflow gems carry a project root, so only they have a hygiene score to
+  // back-fill — every other gem type keeps the reserved slot's existing null/signal
+  // behavior in GemCard untouched.
+  const hygieneMap = hygiene ?? EMPTY_HYGIENE;
+  const scoreFor = (gem: UnifiedGem): GemScore => {
+    if (gem.type !== "workflow") return null;
+    const h = hygieneMap.get(gem.root!);
+    if (h?.running) return "running";
+    if (h && h.score !== null) return { value: h.score, tone: h.tone ?? "warn", label: "hygiene" };
+    return null;
+  };
+
+  const onOpen = (gem: UnifiedGem) => {
+    if (gem.type === "workflow") { toggleExpand(gem.root!, gem.key!); return; }
+    // skill / subagent / lesson / rubric: no in-place detail view yet — Curate is
+    // the home for every inventory artifact.
+    window.location.hash = "#/curate";
+  };
+
+  const onRunHygiene = (gem: UnifiedGem) => {
+    if (gem.type === "workflow") {
+      launchRubricRun({ rubric: PROJECT_HYGIENE_SHORTCUT.rubric, scope: "project", root: gem.root! });
+      return;
+    }
+    // Inventory gems (skill/subagent) aren't tied to one project root.
+    launchRubricRun({ rubric: PROJECT_HYGIENE_SHORTCUT.rubric, scope: "all" });
+  };
+
+  const onShare = (gem: UnifiedGem) => {
+    if (gem.type === "workflow") { void shareWorkflow(gem.root!, gem.key!, gem.name); return; }
+    // Non-workflow cards don't expand (no detail slot for ShareLinks to render
+    // into), so Share is a no-op for them here — kept simple rather than growing a
+    // second expand/share surface for inventory and miniapp gems.
+  };
+
+  const onPlay = (gem: UnifiedGem) => {
+    if (gem.type === "miniapp") window.location.hash = "#/play";
+  };
+
+  const renderDetail = (gem: UnifiedGem) => {
+    const cacheKey = `${gem.root}:${gem.key}`;
     return (
       <div className="mine-wf-detail">
         {detailLoading[cacheKey] && <span>Loading…</span>}
@@ -103,7 +196,7 @@ export function MineWorkflows({ data, onBuild, building, result, error, apiBase,
           );
         })()}
         {shareErrors[cacheKey] && <span className="obs-error">{shareErrors[cacheKey]}</span>}
-        {(sharing.has(cacheKey) || shareUrls[cacheKey]) && <ShareLinks url={shareUrls[cacheKey]} title={card.name} />}
+        {(sharing.has(cacheKey) || shareUrls[cacheKey]) && <ShareLinks url={shareUrls[cacheKey]} title={gem.name} />}
       </div>
     );
   };
@@ -118,31 +211,47 @@ export function MineWorkflows({ data, onBuild, building, result, error, apiBase,
         </p>
       )}
       {error && <p className="obs-error">{error}</p>}
-      {groups.map((group) => (
-        <div className="mine-group" key={group.key}>
+      {group !== "value" && (
+        <div className="mine-filter-bar" role="group" aria-label="Filter by value">
+          {VALUE_FILTERS.map((f) => (
+            <button
+              key={f.key}
+              type="button"
+              className={"mine-filter-chip" + (valueFilter === f.key ? " is-active" : "")}
+              aria-pressed={valueFilter === f.key}
+              onClick={() => setValueFilter(f.key)}
+            >
+              {f.label}
+            </button>
+          ))}
+        </div>
+      )}
+      {groups.map((grp) => (
+        <div className="mine-group" key={grp.key}>
           <div className="mine-group-head">
-            <span className="mine-group-label">{group.label}</span>
-            <span className="mine-group-count">{group.key === "gaps" ? group.gaps.length : group.items.length}</span>
-            <span className="mine-group-hint">{group.hint}</span>
+            <span className="mine-group-label">{grp.label}</span>
+            <span className="mine-group-count">{"gaps" in grp ? grp.gaps.length : grp.items.length}</span>
+            {"hint" in grp && grp.hint && <span className="mine-group-hint">{grp.hint}</span>}
           </div>
-          {group.key === "gaps" ? (
-            group.gaps.map((gap, i) => <div className="mine-gaps-row" key={i}>{gap}</div>)
+          {"gaps" in grp ? (
+            grp.gaps.map((gap, i) => <div className="mine-gaps-row" key={i}>{gap}</div>)
           ) : (
             <ul className="play-grid">
-              {group.items.map((card) => {
-                const cacheKey = `${card.root}:${card.key}`;
+              {grp.items.map((gem) => {
+                const cacheKey = workflowCacheKey(gem);
                 return (
                   <GemCard
-                    key={cacheKey}
-                    card={card}
-                    score={null}
-                    expanded={expanded[cacheKey]}
-                    onOpen={(c) => toggleExpand(c.root, c.key)}
-                    onDistill={(c) => { if (!building) onBuild([{ root: c.root, keys: [c.key] }], c.name); }}
-                    onShare={(c) => void shareWorkflow(c.root, c.key, c.name)}
-                    onRunHygiene={(c) => launchRubricRun({ rubric: PROJECT_HYGIENE_SHORTCUT.rubric, scope: "project", root: c.root })}
+                    key={gem.id}
+                    gem={gem}
+                    score={scoreFor(gem)}
+                    expanded={cacheKey ? expanded[cacheKey] : undefined}
+                    onOpen={onOpen}
+                    onDistill={(g) => { if (!building) onBuild([{ root: g.root!, keys: [g.key!] }], g.name); }}
+                    onShare={onShare}
+                    onRunHygiene={onRunHygiene}
+                    onPlay={onPlay}
                   >
-                    {renderDetail(card)}
+                    {cacheKey ? renderDetail(gem) : undefined}
                   </GemCard>
                 );
               })}
