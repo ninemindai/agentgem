@@ -6,9 +6,8 @@ import { RefreshButton } from "../../shell/RefreshButton.js";
 import { timeAgo } from "../../util/timeAgo.js";
 import { useShareMint } from "../_shared/useShareMint.js";
 
-// Asset-framed hero. Count stats are now plain text (filter chips moved to MineWorkflows).
-// The share button mints a hosted certificate URL and shows per-platform share intents.
-export type WorkflowFilter = "all" | "battleTested" | "portable";
+// Slim summary hero. Count stats are plain text; the share button mints a hosted
+// certificate URL and shows per-platform share intents.
 
 type CreateShare = (b: { kind: "certificate"; counts: { breadth: number; battleTested: number; portable: number }; generatedAtMs: number }) => Promise<{ id: string; url: string }>;
 

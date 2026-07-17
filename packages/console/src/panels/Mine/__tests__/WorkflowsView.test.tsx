@@ -76,7 +76,7 @@ describe("WorkflowsView", () => {
     ]);
     render(<WorkflowsView apiBase="http://localhost:0" scope="*" openStream={stream} />);
     expect(screen.getByText(/10 reusable workflows/i)).toBeTruthy();
-    expect(screen.getByText(/pick workflows to distill into a gem/i)).toBeTruthy();
+    expect(screen.getByText(/your workflows/i)).toBeTruthy();
   });
 
   it("SWR: a stale event shows the hero immediately with an 'updating…' pill", () => {
