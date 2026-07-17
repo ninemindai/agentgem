@@ -732,6 +732,20 @@ export const homeSummaryRoute = defineRoute("GET", "/api/home/summary", {
   response: HomeSummarySchema,
 });
 
+// Home unlock/reveal-seen state — server-derived and one-way (see src/home.controller.ts):
+// unlocked never reverts once true, even if the gem that triggered it is later deleted.
+export const HomeStateSchema = z.object({
+  unlocked: z.boolean().default(false),
+  existingUser: z.boolean().default(false),
+  revealSeen: z.boolean().default(false),
+});
+export type HomeState = z.infer<typeof HomeStateSchema>;
+export const homeStateRoute = defineRoute("GET", "/api/home/state", { response: HomeStateSchema });
+export const setHomeStateRoute = defineRoute("POST", "/api/home/state", {
+  body: z.object({ unlocked: z.boolean().optional(), revealSeen: z.boolean().optional() }),
+  response: HomeStateSchema,
+});
+
 export const createShareRoute = defineRoute("POST", "/api/share", {
   body: z.object({
     kind: z.literal("certificate"),

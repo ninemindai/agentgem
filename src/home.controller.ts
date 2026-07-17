@@ -11,9 +11,12 @@
 // perf cap). NOTE: src/usage/reporter.ts is the signed-in aggregator POST
 // side-effect — deliberately NOT reused here; this is a read model only.
 import { z } from "zod";
-import { api, get } from "@agentback/openapi";
+import { api, get, post } from "@agentback/openapi";
 import { scanSessionsCached, readAnalysisCacheLatest } from "@agentgem/insight";
 import { selectScorecardRoots, SCORECARD_CACHE_ROOT, MAX_PROJECTS } from "./gem/scorecard.js";
+import { agentgemHome } from "@agentgem/model";
+import { listWorkspaces } from "@agentgem/base";
+import { readState, persistUnlock, persistRevealSeen, type HomeState } from "./home/state.js";
 
 // The Claude-only session count below which the reveal's "you have a goldmine"
 // framing shouldn't fire — too little Claude history to back the claim. Defined
@@ -41,6 +44,31 @@ const HomeSummarySchema = z.object({
   projectsScanned: z.number(),
   projectsCap: z.number(),
 });
+
+const HomeStateSchema = z.object({
+  unlocked: z.boolean(),
+  existingUser: z.boolean(),
+  revealSeen: z.boolean(),
+});
+const HomeStateBodySchema = z.object({
+  unlocked: z.boolean().optional(),
+  revealSeen: z.boolean().optional(),
+});
+
+// Unlock is server-derived and one-way: unlocked = unlockedAt set OR existingUser OR
+// (≥1 gem exists). The gem check reuses listWorkspaces() — the same lookup GET
+// /api/workspaces (the console's gems list) is built on — so deleting the last gem never
+// re-locks: the first time the OR is true, unlockedAt latches permanently.
+function resolveHomeState(base: string): HomeState {
+  let s = readState(base);
+  const gemsExist = listWorkspaces().length > 0;
+  const unlocked = !!s.unlockedAt || !!s.existingUser || gemsExist;
+  if (unlocked && !s.unlockedAt) s = persistUnlock(s, base);
+  return s;
+}
+function toResponse(s: HomeState): z.infer<typeof HomeStateSchema> {
+  return { unlocked: !!s.unlockedAt, existingUser: !!s.existingUser, revealSeen: !!s.revealSeenAt };
+}
 
 @api({ basePath: "/api" })
 export class HomeController {
@@ -76,5 +104,21 @@ export class HomeController {
       projectsScanned: selectScorecardRoots(undefined, undefined).length,
       projectsCap: MAX_PROJECTS,
     };
+  }
+
+  @get("/home/state", { response: HomeStateSchema })
+  async state(): Promise<z.infer<typeof HomeStateSchema>> {
+    return toResponse(resolveHomeState(agentgemHome()));
+  }
+
+  // One-way only: `false` is ignored (no unset path exists), so a client can only ever
+  // move these flags from unset to set, never back.
+  @post("/home/state", { body: HomeStateBodySchema, response: HomeStateSchema })
+  async setState(input: { body: z.infer<typeof HomeStateBodySchema> }): Promise<z.infer<typeof HomeStateSchema>> {
+    const base = agentgemHome();
+    let s = resolveHomeState(base);
+    if (input.body.unlocked) s = persistUnlock(s, base);
+    if (input.body.revealSeen) s = persistRevealSeen(s, base);
+    return toResponse(s);
   }
 }
