@@ -98,3 +98,15 @@ export function detectReportDone(
   }
   return out;
 }
+
+// Baseline-merge for the provider: keep vanished PENDING sessions in the stored
+// snapshot. A transient read failure on the server drops a session from one
+// attention response; without carrying it forward, the same stall would re-fire
+// detectAttention when the session reappears with an unchanged pendingKey.
+// Idle/busy sessions are not carried — their absence has nothing to suppress.
+export function carryVanishedPending(prev: AttentionSnapshot | null, next: AttentionSnapshot): AttentionSnapshot {
+  if (!prev) return next;
+  const present = new Set(next.sessions.map((s) => s.id));
+  const carried = prev.sessions.filter((s) => s.state === "pending" && !present.has(s.id));
+  return carried.length === 0 ? next : { sessions: [...next.sessions, ...carried] };
+}

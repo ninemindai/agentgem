@@ -1,8 +1,8 @@
 import { describe, it, expect, beforeAll, afterAll } from "vitest";
-import { mkdtempSync, mkdirSync, writeFileSync, rmSync, utimesSync } from "node:fs";
+import { mkdtempSync, mkdirSync, writeFileSync, appendFileSync, rmSync, utimesSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { listActiveSessions, resolveTranscriptFile, agentForFile, sourceForFile } from "../watchSessions.js";
+import { listActiveSessions, createSessionLister, resolveTranscriptFile, agentForFile, sourceForFile } from "../watchSessions.js";
 import { resolveDirs } from "@agentgem/model";
 
 let home: string, claudeDir: string, proj: string, freshFile: string, staleFile: string;
@@ -88,5 +88,39 @@ describe("sourceForFile / agentForFile", () => {
   it("returns null for an out-of-scope path", () => {
     expect(agentForFile("/etc/passwd.jsonl", claudeDir)).toBeNull();
     expect(sourceForFile("/etc/passwd.jsonl", claudeDir)).toBeNull();
+  });
+});
+
+describe("createSessionLister", () => {
+  it("matches listActiveSessions output on a fresh cache", () => {
+    const list = createSessionLister();
+    const cached = list({ baseDir: claudeDir, now: NOW, withinMs: 60 * 60 * 1000 });
+    const plain = listActiveSessions({ baseDir: claudeDir, now: NOW, withinMs: 60 * 60 * 1000 });
+    expect(cached).toEqual(plain);
+  });
+
+  it("ageMs stays live on cache hits", () => {
+    const list = createSessionLister();
+    list({ baseDir: claudeDir, now: NOW, withinMs: 60 * 60 * 1000 });
+    const later = list({ baseDir: claudeDir, now: NOW + 10_000, withinMs: 60 * 60 * 1000 });
+    expect(later.find((s) => s.file === freshFile)!.ageMs).toBe(70_000); // 60s old + 10s later
+  });
+
+  // Mutates freshFile — keep this test LAST in the file.
+  it("serves cached meta while the mtime is unchanged, refreshes when it moves", () => {
+    const list = createSessionLister();
+    const before = list({ baseDir: claudeDir, now: NOW, withinMs: 60 * 60 * 1000 });
+    const s0 = before.find((s) => s.file === freshFile)!;
+
+    // Append a record but pin the mtime back — a cached lister must NOT re-read.
+    appendFileSync(freshFile, rec({ type: "user", cwd: "/work/site", timestamp: "2026-07-03T11:59:40.000Z", message: { role: "user", content: "more" } }) + "\n");
+    utimesSync(freshFile, (NOW - 60_000) / 1000, (NOW - 60_000) / 1000);
+    const stale = list({ baseDir: claudeDir, now: NOW, withinMs: 60 * 60 * 1000 });
+    expect(stale.find((s) => s.file === freshFile)!.msgs).toBe(s0.msgs);
+
+    // Bump the mtime — the lister re-parses and sees the appended record.
+    utimesSync(freshFile, (NOW - 30_000) / 1000, (NOW - 30_000) / 1000);
+    const fresh = list({ baseDir: claudeDir, now: NOW, withinMs: 60 * 60 * 1000 });
+    expect(fresh.find((s) => s.file === freshFile)!.msgs).toBeGreaterThan(s0.msgs);
   });
 });
