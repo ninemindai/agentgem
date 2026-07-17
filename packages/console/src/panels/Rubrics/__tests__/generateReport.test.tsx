@@ -72,6 +72,52 @@ describe("Rubrics panel — Generate report", () => {
     expect(q.get("root")).toBeNull();
   });
 
+  it("renders the report in a viewer modal after generation, and can reopen it", async () => {
+    vi.stubGlobal("fetch", vi.fn(async (u: string) => {
+      const url = String(u);
+      if (url.includes("/api/rubric/report")) {
+        return sseResponse([
+          { type: "start", rubric: "context-hygiene", title: "Context hygiene", scope: "session" },
+          { type: "done", html: "<html>REPORT</html>", truncated: false },
+        ]);
+      }
+      if (url.includes("/api/rubric/stream")) {
+        return sseResponse([{ type: "done", report: DONE_REPORT, cached: false, updatedAt: null }]);
+      }
+      if (url.includes("/api/report/runs")) return jsonResponse({ runs: [] });
+      if (url.includes("/api/rubrics")) {
+        return jsonResponse({ rubrics: [{ id: "context-hygiene", title: "Context hygiene", target: "overview", factors: [{ factor: "task-sprawl" }] }] });
+      }
+      if (url.includes("/api/testbed/projects")) return jsonResponse({ projects: [] });
+      if (url.includes("/api/testbed/recents")) return jsonResponse({ recents: [] });
+      return jsonResponse({});
+    }));
+    (URL as unknown as { createObjectURL: unknown }).createObjectURL = vi.fn(() => "blob:report");
+    const click = vi.spyOn(HTMLAnchorElement.prototype, "click").mockImplementation(() => {});
+
+    setPendingRubricRun({ rubric: "context-hygiene", scope: "session", sessionId: "sess-9", autorun: true });
+    render(<Rubrics apiBase="http://x" />);
+
+    fireEvent.click(await screen.findByText("Generate report ⤓"));
+
+    // The viewer opens automatically with the report in a sealed iframe — the
+    // download ("save") still happens exactly once alongside it.
+    const frame = await screen.findByTitle("Rubric report");
+    expect((frame as HTMLIFrameElement).getAttribute("srcdoc")).toContain("<html>REPORT</html>");
+    expect((frame as HTMLIFrameElement).getAttribute("sandbox")).toBe("allow-scripts");
+    expect(click).toHaveBeenCalledTimes(1);
+
+    // Close hides the viewer; "View report" brings it back without re-generating.
+    fireEvent.click(screen.getByLabelText("Close report"));
+    expect(screen.queryByTitle("Rubric report")).toBeNull();
+    fireEvent.click(screen.getByText("View report"));
+    expect(await screen.findByTitle("Rubric report")).toBeTruthy();
+
+    // The modal's own Download button saves the same html again.
+    fireEvent.click(screen.getByText("Download ⤓"));
+    expect(click).toHaveBeenCalledTimes(2);
+  });
+
   it("shows the failure message when the render stream fails", async () => {
     vi.stubGlobal("fetch", vi.fn(async (u: string) => {
       const url = String(u);

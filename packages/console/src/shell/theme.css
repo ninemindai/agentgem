@@ -1197,6 +1197,11 @@ body::before {
   border-radius: 7px; width: 28px; height: 28px; cursor: pointer; font-size: 13px; }
 .setup-modal-close:hover { border-color: var(--accent); color: var(--accent); }
 .setup-modal-desc { margin: 0; padding: 10px 16px 0; color: var(--muted); font-size: 13px; }
+/* Rubric report viewer — the setup-modal shell, sized for a full document. The iframe gets a
+   white ground: reports are standalone light-theme documents, and an opaque-origin frame
+   would otherwise flash the parchment background through while it loads. */
+.rubric-report-panel { width: min(1100px, 100%); height: 92vh; }
+.rubric-report-frame { flex: 1; width: 100%; border: 0; background: #fff; }
 .setup-modal-body { padding: 8px 16px 16px; overflow: auto; }
 .setup-config { margin: 8px 0; white-space: pre-wrap; word-break: break-word; font: 12.5px/1.6 var(--font-mono); color: var(--ink-soft); }
 

@@ -201,7 +201,10 @@ export function Rubrics({ apiBase }: { apiBase: string }) {
     error?: string;
     startedAt?: number;
     chars?: number;
+    html?: string;   // kept after "done" so the viewer can render (and re-download) without re-generating
+    path?: string;   // which row generated it — the "View report" affordance belongs to that row only
   }>({ status: "idle" });
+  const [showReport, setShowReport] = useState(false);
   // A once-a-second tick that re-renders the elapsed counter while a report is generating.
   const [, setTick] = useState(0);
   useEffect(() => {
@@ -210,21 +213,29 @@ export function Rubrics({ apiBase }: { apiBase: string }) {
     return () => clearInterval(id);
   }, [reportGen.status]);
 
+  const downloadReport = (html: string) => {
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(new Blob([html], { type: "text/html" }));
+    a.download = `${rubricId}-report.html`;
+    a.click();
+  };
+
   const generateReport = (path: string) => {
     if (!rubricId || reportGen.status === "running") return;
-    setReportGen({ status: "running", startedAt: Date.now(), chars: 0 });
+    setShowReport(false);
+    setReportGen({ status: "running", startedAt: Date.now(), chars: 0, path });
     openRubricReportStream(makeClient(apiBase), { rubric: rubricId, ...scopeFor(path) }, (e) => {
       if (e.type === "delta") {
         // The agent streams the HTML as it renders — surface it as a "chars streamed" liveness signal.
         setReportGen((g) => (g.status === "running" ? { ...g, chars: (g.chars ?? 0) + e.text.length } : g));
       } else if (e.type === "done") {
-        const a = document.createElement("a");
-        a.href = URL.createObjectURL(new Blob([e.html], { type: "text/html" }));
-        a.download = `${rubricId}-report.html`;
-        a.click();
-        setReportGen({ status: "done" });
+        // Save AND show: download stays (the durable copy), the viewer opens on the
+        // same html so the result is on screen without a trip to the downloads folder.
+        downloadReport(e.html);
+        setReportGen({ status: "done", html: e.html, path });
+        setShowReport(true);
       } else if (e.type === "failed") {
-        setReportGen({ status: "failed", error: e.message });
+        setReportGen({ status: "failed", error: e.message, path });
       }
     });
   };
@@ -339,6 +350,10 @@ export function Rubrics({ apiBase }: { apiBase: string }) {
                             >
                               {reportGen.status === "running" ? `Generating… ${reportElapsed}s` : "Generate report ⤓"}
                             </button>
+                            {reportGen.status === "done" && reportGen.html != null && reportGen.path === r.path && (
+                              <button type="button" className="ledger-view" style={{ marginLeft: 8 }}
+                                title="Reopen the generated report" onClick={() => setShowReport(true)}>View report</button>
+                            )}
                           </>
                         )}
                       </div>
@@ -360,6 +375,20 @@ export function Rubrics({ apiBase }: { apiBase: string }) {
             })}
           </ul>
         )}
+      {showReport && reportGen.html != null && (
+        <div className="setup-modal" onClick={() => setShowReport(false)}>
+          <div className="setup-modal-panel rubric-report-panel" onClick={(e) => e.stopPropagation()}>
+            <div className="setup-modal-head">
+              <div className="setup-modal-title"><strong>{rubricId} report</strong></div>
+              <button type="button" className="setup-modal-copy" onClick={() => downloadReport(reportGen.html!)}>Download ⤓</button>
+              <button type="button" className="setup-modal-close" aria-label="Close report" onClick={() => setShowReport(false)}>✕</button>
+            </div>
+            {/* allow-scripts WITHOUT allow-same-origin: reports may carry inline chart JS,
+                and the opaque origin keeps the document sealed off from the console. */}
+            <iframe className="rubric-report-frame" title="Rubric report" sandbox="allow-scripts" srcDoc={reportGen.html} />
+          </div>
+        </div>
+      )}
     </section>
   );
 }
