@@ -26,9 +26,13 @@ describe("useBackgroundJobs", () => {
       { enabled: true, phasesLit: ["LIGHT"], promoted: 1, queued: 0, lastPassAtMs: 1000, progress: null },
     );
     const { result } = renderHook(() => useBackgroundJobs(""));
-    await waitFor(() => expect(result.current.mode).toBe("idle"));
+    // `mode` is already "idle" at mount (warm=null, count=0, not `off`), so waiting on
+    // it first can pass synchronously and race the stubbed fetch's microtask — wait on
+    // `jobs` instead, which only reaches this value once the warm-status fetch has
+    // actually resolved and populated state.
+    await waitFor(() => expect(result.current.jobs).toEqual([{ id: "warm", label: "Background caches warm", route: "#/optimize" }]));
+    expect(result.current.mode).toBe("idle");
     expect(result.current.count).toBe(0);
-    expect(result.current.jobs).toEqual([{ id: "warm", label: "Background caches warm", route: "#/optimize" }]);
   });
 
   it("active: warm is running — contributes a job row and flips the mode", async () => {

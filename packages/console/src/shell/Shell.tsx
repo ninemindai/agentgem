@@ -50,7 +50,11 @@ export function Shell({ pages, apiBase }: { pages: ConsolePage[]; apiBase: strin
   const { keys } = useActiveGem();
   const hasGem = keys.size > 0;
   const sidebar = useSidebar();
-  const home = useHomeState(apiBase);
+  // Shell is the one instance that needs live cross-instance notice of an unlock
+  // (see useHomeState's module doc) — Observe's and RevealContent's own instances
+  // must NOT poll, or a poll landing mid-ceremony would unmount it out from under
+  // the user.
+  const home = useHomeState(apiBase, { poll: true });
   const bg = useBackgroundJobs(apiBase);
   const [hash, setHash] = useState(() => normalizeHash(window.location.hash));
 

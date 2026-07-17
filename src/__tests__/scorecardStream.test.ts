@@ -1,6 +1,7 @@
 // Copyright (c) 2026 NineMind, Inc.
 // SPDX-License-Identifier: MIT
 import { describe, it, expect, vi, afterEach } from "vitest";
+import { transcriptToken } from "@agentgem/insight";
 import { ScorecardController, setScorecardDepsForTests, type ScorecardStreamDeps } from "../scorecard.stream.controller.js";
 
 afterEach(() => setScorecardDepsForTests(null));
@@ -110,5 +111,31 @@ describe("ScorecardController.stream (streamOf route)", () => {
 
     expect(ev.some((e) => e.type === "progress")).toBe(true);
     expect(loadProject).toHaveBeenCalled();
+  });
+
+  // Regression: the aggregate cache's token now folds in SCORECARD_SCHEMA_VERSION
+  // (src/gem/scorecard.ts) on top of the content-derived transcriptToken, so a
+  // pre-upgrade entry — written back when the WorkflowItem shape lacked
+  // sessions/lastSeenMs — misses instead of being served as-is (which would have
+  // rendered the migration ceremony's scorecard hero as "from 0 sessions", with no
+  // re-scan affordance).
+  it("a pre-upgrade cache entry, keyed under the un-versioned token, is not served — a fresh scan runs instead", async () => {
+    const legacyToken = transcriptToken([]); // what a pre-upgrade write keyed the entry under
+    const loadProject = vi.fn(() => mkLoad() as never);
+    const STALE_SC = { breadth: 9, battleTested: 0, portable: 0, gaps: [], projects: [], generatedAtMs: 0, degraded: false };
+    setScorecardDepsForTests(baseDeps({
+      loadProject,
+      // Simulates "an entry exists in the cache file, but only under the old key" —
+      // the controller's own (now-versioned) token never matches it.
+      readCacheEntry: (_root, token) => (token === legacyToken ? { result: STALE_SC, ts: 11111 } : null),
+    }));
+
+    const ev = await drive({ projects: JSON.stringify(["/r/a"]) });
+
+    expect(ev.some((e) => e.type === "progress")).toBe(true); // re-scanned, not short-circuited
+    expect(loadProject).toHaveBeenCalled();
+    const done = ev.find((e) => e.type === "done");
+    expect(done).toMatchObject({ cached: false }); // not served from the stale hit
+    expect((done?.scorecard as { breadth: number }).breadth).not.toBe(9);
   });
 });

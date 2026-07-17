@@ -28,14 +28,24 @@ const POLL_MS = 5000;
  *  POST one-way and apply the full record the server echoes back; the server itself
  *  never reverts unlocked→false, so there's no local "lock" path to support.
  *
- *  While still locked, this also polls the same GET every 5s so a Shell-mounted
- *  instance notices a DIFFERENT instance's unlock (e.g. Observe/Reveal's own
+ *  Polling is OPT-IN via `{ poll: true }` — Shell is the only caller that passes it.
+ *  While still locked, Shell's instance then polls the same GET every 5s so it
+ *  notices a DIFFERENT instance's unlock (e.g. Observe's or RevealContent's own
  *  `useHomeState`, flipped by the first-gem ceremony or "Show everything" while both
  *  are mounted at once) within one tick — otherwise Shell's rail would only learn
  *  about it on the next full reload, since it fetches once on mount and never again.
  *  Self-terminating: the poll stops for good the moment it observes `unlocked`,
- *  since the server never reverts it. */
-export function useHomeState(apiBase: string) {
+ *  since the server never reverts it.
+ *
+ *  Observe's and RevealContent's instances must NOT poll: Observe uses `revealSeen`
+ *  to pick which mode to render (first-run / ceremony / returning), and a poll
+ *  landing mid-ceremony (RevealContent POSTs `revealSeen` right after the CTA's
+ *  build resolves) would unmount the just-built GemCeremony out from under the user
+ *  before they can click "Open in Curate". Only Shell needs live cross-instance
+ *  notice; Observe/Reveal each still fetch once on mount and can POST through their
+ *  own setters same as before. */
+export function useHomeState(apiBase: string, options?: { poll?: boolean }) {
+  const poll = options?.poll ?? false;
   const [state, setState] = useState<HomeState>(() => ({ ...LOCKED, unlocked: readHintUnlocked() }));
   // The rail treats "locked" as its own loading placeholder (see useHomeState's
   // module doc), but the reveal panel needs to tell "still fetching" apart from
@@ -66,12 +76,12 @@ export function useHomeState(apiBase: string) {
         .finally(() => { if (alive) setLoading(false); });
 
     fetchOnce();
-    pollRef.current = setInterval(fetchOnce, POLL_MS);
+    if (poll) pollRef.current = setInterval(fetchOnce, POLL_MS);
     return () => {
       alive = false;
       if (pollRef.current !== undefined) clearInterval(pollRef.current);
     };
-  }, [apiBase, apply]);
+  }, [apiBase, apply, poll]);
 
   const setUnlocked = useCallback((unlocked: true) => {
     setHomeStateRoute.call(makeClient(apiBase), { body: { unlocked } })
