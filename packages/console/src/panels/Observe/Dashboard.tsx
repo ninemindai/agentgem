@@ -6,6 +6,7 @@ import {
 } from "recharts";
 import type { ObservePayload, ObserveRange, ObserveFilter } from "../../api/routes.js";
 import { fmtTokens, fmtDuration, tokenSeries, heatmapCells, heatmapMonths } from "./data.js";
+import { TokensByProjectCard, TopSessionsCard } from "./BreakdownCard.js";
 import { RangeTabs, ObserveFilters } from "./ObserveControls.js";
 import { RefreshButton } from "../../shell/RefreshButton.js";
 import { QuickShareButton } from "../_shared/QuickShareButton.js";
@@ -126,6 +127,25 @@ export function Dashboard({ data, range, onRange, filter, onFilter, pending, onR
                 </ul>
               </Card>
             </div>
+
+            {(() => {
+              const attrFilterActive =
+                filter.agent !== undefined || filter.project !== undefined || filter.model !== undefined;
+              if (data.byProject.length === 0 && data.topSessions.length === 0 && !attrFilterActive) return null;
+              return (
+                <div className="obs-breakdown-section">
+                  <div className="obs-card-title obs-breakdown-title">Where tokens went</div>
+                  <div className="obs-breakdown-charts">
+                    <TokensByProjectCard
+                      rows={data.byProject} activeProject={filter.project}
+                      onPick={(p) => onFilter({ ...filter, project: p })}
+                      onClear={() => onFilter({ ...filter, project: undefined })}
+                    />
+                    <TopSessionsCard rows={data.topSessions} filterActive={attrFilterActive} />
+                  </div>
+                </div>
+              );
+            })()}
 
             {(data.byTool.length > 0 || data.bySubagent.length > 0 || data.bySkill.length > 0) && (
               <>

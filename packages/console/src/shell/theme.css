@@ -1071,6 +1071,21 @@ body::before {
 .obs-usage-series-legend { flex-direction: row; flex-wrap: wrap; gap: 4px 16px; margin-top: 8px; }
 .obs-usage-series-empty { margin: 20px 0; }
 
+/* "Where tokens went" — token attribution (Tokens by project / Top sessions).
+   Own auto-fit grid: .obs-charts' auto-fill would leave a ghost third column
+   in a two-card row. Emerald marks SELECTION (distinct from terracotta data). */
+.obs-breakdown-section { margin-bottom: 24px; }
+.obs-breakdown-title { margin-bottom: 10px; }
+.obs-breakdown-charts { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 14px; }
+.obs-breakdown-head { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; margin-bottom: 10px; }
+.obs-breakdown-head .obs-card-title { margin-bottom: 0; }
+.obs-breakdown-chip { font: 500 11px/1 var(--font-ui); color: var(--ink-soft); background: var(--paper-2);
+  border: 1px solid var(--line); border-radius: 999px; padding: 3px 9px; cursor: pointer; }
+.obs-breakdown-chip:hover { border-color: var(--accent); }
+.obs-breakdown-meta { font: 11px/1.3 var(--font-ui); color: var(--muted); }
+.obs-usage-row.is-active .obs-usage-name { font-weight: 700; }
+.obs-usage-row.is-active .obs-usage-fill { background: var(--emerald); }
+
 /* Setup — the local .claude inventory browser + artifact viewer. */
 .setup { animation: fade .4s ease both; }
 .setup-head-titles { display: flex; flex-direction: column; gap: 2px; }
