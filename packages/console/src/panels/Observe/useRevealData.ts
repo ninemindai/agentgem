@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
 import { homeSummaryRoute, makeClient, type HomeSummary, type Scorecard } from "../../api/routes.js";
 import { openScorecardStream, type ScorecardStreamEvent } from "../Mine/scorecardStream.js";
 
