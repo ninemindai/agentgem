@@ -32,6 +32,7 @@ import { streamWatch } from "./watchStream.js";
 import { streamWatchEvents } from "./watchEvents.js";
 import { streamWatchHygiene } from "./watchHygiene.js";
 import { listActiveSessions } from "./watchSessions.js";
+import { createAttentionLister } from "./watchAttention.js";
 import { registerChatRoutes, makeChatConnectFn, installAgentFn, goldmineMcpServers, resolveChatCwd } from "./goldmine/chatRoutes.js";
 import { resolveAllowedProjectRoot } from "./goldmine/projectRoots.js";
 import { collectBehaviorFindings } from "./goldmine/behaviorFindings.js";
@@ -277,6 +278,12 @@ export function finalizeCommonApp(app: RestApplication, server: Awaited<RestAppl
   // content only; the ?file= path is pinned to a transcript root by resolveTranscriptFile.
   server.expressApp.get("/api/watch/sessions", originGuard, (_req, res) =>
     res.json({ sessions: listActiveSessions() } as never));
+  // Watch attention: which active sessions look blocked on the user — an unmatched
+  // tool_call with a stalled transcript (permission prompt, or a long tool run; the
+  // transcript can't tell). Polled by the console's NotificationsProvider.
+  const listAttention = createAttentionLister();
+  server.expressApp.get("/api/watch/attention", originGuard, (_req, res) =>
+    res.json({ sessions: listAttention() } as never));
   server.expressApp.get("/api/watch/stream", originGuard, (req, res) => streamWatch(req as never, res as never));
   // Flavor A live feed: SSE-stream the same session's ordered SessionEvents (messages,
   // tool_calls, tool_results) as it runs — the data layer for a CopilotKit-style feed.
