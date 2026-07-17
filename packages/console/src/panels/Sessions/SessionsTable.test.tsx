@@ -18,6 +18,7 @@ const payload: ObservePayload = {
   }],
   models: [{ model: "claude-opus-4-8", agent: "claude", sessions: 2, tokens: 1_200_000 }],
   byTool: [], bySkill: [], bySubagent: [], usageDaily: [],
+  byProject: [], topSessions: [],
   facets: { agents: ["claude"], projects: ["agentgem"], models: ["claude-opus-4-8"] },
   range: "7d",
 };

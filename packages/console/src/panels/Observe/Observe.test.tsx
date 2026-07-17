@@ -1,5 +1,5 @@
 import { describe, it, expect, afterEach, vi } from "vitest";
-import { render, screen, cleanup, fireEvent } from "@testing-library/react";
+import { render, screen, cleanup, fireEvent, within } from "@testing-library/react";
 
 afterEach(() => { cleanup(); vi.unstubAllGlobals(); window.location.hash = ""; });
 import { Dashboard } from "./Dashboard.js";
@@ -23,6 +23,14 @@ const payload: ObservePayload = {
   bySubagent: [{ name: "Explore", count: 2 }],
   bySkill: [],
   usageDaily: [{ date: "2026-06-28", tools: { Read: 8, Bash: 4 }, skills: {}, subagents: { Explore: 2 } }],
+  byProject: [
+    { project: "agentgem", sessions: 2, tokens: 900_000, tokensIn: 700_000, tokensOut: 150_000, tokensCache: 50_000 },
+    { project: null, sessions: 1, tokens: 100_000, tokensIn: 80_000, tokensOut: 10_000, tokensCache: 10_000 },
+  ],
+  topSessions: [
+    { agent: "claude", sessionId: "a3f9c2d1e5b70000", project: "agentgem", model: "claude-opus-4-8",
+      tokens: 900_000, tokensIn: 700_000, tokensOut: 150_000, tokensCache: 50_000, endMs: Date.now() - 2 * 3_600_000 },
+  ],
   facets: { agents: ["claude"], projects: ["agentgem"], models: ["claude-opus-4-8"] },
   range: "7d",
 };
@@ -122,9 +130,83 @@ describe("Observe first-run", () => {
   });
 });
 
+describe("Where tokens went", () => {
+  const dash = (over?: Partial<Parameters<typeof Dashboard>[0]>) =>
+    render(<Dashboard data={payload} range="7d" onRange={() => {}} filter={{}} onFilter={() => {}} apiBase="" {...over} />);
+
+  it("renders the section with both cards, shares, and session metadata", () => {
+    dash();
+    expect(screen.getByText("Where tokens went")).toBeDefined();
+    expect(screen.getByText("Tokens by project")).toBeDefined();
+    expect(screen.getByText("Top sessions")).toBeDefined();
+    expect(screen.getByText("900k · 90%")).toBeDefined();          // fmtTokens + share of Σ byProject
+    expect(screen.getByText(/a3f9c2d1 …|a3f9c2d1…/)).toBeDefined() // two-line meta: id prefix…
+    expect(screen.getByText(/2h ago/)).toBeDefined();              // …and timeAgo(endMs)
+  });
+
+  it("renders Unassigned as a plain span (not a button), with the not-filterable tooltip", () => {
+    dash();
+    const el = screen.getByText("Unassigned");
+    expect(el.tagName).toBe("SPAN");
+    expect(el.getAttribute("title")).toBe("sessions with no project metadata — not filterable");
+  });
+
+  it("project row click applies the filter; clicking the ACTIVE row clears it", () => {
+    // "agentgem" also names the Top sessions row button — scope to the project card.
+    const projectBtn = () => within(screen.getByText("Tokens by project").closest(".obs-card") as HTMLElement)
+      .getByRole("button", { name: "agentgem" });
+    const onFilter = vi.fn();
+    dash({ onFilter });
+    fireEvent.click(projectBtn());
+    expect(onFilter).toHaveBeenCalledWith({ project: "agentgem" });
+    cleanup();
+    dash({ filter: { project: "agentgem" }, onFilter });
+    fireEvent.click(projectBtn());
+    expect(onFilter).toHaveBeenLastCalledWith({ project: undefined });
+  });
+
+  it("active row is marked aria-current and the ✕ chip clears the filter", () => {
+    const onFilter = vi.fn();
+    const { container } = dash({ filter: { project: "agentgem" }, onFilter });
+    const active = container.querySelector('[aria-current="true"]');
+    expect(active?.textContent).toContain("agentgem");
+    fireEvent.click(screen.getByRole("button", { name: "Clear project filter" }));
+    expect(onFilter).toHaveBeenCalledWith({ project: undefined });
+  });
+
+  it("session row deep-links to Sessions detail with encoded segments", () => {
+    dash();
+    // Accessible name is just the project text ("agentgem"), which also appears as a button
+    // in the Tokens by project card — scope to the Top sessions card and match by prefix.
+    const card = screen.getByText("Top sessions").closest(".obs-card") as HTMLElement;
+    const btn = within(card).getAllByRole("button").find((b) => b.textContent?.startsWith("agentgem"))!;
+    fireEvent.click(btn);
+    expect(window.location.hash).toBe("#/sessions/claude/a3f9c2d1e5b70000");
+  });
+
+  it("keeps Top sessions mounted with an empty line while a filter is active", () => {
+    dash({ data: { ...payload, topSessions: [] }, filter: { model: "claude-opus-4-8" } });
+    expect(screen.getByText("Top sessions")).toBeDefined();
+    expect(screen.getByText("No sessions in this range.")).toBeDefined();
+  });
+
+  it("hides the project card when the only bucket is Unassigned", () => {
+    dash({ data: { ...payload, byProject: [{ project: null, sessions: 1, tokens: 5, tokensIn: 5, tokensOut: 0, tokensCache: 0 }] } });
+    expect(screen.queryByText("Tokens by project")).toBeNull();
+  });
+
+  it("omits the share segment when total tokens are zero", () => {
+    dash({ data: { ...payload, byProject: [
+      { project: "z", sessions: 1, tokens: 0, tokensIn: 0, tokensOut: 0, tokensCache: 0 },
+      { project: "y", sessions: 1, tokens: 0, tokensIn: 0, tokensOut: 0, tokensCache: 0 },
+    ] } });
+    expect(screen.queryByText(/NaN|%/)).toBeNull();
+  });
+});
+
 describe("ObservePayloadSchema version-skew defaults", () => {
   it("parses an old server payload lacking byProject/topSessions (protects /api/observe consumers like SessionPicker)", () => {
-    const { byProject: _bp, topSessions: _ts, ...legacy } = payload as ObservePayload & { byProject?: unknown; topSessions?: unknown };
+    const { byProject: _bp, topSessions: _ts, ...legacy } = payload;
     const parsed = ObservePayloadSchema.safeParse(legacy);
     expect(parsed.success).toBe(true);
     if (parsed.success) {
