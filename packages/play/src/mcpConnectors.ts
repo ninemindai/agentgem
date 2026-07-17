@@ -58,6 +58,44 @@ interface Entry {
 }
 const pool = new Map<string, Entry>();
 
+// Spawns the transport and completes the SDK handshake for `gem`. Shared by the cold-connect path
+// and the digest-invalidation reconnect path below — neither touches the pool; the caller wires the
+// result (or failure) into its own Entry so both paths keep the same single-flight guarantees.
+async function connectTransport(server: string, gem: McpServerArtifact): Promise<{ client: Client; transport: Transport }> {
+  const client = new Client({ name: "agentgem-connector", version: "1.0.0" }, { capabilities: {} });
+  let transport: Transport;
+  if (gem.transport === "stdio") {
+    const command = String((gem.config as { command?: unknown }).command ?? "");
+    const args = Array.isArray((gem.config as { args?: unknown }).args)
+      ? ((gem.config as { args: unknown[] }).args as string[])
+      : [];
+    const { env, missingSecrets } = buildSpawnEnv(gem, process.env);
+    if (missingSecrets.length) {
+      throw new ConnectorError(
+        `MCP server "${server}" is missing required secret(s): ${missingSecrets.join(", ")} — set them in your environment`,
+        "server_not_connected",
+      );
+    }
+    transport = new StdioClientTransport({ command, args, env, stderr: "pipe" });
+  } else {
+    // http/sse: import the matching transport lazily so a stdio-only environment doesn't pay for it.
+    const url = new URL(String((gem.config as { url?: unknown }).url ?? ""));
+    if (gem.transport === "sse") {
+      const { SSEClientTransport } = await import("@modelcontextprotocol/sdk/client/sse.js");
+      transport = new SSEClientTransport(url);
+    } else {
+      const { StreamableHTTPClientTransport } = await import("@modelcontextprotocol/sdk/client/streamableHttp.js");
+      transport = new StreamableHTTPClientTransport(url);
+    }
+  }
+  try {
+    await client.connect(transport);
+  } catch (e) {
+    throw new ConnectorError(`could not connect to MCP server "${server}": ${(e as Error).message}`, "server_unavailable");
+  }
+  return { client, transport };
+}
+
 async function ensureClient(server: string): Promise<Client> {
   const existing = pool.get(server);
   // A connect already in flight is single-flighted as-is: joining callers must NOT re-resolve the
@@ -72,8 +110,36 @@ async function ensureClient(server: string): Promise<Client> {
   if (existing?.client) {
     if (existing.digest === digest) return existing.client;
     // Config changed since this client connected (D3/D9): a stale client must not silently answer
-    // under the old identity. Close it and fall through to reconnect below.
-    await closeEntry(server);
+    // under the old identity. This must join the SAME single-flight discipline as the cold-connect
+    // path below: `existing.connecting` is set on the SAME Entry, synchronously, with no `await`
+    // in between — the pool is never emptied. A concurrent caller's synchronous `pool.get` (above)
+    // then sees `existing.connecting` already set and joins THIS reconnect instead of racing a
+    // second one (which previously could spawn two child processes and orphan one of them — see
+    // the file-level "new-index-method-must-join-single-flight-chain" note).
+    const oldTransport = existing.transport;
+    if (existing.idle) clearTimeout(existing.idle);
+    existing.digest = digest;
+    existing.connecting = (async () => {
+      try {
+        try {
+          await oldTransport.close();
+        } catch {
+          /* best-effort */
+        }
+        const { client, transport } = await connectTransport(server, gem);
+        existing.client = client;
+        existing.transport = transport;
+        existing.connecting = null;
+        touchIdle(server);
+        return client;
+      } catch (e) {
+        // Same failure-must-not-poison-the-pool rule as the cold path: only drop the entry if it's
+        // still OURS (a newer reconnect hasn't already replaced it).
+        if (pool.get(server) === existing) pool.delete(server);
+        throw e;
+      }
+    })();
+    return existing.connecting;
   }
 
   // IMPORTANT — two invariants depend on this exact ordering:
@@ -100,37 +166,7 @@ async function ensureClient(server: string): Promise<Client> {
 
   entry.connecting = (async () => {
     try {
-      const client = new Client({ name: "agentgem-connector", version: "1.0.0" }, { capabilities: {} });
-      let transport: Entry["transport"];
-      if (gem.transport === "stdio") {
-        const command = String((gem.config as { command?: unknown }).command ?? "");
-        const args = Array.isArray((gem.config as { args?: unknown }).args)
-          ? ((gem.config as { args: unknown[] }).args as string[])
-          : [];
-        const { env, missingSecrets } = buildSpawnEnv(gem, process.env);
-        if (missingSecrets.length) {
-          throw new ConnectorError(
-            `MCP server "${server}" is missing required secret(s): ${missingSecrets.join(", ")} — set them in your environment`,
-            "server_not_connected",
-          );
-        }
-        transport = new StdioClientTransport({ command, args, env, stderr: "pipe" });
-      } else {
-        // http/sse: import the matching transport lazily so a stdio-only environment doesn't pay for it.
-        const url = new URL(String((gem.config as { url?: unknown }).url ?? ""));
-        if (gem.transport === "sse") {
-          const { SSEClientTransport } = await import("@modelcontextprotocol/sdk/client/sse.js");
-          transport = new SSEClientTransport(url);
-        } else {
-          const { StreamableHTTPClientTransport } = await import("@modelcontextprotocol/sdk/client/streamableHttp.js");
-          transport = new StreamableHTTPClientTransport(url);
-        }
-      }
-      try {
-        await client.connect(transport);
-      } catch (e) {
-        throw new ConnectorError(`could not connect to MCP server "${server}": ${(e as Error).message}`, "server_unavailable");
-      }
+      const { client, transport } = await connectTransport(server, gem);
       entry.client = client;
       entry.transport = transport;
       entry.connecting = null;
