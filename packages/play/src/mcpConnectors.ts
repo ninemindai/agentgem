@@ -55,8 +55,49 @@ interface Entry {
   inFlight: number;
   idle?: ReturnType<typeof setTimeout>;
   digest?: string; // the gem's config digest AT CONNECT TIME — compared against the live digest below
+  // Transports superseded by a reconnect while a call was still in flight on this entry (D14 follow-
+  // up): closing them right away would yank the transport out from under that call. They queue here
+  // and get closed once callConnectorTool's `finally` drains inFlight back to 0 (see
+  // scheduleOldTransportClose / drainDeferredCloses below). Almost always 0 or 1 entries — an array
+  // only because a second reconnect could in principle land before the first deferred close drains.
+  deferredCloses: Transport[];
 }
 const pool = new Map<string, Entry>();
+
+// Closes `oldTransport` now if nothing on `entry` is still using it, else queues it to close once
+// callConnectorTool's completion path drains inFlight to 0. `entry.inFlight` is entry-scoped (not
+// tied to which client a caller captured), so this is deliberately an over-approximation: a caller
+// that joined the entry AFTER the reconnect can delay the old transport's close further. That's the
+// tradeoff the brief calls for — correctness (never closing a transport a live call still needs) over
+// promptness.
+async function scheduleOldTransportClose(entry: Entry, oldTransport: Transport): Promise<void> {
+  if (entry.inFlight === 0) {
+    try {
+      await oldTransport.close();
+    } catch {
+      /* best-effort */
+    }
+  } else {
+    entry.deferredCloses.push(oldTransport);
+  }
+}
+
+// Drains and closes any old transports queued by scheduleOldTransportClose once inFlight has reached
+// 0. Called from callConnectorTool's `finally` right after the decrement. Safe to call speculatively
+// (no-ops when inFlight is still >0 or nothing is queued) — the snapshot-and-clear happens
+// synchronously before any `await`, so a concurrent push can't be lost or double-closed.
+async function drainDeferredCloses(entry: Entry): Promise<void> {
+  if (entry.inFlight > 0 || entry.deferredCloses.length === 0) return;
+  const closes = entry.deferredCloses;
+  entry.deferredCloses = [];
+  for (const t of closes) {
+    try {
+      await t.close();
+    } catch {
+      /* best-effort */
+    }
+  }
+}
 
 // Spawns the transport and completes the SDK handshake for `gem`. Shared by the cold-connect path
 // and the digest-invalidation reconnect path below — neither touches the pool; the caller wires the
@@ -121,21 +162,24 @@ async function ensureClient(server: string): Promise<Client> {
     existing.digest = digest;
     existing.connecting = (async () => {
       try {
-        try {
-          await oldTransport.close();
-        } catch {
-          /* best-effort */
-        }
+        // Connect the REPLACEMENT first, before touching the old transport at all: a caller already
+        // mid-`callConnectorTool` on the old client (entry.inFlight>0) must keep answering on it
+        // undisturbed while this reconnect is in progress — see scheduleOldTransportClose below for
+        // why the close itself is also gated on inFlight rather than unconditional.
         const { client, transport } = await connectTransport(server, gem);
         existing.client = client;
         existing.transport = transport;
         existing.connecting = null;
         touchIdle(server);
+        await scheduleOldTransportClose(existing, oldTransport);
         return client;
       } catch (e) {
         // Same failure-must-not-poison-the-pool rule as the cold path: only drop the entry if it's
-        // still OURS (a newer reconnect hasn't already replaced it).
+        // still OURS (a newer reconnect hasn't already replaced it). The old transport is still live
+        // here (we never touched it above) and still may have a call in flight on it — same
+        // inFlight-gated close as the success path, not an unconditional one.
         if (pool.get(server) === existing) pool.delete(server);
+        await scheduleOldTransportClose(existing, oldTransport);
         throw e;
       }
     })();
@@ -161,6 +205,7 @@ async function ensureClient(server: string): Promise<Client> {
     connecting: null,
     inFlight: 0,
     digest,
+    deferredCloses: [],
   };
   pool.set(server, entry);
 
@@ -201,10 +246,17 @@ async function closeEntry(server: string): Promise<void> {
   if (!e) return;
   pool.delete(server);
   if (e.idle) clearTimeout(e.idle);
-  try {
-    await e.transport?.close();
-  } catch {
-    /* best-effort */
+  // Close the current transport AND any old ones still queued from a reconnect whose inFlight-drain
+  // never got the chance to fire (e.g. the entry closes via the idle reaper before that happens) —
+  // otherwise those old child processes leak.
+  const deferred = e.deferredCloses;
+  e.deferredCloses = [];
+  for (const t of [e.transport, ...deferred]) {
+    try {
+      await t?.close();
+    } catch {
+      /* best-effort */
+    }
   }
 }
 
@@ -251,6 +303,10 @@ export async function callConnectorTool(
   } finally {
     entry.inFlight--;
     touchIdle(server);
+    // The call-completion hook a deferred reconnect-close is waiting on (see
+    // scheduleOldTransportClose) — a no-op unless this decrement just brought inFlight to 0 AND a
+    // reconnect actually queued something.
+    void drainDeferredCloses(entry);
   }
 }
 
