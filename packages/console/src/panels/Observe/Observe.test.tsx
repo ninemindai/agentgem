@@ -295,8 +295,15 @@ const rawStat = {
 describe("Observe view persistence", () => {
   afterEach(() => { sessionStorage.clear(); });
 
+  // Post-redesign, Observe consults home-state before rendering the dashboard —
+  // these persistence tests exercise the RETURNING-user dashboard, so stub a
+  // reveal-seen visitor (the scoreboard above it may sit in its failed/skeleton
+  // state; the dashboard beneath is what's under test).
   const renderObserve = () => {
-    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(res({ sessions: [rawStat] })));
+    stubHomeFetch({
+      home: { unlocked: true, existingUser: true, revealSeen: true },
+      observeRaw: { sessions: [rawStat] },
+    });
     return render(<Observe apiBase="" />);
   };
 
