@@ -1,19 +1,21 @@
 import { useEffect, useRef } from "react";
 import { useToast } from "../shell/Toast.js";
-import { detectWarm, detectDream, type WarmSnapshot, type DreamSnapshot, type NotifyEvent } from "./events.js";
+import { detectWarm, detectDream, detectAttention, type WarmSnapshot, type DreamSnapshot, type AttentionSnapshot, type NotifyEvent } from "./events.js";
 import { dispatch } from "./dispatch.js";
 import { osNotify } from "./osNotify.js";
 import { readNotifyPref } from "./prefs.js";
+import { readWatchAlertPrefs, enrolledFiles } from "./watchAlertPrefs.js";
 
 const POLL_MS = 5000;
 
-// Mounted once in Shell. Polls warm + dream status, detects transitions, and
-// routes events through dispatch. Renders nothing. Independent of WarmingPill's
-// own poll (kept separate so the pill stays untouched).
+// Mounted once in Shell. Polls warm + dream + watch-attention status, detects
+// transitions, and routes events through dispatch. Renders nothing. Independent of
+// WarmingPill's own poll (kept separate so the pill stays untouched).
 export function NotificationsProvider({ apiBase }: { apiBase: string }): null {
   const { push } = useToast();
   const warmPrev = useRef<WarmSnapshot | null>(null);
   const dreamPrev = useRef<DreamSnapshot | null>(null);
+  const attnPrev = useRef<AttentionSnapshot | null>(null);
 
   useEffect(() => {
     let alive = true;
@@ -30,9 +32,10 @@ export function NotificationsProvider({ apiBase }: { apiBase: string }): null {
 
     const poll = async () => {
       try {
-        const [wr, dr] = await Promise.all([
+        const [wr, dr, ar] = await Promise.all([
           fetch(`${apiBase}/api/warm/status`),
           fetch(`${apiBase}/api/dream/status`),
+          fetch(`${apiBase}/api/watch/attention`),
         ]);
         if (!alive) return;
         if (wr.ok) {
@@ -46,6 +49,12 @@ export function NotificationsProvider({ apiBase }: { apiBase: string }): null {
           const next: DreamSnapshot = { queued: d.queued };
           fire(detectDream(dreamPrev.current, next));
           dreamPrev.current = next;
+        }
+        if (ar.ok) {
+          const next = (await ar.json()) as AttentionSnapshot;
+          const enrolled = enrolledFiles(readWatchAlertPrefs(), next.sessions.map((s) => s.file));
+          for (const e of detectAttention(attnPrev.current, next, enrolled)) fire(e);
+          attnPrev.current = next;
         }
       } catch {
         /* best-effort — a failed poll leaves the baseline untouched */
