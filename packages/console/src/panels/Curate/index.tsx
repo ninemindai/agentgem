@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { defineConsolePage } from "../../registry.js";
 import { inventoryRoute, usageRoute, artifactContentRoute, createWorkspaceRoute, scaffoldChecksRoute, playbookPrepareRoute, makeClient, type Usage, type GemCheck } from "../../api/routes.js";
-import { groupInventory, mergeUsage, applyView, sortGroupItems, relativeTime, formatSource, DEFAULT_VIEW, type LedgerGroup, type SortKey, type SortDir } from "./data.js";
+import { groupInventory, mergeUsage, applyView, sortGroupItems, relativeTime, formatSource, DEFAULT_VIEW, type LedgerGroup, type SortKey, type SortDir } from "../shared/ledgerModel.js";
 import { selKey, visibleKeys, buildSelection } from "./selection.js";
 import { useActiveGem, setKeys, toggleKey as toggleKeyStore, clearKeys, setName as setNameStore } from "../../activeGem.js";
 import { consumePendingAnalyze, consumePendingPlaybook, consumePendingContribution } from "../../pendingAnalyze.js";
