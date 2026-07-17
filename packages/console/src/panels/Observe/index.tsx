@@ -1,5 +1,5 @@
 // packages/console/src/panels/Observe/index.tsx
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { defineConsolePage } from "../../registry.js";
 import { inventoryRoute, makeClient, type ObserveRange, type ObserveFilter } from "../../api/routes.js";
 import { setPendingContribution } from "../../pendingAnalyze.js";
@@ -8,13 +8,43 @@ import { Dashboard } from "./Dashboard.js";
 import { Loading } from "../../shell/Loading.js";
 import { useObserveData } from "./useObserveData.js";
 
+const VIEW_KEY = "agentgem.observe.view";
+const VIEW_RANGES: ObserveRange[] = ["today", "7d", "30d", "all"];
+
+/** 4A + 3A: validated sessionStorage rehydration. Garbage, old-build values, or
+ *  wrong types fall back to the defaults; a stale `project` passes through (the
+ *  card's ✕ chip is the recovery affordance). Exported for tests. */
+export function loadObserveView(): { range: ObserveRange; filter: ObserveFilter } {
+  const fallback: { range: ObserveRange; filter: ObserveFilter } = { range: "7d", filter: { minMsgs: 100 } };
+  try {
+    const raw = sessionStorage.getItem(VIEW_KEY);
+    if (!raw) return fallback;
+    const v = JSON.parse(raw) as { range?: unknown; filter?: Record<string, unknown> };
+    const range = VIEW_RANGES.includes(v.range as ObserveRange) ? (v.range as ObserveRange) : fallback.range;
+    const f = v.filter ?? {};
+    const str = (x: unknown) => (typeof x === "string" && x !== "" ? x : undefined);
+    // A stored blob with no minMsgs means the user CLEARED it — keep it cleared.
+    const minMsgs = !("minMsgs" in f) ? undefined
+      : typeof f.minMsgs === "number" && Number.isFinite(f.minMsgs) ? f.minMsgs
+      : fallback.filter.minMsgs;
+    return { range, filter: { agent: str(f.agent), project: str(f.project), model: str(f.model), minMsgs } };
+  } catch {
+    return fallback;
+  }
+}
+
 // Inspect is the aggregate usage dashboard. The per-session ledger + transcript
 // drill-down live in the Sessions screen (panels/Sessions); legacy #/inspect/<a>/<s>
 // links are rewritten to #/sessions/<a>/<s> by normalizeHash.
 export function Observe({ apiBase }: { apiBase: string }) {
   const { stats, error: fetchError, pending, onRefresh } = useObserveData(apiBase);
-  const [range, setRange] = useState<ObserveRange>("7d");
-  const [filter, setFilter] = useState<ObserveFilter>({ minMsgs: 100 });
+  const [range, setRange] = useState<ObserveRange>(() => loadObserveView().range);
+  const [filter, setFilter] = useState<ObserveFilter>(() => loadObserveView().filter);
+  // Persist the view so the triage loop (Overview → session detail → back) keeps
+  // its investigation context (4A). Best-effort: a blocked/full store is harmless.
+  useEffect(() => {
+    try { sessionStorage.setItem(VIEW_KEY, JSON.stringify({ range, filter })); } catch { /* best-effort */ }
+  }, [range, filter]);
   const [actionError, setActionError] = useState<string | null>(null);
 
   // "Share my setup" (light) and "Publish" (heavy) both need the inventory, but only when
