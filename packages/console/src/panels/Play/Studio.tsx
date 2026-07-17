@@ -164,14 +164,20 @@ export function Studio({
     let failStreak = 0;
     const tick = async () => {
       try {
-        const st = await fetch(`${apiBase}/api/chat/${encodeURIComponent(id)}/state`).then((r) => r.ok ? r.json() : { alive: false });
+        // Non-ok can only be a server/transport error — the server returns 200 {alive:false} for a
+        // genuinely unknown chat — so throw and let the catch/failStreak tolerance below handle it
+        // rather than routing a transient 500 into the "session dead" completion branch.
+        const st = await fetch(`${apiBase}/api/chat/${encodeURIComponent(id)}/state`).then((r) => { if (!r.ok) throw new Error(`state ${r.status}`); return r.json(); });
         if (gen !== pollGenRef.current) return; // stale loop (unmounted / stopped / superseded)
         failStreak = 0;
         if (!st.alive || !st.running) {
-          setBusy(false); setWorking("");
+          // Reconcile before unlocking: read the durable transcript and adopt it BEFORE clearing
+          // busy, so there's no gap where a new send's optimistic message could land and then be
+          // clobbered by this stale read.
           const r = await loadStudioSession(apiBase, name);
           if (gen !== pollGenRef.current) return;
           setMsgs(r.msgs);
+          setBusy(false); setWorking("");
           await refresh();
           return;
         }
@@ -316,7 +322,10 @@ export function Studio({
   // is hit), so setInput("") called after send() would win the state-update batch and clobber
   // the restored text. Clearing first — with the text captured up front, since send() reads
   // the argument, not `input` state — makes an in-send restore the LAST call, so it wins.
-  function submit() { const text = input; setInput(""); send(text); }
+  // Guard on busy: the textarea's Enter handler calls submit() unconditionally, and send()
+  // early-returns while busy — without this guard, pressing Enter mid-turn would still wipe
+  // the composer (including a message an "already running" restore just put back).
+  function submit() { if (busy || !input.trim()) return; const text = input; setInput(""); send(text); }
 
   // Save gates the seal; a gate failure becomes an actionable banner (offer to have the agent fix it).
   async function save(): Promise<boolean> {
