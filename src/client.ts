@@ -17,6 +17,7 @@ import { buildCommonApp, finalizeCommonApp, installGracefulShutdown, warmEnabled
 import { BenchmarkProxyController } from "./benchmark.proxy.controller.js";
 import { AgentTasksController } from "./agentTasks.controller.js";
 import { startWarmSchedule } from "./warm/schedule.js";
+import { readState } from "./home/state.js";
 
 export async function createClientApp(port: number): Promise<RestApplication> {
   const { app, server } = await buildCommonApp(port);
@@ -38,6 +39,9 @@ export async function createClientApp(port: number): Promise<RestApplication> {
 export async function runClient(port: number = Number(process.env.PORT ?? 4317)): Promise<RestApplication> {
   const app = await createClientApp(port);
   await app.start();
+  // See index.ts's run() for why this must happen before startWarmSchedule(): warm's
+  // boot pass writes the same cache files the existingUser heuristic checks for.
+  readState();
   const sched = warmEnabled(process.env) ? startWarmSchedule() : null;
   installGracefulShutdown({ stop: async () => { sched?.stop(); await app.stop(); } });
   const server = await app.restServer;

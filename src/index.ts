@@ -16,6 +16,7 @@ import { mountAggregator } from "./serverAggregator.js";
 import { BenchmarkProxyController } from "./benchmark.proxy.controller.js";
 import { AgentTasksController } from "./agentTasks.controller.js";
 import { startWarmSchedule } from "./warm/schedule.js";
+import { readState } from "./home/state.js";
 
 // Moved to serverAggregator.ts (Task 4); re-exported here because
 // src/__tests__/migrateAccountsOrFail.test.ts imports it from "../index.js".
@@ -59,6 +60,16 @@ export async function createApp(port: number): Promise<RestApplication> {
 export async function run(port: number = Number(process.env.PORT ?? 4317)): Promise<RestApplication> {
   const app = await createApp(port);
   await app.start();
+  // Latch the first-run/existing-user snapshot BEFORE warm's own boot pass can run:
+  // that pass (below) writes the very cache files (transcript-index.db,
+  // global-usage-cache.json, etc.) that home/state.ts's existingUser heuristic checks
+  // for, within a tick of boot (setTimeout(fn,0)) — so calling readState() any later
+  // (e.g. lazily on the console's first GET /api/home/state) would flag EVERY brand
+  // new install as "existing" the moment warm's boot pass has fired, which in
+  // practice is always by the time a browser finishes loading the page. Reading here
+  // is synchronous and persists the snapshot immediately, so the lazy read on the
+  // console's first request just returns what's already on disk.
+  readState();
   const sched = warmEnabled(process.env) ? startWarmSchedule() : null;
   installGracefulShutdown({ stop: async () => { sched?.stop(); await app.stop(); } });
   const server = await app.restServer;
