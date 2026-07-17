@@ -31,6 +31,41 @@ export function detectDream(prev: DreamSnapshot | null, next: DreamSnapshot): No
   return null;
 }
 
+export interface AttentionSessionSnap {
+  id: string;
+  file: string;
+  project: string | null;
+  state: "pending" | "busy" | "idle";
+  pendingKey: number | null;
+  pendingToolName: string | null;
+}
+export interface AttentionSnapshot { sessions: AttentionSessionSnap[] }
+
+// One NotifyEvent per ENROLLED session that transitioned into pending (or into a
+// NEW stall — the pendingKey changed). First snapshot is a silent baseline, like
+// detectWarm. Copy hedges "(or a long tool run)": the transcript can't distinguish
+// a permission prompt from a slow tool.
+export function detectAttention(
+  prev: AttentionSnapshot | null,
+  next: AttentionSnapshot,
+  enrolled: Set<string>,
+): NotifyEvent[] {
+  if (!prev) return [];
+  const prevKey = new Map(prev.sessions.map((s) => [s.id, s.state === "pending" ? s.pendingKey : null]));
+  const out: NotifyEvent[] = [];
+  for (const s of next.sessions) {
+    if (s.state !== "pending" || s.pendingKey === null || !enrolled.has(s.file)) continue;
+    if (prevKey.get(s.id) === s.pendingKey) continue;
+    const who = s.project ?? s.id.slice(0, 8);
+    out.push({
+      key: `attention-${s.id}-${s.pendingKey}`,
+      title: "Session needs your input",
+      message: `${who} — waiting on approval for ${s.pendingToolName ?? "a tool"} (or a long tool run).`,
+    });
+  }
+  return out;
+}
+
 export interface ReportSnapshot {
   terminal: Record<string, "done" | "failed">;   // run id -> terminal status
   kindOf: Record<string, string>;                 // run id -> kind

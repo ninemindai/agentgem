@@ -36,3 +36,44 @@ describe("detectDream", () => {
     expect(detectDream({ queued: 4 }, { queued: 2 })).toBeNull();
   });
 });
+
+import { detectAttention, type AttentionSnapshot } from "./events.js";
+
+const snap = (sessions: AttentionSnapshot["sessions"]): AttentionSnapshot => ({ sessions });
+const pending = (over: Partial<AttentionSnapshot["sessions"][0]> = {}) => ({
+  id: "s1", file: "/t/s1.jsonl", project: "site",
+  state: "pending" as const, pendingKey: 4, pendingToolName: "Bash", ...over,
+});
+
+describe("detectAttention", () => {
+  it("is silent on the first snapshot (baseline)", () => {
+    expect(detectAttention(null, snap([pending()]), new Set(["/t/s1.jsonl"]))).toEqual([]);
+  });
+
+  it("fires once when an enrolled session transitions into pending", () => {
+    const events = detectAttention(snap([{ ...pending(), state: "busy", pendingKey: null, pendingToolName: null }]), snap([pending()]), new Set(["/t/s1.jsonl"]));
+    expect(events).toHaveLength(1);
+    expect(events[0].key).toBe("attention-s1-4");
+    expect(events[0].title).toBe("Session needs your input");
+    expect(events[0].message).toBe("site — waiting on approval for Bash (or a long tool run).");
+  });
+
+  it("does not re-fire while the same stall persists", () => {
+    expect(detectAttention(snap([pending()]), snap([pending()]), new Set(["/t/s1.jsonl"]))).toEqual([]);
+  });
+
+  it("fires again for a later, different stall (new pendingKey)", () => {
+    const events = detectAttention(snap([pending()]), snap([pending({ pendingKey: 9, pendingToolName: "Write" })]), new Set(["/t/s1.jsonl"]));
+    expect(events).toHaveLength(1);
+    expect(events[0].key).toBe("attention-s1-9");
+  });
+
+  it("ignores sessions that are not enrolled", () => {
+    expect(detectAttention(snap([]), snap([pending()]), new Set())).toEqual([]);
+  });
+
+  it("falls back to the id prefix when project is null", () => {
+    const events = detectAttention(snap([]), snap([pending({ project: null, id: "abcdef1234" })]), new Set(["/t/s1.jsonl"]));
+    expect(events[0].message).toBe("abcdef12 — waiting on approval for Bash (or a long tool run).");
+  });
+});
