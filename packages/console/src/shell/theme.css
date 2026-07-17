@@ -1231,7 +1231,7 @@ body::before {
 .reveal { max-width: 880px; margin: 0 auto; padding: 8px 0 32px; }
 .reveal-masthead { display: flex; justify-content: space-between; align-items: baseline; padding: 4px 0 10px; }
 .reveal-brand { font: 700 15px/1 var(--font-display); font-optical-sizing: auto; letter-spacing: .04em; color: var(--ink); }
-.reveal-date { font: 400 11.5px/1 var(--font-ui); color: var(--muted); letter-spacing: .06em; text-transform: uppercase; }
+.reveal-date { font: 400 11.5px/1 var(--font-ui); color: var(--ink-soft); letter-spacing: .06em; text-transform: uppercase; }
 .reveal-rule-2 { border: 0; border-top: 2px solid var(--ink); margin: 0; }
 .reveal-rule-1 { border: 0; border-top: 1px solid var(--line); margin: 4px 0 0; }
 
@@ -1252,23 +1252,24 @@ body::before {
 .reveal-ledger-item { font: 400 15px/1 var(--font-display); font-optical-sizing: auto; color: var(--ink-soft); }
 .reveal-ledger-item b { font-size: 21px; font-weight: 700; color: var(--ink); font-feature-settings: "tnum"; }
 
-.reveal-earnit, .reveal-degrade { font: 400 13px/1.5 var(--font-ui); color: var(--muted); margin: 12px 0 0; }
+.reveal-earnit, .reveal-degrade { font: 400 14px/1.5 var(--font-ui); color: var(--muted); margin: 12px 0 0; }
 .reveal-below { margin: 26px 0 0; }
-.reveal-cta-sub { font: 400 13px/1.4 var(--font-ui); color: var(--muted); margin: 10px 0 0; }
+.reveal-cta-sub { font: 400 14px/1.4 var(--font-ui); color: var(--muted); margin: 10px 0 0; }
 .reveal-candidate { font: 500 13.5px/1.4 var(--font-ui); color: var(--ink-soft); margin: 6px 0 0; }
-.reveal-gaps { font: 400 13.5px/1.5 var(--font-ui); font-style: italic; color: var(--muted); margin: 18px 0 0; }
+.reveal-gaps { font: 400 14px/1.5 var(--font-ui); font-style: italic; color: var(--muted); margin: 18px 0 0; }
+.reveal-scope { font: 400 14px/1.5 var(--font-ui); color: var(--muted); margin: 10px 0 0; }
 
 .reveal-claude-only, .reveal-assaying, .reveal-scanning, .reveal-prospecting {
   font: 400 15px/1.6 var(--font-ui); color: var(--ink-soft); margin: 26px 0 0; }
 
 .reveal-footnote { font: 400 12.5px/1.5 var(--font-ui); color: var(--muted); margin: 30px 0 0; }
-.reveal-dismiss { display: block; margin: 20px 0 0; background: none; border: 0; padding: 0; color: var(--muted);
+.reveal-dismiss { display: block; margin: 20px 0 0; background: none; border: 0; padding: 0; color: var(--ink-soft);
   font: 500 13px/1 var(--font-ui); cursor: pointer; text-decoration: underline; }
 .reveal-dismiss:hover { color: var(--accent); }
 
 .reveal-diagnostic { margin: 30px 0 0; }
 .reveal-diagnostic-text { font: 500 15px/1.4 var(--font-ui); color: var(--ink); margin: 0 0 6px; }
-.reveal-diagnostic-path { font: 400 12.5px/1.4 var(--font-mono); color: var(--muted); margin: 0 0 14px; }
+.reveal-diagnostic-path { font: 400 12.5px/1.4 var(--font-mono); color: var(--ink-soft); margin: 0 0 14px; }
 .reveal-retry { font: 600 13px/1 var(--font-ui); color: var(--ink-soft); background: var(--raised);
   border: 1px solid var(--line); border-radius: 7px; padding: 8px 16px; cursor: pointer; }
 .reveal-retry:hover { border-color: var(--accent); color: var(--accent); }
