@@ -110,6 +110,15 @@ describe("GET /api/play/mcp/servers", () => {
     expect(res.error?.code).toBe("server_config_changed");
   });
 
+  it("reports server_not_connected (not server_config_changed) when the connector isn't installed", async () => {
+    const ctrl = new PlayController();
+    await ctrl.save({ body: { name: "pulse", html: mcpHtml(`window.agentgemApp.mcp.callTool("fake","read_thing")`), meta: { ...meta, mcpNeeds: [{ server: "fake", tools: ["read_thing"] }] } } });
+    __setConnectorReaderForTest(() => undefined); // gem not installed → resolveConnectorDigest is undefined
+    const res = await ctrl.mcpCall({ body: { name: "pulse", server: "fake", tool: "read_thing", input: {}, expectedConfigDigest: "sha256:deadbeef" } });
+    expect(res.ok).toBe(false);
+    expect(res.error?.code).toBe("server_not_connected");
+  });
+
   it("allows a call whose expectedConfigDigest matches (or is omitted)", async () => {
     const ctrl = new PlayController();
     await ctrl.save({ body: { name: "pulse", html: mcpHtml(`window.agentgemApp.mcp.callTool("fake","read_thing")`), meta: { ...meta, mcpNeeds: [{ server: "fake", tools: ["read_thing"] }] } } });

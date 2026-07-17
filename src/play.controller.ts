@@ -190,8 +190,16 @@ export class PlayController {
     }
     // Digest re-check (D3/D7): AFTER the manifest check, BEFORE ever calling the connector. A caller
     // that omits expectedConfigDigest (a non-console caller) skips this — the console always sends it.
-    if (expectedConfigDigest !== undefined && expectedConfigDigest !== resolveConnectorDigest(server)) {
-      return { ok: false, error: { code: "server_config_changed", message: "connector config changed since consent — re-approve" } };
+    if (expectedConfigDigest !== undefined) {
+      const liveDigest = resolveConnectorDigest(server);
+      // An uninstalled connector resolves to `undefined`, not a changed digest — report the connector
+      // as not connected rather than misleadingly telling the caller its consent is stale.
+      if (liveDigest === undefined) {
+        return { ok: false, error: { code: "server_not_connected", message: `MCP server "${server}" is not installed` } };
+      }
+      if (expectedConfigDigest !== liveDigest) {
+        return { ok: false, error: { code: "server_config_changed", message: "connector config changed since consent — re-approve" } };
+      }
     }
     try {
       const result = await callConnectorTool(server, tool, args);

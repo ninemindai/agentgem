@@ -87,6 +87,40 @@ describe("connection manager", () => {
     await expect(callConnectorTool("fake", "read_thing", { q: 2 })).rejects.toMatchObject({ code: "server_unavailable" });
   });
 
+  it("single-flights a digest-invalidation reconnect (two concurrent callers, one reconnect, no orphaned process)", async () => {
+    // Warm the pool with a working client, then flip the reader to a DIFFERENT (broken) command so
+    // the next ensureClient sees a stale digest. Two callers race the invalidation in the same tick —
+    // without single-flighting the reconnect (the bug), the first would delete the pool entry then
+    // `await` its close, and the second — seeing an empty pool in that same synchronous turn — would
+    // start its OWN reconnect: two child processes, one orphaned pool entry the reaper/reset never
+    // reaches.
+    let reads = 0;
+    let broken = false;
+    __setConnectorReaderForTest(() => {
+      reads++;
+      return broken
+        ? { type: "mcp_server" as const, name: "fake", transport: "stdio" as const, config: { command: "definitely-not-a-real-binary-xyz" }, source: "user" }
+        : stdioGem("fake");
+    });
+    await callConnectorTool("fake", "read_thing", {}); // warm the pool with a working client
+    broken = true; // same server name, different command → digest changes
+    reads = 0;
+    const [a, b] = await Promise.allSettled([
+      callConnectorTool("fake", "read_thing", { q: 1 }),
+      callConnectorTool("fake", "read_thing", { q: 2 }),
+    ]);
+    // Both callers reject — a stale client is never reused across a digest change.
+    expect(a.status).toBe("rejected");
+    expect(b.status).toBe("rejected");
+    // The reader is consulted exactly ONCE: the second (concurrent) caller must find `connecting`
+    // already set on the SAME pool entry and join that one reconnect, rather than re-resolving the
+    // gem itself and racing a second reconnect. Mirrors the cold-path single-flight test's `spawns===1`.
+    expect(reads).toBe(1);
+    // A failed reconnect must not poison the pool AND must not leave a second, orphaned entry behind
+    // for the reaper to miss — after reset, there is nothing left to close.
+    await __resetConnectorsForTest();
+  });
+
   it("does NOT poison the pool after a failed connect — a retry once the secret is set succeeds", async () => {
     let hasSecret = false;
     __setConnectorReaderForTest(() => hasSecret ? stdioGem("fake") : ({ ...stdioGem("fake"), secretRefs: [{ name: "GITHUB_TOKEN", location: "env.GITHUB_TOKEN" }] }));
