@@ -7,8 +7,8 @@ import { useState } from "react";
 import type { TranscriptTurn, TranscriptSpan } from "../../api/routes.js";
 import { fmtTokens } from "./data.js";
 
-export function Turn({ turn, startMs, open, onToggle }: {
-  turn: TranscriptTurn; startMs: number; open: boolean; onToggle: () => void;
+export function Turn({ turn, startMs, open, onToggle, live }: {
+  turn: TranscriptTurn; startMs: number; open: boolean; onToggle: () => void; live?: boolean;
 }) {
   const tok = turn.tokens.in + turn.tokens.out;
   return (
@@ -22,28 +22,39 @@ export function Turn({ turn, startMs, open, onToggle }: {
       </button>
       {open && (
         <div className="tv-spans">
-          {turn.spans.map((span, i) => <Span key={i} span={span} />)}
+          {turn.spans.map((span, i) => <Span key={i} span={span} live={live} />)}
         </div>
       )}
     </li>
   );
 }
 
-export function Span({ span }: { span: TranscriptSpan }) {
+// `live` marks a still-streaming session (Watch → Feed): tool calls whose result
+// hasn't arrived yet (`output === undefined`) show a "running" badge and mount
+// expanded, so the output appears in place the moment it lands. Historic views
+// (Observe) omit the prop and render exactly as before.
+export function Span({ span, live }: { span: TranscriptSpan; live?: boolean }) {
   if (span.kind === "message") {
     return <pre className={"tv-msg role-" + span.role}>{span.text}</pre>;
   }
-  return <ToolCall span={span} />;
+  return <ToolCall span={span} live={live} />;
 }
 
-function ToolCall({ span }: { span: Extract<TranscriptSpan, { kind: "tool_call" }> }) {
-  const [open, setOpen] = useState(false);
+function ToolCall({ span, live }: { span: Extract<TranscriptSpan, { kind: "tool_call" }>; live?: boolean }) {
+  const running = live === true && span.output === undefined;
+  const [open, setOpen] = useState(running);
+  const headline = toolHeadline(span.input);
   return (
     <div className={"tv-tool" + (span.error ? " is-error" : "")}>
       <button type="button" className="tv-tool-head" aria-expanded={open} onClick={() => setOpen((o) => !o)}>
         <span className={"obs-caret" + (open ? " open" : "")}>▸</span>
         <span className="tv-tool-name">{span.name}</span>
-        {span.error && <span className="tv-tool-err">error</span>}
+        {headline && <code className="tv-tool-arg">{headline}</code>}
+        {live
+          ? <span className={"run-badge " + (running ? "run-running" : "run-done")}>
+              {running ? "running" : span.error ? "error" : "done"}
+            </span>
+          : span.error && <span className="tv-tool-err">error</span>}
       </button>
       {open && (
         <div className="tv-tool-body">
@@ -68,6 +79,19 @@ export function summarize(turn: TranscriptTurn): string {
   if (first.kind === "message") return firstLine(first.text);
   const tools = turn.spans.filter((s) => s.kind === "tool_call").map((s) => (s as { name: string }).name);
   return tools.length === 1 ? tools[0] : `${tools.length} tool calls: ${tools.slice(0, 3).join(", ")}`;
+}
+
+// Pull the one arg that best summarises a tool call, so the header reads like what
+// the agent is actually doing (the command, the file, the query) rather than raw JSON.
+function toolHeadline(input: string): string {
+  let o: unknown;
+  try { o = JSON.parse(input); } catch { return ""; }
+  if (!o || typeof o !== "object") return "";
+  const r = o as Record<string, unknown>;
+  for (const k of ["command", "file_path", "path", "pattern", "url", "query"]) {
+    if (typeof r[k] === "string") return r[k] as string;
+  }
+  return "";
 }
 
 function firstLine(s: string): string {
