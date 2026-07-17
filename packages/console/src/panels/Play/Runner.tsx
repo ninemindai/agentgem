@@ -47,6 +47,7 @@ export const Runner = forwardRef<RunnerHandle,
   const pendingResolve = useRef<((allow: boolean) => void) | null>(null); // resolves the open requestConsent()
   const rebindBtnRef = useRef<HTMLButtonElement>(null);        // the "Replay yours" trigger — focus returns here on close
   const pickerRef = useRef<HTMLDivElement>(null);             // the picker dialog — focused on open, hosts Escape
+  const watchTimersRef = useRef<Set<ReturnType<typeof setTimeout>>>(new Set()); // every outstanding watch-poll timer
 
   // Consent gate handed to the router: the router calls this for GATED caps only (AUTO caps bypass it).
   // Thumbnails never prompt/feed sensitive caps; remembered per-gem choices resolve immediately; a fresh
@@ -73,6 +74,17 @@ export const Runner = forwardRef<RunnerHandle,
       setPickerOpen(false);                                          // the ask takes precedence over an open picker
     });
   }, [interactive, name]);
+
+  // The watch registry's real scheduler (mcpUiHost.ts stays DOM-free — Task 3 — so the Runner supplies the
+  // actual setTimeout wrapper, Task 6). Every armed timer is tracked in watchTimersRef so the host-creation
+  // effect's teardown (game change AND true unmount, same cleanup path — see below) can clear them all,
+  // independent of whether mcpUiHost's own bumpGeneration() also cancelled each entry's timer.
+  const schedule = useCallback((fn: () => void, ms: number): (() => void) => {
+    const t = setTimeout(() => { watchTimersRef.current.delete(t); fn(); }, ms);
+    watchTimersRef.current.add(t);
+    return () => { clearTimeout(t); watchTimersRef.current.delete(t); };
+  }, []);
+  const isHidden = useCallback(() => document.visibilityState === "hidden", []);
 
   // The live host context sent on ui/initialize and re-pushed on every fullscreen toggle. Colors must
   // resolve to concrete hex here: the sealed iframe has no `allow-same-origin`, so it can't see the
@@ -122,12 +134,25 @@ export const Runner = forwardRef<RunnerHandle,
       onDisplayMode: (m) => { const ok = interactive && m === "fullscreen"; setFs(ok); return ok ? "fullscreen" : "inline"; },
       openExternal: (url) => { window.open(url, "_blank", "noopener"); },
       copyText: (text) => { void navigator.clipboard?.writeText(text); },
+      schedule, isHidden,
     });
     hostRef.current = host;
     const onMsg = (e: MessageEvent) => host.handleMessage(e);
     window.addEventListener("message", onMsg);
-    return () => { window.removeEventListener("message", onMsg); host.bumpGeneration(); hostRef.current = null; };
-  }, [name, apiBase, needs, mcpNeeds, interactive, requestConsent, stableHostContext]);
+    // A watch entry never arms a NEXT timer while the tab is hidden (mcpUiHost's scheduleNext); becoming
+    // visible again needs an explicit nudge to catch those paused watches up, rather than waiting out
+    // whatever timer would have fired had the tab stayed visible.
+    const onVisibility = () => { if (document.visibilityState === "visible") host.wakeWatches(); };
+    document.addEventListener("visibilitychange", onVisibility);
+    return () => {
+      window.removeEventListener("message", onMsg);
+      document.removeEventListener("visibilitychange", onVisibility);
+      host.bumpGeneration();                          // cancels every watch's own armed timer too
+      hostRef.current = null;
+      for (const t of watchTimersRef.current) clearTimeout(t); // belt-and-suspenders: no timer outlives this host
+      watchTimersRef.current.clear();
+    };
+  }, [name, apiBase, needs, mcpNeeds, interactive, requestConsent, stableHostContext, schedule, isHidden]);
 
   // Push host-context-changed on every fullscreen toggle, whether button- or request-driven, so the game
   // re-lays-out from the new dimensions instead of scaling a magnified vw×vh. Skip the very first render
