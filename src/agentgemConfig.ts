@@ -11,7 +11,11 @@ const log = createLogger("config");
 // Resolve the paths lazily (per call) rather than at module load, so the config honors
 // the current HOME — matters for the hermetic-home test fixture and for any HOME change.
 const configDir = (): string => join(homedir(), ".agentgem");
-const configPath = (): string => join(configDir(), "config.json");
+// Exported so other modules that need to check "does this config exist" (e.g. src/home/state.ts's
+// existing-user detection) read the exact path this module writes, rather than re-deriving it
+// against a different base (this is os.homedir(), NOT agentgemHome() — they only coincide when
+// AGENTGEM_HOME is unset) and risking drift.
+export const configPath = (): string => join(configDir(), "config.json");
 
 interface AgentgemConfig {
   shareAdoption?: boolean;

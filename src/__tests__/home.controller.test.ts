@@ -1,7 +1,8 @@
 // Copyright (c) 2026 NineMind, Inc.
 // SPDX-License-Identifier: MIT
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
-import { mkdirSync, writeFileSync } from "node:fs";
+import { mkdirSync, writeFileSync, readFileSync, existsSync, mkdtempSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { clearScanCache, writeAnalysisCache } from "@agentgem/insight";
 import { SCORECARD_CACHE_ROOT } from "../gem/scorecard.js";
@@ -170,5 +171,52 @@ describe("HomeController.state", () => {
     deleteWorkspace("mp");
     const afterDelete = await new HomeController().state();
     expect(afterDelete.unlocked).toBe(true); // latched — deleting gems never re-locks
+  });
+
+  it("POST unlocked:false after already-unlocked stays a no-op (unlocked stays true, file unchanged)", async () => {
+    await new HomeController().setState({ body: { unlocked: true } });
+    const statePath = join(home, ".agentgem", "home-state.json");
+    const before = readFileSync(statePath, "utf8");
+
+    const out = await new HomeController().setState({ body: { unlocked: false } });
+    expect(out.unlocked).toBe(true);
+    expect(readFileSync(statePath, "utf8")).toBe(before); // no write happened at all
+  });
+
+  it("corrupt home-state.json self-heals: re-derives existingUser from artifacts and repairs the file on disk", async () => {
+    mkdirSync(join(home, ".agentgem"), { recursive: true });
+    writeFileSync(join(home, ".agentgem", "transcript-index.db"), "");
+    writeFileSync(join(home, ".agentgem", "home-state.json"), "{ this is not json ]["); // torn/corrupt write
+
+    const out = await new HomeController().state();
+    expect(out).toEqual({ unlocked: true, existingUser: true, revealSeen: false });
+
+    const onDisk = JSON.parse(readFileSync(join(home, ".agentgem", "home-state.json"), "utf8"));
+    expect(onDisk.existingUser).toBe(true); // repaired on disk, not left corrupt
+  });
+
+  it("existing-user config.json check reads os.homedir() (the writer's actual path), not agentgemHome() — they can diverge", async () => {
+    // Point AGENTGEM_HOME somewhere OTHER than HOME/os.homedir() (useHermeticHome starts them
+    // equal). src/agentgemConfig.ts always writes config.json under os.homedir(), so detection
+    // must check that exact path — not `<agentgemHome()>/.agentgem/config.json`, which would
+    // silently miss it whenever the two diverge (the config-existence bug this test guards).
+    const altAgentgemHome = mkdtempSync(join(tmpdir(), "agem-alt-"));
+    const prevAgentgemHome = process.env.AGENTGEM_HOME;
+    process.env.AGENTGEM_HOME = altAgentgemHome;
+    try {
+      mkdirSync(join(home, ".agentgem"), { recursive: true });
+      writeFileSync(join(home, ".agentgem", "config.json"), JSON.stringify({ shareAdoption: true }));
+
+      const out = await new HomeController().state();
+      expect(out.existingUser).toBe(true);
+      expect(out.unlocked).toBe(true);
+      // home-state.json is persisted under the (different) AGENTGEM_HOME, proving the config
+      // check didn't just coincidentally hit the same directory.
+      expect(existsSync(join(altAgentgemHome, ".agentgem", "home-state.json"))).toBe(true);
+    } finally {
+      if (prevAgentgemHome !== undefined) process.env.AGENTGEM_HOME = prevAgentgemHome;
+      else delete process.env.AGENTGEM_HOME;
+      rmSync(altAgentgemHome, { recursive: true, force: true });
+    }
   });
 });
