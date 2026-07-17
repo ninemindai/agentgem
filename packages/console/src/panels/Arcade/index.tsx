@@ -40,9 +40,9 @@ export function ArcadePage({ apiBase }: { apiBase: string }) {
 }
 
 export const arcadePage = defineConsolePage({
-  id: "arcade", title: "Arcade", icon: "🎮", order: 40,
+  id: "arcade", title: "Arcade", icon: "🎮", order: 30,
   phase: "observe", category: "sessions",
-  group: "power", hiddenUntilUnlock: true,
+  group: "share", hiddenUntilUnlock: true,
   route: "#/arcade",
   component: ({ apiBase }) => <ArcadePage apiBase={apiBase} />,
 });

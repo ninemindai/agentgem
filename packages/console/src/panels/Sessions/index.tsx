@@ -105,10 +105,10 @@ export const sessionsPage = defineConsolePage({
   id: "sessions",
   title: "History",
   icon: "🗒",
-  order: 5,
+  order: 20,
   phase: "observe",
   category: "sessions",
-  group: "evidence", hiddenUntilUnlock: true,
+  group: "observe", hiddenUntilUnlock: true,
   route: "#/sessions",
   component: Sessions,
 });

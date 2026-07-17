@@ -299,9 +299,9 @@ export const chatPage = defineConsolePage({
   id: "chat",
   title: "Chat",
   icon: "💬",
-  order: 20,
+  order: 50,
   phase: "observe", category: "sessions",
-  group: "power", hiddenUntilUnlock: true,
+  group: "build", hiddenUntilUnlock: true,
   route: "#/chat",
   component: Chat,
 });

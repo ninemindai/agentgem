@@ -215,7 +215,7 @@ export const watchPage = defineConsolePage({
   icon: "📺",
   order: 10,
   phase: "observe", category: "sessions",
-  group: "background", hiddenUntilUnlock: true,
+  group: "observe", hiddenUntilUnlock: true,
   route: "#/watch",
   component: Watch,
 });

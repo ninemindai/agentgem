@@ -14,9 +14,9 @@ describe("pages registry", () => {
     expect(g.map((x) => x.category)).toEqual(["usage", "sessions", "projects", "setup"]);
     expect(g.map((x) => x.pages.map((p) => p.id))).toEqual([
       ["overview", "benchmark"],
-      ["sessions", "recall", "watch", "chat", "dreaming", "arcade"],
+      ["watch", "sessions", "recall", "arcade", "dreaming", "chat"],
       ["mine", "optimize"],
-      ["setup", "rubrics"],
+      ["rubrics", "setup"],
     ]);
   });
 
@@ -25,7 +25,7 @@ describe("pages registry", () => {
     expect(g.map((x) => x.category)).toEqual(["setup", "projects"]);
     expect(flat("build")).toEqual([
       "curate", "sources", "gems", "play", "rubric-library",
-      "materialize", "deploy", "publish", "reviews",
+      "deploy", "publish", "reviews", "materialize",
     ]);
   });
 
@@ -40,24 +40,25 @@ describe("pages registry", () => {
 });
 
 describe("railModel over the real registry", () => {
-  it("locked: foreground is exactly Overview, Curate, Gems — no groups", () => {
+  it("locked: foreground is exactly Overview, Mine, Gems — no groups", () => {
     const model = railModel(pages, false);
-    expect(model.foreground.map((p) => p.id)).toEqual(["overview", "curate", "gems"]);
+    expect(model.foreground.map((p) => p.id)).toEqual(["overview", "mine", "gems"]);
     expect(model.groups).toEqual([]);
   });
 
-  it("unlocked: the four groups appear in order, each with the disposition-table membership", () => {
-    // `order` is scoped to a page's (phase, category) bucket, not to its disclosure group, so
-    // intra-group sequencing isn't meaningful here — assert membership (sorted for a stable
-    // diff), not a specific position within the group.
+  it("unlocked: the four journey groups appear in order, each in its intended sequence", () => {
+    // Unlike the legacy phase/category bucket, `order` here is deliberately assigned per
+    // disclosure group to encode the journey sequence (what happened → make gems → is it
+    // good → ship it), so intra-group position is meaningful and asserted exactly.
     const model = railModel(pages, true);
-    expect(model.foreground.map((p) => p.id)).toEqual(["overview", "curate", "gems"]);
-    expect(model.groups.map((g) => g.key)).toEqual(["make", "evidence", "background", "power"]);
-    expect(model.groups.map((g) => [...g.pages.map((p) => p.id)].sort())).toEqual([
-      ["deploy", "materialize", "setup"],
-      ["benchmark", "recall", "rubric-library", "rubrics", "sessions", "sources"],
-      ["dreaming", "mine", "optimize", "watch"],
-      ["arcade", "chat", "play", "reviews"],
+    expect(model.foreground.map((p) => p.id)).toEqual(["overview", "mine", "gems"]);
+    expect(model.groups.map((g) => g.key)).toEqual(["observe", "build", "evaluate", "share"]);
+    expect(model.groups.map((g) => g.label)).toEqual(["Observe", "Build", "Evaluate", "Share"]);
+    expect(model.groups.map((g) => g.pages.map((p) => p.id))).toEqual([
+      ["watch", "sessions", "recall", "dreaming"],
+      ["curate", "setup", "play", "materialize", "chat", "rubric-library"],
+      ["rubrics", "benchmark", "reviews", "optimize"],
+      ["deploy", "sources", "arcade"],
     ]);
   });
 

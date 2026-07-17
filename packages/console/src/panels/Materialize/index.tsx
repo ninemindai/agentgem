@@ -114,10 +114,10 @@ export const materializePage = defineConsolePage({
   id: "materialize",
   title: "Materialize",
   icon: "▸",
-  order: 10,
+  order: 40,
   phase: "build", category: "projects",
   requiresGem: true,
-  group: "make", hiddenUntilUnlock: true,
+  group: "build", hiddenUntilUnlock: true,
   route: "#/materialize",
   component: ({ apiBase }) => <Materialize apiBase={apiBase} />,
 });

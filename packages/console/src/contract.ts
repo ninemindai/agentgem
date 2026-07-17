@@ -5,7 +5,7 @@ export type Phase = "observe" | "build";
 /** Artifact group within a phase — the secondary sidebar axis. */
 export type ArtifactCategory = "setup" | "sessions" | "projects" | "usage";
 /** Progressive-disclosure rail group — the axis a locked console collapses onto. */
-export type DisclosureGroup = "make" | "evidence" | "background" | "power";
+export type DisclosureGroup = "observe" | "build" | "evaluate" | "share";
 
 export interface ConsolePage {
   id: string;

@@ -31,11 +31,11 @@ const pages = [
   p({ id: "overview", phase: "observe", category: "usage", order: 10 }),
   p({ id: "curate", phase: "build", category: "setup", order: 10 }),
   p({ id: "gems", phase: "build", category: "setup", order: 20 }),
-  p({ id: "deploy", phase: "build", category: "projects", order: 10, group: "make", hiddenUntilUnlock: true, requiresGem: true }),
-  p({ id: "rubrics", phase: "observe", category: "setup", order: 10, group: "evidence", hiddenUntilUnlock: true }),
-  p({ id: "watch", phase: "observe", category: "sessions", order: 10, group: "background", hiddenUntilUnlock: true }),
-  p({ id: "optimize", phase: "observe", category: "projects", order: 20, group: "background", hiddenUntilUnlock: true }),
-  p({ id: "reviews", phase: "build", category: "projects", order: 40, group: "power", hiddenUntilUnlock: true }),
+  p({ id: "deploy", phase: "build", category: "projects", order: 10, group: "observe", hiddenUntilUnlock: true, requiresGem: true }),
+  p({ id: "rubrics", phase: "observe", category: "setup", order: 10, group: "build", hiddenUntilUnlock: true }),
+  p({ id: "watch", phase: "observe", category: "sessions", order: 10, group: "evaluate", hiddenUntilUnlock: true }),
+  p({ id: "optimize", phase: "observe", category: "projects", order: 20, group: "evaluate", hiddenUntilUnlock: true }),
+  p({ id: "reviews", phase: "build", category: "projects", order: 40, group: "share", hiddenUntilUnlock: true }),
   p({ id: "publish", phase: "build", category: "projects", order: 30, hidden: true }),
   p({ id: "settings", footer: true }),
 ];
@@ -126,7 +126,7 @@ describe("Shell — grouped rail (cold console)", () => {
     expect(screen.getByRole("button", { name: "overview" })).toBeTruthy();
     expect(screen.getByRole("button", { name: "curate" })).toBeTruthy();
     expect(screen.getByRole("button", { name: "gems" })).toBeTruthy();
-    for (const label of ["Make", "Evidence", "Background", "Power tools"]) {
+    for (const label of ["Observe", "Build", "Evaluate", "Share"]) {
       expect(screen.queryByText(label)).toBeNull();
     }
     expect(screen.queryByRole("button", { name: "deploy" })).toBeNull();
@@ -138,10 +138,10 @@ describe("Shell — grouped rail (cold console)", () => {
   it("(e) unlocked rail shows the four groups and drops Show everything", async () => {
     mockHomeState({ unlocked: true });
     render(<Shell pages={pages} apiBase="" />);
-    expect(await screen.findByText("Make")).toBeTruthy();
-    expect(screen.getByText("Evidence")).toBeTruthy();
-    expect(screen.getByText("Background")).toBeTruthy();
-    expect(screen.getByText("Power tools")).toBeTruthy();
+    expect(await screen.findByText("Observe")).toBeTruthy();
+    expect(screen.getByText("Build")).toBeTruthy();
+    expect(screen.getByText("Evaluate")).toBeTruthy();
+    expect(screen.getByText("Share")).toBeTruthy();
     expect(screen.queryByText("Show everything")).toBeNull();
   });
 
@@ -151,7 +151,7 @@ describe("Shell — grouped rail (cold console)", () => {
     mockHomeState({ unlocked: true });
     window.location.hash = "#/curate";
     render(<Shell pages={pages} apiBase="" />);
-    fireEvent.click(await screen.findByText("Make")); // expand to reveal deploy
+    fireEvent.click(await screen.findByText("Observe")); // expand to reveal deploy
     const deployBtn = () => screen.getByRole("button", { name: "deploy" });
     expect(deployBtn().classList.contains("is-locked")).toBe(true);
     act(() => { setKeys(new Set(["x"])); });
@@ -167,7 +167,7 @@ describe("Shell — grouped rail (cold console)", () => {
     render(<Shell pages={pages} apiBase="" />);
     fireEvent.click(await screen.findByText("Show everything"));
     expect(setSpy).toHaveBeenCalledWith(expect.anything(), { body: { unlocked: true } });
-    await waitFor(() => expect(screen.getByText("Make")).toBeTruthy());
+    await waitFor(() => expect(screen.getByText("Observe")).toBeTruthy());
     // Expanded immediately alongside the unlock — no extra click needed to see deploy.
     expect(screen.getByRole("button", { name: "deploy" })).toBeTruthy();
   });
@@ -176,12 +176,12 @@ describe("Shell — grouped rail (cold console)", () => {
   it("(g) group expansion persists across remount", async () => {
     mockHomeState({ unlocked: true });
     const { unmount } = render(<Shell pages={pages} apiBase="" />);
-    fireEvent.click(await screen.findByText("Make"));
+    fireEvent.click(await screen.findByText("Observe"));
     expect(screen.getByRole("button", { name: "deploy" })).toBeTruthy();
     unmount();
 
     render(<Shell pages={pages} apiBase="" />);
-    await screen.findByText("Make");
+    await screen.findByText("Observe");
     expect(screen.getByRole("button", { name: "deploy" })).toBeTruthy();
   });
 
@@ -201,8 +201,8 @@ describe("Shell — grouped rail (cold console)", () => {
     // poll interval could otherwise race past the assertion window.
     await act(async () => {});
 
-    expect(screen.getByText("Make")).toBeTruthy();
-    expect(screen.getByText("Make").closest("button")?.classList.contains("rail-enter")).toBe(true);
+    expect(screen.getByText("Observe")).toBeTruthy();
+    expect(screen.getByText("Observe").closest("button")?.classList.contains("rail-enter")).toBe(true);
     expect(screen.getByText("Console unlocked — 4 new groups.")).toBeTruthy();
   });
 
@@ -217,14 +217,14 @@ describe("Shell — grouped rail (cold console)", () => {
 
     render(<Shell pages={pages} apiBase="" />);
     // Hinted render — the real fetch hasn't resolved yet.
-    expect(screen.getByText("Make")).toBeTruthy();
+    expect(screen.getByText("Observe")).toBeTruthy();
 
     await act(async () => {
       resolveFetch({ unlocked: false, existingUser: false, revealSeen: false });
       await pending;
     });
     // Server truth (locked) wins outright and corrects the hinted render.
-    expect(screen.queryByText("Make")).toBeNull();
+    expect(screen.queryByText("Observe")).toBeNull();
   });
 });
 

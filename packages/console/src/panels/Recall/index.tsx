@@ -174,10 +174,10 @@ export const recallPage = defineConsolePage({
   id: "recall",
   title: "Recall",
   icon: "✦",
-  order: 6,
+  order: 30,
   phase: "observe",
   category: "sessions",
-  group: "evidence", hiddenUntilUnlock: true,
+  group: "observe", hiddenUntilUnlock: true,
   route: "#/recall",
   component: Recall,
 });

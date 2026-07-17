@@ -23,10 +23,10 @@ export const deployPage = defineConsolePage({
   id: "deploy",
   title: "Deploy",
   icon: "▲",
-  order: 20,
+  order: 10,
   phase: "build", category: "projects",
   requiresGem: true,
-  group: "make", hiddenUntilUnlock: true,
+  group: "share", hiddenUntilUnlock: true,
   route: "#/deploy",
   component: ({ apiBase }) => <Deploy apiBase={apiBase} />,
 });

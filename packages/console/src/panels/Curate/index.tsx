@@ -437,6 +437,7 @@ export const curatePage = defineConsolePage({
   icon: "◆",
   order: 10,
   phase: "build", category: "setup",
+  group: "build", hiddenUntilUnlock: true,
   route: "#/curate",
   component: ({ apiBase }) => <Curate apiBase={apiBase} />,
 });
