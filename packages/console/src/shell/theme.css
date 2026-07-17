@@ -1836,17 +1836,20 @@ button.scorecard-intent { line-height: 1.4; }
 /* ── Mine Workflows ─────────────────────────── */
 .mine-workflows { margin-top: 1.5rem; }
 .mine-workflows h3 { font-size: 0.85rem; font-weight: 600; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); margin-bottom: 0.75rem; }
-.mine-project { margin-bottom: 1rem; }
-.mine-project-label { font-size: 0.8rem; font-weight: 600; color: var(--muted); margin-bottom: 0.25rem; padding-left: 0.25rem; }
-.mine-wf-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 0.35rem; }
-.mine-wf-list li { display: flex; flex-wrap: wrap; align-items: center; gap: .4rem; padding: 0.2rem 0; }
-.mine-wf-list li label { display: flex; align-items: center; cursor: pointer; }
-.mine-wf-list li label:hover input { accent-color: var(--accent); }
-.mine-wf-name { font-size: 0.875rem; flex: 1; min-width: 0; cursor: pointer; }
-.mine-wf-name:hover { color: var(--accent); }
 .mine-badge { font-size: 0.65rem; font-weight: 600; padding: 0.1rem 0.45rem; border-radius: 999px; letter-spacing: .04em; }
 .mine-badge-bt { background: color-mix(in srgb, var(--accent) 15%, transparent); color: var(--accent); }
 .mine-badge-portable { background: color-mix(in srgb, var(--emerald) 15%, transparent); color: var(--emerald); }
+
+/* ── Value-grouped gem grid ── one header per GemGroup, then either a .play-grid
+   of GemCards or (for the "gaps" group, which has no workflow behind it) a plain
+   list of hint rows. */
+.mine-group { margin-bottom: 1.5rem; }
+.mine-group-head { display: flex; align-items: baseline; gap: 8px; margin-bottom: 0.6rem; flex-wrap: wrap; }
+.mine-group-label { font: 600 15px var(--font-display); color: var(--ink); }
+.mine-group-count { font: 600 12px var(--font-ui); color: var(--muted); }
+.mine-group-hint { font: 400 12px var(--font-ui); color: var(--muted); }
+.mine-gaps-row { border: 1px solid var(--line); border-radius: var(--radius); padding: 0.5rem 0.75rem; margin-bottom: 0.4rem; color: var(--ink-soft); font-size: 0.875rem; }
+.mine-build-result { margin: 0 0 0.75rem; color: var(--emerald); font-size: 0.875rem; }
 
 /* ── Gem card ── the Mine grid's unit: name is the primary read, the reserved
    score slot on the right supports it (never out-shouts it). Mirrors .play-card's
@@ -1895,25 +1898,14 @@ button.scorecard-intent { line-height: 1.4; }
   .gem-card__skel-icon, .gem-card__skel-line, .gem-card__skel-badge { animation: none; }
 }
 
-.mine-build-bar { display: flex; align-items: center; gap: 0.75rem; margin-top: 1rem; }
-.mine-gem-name { flex: 1; background: var(--raised); border: 1px solid var(--line); border-radius: 6px; padding: 0.4rem 0.65rem; font-size: 0.875rem; color: var(--ink); outline: none; }
-.mine-gem-name:focus { border-color: var(--accent); }
-.mine-build-ok { margin-top: 0.75rem; color: var(--emerald); font-size: 0.875rem; }
 .scorecard-stats { font-size: 0.8rem; color: var(--ink-soft); margin: 0 0 13px; }
-.mine-filter-bar { display: flex; flex-wrap: wrap; gap: 7px; margin: 0 0 1rem; }
-.mine-filter-bar button { font: 500 12px var(--font-ui); color: var(--accent); background: rgba(154, 51, 36, .06); border: 1px solid rgba(154, 51, 36, .2); border-radius: 999px; padding: 0.2rem 0.65rem; cursor: pointer; transition: background 0.15s, color 0.15s; }
-.mine-filter-bar button:hover { background: rgba(154, 51, 36, .1); border-color: var(--accent); color: var(--accent-2); }
-.mine-filter-bar button.is-active { background: var(--accent); color: var(--raised); border-color: var(--accent); }
-.mine-wf-view { background: none; border: none; cursor: pointer; font-size: 0.7rem; color: var(--muted); padding: 0 0.25rem; line-height: 1; }
-.mine-wf-view:hover { color: var(--ink); }
 .mine-wf-share { background: none; border: 1px solid var(--line); cursor: pointer; font-size: 0.7rem; color: var(--muted); padding: 0.1rem 0.4rem; border-radius: 4px; line-height: 1.4; margin-left: auto; white-space: nowrap; }
 .mine-wf-share:hover { color: var(--accent); border-color: var(--accent); }
-.mine-wf-detail { flex-basis: 100%; width: 100%; margin: 0.15rem 0 0.4rem 2rem; padding: 0.5rem 0.75rem; border-left: 2px solid var(--line); font-size: 0.8rem; color: var(--ink-soft); }
+.mine-wf-detail { margin: 0; padding: 0.5rem 0.75rem; border-left: 2px solid var(--line); font-size: 0.8rem; color: var(--ink-soft); }
 .mine-wf-detail p { margin: 0.2rem 0; }
 .mine-wf-detail ol.steps { margin: 0.25rem 0; padding-left: 1.25rem; }
 .mine-wf-detail ol.steps li { margin-bottom: 0.15rem; }
 .mine-wf-sessions { font-size: 0.75rem; color: var(--muted); margin-top: 0.35rem; }
-.mine-hidden-note { font-size: 0.75rem; color: var(--muted); white-space: nowrap; }
 
 /* Optimize panel */
 .opt { padding: 16px; }
