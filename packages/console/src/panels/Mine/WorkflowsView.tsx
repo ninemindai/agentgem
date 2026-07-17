@@ -1,25 +1,31 @@
 import { useEffect, useRef, useState } from "react";
-import type { Scorecard } from "../../api/routes.js";
-import { scorecardBuildRoute, makeClient } from "../../api/routes.js";
+import type { Scorecard, Usage } from "../../api/routes.js";
+import { scorecardBuildRoute, inventoryRoute, usageRoute, playMiniappsRoute, makeClient } from "../../api/routes.js";
+import { groupInventory, mergeUsage, type LedgerGroup } from "../shared/ledgerModel.js";
 import { ScorecardHero, ScorecardHeroSkeleton, ScorecardScanning } from "./Scorecard.js";
 import { openScorecardStream, type ScorecardStreamEvent } from "./scorecardStream.js";
 import { MineWorkflows } from "./Workflows.js";
 import { GemCardSkeleton } from "./GemCardSkeleton.js";
 import { PROJECT_HYGIENE_SHORTCUT, launchRubricRun } from "../../rubricShortcuts.js";
+import type { Miniapp } from "./unifiedGems.js";
+import { useMineRubricRuns } from "./mineJobs.js";
+import { useHygieneScores } from "./useHygieneScores.js";
+import { JobsStrip } from "./JobsStrip.js";
 
 type Progress = { done: number; total: number; label: string; partial: { breadth: number; battleTested: number; portable: number } };
 
-// PR-1 of the "Group by" switcher: only "value" exists (Type/Maturity land later).
-// Kept as a union rather than a bare string so a later PR's added values are a
-// type-checked, additive change here.
-type Group = "value";
+// The "Group by" perspective switcher's three axes. Kept as a union rather than a
+// bare string so an unrecognized/legacy `?group=` value is a type-checked fallback.
+type Group = "value" | "type" | "maturity";
 
 // Mirrors Setup/index.tsx's `parseQuery`: the hash query string, not localStorage,
-// is the source of truth for the current grouping. PR-1 has exactly one valid
-// value, so an absent or unrecognized `group` param both normalize to "value";
-// PR-2 widens this to actually branch on the parsed param.
+// is the source of truth for the current grouping. An absent or unrecognized
+// `group` param normalizes to "value".
 function parseGroup(): Group {
-  return "value";
+  const hash = window.location.hash || "";
+  const query = hash.split("?")[1] ?? "";
+  const g = new URLSearchParams(query).get("group");
+  return g === "type" || g === "maturity" ? g : "value";
 }
 
 // Writes `?group=<g>` onto the current `#/mine...` hash, preserving the path and
@@ -33,14 +39,17 @@ function setGroupParam(g: Group) {
   window.location.hash = `${path}?${params.toString()}`;
 }
 
-/** True once the scorecard has actually surfaced anything worth showing. Checks
+/** True once nothing has been mined from ANY source yet: no workflows, no inventory
+ *  gems (skills/subagents/lessons/rubrics), no miniapps. The workflow half checks
  *  `breadth` first (the authoritative count); only falls back to inspecting each
  *  project's workflows when there ARE projects — an empty `projects` array must
  *  not be read as "empty" on its own, since a nonzero `breadth` can still be true
- *  before the per-project detail has synced. */
-function isEmptyScorecard(data: Scorecard): boolean {
-  if (data.breadth === 0) return true;
-  return data.projects.length > 0 && data.projects.every((p) => p.workflows.length === 0);
+ *  before the per-project detail has synced. Inventory/miniapps default to `[]`
+ *  while their fetch is in flight, so this correctly reads "empty" until they land. */
+function isEmptyMine(data: Scorecard, inventory: LedgerGroup[], miniapps: Miniapp[]): boolean {
+  const workflowsEmpty = data.breadth === 0 || (data.projects.length > 0 && data.projects.every((p) => p.workflows.length === 0));
+  const inventoryEmpty = inventory.every((g) => g.items.length === 0);
+  return workflowsEmpty && inventoryEmpty && miniapps.length === 0;
 }
 
 // A handful of placeholder cards shown under the scanning header while the scan
@@ -54,16 +63,17 @@ function LoadingGrid() {
   );
 }
 
-// "Group by" perspective switcher: PR-1 renders a single active "Value" segment
-// (the only grouping MineWorkflows supports today) so the #/mine?group= hash
-// contract is live before PR-2 lifts real grouping state into MineWorkflows and
-// adds the Type/Maturity segments alongside it.
+// "Group by" perspective switcher: three axes over the unified gem set, each
+// writing `?group=<axis>` onto the `#/mine` hash (the source of truth, restored
+// via parseGroup on mount and on hashchange).
 function GroupBySwitcher({ group, onChange }: { group: Group; onChange: (g: Group) => void }) {
   return (
     <div className="mine-groupby">
       <span className="mine-groupby-label">Group by</span>
       <span className="play-seg">
         <button type="button" aria-pressed={group === "value"} onClick={() => onChange("value")}>Value</button>
+        <button type="button" aria-pressed={group === "type"} onClick={() => onChange("type")}>Type</button>
+        <button type="button" aria-pressed={group === "maturity"} onClick={() => onChange("maturity")}>Maturity</button>
       </span>
     </div>
   );
@@ -86,7 +96,7 @@ export function WorkflowsView({ apiBase, scope, openStream = openScorecardStream
   // A manual re-scan opens the stream with ?refresh=true to bypass the cached
   // scorecard; the ref keeps it out of the dep array so it's a one-shot.
   const freshRef = useRef(false);
-  // #/mine?group= sub-state — PR-1 seam only, not yet threaded into MineWorkflows.
+  // #/mine?group= sub-state, threaded into MineWorkflows.
   const [group, setGroup] = useState<Group>(() => parseGroup());
   useEffect(() => {
     const onHash = () => setGroup(parseGroup());
@@ -94,6 +104,29 @@ export function WorkflowsView({ apiBase, scope, openStream = openScorecardStream
     return () => window.removeEventListener("hashchange", onHash);
   }, []);
   const onGroupChange = (g: Group) => { setGroupParam(g); setGroup(g); };
+
+  // Inventory (skills/subagents/lessons/rubrics) and miniapps, composed client-side
+  // alongside the scorecard's workflows into the unified gem set. Global, not scoped
+  // to the project selection — re-fetched only when apiBase changes. Each source
+  // degrades independently (starts as `[]`) so a slow/failed fetch never blocks the
+  // workflow render; the extra gems just fold in whenever they land.
+  const [inventory, setInventory] = useState<LedgerGroup[]>([]);
+  const [miniapps, setMiniapps] = useState<Miniapp[]>([]);
+  useEffect(() => {
+    let alive = true;
+    const client = makeClient(apiBase);
+    (async () => {
+      const [inv, usage, miniappsRes] = await Promise.all([
+        inventoryRoute.call(client, { query: { body: "defer" } }).catch(() => null),
+        usageRoute.call(client, { query: { scope: "global" } }).catch(() => ({ artifacts: [] }) as Usage),
+        playMiniappsRoute.call(client, {}).catch(() => ({ miniapps: [] })),
+      ]);
+      if (!alive) return;
+      if (inv) setInventory(mergeUsage(groupInventory(inv), usage));
+      setMiniapps(miniappsRes.miniapps.map((m) => ({ name: m.name, title: m.title, genre: m.genre })));
+    })();
+    return () => { alive = false; };
+  }, [apiBase]);
 
   useEffect(() => {
     setScorecard(null); setScorecardUpdatedAt(null); setProgress(null); setPhase("loading"); setRevalidating(false); setFailMessage(null);
@@ -112,6 +145,13 @@ export function WorkflowsView({ apiBase, scope, openStream = openScorecardStream
   }, [apiBase, openStream, reloadKey, scope]);
 
   const onRescan = () => { freshRef.current = true; setReloadKey((k) => k + 1); };
+
+  // Mine-local jobs strip + per-card hygiene back-fill. Called unconditionally (Rules
+  // of Hooks) even while loading/empty/failed — roots is [] until a scorecard lands,
+  // which useHygieneScores already treats as "nothing to fetch".
+  const runs = useMineRubricRuns();
+  const roots = [...new Set((scorecard?.projects ?? []).map((p) => p.root))];
+  const hygiene = useHygieneScores(roots, runs, apiBase);
 
   const onRunHygiene = () => launchRubricRun({
     rubric: PROJECT_HYGIENE_SHORTCUT.rubric,
@@ -137,7 +177,7 @@ export function WorkflowsView({ apiBase, scope, openStream = openScorecardStream
   return (
     <div className="obs mine">
       {phase === "done" && scorecard
-        ? isEmptyScorecard(scorecard)
+        ? isEmptyMine(scorecard, inventory, miniapps)
           ? (
             <div className="ledger-empty-state">
               <h3 className="ledger-empty-title">No gems mined here yet</h3>
@@ -159,7 +199,19 @@ export function WorkflowsView({ apiBase, scope, openStream = openScorecardStream
               )}
               <ScorecardHero data={scorecard} updatedAt={scorecardUpdatedAt} onRescan={onRescan} />
               <GroupBySwitcher group={group} onChange={onGroupChange} />
-              <MineWorkflows data={scorecard} onBuild={onBuild} building={building} result={buildResult} error={buildError} apiBase={apiBase} />
+              <JobsStrip runs={runs} />
+              <MineWorkflows
+                data={scorecard}
+                onBuild={onBuild}
+                building={building}
+                result={buildResult}
+                error={buildError}
+                apiBase={apiBase}
+                group={group}
+                inventory={inventory}
+                miniapps={miniapps}
+                hygiene={hygiene}
+              />
             </>
         : phase === "failed"
           ? (

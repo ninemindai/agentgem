@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
 import { selKey, visibleKeys, buildSelection } from "./selection.js";
-import type { LedgerGroup } from "./data.js";
+import type { LedgerGroup } from "../shared/ledgerModel.js";
 
 const groups: LedgerGroup[] = [
   { key: "skills", label: "Skills", items: [
