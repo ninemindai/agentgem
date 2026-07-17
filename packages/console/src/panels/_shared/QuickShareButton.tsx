@@ -47,10 +47,18 @@ export function QuickShareButton({
       {err && <span className="obs-error">{err}</span>}
       {(busy || url) && (
         <div className="quick-share-result">
-          <ShareLinks url={url ?? undefined} title={title ?? name} />
-          {url && onUpgrade && (
-            <button type="button" className="quick-share-upgrade" onClick={onUpgrade}>
-              Want others to install this? Publish to Explore →
+          <div className="quick-share-result-body">
+            <ShareLinks url={url ?? undefined} title={title ?? name} />
+            {url && onUpgrade && (
+              <button type="button" className="quick-share-upgrade" onClick={onUpgrade}>
+                Want others to install this? Publish to Explore →
+              </button>
+            )}
+          </div>
+          {/* No close while a mint is in flight — setUrl would reopen the panel anyway. */}
+          {url && (
+            <button type="button" className="quick-share-close" aria-label="Close link panel" onClick={() => setUrl(null)}>
+              ×
             </button>
           )}
         </div>

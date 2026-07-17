@@ -1001,7 +1001,17 @@ body::before {
 .obs-range-btn:hover { border-color: var(--accent); color: var(--accent); }
 .obs-range-btn.is-active { background: var(--accent); border-color: var(--accent); color: #fff; font-weight: 600; }
 
-.obs-share-strip { padding: 6px 0 2px; }
+/* In the Overview header, the share button sits on the title line and its result
+   panel floats as a popover so a mint doesn't inflate the header row. */
+.obs-head .quick-share { position: relative; }
+.obs-head .quick-share-result {
+  position: absolute; top: calc(100% + 8px); left: 0; z-index: 30; margin-top: 0;
+  width: min(540px, 82vw); padding: 12px;
+  background: var(--raised); border: 1px solid var(--line); border-radius: var(--radius);
+  box-shadow: var(--shadow-md);
+}
+/* ShareLinks draws its own top separator for inline contexts; redundant inside the popover card. */
+.obs-head .quick-share-result .scorecard-share-links { margin-top: 0; padding-top: 0; border-top: none; }
 
 .obs-filters { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 16px; align-items: center; }
 .obs-filters select, .obs-filters input[type="number"] {
@@ -1978,7 +1988,11 @@ button.scorecard-intent { line-height: 1.4; }
 }
 
 .quick-share { display: inline-flex; flex-direction: column; gap: 6px; align-items: flex-start; }
-.quick-share-result { margin-top: 4px; }
+.quick-share-result { margin-top: 4px; display: flex; align-items: flex-start; gap: 6px; }
+.quick-share-result-body { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 4px; }
+.quick-share-close { flex: none; background: none; border: 1px solid var(--line); border-radius: 4px;
+  width: 20px; height: 20px; padding: 0; line-height: 1; font-size: 0.85rem; color: var(--muted); cursor: pointer; }
+.quick-share-close:hover { color: var(--accent); border-color: var(--accent); }
 .quick-share-upgrade { background: none; border: none; padding: 2px 0; cursor: pointer; font-size: 0.75rem; color: var(--accent); text-align: left; }
 .quick-share-upgrade:hover { text-decoration: underline; }
 
