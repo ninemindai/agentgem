@@ -9,6 +9,30 @@ import { PROJECT_HYGIENE_SHORTCUT, launchRubricRun } from "../../rubricShortcuts
 
 type Progress = { done: number; total: number; label: string; partial: { breadth: number; battleTested: number; portable: number } };
 
+// PR-1 of the "Group by" switcher: only "value" exists (Type/Maturity land later).
+// Kept as a union rather than a bare string so a later PR's added values are a
+// type-checked, additive change here.
+type Group = "value";
+
+// Mirrors Setup/index.tsx's `parseQuery`: the hash query string, not localStorage,
+// is the source of truth for the current grouping. PR-1 has exactly one valid
+// value, so an absent or unrecognized `group` param both normalize to "value";
+// PR-2 widens this to actually branch on the parsed param.
+function parseGroup(): Group {
+  return "value";
+}
+
+// Writes `?group=<g>` onto the current `#/mine...` hash, preserving the path and
+// any other query params. Generic on purpose so PR-2's Type/Maturity segments can
+// call it unchanged.
+function setGroupParam(g: Group) {
+  const hash = window.location.hash || "#/mine";
+  const [path, query] = hash.split("?");
+  const params = new URLSearchParams(query ?? "");
+  params.set("group", g);
+  window.location.hash = `${path}?${params.toString()}`;
+}
+
 /** True once the scorecard has actually surfaced anything worth showing. Checks
  *  `breadth` first (the authoritative count); only falls back to inspecting each
  *  project's workflows when there ARE projects — an empty `projects` array must
@@ -30,6 +54,21 @@ function LoadingGrid() {
   );
 }
 
+// "Group by" perspective switcher: PR-1 renders a single active "Value" segment
+// (the only grouping MineWorkflows supports today) so the #/mine?group= hash
+// contract is live before PR-2 lifts real grouping state into MineWorkflows and
+// adds the Type/Maturity segments alongside it.
+function GroupBySwitcher({ group, onChange }: { group: Group; onChange: (g: Group) => void }) {
+  return (
+    <div className="mine-groupby">
+      <span className="mine-groupby-label">Group by</span>
+      <span className="play-seg">
+        <button type="button" aria-pressed={group === "value"} onClick={() => onChange("value")}>Value</button>
+      </span>
+    </div>
+  );
+}
+
 /** The Workflows view of the Mine tab: the deterministic scorecard scan, scoped to
  *  the shared project selection. Moved verbatim from the pre-shell Mine panel. */
 export function WorkflowsView({ apiBase, scope, openStream = openScorecardStream }: { apiBase: string; scope: string; openStream?: typeof openScorecardStream }) {
@@ -47,6 +86,14 @@ export function WorkflowsView({ apiBase, scope, openStream = openScorecardStream
   // A manual re-scan opens the stream with ?refresh=true to bypass the cached
   // scorecard; the ref keeps it out of the dep array so it's a one-shot.
   const freshRef = useRef(false);
+  // #/mine?group= sub-state — PR-1 seam only, not yet threaded into MineWorkflows.
+  const [group, setGroup] = useState<Group>(() => parseGroup());
+  useEffect(() => {
+    const onHash = () => setGroup(parseGroup());
+    window.addEventListener("hashchange", onHash);
+    return () => window.removeEventListener("hashchange", onHash);
+  }, []);
+  const onGroupChange = (g: Group) => { setGroupParam(g); setGroup(g); };
 
   useEffect(() => {
     setScorecard(null); setScorecardUpdatedAt(null); setProgress(null); setPhase("loading"); setRevalidating(false); setFailMessage(null);
@@ -111,6 +158,7 @@ export function WorkflowsView({ apiBase, scope, openStream = openScorecardStream
                 </span>
               )}
               <ScorecardHero data={scorecard} updatedAt={scorecardUpdatedAt} onRescan={onRescan} />
+              <GroupBySwitcher group={group} onChange={onGroupChange} />
               <MineWorkflows data={scorecard} onBuild={onBuild} building={building} result={buildResult} error={buildError} apiBase={apiBase} />
             </>
         : phase === "failed"

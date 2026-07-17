@@ -1837,6 +1837,11 @@ button.scorecard-intent { line-height: 1.4; }
 .mine-retry-state { max-width: 46ch; margin: 44px auto; text-align: center; }
 .mine-retry { margin-top: 10px; }
 
+/* "Group by" perspective switcher, above the card list. PR-1 ships a single Value
+   segment (see .play-seg); Type/Maturity arrive as additive segments later. */
+.mine-groupby { display: flex; align-items: center; gap: 9px; margin: 0 0 14px; }
+.mine-groupby-label { font: 600 11px var(--font-ui); letter-spacing: .05em; text-transform: uppercase; color: var(--muted); }
+
 /* ── Mine Workflows ─────────────────────────── */
 .mine-workflows { margin-top: 1.5rem; }
 .mine-workflows h3 { font-size: 0.85rem; font-weight: 600; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); margin-bottom: 0.75rem; }
