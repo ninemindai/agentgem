@@ -199,6 +199,7 @@ export const sourcesPage = defineConsolePage({
   icon: "🧩",
   order: 20,
   phase: "build", category: "setup",
+  group: "evidence", hiddenUntilUnlock: true,
   route: "#/sources",
   component: ({ apiBase }) => <Sources apiBase={apiBase} />,
 });

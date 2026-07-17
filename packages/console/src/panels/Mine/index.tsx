@@ -61,5 +61,6 @@ export function Mine({ apiBase }: { apiBase: string }) {
 
 export const minePage = defineConsolePage({
   id: "mine", title: "Mine", icon: "💎", order: 10, phase: "observe", category: "projects",
+  group: "background", hiddenUntilUnlock: true,
   route: "#/mine", component: Mine,
 });

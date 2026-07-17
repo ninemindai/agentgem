@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { phaseGroups, footerPages, sortedPages, normalizeHash } from "./registry.js";
+import { phaseGroups, footerPages, sortedPages, normalizeHash, railModel } from "./registry.js";
 import { defineConsolePage } from "./contract.js";
 import type { ConsolePage } from "./contract.js";
 
@@ -81,6 +81,64 @@ describe("sortedPages", () => {
   it("still rejects duplicate ids", () => {
     const pages = [page({ id: "a", footer: true }), page({ id: "a", footer: true })];
     expect(() => sortedPages(pages)).toThrow(/duplicate/i);
+  });
+});
+
+describe("railModel", () => {
+  const synthetic = [
+    // foreground: no group, no footer (phase/category still set, same as the real registry)
+    page({ id: "overview", order: 5, phase: "observe", category: "usage" }),
+    page({ id: "curate", order: 10, phase: "build", category: "setup" }),
+    page({ id: "materialize", order: 10, phase: "build", category: "projects", group: "make", hiddenUntilUnlock: true }),
+    page({ id: "benchmark", order: 20, phase: "observe", category: "usage", group: "evidence", hiddenUntilUnlock: true }),
+    page({ id: "mine", order: 10, phase: "observe", category: "projects", group: "background", hiddenUntilUnlock: true }),
+    page({ id: "reviews", order: 40, phase: "build", category: "projects", group: "power", hiddenUntilUnlock: true }),
+    page({ id: "publish", order: 30, phase: "build", category: "projects", hidden: true }),
+    page({ id: "settings", footer: true }),
+  ];
+
+  it("locked: only the ungrouped, non-footer pages are foreground; groups are empty", () => {
+    const model = railModel(synthetic, false);
+    expect(model.foreground.map((p) => p.id)).toEqual(["overview", "curate"]);
+    expect(model.groups).toEqual([]);
+  });
+
+  it("unlocked: populates all four groups in Make/Evidence/Background/Power order", () => {
+    const model = railModel(synthetic, true);
+    expect(model.groups.map((g) => g.key)).toEqual(["make", "evidence", "background", "power"]);
+    expect(model.groups.map((g) => g.label)).toEqual(["Make", "Evidence", "Background", "Power tools"]);
+    expect(model.groups.map((g) => g.pages.map((p) => p.id))).toEqual([
+      ["materialize"], ["benchmark"], ["mine"], ["reviews"],
+    ]);
+  });
+
+  it("omits empty groups", () => {
+    const model = railModel(
+      [page({ id: "overview", phase: "observe", category: "usage" }), page({ id: "mine", group: "background" })],
+      true,
+    );
+    expect(model.groups.map((g) => g.key)).toEqual(["background"]);
+  });
+
+  it("never surfaces a hidden page, locked or unlocked", () => {
+    expect(railModel(synthetic, false).foreground.map((p) => p.id)).not.toContain("publish");
+    const unlocked = railModel(synthetic, true);
+    expect(unlocked.foreground.map((p) => p.id)).not.toContain("publish");
+    expect(unlocked.groups.flatMap((g) => g.pages.map((p) => p.id))).not.toContain("publish");
+  });
+
+  it("excludes footer pages from foreground", () => {
+    expect(railModel(synthetic, false).foreground.map((p) => p.id)).not.toContain("settings");
+  });
+
+  it("accepts a page placed only by group, with neither phase/category nor footer", () => {
+    const pages = [page({ id: "grouped-only", group: "power" })];
+    expect(() => railModel(pages, true)).not.toThrow();
+  });
+
+  it("still rejects a page with neither phase/category, footer, nor group", () => {
+    const pages = [page({ id: "orphan" })];
+    expect(() => railModel(pages, true)).toThrow();
   });
 });
 

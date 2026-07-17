@@ -108,6 +108,7 @@ export const sessionsPage = defineConsolePage({
   order: 5,
   phase: "observe",
   category: "sessions",
+  group: "evidence", hiddenUntilUnlock: true,
   route: "#/sessions",
   component: Sessions,
 });

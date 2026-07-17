@@ -366,5 +366,6 @@ export function Rubrics({ apiBase }: { apiBase: string }) {
 
 export const rubricsPage = defineConsolePage({
   id: "rubrics", title: "Rubrics", icon: "📋", order: 20, phase: "observe", category: "setup",
+  group: "evidence", hiddenUntilUnlock: true,
   route: "#/rubrics", component: Rubrics,
 });

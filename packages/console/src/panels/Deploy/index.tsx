@@ -26,6 +26,7 @@ export const deployPage = defineConsolePage({
   order: 20,
   phase: "build", category: "projects",
   requiresGem: true,
+  group: "make", hiddenUntilUnlock: true,
   route: "#/deploy",
   component: ({ apiBase }) => <Deploy apiBase={apiBase} />,
 });

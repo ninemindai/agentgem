@@ -228,5 +228,6 @@ export function Dreaming({ apiBase }: { apiBase: string }) {
 
 export const dreamingPage = defineConsolePage({
   id: "dreaming", title: "Journey", icon: "🌙", order: 30, phase: "observe", category: "sessions",
+  group: "background", hiddenUntilUnlock: true,
   route: "#/dreaming", component: Dreaming,
 });
