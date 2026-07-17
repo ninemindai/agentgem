@@ -1,9 +1,11 @@
 import { useEffect, useState, type ReactNode } from "react";
-import type { Scorecard } from "../../api/routes.js";
+import type { Gem, Scorecard } from "../../api/routes.js";
 import { openScorecardStream } from "../Mine/scorecardStream.js";
 import { fmtTokens } from "./data.js";
 import { useCountUp } from "./useCountUp.js";
 import { useRevealData } from "./useRevealData.js";
+import { useFirstGem, type FirstGemCandidate, type FirstGemPhase } from "./useFirstGem.js";
+import { useHomeState } from "../../shell/useHomeState.js";
 
 export type RevealMode = "first-run" | "ceremony";
 
@@ -59,12 +61,15 @@ function rankConfidence(c: "high" | "medium" | "low"): number {
 
 /** The CTA's candidate workflow: highest confidence first, then most recently
  *  seen — per the brief this is described as "the top battle-tested workflow",
- *  which in practice is whatever sorts to the front of that ordering. */
-function pickTopWorkflow(scorecard: Scorecard): { name: string; sessions: number } | null {
-  const all = scorecard.projects.flatMap((p) => p.workflows);
+ *  which in practice is whatever sorts to the front of that ordering. Carries
+ *  its project root + key (not just display fields) so it can be handed
+ *  straight to `POST /scorecard/build`'s `selections: [{root, keys}]` shape. */
+function pickTopWorkflow(scorecard: Scorecard): FirstGemCandidate | null {
+  const all = scorecard.projects.flatMap((p) => p.workflows.map((w) => ({ ...w, root: p.root })));
   if (all.length === 0) return null;
   const sorted = [...all].sort((a, b) => rankConfidence(b.confidence) - rankConfidence(a.confidence) || b.lastSeenMs - a.lastSeenMs);
-  return { name: sorted[0].name, sessions: sorted[0].sessions };
+  const top = sorted[0];
+  return { root: top.root, key: top.key, name: top.name, sessions: top.sessions };
 }
 
 function heroSentenceText(scorecard: Scorecard): string {
@@ -112,11 +117,15 @@ function earnItLine(showBattleTested: boolean, showPortable: boolean): string | 
   return null;
 }
 
-function GoldmineHero({ scorecard, display, projectsScanned }: { scorecard: Scorecard; display: number[]; projectsScanned: number }) {
+function GoldmineHero({
+  scorecard, display, projectsScanned, candidate, buildPhase, onBuildClick,
+}: {
+  scorecard: Scorecard; display: number[]; projectsScanned: number;
+  candidate: FirstGemCandidate | null; buildPhase: FirstGemPhase; onBuildClick: () => void;
+}) {
   const [breadth, battleTested, portable] = display;
   const showBattleTested = scorecard.battleTested > 0;
   const showPortable = scorecard.portable > 0;
-  const candidate = pickTopWorkflow(scorecard);
   const unreadCount = Math.max(0, projectsScanned - scorecard.projects.length);
   const earnIt = earnItLine(showBattleTested, showPortable);
 
@@ -133,20 +142,41 @@ function GoldmineHero({ scorecard, display, projectsScanned }: { scorecard: Scor
         <p className="reveal-degrade">couldn&#39;t read {unreadCount} projects</p>
       )}
       {candidate && (
-        // Rendered enabled — the button's behavior is wired by Task 6; this pass only
-        // renders the surface (label, sub-line, candidate) with a no-op click handler.
         <div className="reveal-below">
-          <button type="button" className="reveal-cta" onClick={() => {}}>
+          <button type="button" className="reveal-cta" onClick={onBuildClick} disabled={buildPhase === "building"}>
             Turn your top workflow into a Gem
           </button>
           <p className="reveal-cta-sub">assembled now — deep distill keeps improving it in the background.</p>
           <p className="reveal-candidate">{candidate.name} — from {candidate.sessions} sessions</p>
+          {buildPhase === "error" && (
+            <p className="reveal-build-error">couldn&#39;t assemble the gem — try again</p>
+          )}
         </div>
       )}
       {scorecard.gaps.length > 0 && (
         <p className="reveal-gaps">Still unmined: {scorecard.gaps.slice(0, 3).join(" · ")}</p>
       )}
     </>
+  );
+}
+
+/** The first-gem ceremony: shown IN PLACE of the reveal's normal body once the
+ *  CTA's build resolves — a certification moment (emerald, per this surface's
+ *  color semantics), not another data screen. One continue action, which hands
+ *  the built gem's selection to Curate's existing Publish-flow deep-link
+ *  (`setPendingContribution` + `#/curate` — the same one-shot hand-off
+ *  "Share my setup" and a lesson's "Share" already use). */
+function GemCeremony({ gem, candidate, onContinue }: { gem: Gem; candidate: FirstGemCandidate | null; onContinue: () => void }) {
+  return (
+    <div className="reveal-ceremony">
+      <p className="reveal-ceremony-kicker">Your first gem — assembled</p>
+      <h2 className="reveal-ceremony-name">{gem.name}</h2>
+      <p className="reveal-ceremony-sub">
+        built from <b>{candidate?.name ?? gem.name}</b>
+        {candidate ? ` — ${candidate.sessions} sessions strong` : ""}. Deep distill is still refining it in the background.
+      </p>
+      <button type="button" className="reveal-ceremony-continue" onClick={onContinue}>Open in Curate</button>
+    </div>
   );
 }
 
@@ -162,8 +192,20 @@ function DiagnosticBlock({ path, onRetry }: { path: string; onRetry: () => void 
 
 type RevealDataProps = ReturnType<typeof useRevealData>;
 
-function RevealContent({ mode, onDismiss, data }: { mode: RevealMode; onDismiss: () => void; data: RevealDataProps }) {
+function RevealContent({ mode, onDismiss, data, apiBase }: { mode: RevealMode; onDismiss: () => void; data: RevealDataProps; apiBase: string }) {
   const { summary, summaryError, scorecard, phase, slow, streamError, retry } = data;
+
+  // A separate `useHomeState` instance from the one Observe/index.tsx uses to pick
+  // the reveal's mode: each mount owns its own copy (see useHomeState's module doc),
+  // so posting here never flips this page's already-rendered Observe out from under
+  // the ceremony — it just persists the real state server-side for the NEXT mount
+  // (after "Open in Curate" navigates away) to read as "returning".
+  const homeState = useHomeState(apiBase);
+  const firstGem = useFirstGem(apiBase, () => {
+    homeState.setUnlocked(true);
+    homeState.setRevealSeen(true);
+  });
+  const candidate = scorecard ? pickTopWorkflow(scorecard) : null;
 
   const usage = summary?.usage ?? { sessions: 0, spanDays: 0, activeMs: 0, tokensIn: 0, tokensOut: 0, tokensCache: 0 };
   const activeHours = Math.round(usage.activeMs / 3_600_000);
@@ -186,7 +228,9 @@ function RevealContent({ mode, onDismiss, data }: { mode: RevealMode; onDismiss:
   const failedEndpoint = summaryError ? "/api/home/summary" : streamError && !scorecard ? "/api/scorecard/stream" : null;
 
   let body: ReactNode;
-  if (failedEndpoint) {
+  if (firstGem.phase === "built" && firstGem.gem) {
+    body = <GemCeremony gem={firstGem.gem} candidate={candidate} onContinue={firstGem.openInCurate} />;
+  } else if (failedEndpoint) {
     body = <DiagnosticBlock path={failedEndpoint} onRetry={retry} />;
   } else if (!summary) {
     body = <RevealSkeleton />;
@@ -208,7 +252,11 @@ function RevealContent({ mode, onDismiss, data }: { mode: RevealMode; onDismiss:
       <>
         <LedgerRow display={ledgerDisplay} projectsScanned={summary.projectsScanned} />
         {scorecard
-          ? <GoldmineHero scorecard={scorecard} display={heroDisplay} projectsScanned={summary.projectsScanned} />
+          ? <GoldmineHero
+              scorecard={scorecard} display={heroDisplay} projectsScanned={summary.projectsScanned}
+              candidate={candidate} buildPhase={firstGem.phase}
+              onBuildClick={() => { if (candidate) firstGem.build(candidate); }}
+            />
           : slow
             ? <p className="reveal-assaying">still assaying your workflows…</p>
             : <p className="reveal-scanning">scoring your goldmine…</p>}
@@ -216,17 +264,21 @@ function RevealContent({ mode, onDismiss, data }: { mode: RevealMode; onDismiss:
     );
   }
 
+  // The ceremony is a full takeover of the reveal's content area — the returning-user
+  // dismiss button and the Claude-only footnote belong to the data screen it replaced.
+  const ceremonyShowing = firstGem.phase === "built" && !!firstGem.gem;
+
   return (
     <div className="reveal">
       <Masthead label={mode === "ceremony" ? "Welcome back" : "First reading"} />
       {body}
-      {mode === "ceremony" && (
+      {mode === "ceremony" && !ceremonyShowing && (
         <button type="button" className="reveal-dismiss" onClick={onDismiss}>Take me to my console</button>
       )}
       <p className="reveal-sr-only" aria-live="polite">{announced}</p>
       {/* Codex-heavy already shows this exact sentence, prominently, as the goldmine
           section itself — a second identical line at the bottom would just be noise. */}
-      {summary && !failedEndpoint && !codexHeavy && (
+      {summary && !failedEndpoint && !codexHeavy && !ceremonyShowing && (
         <p className="reveal-footnote">{CLAUDE_ONLY_TEXT}</p>
       )}
     </div>
@@ -258,5 +310,5 @@ export function Reveal({
     );
   }
 
-  return <RevealContent mode={mode} onDismiss={onDismiss} data={data} />;
+  return <RevealContent mode={mode} onDismiss={onDismiss} data={data} apiBase={apiBase} />;
 }

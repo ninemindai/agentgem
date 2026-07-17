@@ -1256,8 +1256,23 @@ body::before {
 .reveal-below { margin: 26px 0 0; }
 .reveal-cta-sub { font: 400 14px/1.4 var(--font-ui); color: var(--muted); margin: 10px 0 0; }
 .reveal-candidate { font: 500 13.5px/1.4 var(--font-ui); color: var(--ink-soft); margin: 6px 0 0; }
+.reveal-build-error { font: 500 13.5px/1.4 var(--font-ui); color: var(--accent); margin: 10px 0 0; }
 .reveal-gaps { font: 400 14px/1.5 var(--font-ui); font-style: italic; color: var(--muted); margin: 18px 0 0; }
 .reveal-scope { font: 400 14px/1.5 var(--font-ui); color: var(--muted); margin: 10px 0 0; }
+
+/* First-gem ceremony (Task 6): certification moment, emerald-accented — a full
+   takeover of the reveal body, not another data screen. */
+.reveal-ceremony { margin: 34px 0 0; padding: 26px 28px; background: var(--raised);
+  border: 1px solid var(--emerald); border-radius: var(--radius); box-shadow: var(--shadow-md); }
+.reveal-ceremony-kicker { font: 600 12.5px/1 var(--font-ui); letter-spacing: .06em; text-transform: uppercase;
+  color: var(--emerald); margin: 0 0 12px; }
+.reveal-ceremony-name { font: 400 32px/1.25 var(--font-display); font-optical-sizing: auto; color: var(--ink); margin: 0; }
+.reveal-ceremony-sub { font: 400 15px/1.55 var(--font-ui); color: var(--ink-soft); margin: 14px 0 0; max-width: 560px; }
+.reveal-ceremony-continue { display: inline-block; font: 600 15px/1 var(--font-ui); color: #fff;
+  background: linear-gradient(180deg, var(--accent-2), var(--accent)); border: 1px solid var(--accent);
+  border-radius: var(--radius); padding: 13px 24px; cursor: pointer; box-shadow: var(--shadow-md);
+  transition: filter .14s; margin: 22px 0 0; }
+.reveal-ceremony-continue:hover { filter: brightness(1.05); }
 
 .reveal-claude-only, .reveal-assaying, .reveal-scanning, .reveal-prospecting {
   font: 400 15px/1.6 var(--font-ui); color: var(--ink-soft); margin: 26px 0 0; }
