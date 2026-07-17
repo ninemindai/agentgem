@@ -204,6 +204,61 @@ describe("Where tokens went", () => {
   });
 });
 
+const rawStat = {
+  agent: "claude", sessionId: "s1", project: "agentgem", model: "claude-opus-4-8", gitBranch: null,
+  startMs: Date.now() - 10_000, endMs: Date.now() - 5_000, msgs: 200,
+  tokensIn: 700_000, tokensOut: 150_000, tokensCache: 50_000,
+};
+
+describe("Observe view persistence", () => {
+  afterEach(() => { sessionStorage.clear(); });
+
+  const renderObserve = () => {
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(res({ sessions: [rawStat] })));
+    return render(<Observe apiBase="" />);
+  };
+
+  it("CRITICAL regression: fresh mount with empty storage keeps today's defaults (7d, min 100 msgs)", async () => {
+    sessionStorage.clear();
+    renderObserve();
+    const tab = await screen.findByRole("tab", { name: "7d" });
+    expect(tab.getAttribute("aria-selected")).toBe("true");
+    expect((screen.getByLabelText("minimum messages per session") as HTMLInputElement).value).toBe("100");
+  });
+
+  it("rehydrates persisted range and filter", async () => {
+    sessionStorage.setItem("agentgem.observe.view",
+      JSON.stringify({ range: "30d", filter: { project: "agentgem", minMsgs: 100 } }));
+    renderObserve();
+    const tab = await screen.findByRole("tab", { name: "30d" });
+    expect(tab.getAttribute("aria-selected")).toBe("true");
+    expect((screen.getByLabelText("project") as HTMLSelectElement).value).toBe("agentgem");
+  });
+
+  it("garbage in storage falls back to defaults without crashing", async () => {
+    sessionStorage.setItem("agentgem.observe.view", "not-json{{{");
+    renderObserve();
+    const tab = await screen.findByRole("tab", { name: "7d" });
+    expect(tab.getAttribute("aria-selected")).toBe("true");
+  });
+
+  it("old-build values are whitelisted: unknown range falls back, cleared minMsgs survives", async () => {
+    sessionStorage.setItem("agentgem.observe.view",
+      JSON.stringify({ range: "14d", filter: {} }));
+    renderObserve();
+    const tab = await screen.findByRole("tab", { name: "7d" });     // "14d" not in the enum
+    expect(tab.getAttribute("aria-selected")).toBe("true");
+    expect((screen.getByLabelText("minimum messages per session") as HTMLInputElement).value).toBe(""); // cleared stays cleared
+  });
+
+  it("persists range changes for the next mount", async () => {
+    renderObserve();
+    fireEvent.click(await screen.findByRole("tab", { name: "30d" }));
+    const stored = JSON.parse(sessionStorage.getItem("agentgem.observe.view")!);
+    expect(stored.range).toBe("30d");
+  });
+});
+
 describe("ObservePayloadSchema version-skew defaults", () => {
   it("parses an old server payload lacking byProject/topSessions (protects /api/observe consumers like SessionPicker)", () => {
     const { byProject: _bp, topSessions: _ts, ...legacy } = payload;
