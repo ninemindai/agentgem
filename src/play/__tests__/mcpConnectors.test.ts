@@ -121,6 +121,39 @@ describe("connection manager", () => {
     await __resetConnectorsForTest();
   });
 
+  it("defers closing the old transport until an in-flight call on it completes (no mid-call transport yank)", async () => {
+    // Caller X holds a slow call on the currently-pooled (v1) client; while X is genuinely in flight,
+    // caller Y triggers a digest-invalidation reconnect (config flips to v2). If the manager closes
+    // the OLD transport immediately (the bug), X's pending request is aborted out from under it — X
+    // would reject instead of resolving. The fix must connect v2 first and defer closing v1's
+    // transport until X's own `finally { entry.inFlight-- }` drains inFlight back to 0.
+    //
+    // The delay has to clear the SDK's OWN grace period, not just be "slow": StdioClientTransport
+    // .close() is lenient — it ends stdin and waits up to 2000ms for the child to exit on its own
+    // before escalating to SIGTERM, and a still-alive child can finish and flush its response during
+    // that whole window regardless of who called close(). A short delay (e.g. 150ms) passes even on
+    // the buggy code, because the killed-but-still-alive child answers well within the 2s grace
+    // window. Only once the child survives past the 2000ms mark does close() send SIGTERM and kill
+    // it before it can respond — which is the actual "yank". 2600ms clears that with margin.
+    let reconfigured = false;
+    __setConnectorReaderForTest(() => reconfigured
+      ? stdioGem("fake", { env: { FAKE_TAG: "v2" } }) // different env → different digest, fast responses
+      : stdioGem("fake", { env: { FAKE_DELAY_MS: "2600" } })); // v1: slow tool responses (see comment above)
+    // X: a cold connect (fast — only callTool responses are delayed, not the initialize handshake)
+    // followed by a slow call. Its response won't arrive for 2600ms, giving Y's concurrent reconnect
+    // a wide window while X is genuinely in flight (entry.inFlight===1).
+    const x = callConnectorTool("fake", "read_thing", { who: "x" });
+    await new Promise((r) => setTimeout(r, 150)); // let X's cold connect finish and its request reach the fixture before reconfiguring
+    reconfigured = true; // same server name, different digest → Y's ensureClient must reconnect
+    const y = await callConnectorTool("fake", "read_thing", { who: "y" });
+    // Y gets the NEW (v2) client — proves the reconnect actually happened.
+    expect(JSON.parse((y.content[0] as { text: string }).text)).toEqual({ echo: { who: "y" } });
+    // X must still resolve successfully — if v1's transport had been closed (and eventually SIGTERM'd)
+    // out from under it, this would reject with a connection-closed tool_error instead.
+    const xResult = await x;
+    expect(JSON.parse((xResult.content[0] as { text: string }).text)).toEqual({ echo: { who: "x" } });
+  }, 10000);
+
   it("does NOT poison the pool after a failed connect — a retry once the secret is set succeeds", async () => {
     let hasSecret = false;
     __setConnectorReaderForTest(() => hasSecret ? stdioGem("fake") : ({ ...stdioGem("fake"), secretRefs: [{ name: "GITHUB_TOKEN", location: "env.GITHUB_TOKEN" }] }));
