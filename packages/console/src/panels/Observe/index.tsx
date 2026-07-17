@@ -1,12 +1,16 @@
 // packages/console/src/panels/Observe/index.tsx
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { defineConsolePage } from "../../registry.js";
-import { inventoryRoute, makeClient, type ObserveRange, type ObserveFilter } from "../../api/routes.js";
+import { inventoryRoute, makeClient, type ObserveRange, type ObserveFilter, type Scorecard } from "../../api/routes.js";
 import { setPendingContribution } from "../../pendingAnalyze.js";
 import { aggregateObserve } from "@agentgem/insight/observeAggregate";
 import { Dashboard } from "./Dashboard.js";
 import { Loading } from "../../shell/Loading.js";
 import { useObserveData } from "./useObserveData.js";
+import { useHomeState } from "../../shell/useHomeState.js";
+import { Reveal, RevealLoadingShell } from "./Reveal.js";
+import { openScorecardStream, type ScorecardStreamEvent } from "../Mine/scorecardStream.js";
+import { ScorecardHero, ScorecardHeroSkeleton, ScorecardScanning } from "../Mine/Scorecard.js";
 
 const VIEW_KEY = "agentgem.observe.view";
 const VIEW_RANGES: ObserveRange[] = ["today", "7d", "30d", "all"];
@@ -33,10 +37,76 @@ function loadObserveView(): { range: ObserveRange; filter: ObserveFilter } {
   }
 }
 
-// Inspect is the aggregate usage dashboard. The per-session ledger + transcript
-// drill-down live in the Sessions screen (panels/Sessions); legacy #/inspect/<a>/<s>
-// links are rewritten to #/sessions/<a>/<s> by normalizeHash.
+// Home/reveal (page id stays "overview", route stays "#/overview" — deep links and the
+// rail depend on it): a one-time consent + streaming-reveal ceremony for first-run and
+// existing users (see Reveal.tsx), then a condensed masthead scoreboard + this same
+// usage dashboard beneath, once `revealSeen`. The per-session ledger + transcript
+// drill-down live in the Sessions screen; legacy #/inspect/<a>/<s> links are rewritten
+// to #/sessions/<a>/<s> by normalizeHash.
 export function Observe({ apiBase }: { apiBase: string }) {
+  const home = useHomeState(apiBase);
+
+  // Nothing is known about the visitor yet — render the masthead skeleton only.
+  // Critically, this must NOT mount Reveal in first-run mode (which itself makes
+  // zero fetches, but would show the consent copy prematurely, before we know
+  // whether the visitor is actually first-run, existing, or returning).
+  if (home.loading) return <RevealLoadingShell />;
+
+  if (home.revealSeen) return <ReturningOverview apiBase={apiBase} />;
+
+  return (
+    <Reveal
+      apiBase={apiBase}
+      mode={home.existingUser ? "ceremony" : "first-run"}
+      onDismiss={() => home.setRevealSeen(true)}
+    />
+  );
+}
+
+// Returning-user mode: a condensed scorecard scoreboard (Mine's own components —
+// no second scorecard renderer) sits above the fold, with the existing usage
+// dashboard beneath it. No deltas (P0.5) — this is a plain re-scan, same shape
+// WorkflowsView uses for the Mine tab.
+function ReturningOverview({ apiBase }: { apiBase: string }) {
+  const [scorecard, setScorecard] = useState<Scorecard | null>(null);
+  const [scorecardUpdatedAt, setScorecardUpdatedAt] = useState<number | null>(null);
+  const [scorecardPhase, setScorecardPhase] = useState<"loading" | "scanning" | "done" | "failed">("loading");
+  const [progress, setProgress] = useState<{ done: number; total: number; label: string; partial: { breadth: number; battleTested: number; portable: number } } | null>(null);
+  const freshRef = useRef(false);
+  const [reloadKey, setReloadKey] = useState(0);
+
+  useEffect(() => {
+    setScorecard(null); setScorecardUpdatedAt(null); setScorecardPhase("loading"); setProgress(null);
+    const fresh = freshRef.current; freshRef.current = false;
+    const close = openScorecardStream(makeClient(apiBase), (e: ScorecardStreamEvent) => {
+      if (e.type === "start") setScorecardPhase((p) => (p === "done" ? p : "scanning"));
+      else if (e.type === "stale") { setScorecard(e.scorecard); setScorecardUpdatedAt(e.updatedAt); setScorecardPhase("done"); }
+      else if (e.type === "progress") { setProgress({ done: e.done, total: e.total, label: e.label, partial: e.partial }); setScorecardPhase((p) => (p === "done" ? p : "scanning")); }
+      else if (e.type === "done") { setScorecard(e.scorecard); setScorecardUpdatedAt(e.updatedAt); setScorecardPhase("done"); }
+      else if (e.type === "failed") setScorecardPhase("failed");
+    }, { refresh: fresh || undefined });
+    return close;
+  }, [apiBase, reloadKey]);
+
+  return (
+    <div className="obs">
+      <div className="obs-masthead-scoreboard">
+        {scorecardPhase === "done" && scorecard
+          ? <ScorecardHero data={scorecard} apiBase={apiBase} updatedAt={scorecardUpdatedAt} onRescan={() => { freshRef.current = true; setReloadKey((k) => k + 1); }} />
+          : scorecardPhase === "failed"
+            ? <p className="obs-empty">Couldn&rsquo;t compute your goldmine right now &mdash; try again shortly.</p>
+            : scorecardPhase === "scanning"
+              ? <ScorecardScanning progress={progress} />
+              : <ScorecardHeroSkeleton />}
+      </div>
+      <OverviewDashboard apiBase={apiBase} />
+    </div>
+  );
+}
+
+// The pre-existing Overview content, unchanged: usage pulse + charts + heatmap +
+// filters, driven by the shared session-stats fetch.
+function OverviewDashboard({ apiBase }: { apiBase: string }) {
   const { stats, error: fetchError, pending, onRefresh } = useObserveData(apiBase);
   const [range, setRange] = useState<ObserveRange>(() => loadObserveView().range);
   const [filter, setFilter] = useState<ObserveFilter>(() => loadObserveView().filter);
@@ -48,7 +118,7 @@ export function Observe({ apiBase }: { apiBase: string }) {
   const [actionError, setActionError] = useState<string | null>(null);
 
   // "Share my setup" (light) and "Publish" (heavy) both need the inventory, but only when
-  // the user acts — Inspect doesn't otherwise scan it, so opening Inspect stays cheap.
+  // the user acts — Overview doesn't otherwise scan it, so opening Overview stays cheap.
   const resolveSetupShare = async () => {
     const inv = await inventoryRoute.call(makeClient(apiBase), { query: {} });
     const parts = [
@@ -85,23 +155,22 @@ export function Observe({ apiBase }: { apiBase: string }) {
   );
 
   const error = fetchError ?? actionError;
-  if (error) return <div className="obs"><p className="obs-error">Couldn't load Overview: {error}</p></div>;
-  if (!data) return <div className="obs"><Loading /></div>;
-  // First run: the local session log is empty. Orient a brand-new user instead of a hollow
-  // zeroed dashboard.
+  if (error) return <p className="obs-error">Couldn't load Overview: {error}</p>;
+  if (!data) return <Loading />;
+  // Local session log is empty. Orient a brand-new user instead of a hollow zeroed
+  // dashboard (rare once the reveal ceremony has run, but the local log can still be
+  // empty for an existing account restored on a new machine).
   if (stats && stats.length === 0) return (
-    <div className="obs">
-      <div className="obs-firstrun">
-        <h2 className="obs-firstrun-title">Nothing to inspect yet</h2>
-        <p className="obs-firstrun-text">
-          Run an agent (Claude Code and friends) in a project, then come back — Overview reads your
-          local session log and shows what your agents actually did, so you can mine the good parts
-          into gems.
-        </p>
-        <button type="button" className="ledger-sort" onClick={() => { window.location.hash = "#/gems/market"; }}>
-          Get gems to try →
-        </button>
-      </div>
+    <div className="obs-firstrun">
+      <h2 className="obs-firstrun-title">Nothing to inspect yet</h2>
+      <p className="obs-firstrun-text">
+        Run an agent (Claude Code and friends) in a project, then come back — Overview reads your
+        local session log and shows what your agents actually did, so you can mine the good parts
+        into gems.
+      </p>
+      <button type="button" className="ledger-sort" onClick={() => { window.location.hash = "#/gems/market"; }}>
+        Get gems to try →
+      </button>
     </div>
   );
 
