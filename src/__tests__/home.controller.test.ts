@@ -7,6 +7,8 @@ import { clearScanCache, writeAnalysisCache } from "@agentgem/insight";
 import { SCORECARD_CACHE_ROOT } from "../gem/scorecard.js";
 import { HomeController, CLAUDE_GATE_MIN_SESSIONS } from "../home.controller.js";
 import { useHermeticHome } from "./support/hermeticHome.js";
+import { createWorkspace, deleteWorkspace } from "@agentgem/base";
+import type { Gem } from "@agentgem/model";
 
 let restoreHome: () => void;
 let home: string;
@@ -109,5 +111,64 @@ describe("HomeController.summary", () => {
     claudeSession("proj-y", "s1", { startIso: "2026-07-01T00:00:00Z", endIso: "2026-07-01T00:01:00Z" });
     const out = await new HomeController().summary();
     expect(out.projectsScanned).toBe(2);
+  });
+});
+
+const gem: Gem = { name: "demo", createdFrom: "/d", artifacts: [{ type: "skill", name: "s", source: "standalone", content: "# s" }], checks: [], requiredSecrets: [] };
+
+describe("HomeController.state", () => {
+  it("fresh home: not existingUser, locked", async () => {
+    const out = await new HomeController().state();
+    expect(out).toEqual({ unlocked: false, existingUser: false, revealSeen: false });
+  });
+
+  it("pre-existing artifact (transcript index): existingUser + unlocked, on the very first read", async () => {
+    mkdirSync(join(home, ".agentgem"), { recursive: true });
+    writeFileSync(join(home, ".agentgem", "transcript-index.db"), "");
+    const out = await new HomeController().state();
+    expect(out).toEqual({ unlocked: true, existingUser: true, revealSeen: false });
+  });
+
+  it("a home-state.json already on disk (a prior read) is not re-derived from artifacts written later", async () => {
+    // First read on a genuinely fresh home locks in existingUser=false...
+    await new HomeController().state();
+    // ...so a scan cache written afterward (e.g. by /home/summary) must not flip it retroactively.
+    mkdirSync(join(home, ".agentgem"), { recursive: true });
+    writeFileSync(join(home, ".agentgem", "transcript-index.db"), "");
+    const out = await new HomeController().state();
+    expect(out.existingUser).toBe(false);
+  });
+
+  it("POST unlocked:true persists across reads", async () => {
+    const posted = await new HomeController().setState({ body: { unlocked: true } });
+    expect(posted.unlocked).toBe(true);
+    const out = await new HomeController().state();
+    expect(out.unlocked).toBe(true);
+  });
+
+  it("POST unlocked:false is ignored (one-way — no unlock, no re-lock)", async () => {
+    const out = await new HomeController().setState({ body: { unlocked: false } });
+    expect(out.unlocked).toBe(false);
+  });
+
+  it("POST revealSeen:true persists across reads", async () => {
+    const posted = await new HomeController().setState({ body: { revealSeen: true } });
+    expect(posted.revealSeen).toBe(true);
+    const out = await new HomeController().state();
+    expect(out.revealSeen).toBe(true);
+    expect(out.unlocked).toBe(false); // revealSeen alone doesn't unlock
+  });
+
+  it("gems-exist path unlocks, and deleting the only gem does not re-lock (latched unlockedAt)", async () => {
+    const before = await new HomeController().state();
+    expect(before.unlocked).toBe(false);
+
+    createWorkspace("mp", gem);
+    const withGem = await new HomeController().state();
+    expect(withGem.unlocked).toBe(true);
+
+    deleteWorkspace("mp");
+    const afterDelete = await new HomeController().state();
+    expect(afterDelete.unlocked).toBe(true); // latched — deleting gems never re-locks
   });
 });
