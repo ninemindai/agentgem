@@ -59,17 +59,22 @@ function rankConfidence(c: "high" | "medium" | "low"): number {
   return c === "high" ? 2 : c === "medium" ? 1 : 0;
 }
 
-/** The CTA's candidate workflow: highest confidence first, then most recently
- *  seen — per the brief this is described as "the top battle-tested workflow",
- *  which in practice is whatever sorts to the front of that ordering. Carries
- *  its project root + key (not just display fields) so it can be handed
- *  straight to `POST /scorecard/build`'s `selections: [{root, keys}]` shape. */
-function pickTopWorkflow(scorecard: Scorecard): FirstGemCandidate | null {
+/** Every workflow across all scanned projects, highest confidence first then
+ *  most recently seen — the same ordering the CTA's default pick uses. Carries
+ *  each candidate's project root + key (not just display fields) so any one of
+ *  them can be handed straight to `POST /scorecard/build`'s
+ *  `selections: [{root, keys}]` shape. */
+function topWorkflowCandidates(scorecard: Scorecard, limit: number): FirstGemCandidate[] {
   const all = scorecard.projects.flatMap((p) => p.workflows.map((w) => ({ ...w, root: p.root })));
-  if (all.length === 0) return null;
   const sorted = [...all].sort((a, b) => rankConfidence(b.confidence) - rankConfidence(a.confidence) || b.lastSeenMs - a.lastSeenMs);
-  const top = sorted[0];
-  return { root: top.root, key: top.key, name: top.name, sessions: top.sessions };
+  return sorted.slice(0, limit).map((w) => ({ root: w.root, key: w.key, name: w.name, sessions: w.sessions }));
+}
+
+/** The CTA's default candidate workflow — per the brief, "the top battle-tested
+ *  workflow", which in practice is whatever sorts to the front of
+ *  `topWorkflowCandidates`'s ordering. */
+function pickTopWorkflow(scorecard: Scorecard): FirstGemCandidate | null {
+  return topWorkflowCandidates(scorecard, 1)[0] ?? null;
 }
 
 function heroSentenceText(scorecard: Scorecard): string {
@@ -118,16 +123,22 @@ function earnItLine(showBattleTested: boolean, showPortable: boolean): string | 
 }
 
 function GoldmineHero({
-  scorecard, display, projectsScanned, candidate, buildPhase, onBuildClick,
+  scorecard, display, projectsScanned, candidate, candidates, buildPhase, onBuildClick, onSelectCandidate,
 }: {
   scorecard: Scorecard; display: number[]; projectsScanned: number;
-  candidate: FirstGemCandidate | null; buildPhase: FirstGemPhase; onBuildClick: () => void;
+  candidate: FirstGemCandidate | null; candidates: FirstGemCandidate[];
+  buildPhase: FirstGemPhase; onBuildClick: () => void; onSelectCandidate: (c: FirstGemCandidate) => void;
 }) {
   const [breadth, battleTested, portable] = display;
   const showBattleTested = scorecard.battleTested > 0;
   const showPortable = scorecard.portable > 0;
   const unreadCount = Math.max(0, projectsScanned - scorecard.projects.length);
   const earnIt = earnItLine(showBattleTested, showPortable);
+  // Local to this render only — closing/opening the inline picker doesn't need to
+  // survive a re-mount, and no other component reads it.
+  const [pickerOpen, setPickerOpen] = useState(false);
+  // Only worth offering when there's actually something else to pick.
+  const alternatives = candidates.length > 1;
 
   return (
     <>
@@ -148,6 +159,30 @@ function GoldmineHero({
           </button>
           <p className="reveal-cta-sub">assembled now — deep distill keeps improving it in the background.</p>
           <p className="reveal-candidate">{candidate.name} — from {candidate.sessions} sessions</p>
+          {alternatives && (
+            <button
+              type="button" className="reveal-choose-different"
+              aria-expanded={pickerOpen}
+              onClick={() => setPickerOpen((o) => !o)}
+            >
+              choose a different one
+            </button>
+          )}
+          {alternatives && pickerOpen && (
+            <ul className="reveal-candidate-list">
+              {candidates.map((c) => (
+                <li key={`${c.root}::${c.key}`} className="reveal-candidate-item">
+                  <button
+                    type="button" className="reveal-candidate-option"
+                    onClick={() => { onSelectCandidate(c); setPickerOpen(false); }}
+                  >
+                    <span className="reveal-candidate-option-name">{c.name}</span>
+                    <span className="reveal-candidate-option-sessions">from {c.sessions} sessions</span>
+                  </button>
+                </li>
+              ))}
+            </ul>
+          )}
           {buildPhase === "error" && (
             <p className="reveal-build-error">couldn&#39;t assemble the gem — try again</p>
           )}
@@ -205,7 +240,17 @@ function RevealContent({ mode, onDismiss, data, apiBase }: { mode: RevealMode; o
     homeState.setUnlocked(true);
     homeState.setRevealSeen(true);
   });
-  const candidate = scorecard ? pickTopWorkflow(scorecard) : null;
+  // "choose a different one" overrides the default top pick. No new fetch — the
+  // scorecard is already in memory; only re-derived from it, never re-scanned.
+  const [selectedCandidate, setSelectedCandidate] = useState<FirstGemCandidate | null>(null);
+  const candidates = scorecard ? topWorkflowCandidates(scorecard, 5) : [];
+  const topCandidate = scorecard ? pickTopWorkflow(scorecard) : null;
+  // Guard against a stale selection outliving the scorecard it was chosen from
+  // (e.g. a background rescan lands while the picker is open) — fall back to the
+  // default top pick rather than target a workflow that's no longer offered.
+  const candidate = selectedCandidate && candidates.some((c) => c.root === selectedCandidate.root && c.key === selectedCandidate.key)
+    ? selectedCandidate
+    : topCandidate;
 
   const usage = summary?.usage ?? { sessions: 0, spanDays: 0, activeMs: 0, tokensIn: 0, tokensOut: 0, tokensCache: 0 };
   const activeHours = Math.round(usage.activeMs / 3_600_000);
@@ -254,8 +299,9 @@ function RevealContent({ mode, onDismiss, data, apiBase }: { mode: RevealMode; o
         {scorecard
           ? <GoldmineHero
               scorecard={scorecard} display={heroDisplay} projectsScanned={summary.projectsScanned}
-              candidate={candidate} buildPhase={firstGem.phase}
+              candidate={candidate} candidates={candidates} buildPhase={firstGem.phase}
               onBuildClick={() => { if (candidate) firstGem.build(candidate); }}
+              onSelectCandidate={setSelectedCandidate}
             />
           : slow
             ? <p className="reveal-assaying">still assaying your workflows…</p>
