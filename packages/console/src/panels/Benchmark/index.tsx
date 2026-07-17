@@ -75,6 +75,6 @@ export function Benchmark({ apiBase }: { apiBase: string }) {
 
 export const benchmarkPage = defineConsolePage({
   id: "benchmark", title: "Benchmark", icon: "📈", order: 20, phase: "observe", category: "usage",
-  group: "evidence", hiddenUntilUnlock: true,
+  group: "evaluate", hiddenUntilUnlock: true,
   route: "#/benchmark", component: Benchmark,
 });

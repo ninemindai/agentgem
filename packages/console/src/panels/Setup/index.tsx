@@ -330,7 +330,7 @@ function ArtifactViewer({ apiBase, sel, onClose }: { apiBase: string; sel: { art
 }
 
 export const setupPage = defineConsolePage({
-  id: "setup", title: "Setup", icon: "🧩", order: 5, phase: "observe", category: "setup",
-  group: "make", hiddenUntilUnlock: true,
+  id: "setup", title: "Setup", icon: "🧩", order: 20, phase: "observe", category: "setup",
+  group: "build", hiddenUntilUnlock: true,
   route: "#/setup", component: Setup,
 });

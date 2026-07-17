@@ -89,10 +89,10 @@ describe("railModel", () => {
     // foreground: no group, no footer (phase/category still set, same as the real registry)
     page({ id: "overview", order: 5, phase: "observe", category: "usage" }),
     page({ id: "curate", order: 10, phase: "build", category: "setup" }),
-    page({ id: "materialize", order: 10, phase: "build", category: "projects", group: "make", hiddenUntilUnlock: true }),
-    page({ id: "benchmark", order: 20, phase: "observe", category: "usage", group: "evidence", hiddenUntilUnlock: true }),
-    page({ id: "mine", order: 10, phase: "observe", category: "projects", group: "background", hiddenUntilUnlock: true }),
-    page({ id: "reviews", order: 40, phase: "build", category: "projects", group: "power", hiddenUntilUnlock: true }),
+    page({ id: "materialize", order: 10, phase: "build", category: "projects", group: "observe", hiddenUntilUnlock: true }),
+    page({ id: "benchmark", order: 20, phase: "observe", category: "usage", group: "build", hiddenUntilUnlock: true }),
+    page({ id: "mine", order: 10, phase: "observe", category: "projects", group: "evaluate", hiddenUntilUnlock: true }),
+    page({ id: "reviews", order: 40, phase: "build", category: "projects", group: "share", hiddenUntilUnlock: true }),
     page({ id: "publish", order: 30, phase: "build", category: "projects", hidden: true }),
     page({ id: "settings", footer: true }),
   ];
@@ -103,10 +103,10 @@ describe("railModel", () => {
     expect(model.groups).toEqual([]);
   });
 
-  it("unlocked: populates all four groups in Make/Evidence/Background/Power order", () => {
+  it("unlocked: populates all four groups in Observe/Build/Evaluate/Share order", () => {
     const model = railModel(synthetic, true);
-    expect(model.groups.map((g) => g.key)).toEqual(["make", "evidence", "background", "power"]);
-    expect(model.groups.map((g) => g.label)).toEqual(["Make", "Evidence", "Background", "Power tools"]);
+    expect(model.groups.map((g) => g.key)).toEqual(["observe", "build", "evaluate", "share"]);
+    expect(model.groups.map((g) => g.label)).toEqual(["Observe", "Build", "Evaluate", "Share"]);
     expect(model.groups.map((g) => g.pages.map((p) => p.id))).toEqual([
       ["materialize"], ["benchmark"], ["mine"], ["reviews"],
     ]);
@@ -114,12 +114,12 @@ describe("railModel", () => {
 
   it("gates each grouped page on its own hiddenUntilUnlock, not just the unlocked flag", () => {
     const mixed = [
-      page({ id: "always-on", phase: "build", category: "projects", group: "power" }), // no hiddenUntilUnlock
-      page({ id: "gated-a", phase: "build", category: "projects", group: "power", hiddenUntilUnlock: true }),
-      page({ id: "gated-b", phase: "build", category: "projects", group: "power", hiddenUntilUnlock: true }),
+      page({ id: "always-on", phase: "build", category: "projects", group: "share" }), // no hiddenUntilUnlock
+      page({ id: "gated-a", phase: "build", category: "projects", group: "share", hiddenUntilUnlock: true }),
+      page({ id: "gated-b", phase: "build", category: "projects", group: "share", hiddenUntilUnlock: true }),
     ];
     const locked = railModel(mixed, false);
-    expect(locked.groups.map((g) => g.key)).toEqual(["power"]);
+    expect(locked.groups.map((g) => g.key)).toEqual(["share"]);
     expect(locked.groups[0].pages.map((p) => p.id)).toEqual(["always-on"]);
 
     const unlocked = railModel(mixed, true);
@@ -128,10 +128,10 @@ describe("railModel", () => {
 
   it("omits empty groups", () => {
     const model = railModel(
-      [page({ id: "overview", phase: "observe", category: "usage" }), page({ id: "mine", group: "background" })],
+      [page({ id: "overview", phase: "observe", category: "usage" }), page({ id: "mine", group: "evaluate" })],
       true,
     );
-    expect(model.groups.map((g) => g.key)).toEqual(["background"]);
+    expect(model.groups.map((g) => g.key)).toEqual(["evaluate"]);
   });
 
   it("never surfaces a hidden page, locked or unlocked", () => {
@@ -146,7 +146,7 @@ describe("railModel", () => {
   });
 
   it("accepts a page placed only by group, with neither phase/category nor footer", () => {
-    const pages = [page({ id: "grouped-only", group: "power" })];
+    const pages = [page({ id: "grouped-only", group: "share" })];
     expect(() => railModel(pages, true)).not.toThrow();
   });
 

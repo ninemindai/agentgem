@@ -83,10 +83,10 @@ export function footerPages(pages: ConsolePage[]): ConsolePage[] {
 
 /** Rail disclosure groups, in display order, each with its section label. */
 const DISCLOSURE_GROUPS: { key: DisclosureGroup; label: string }[] = [
-  { key: "make", label: "Make" },
-  { key: "evidence", label: "Evidence" },
-  { key: "background", label: "Background" },
-  { key: "power", label: "Power tools" },
+  { key: "observe", label: "Observe" },
+  { key: "build", label: "Build" },
+  { key: "evaluate", label: "Evaluate" },
+  { key: "share", label: "Share" },
 ];
 
 /** The cold-console rail: an always-visible `foreground` (no group, no footer — Overview,
