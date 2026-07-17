@@ -310,6 +310,63 @@ describe("Reveal — CTA build (Task 6)", () => {
   });
 });
 
+describe("Reveal — choose a different candidate", () => {
+  const HOME_STATE: routes.HomeState = { unlocked: false, existingUser: true, revealSeen: false };
+
+  function setUpRich() {
+    vi.spyOn(routes.homeSummaryRoute, "call").mockResolvedValue(SUMMARY);
+    vi.spyOn(routes.homeStateRoute, "call").mockResolvedValue(HOME_STATE);
+    vi.spyOn(routes.setHomeStateRoute, "call").mockResolvedValue(HOME_STATE);
+    return { openStream: doneStream(SCORECARD) };
+  }
+
+  it("is collapsed by default; toggling it renders the top-5 candidates (name + session count), no new fetch", async () => {
+    const { openStream } = setUpRich();
+    render(<Reveal apiBase="" mode="ceremony" onDismiss={() => {}} openStream={openStream} />);
+    await screen.findByText("You're sitting on a goldmine:");
+
+    expect(screen.queryByText("Older workflow")).toBeNull();
+    const toggle = screen.getByRole("button", { name: "choose a different one" });
+    expect(toggle.getAttribute("aria-expanded")).toBe("false");
+
+    fireEvent.click(toggle);
+
+    expect(toggle.getAttribute("aria-expanded")).toBe("true");
+    const list = document.querySelector(".reveal-candidate-list") as HTMLElement;
+    expect(within(list).getByText("Ship a feature branch")).toBeTruthy();
+    expect(within(list).getByText("from 12 sessions")).toBeTruthy();
+    expect(within(list).getByText("Older workflow")).toBeTruthy();
+    expect(within(list).getByText("from 3 sessions")).toBeTruthy();
+    // No fetch beyond the two the reveal already made to load — the list is
+    // re-derived from the in-memory scorecard, not a new request.
+    expect(routes.homeSummaryRoute.call).toHaveBeenCalledTimes(1);
+  });
+
+  it("selecting an alternative swaps the CTA's shown candidate, collapses the list, and targets that workflow's key on build", async () => {
+    const { openStream } = setUpRich();
+    const buildSpy = vi.spyOn(routes.scorecardBuildRoute, "call").mockReturnValue(new Promise(() => {}));
+    vi.spyOn(routes.playbookPrepareRoute, "call").mockResolvedValue({ skills: [], lessons: [], root: "/p", degraded: false, preparing: false });
+    render(<Reveal apiBase="" mode="ceremony" onDismiss={() => {}} openStream={openStream} />);
+    await screen.findByText("You're sitting on a goldmine:");
+
+    fireEvent.click(screen.getByRole("button", { name: "choose a different one" }));
+    fireEvent.click(screen.getByRole("button", { name: /Older workflow/ }));
+
+    // List collapses after selection.
+    expect(document.querySelector(".reveal-candidate-list")).toBeNull();
+    // The CTA's candidate line now shows the selected workflow, not the default top pick.
+    expect(screen.getByText("Older workflow — from 3 sessions")).toBeTruthy();
+    expect(screen.queryByText(/^Ship a feature branch —/)).toBeNull();
+
+    fireEvent.click(screen.getByRole("button", { name: "Turn your top workflow into a Gem" }));
+    await act(async () => {});
+    expect(buildSpy).toHaveBeenCalledTimes(1);
+    expect(buildSpy.mock.calls[0][1]).toEqual({
+      body: { name: "Older-workflow", selections: [{ root: "/p", keys: ["b"] }] },
+    });
+  });
+});
+
 describe("Reveal — hard failure", () => {
   it("shows a diagnostic with the failed path and Try again re-fetches", async () => {
     const summarySpy = vi.spyOn(routes.homeSummaryRoute, "call")

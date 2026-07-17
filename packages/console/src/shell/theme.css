@@ -1256,6 +1256,21 @@ body::before {
 .reveal-below { margin: 26px 0 0; }
 .reveal-cta-sub { font: 400 14px/1.4 var(--font-ui); color: var(--muted); margin: 10px 0 0; }
 .reveal-candidate { font: 500 13.5px/1.4 var(--font-ui); color: var(--ink-soft); margin: 6px 0 0; }
+
+/* "choose a different one" — a quiet secondary text-link, not a second primary
+   button, toggling a simple inline list of the same in-memory candidates. */
+.reveal-choose-different { display: inline-block; font: 500 12.5px/1 var(--font-ui); color: var(--ink-soft);
+  background: none; border: 0; padding: 0; margin: 10px 0 0; cursor: pointer; text-decoration: underline; }
+.reveal-choose-different:hover { color: var(--accent); }
+.reveal-candidate-list { list-style: none; margin: 10px 0 0; padding: 0; border-top: 1px solid var(--line);
+  max-width: 420px; }
+.reveal-candidate-item { border-bottom: 1px solid var(--line); }
+.reveal-candidate-option { display: flex; justify-content: space-between; align-items: baseline; gap: 12px;
+  width: 100%; font: inherit; color: inherit; background: none; border: 0; padding: 9px 2px; cursor: pointer;
+  text-align: left; }
+.reveal-candidate-option:hover { color: var(--accent); }
+.reveal-candidate-option-name { font: 500 13.5px/1.4 var(--font-ui); color: inherit; }
+.reveal-candidate-option-sessions { font: 400 12.5px/1.4 var(--font-ui); color: var(--muted); flex-shrink: 0; }
 .reveal-build-error { font: 500 13.5px/1.4 var(--font-ui); color: var(--accent); margin: 10px 0 0; }
 .reveal-gaps { font: 400 14px/1.5 var(--font-ui); font-style: italic; color: var(--muted); margin: 18px 0 0; }
 .reveal-scope { font: 400 14px/1.5 var(--font-ui); color: var(--muted); margin: 10px 0 0; }

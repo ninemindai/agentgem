@@ -58,6 +58,9 @@ describe("useFirstGem", () => {
     expect(prepareSpy).not.toHaveBeenCalled();
 
     await waitFor(() => expect(result.current.phase).toBe("built"));
+    // The build POST itself must have already landed — same payload shape asserted
+    // in the dedicated "posts scorecard/build" test above — before enrichment fires.
+    expect(buildSpy).toHaveBeenCalledTimes(1);
     expect(result.current.gem).toEqual(GEM);
     expect(onBuilt).toHaveBeenCalledTimes(1);
     await waitFor(() => expect(prepareSpy).toHaveBeenCalledTimes(1));
