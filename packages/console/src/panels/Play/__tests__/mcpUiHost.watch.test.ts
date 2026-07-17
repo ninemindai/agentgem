@@ -24,7 +24,7 @@
 // elapse calls `vi.setSystemTime(...)` to move the clock forward instead of waiting.
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import { playMcpCallRoute, playMcpServersRoute } from "../../../api/routes.js";
-import { getMcpConsent, setMcpConsent } from "../consent.js";
+import { getMcpConsent, setMcpConsent, clearMcpConsent } from "../consent.js";
 import { createUiHost, type UiHostDeps } from "../mcpUiHost.js";
 
 const FLOOR_MS = 30_000;
@@ -433,7 +433,9 @@ describe("mcpUiHost — mcp/unwatch", () => {
     resolveCall({ ok: true, payload: { v: 1 }, content: [] });
     await tick();
     expect(watchNotifies(target, w1)).toHaveLength(0); // dropped — the entry was torn down before resolve
-    expect(calls.every((c) => c.cancel.mock.calls.length >= 0)).toBe(true); // no crash asserting cancel fns
+    // The poll never landed before unwatch deleted the entry, so scheduleNext/armTimer never ran for it —
+    // no timer was ever armed in the first place (nothing to have cancelled or left dangling).
+    expect(calls).toHaveLength(0);
   });
 
   it("cancels an ARMED timer's cancel fn when the last watcher leaves after a poll has already landed", async () => {
@@ -451,6 +453,112 @@ describe("mcpUiHost — mcp/unwatch", () => {
     host.handleMessage(msg(target, { method: "mcp/unwatch", id: 96, params: { watchId: w1 } }));
     await tick();
     expect(armed.cancel).toHaveBeenCalled();
+  });
+});
+
+describe("mcpUiHost — mcp/watch consent denied at registration", () => {
+  it("requestConsent returning false replies not_granted, creates no watch entry, and never polls (Task 3 review minor #3)", async () => {
+    vi.spyOn(playMcpServersRoute, "call").mockResolvedValue(serversEnvelope({ server: "s", tools: [{ name: "read", readOnlyHint: true }], configDigest: "d1" }));
+    const callSpy = vi.spyOn(playMcpCallRoute, "call").mockResolvedValue({ ok: true, payload: {}, content: [] });
+    const requestConsent = vi.fn(async () => false);
+    const { host, target } = mkHost({ requestConsent });
+    host.handleMessage(msg(target, registerMsg(150)));
+    await tick();
+    expect(requestConsent).toHaveBeenCalledTimes(1);
+    expect(posted(target)).toHaveBeenCalledWith(expect.objectContaining({ id: 150, result: { ok: false, error: { code: "not_granted", message: "consent denied" } } }), "*");
+    expect(callSpy).not.toHaveBeenCalled(); // no watch entry -> no poll
+
+    // Prove no entry lingers from the denied attempt: clear the denied decision and retry the SAME
+    // identity with consent now granted. If the first attempt had left a stray entry in the registry, this
+    // would coalesce onto it (no fresh /call); instead the full register-and-poll path must run from
+    // scratch, proving nothing was created the first time.
+    clearMcpConsent("g1", "s");
+    requestConsent.mockResolvedValue(true);
+    host.handleMessage(msg(target, registerMsg(151)));
+    await tick();
+    expect(requestConsent).toHaveBeenCalledTimes(2);
+    ackWatchId(target, 151);
+    expect(callSpy).toHaveBeenCalledTimes(1); // the first-ever poll for this identity
+  });
+});
+
+describe("mcpUiHost — mcp/watch per-server stop cascade (Task 3 review minor #4)", () => {
+  it("two watches on the SAME server (different tools): one poll's server_config_changed stops BOTH, since consent/digest are tracked per-server not per-watch", async () => {
+    vi.spyOn(playMcpServersRoute, "call").mockResolvedValue(serversEnvelope({
+      server: "s",
+      tools: [{ name: "read", readOnlyHint: true }, { name: "list", readOnlyHint: true }],
+      configDigest: "d1",
+    }));
+    const callSpy = vi.spyOn(playMcpCallRoute, "call").mockResolvedValue({ ok: true, payload: {}, content: [] });
+    const { schedule, calls } = mkSchedule();
+    const { host, target } = mkHost({ mcpNeeds: [{ server: "s", tools: ["read", "list"] }], schedule });
+    host.handleMessage(msg(target, registerMsg(160, { tool: "read" })));
+    await tick();
+    const w1 = ackWatchId(target, 160);
+    host.handleMessage(msg(target, registerMsg(161, { tool: "list" })));
+    await tick();
+    const w2 = ackWatchId(target, 161);
+    expect(callSpy).toHaveBeenCalledTimes(2); // two distinct identities -> two independent initial flights
+    expect(calls.length).toBeGreaterThanOrEqual(2); // both entries armed their own next-poll timer
+
+    // Fire ONLY the "read" entry's own armed timer (not wakeWatches, which would nudge both at once and
+    // make the ordering of who-sees-which-digest ambiguous) so this pins a precise, deterministic story:
+    // "read"'s OWN poll returns server_config_changed and stops it; "list" never itself sees that error.
+    callSpy.mockResolvedValueOnce({ ok: false, error: { code: "server_config_changed", message: "reconfigured" } });
+    vi.setSystemTime(FLOOR_MS); // both entries' floor elapses so a manually-fired timer is allowed to poll
+    calls[0].fn();
+    await tick();
+    const n1 = watchNotifies(target, w1);
+    expect(n1[n1.length - 1].params?._meta?.["ai.agentgem/watch"]).toEqual({ watchId: w1, type: "error" });
+    expect((n1[n1.length - 1].params?.structuredContent as { stop?: boolean }).stop).toBe(true);
+    expect(getMcpConsent("g1", "s")).toBeNull(); // the shared per-server grant is gone
+
+    // "list" hasn't polled again yet, so it hasn't noticed anything — its own last notify is still its
+    // original successful data event.
+    const n2BeforeCascade = watchNotifies(target, w2);
+    expect(n2BeforeCascade[n2BeforeCascade.length - 1].params?._meta?.["ai.agentgem/watch"]).toEqual({ watchId: w2, type: "data" });
+
+    // Now fire "list"'s OWN armed timer. Its poll never gets a fresh server_config_changed response (the
+    // mock is plain ok:true again) — it stops purely because the shared digest was cleared out from under
+    // it: pollOnce's pre-flight grantedNow re-check fails BEFORE ever calling playMcpCallRoute again. This
+    // is the cascade: a single per-server denial cascades to every sibling watch on that server, each on
+    // its own next poll, not synchronously with the first watch's stop.
+    const callsBefore = callSpy.mock.calls.length;
+    calls[1].fn();
+    await tick();
+    expect(callSpy.mock.calls.length).toBe(callsBefore); // no new /call — grantedNow gate short-circuited it
+    const n2 = watchNotifies(target, w2);
+    expect(n2[n2.length - 1].params?._meta?.["ai.agentgem/watch"]).toEqual({ watchId: w2, type: "error" });
+    expect((n2[n2.length - 1].params?.structuredContent as { stop?: boolean }).stop).toBe(true);
+  });
+});
+
+describe("mcpUiHost — mcp/watch cap fires before the consent prompt (Task 3 review minor #1)", () => {
+  it("a 17th register for a brand-new server is cap-rejected before ever prompting for that server's consent", async () => {
+    const tools = Array.from({ length: 16 }, (_, i) => ({ name: `t${i}`, readOnlyHint: true }));
+    vi.spyOn(playMcpServersRoute, "call").mockResolvedValue(serversEnvelope(
+      { server: "s", tools, configDigest: "d1" },
+      { server: "u", tools: [{ name: "peek", readOnlyHint: true }], configDigest: "e1" },
+    ));
+    vi.spyOn(playMcpCallRoute, "call").mockResolvedValue({ ok: true, payload: {}, content: [] });
+    const requestConsent = vi.fn(async () => true);
+    const { host, target } = mkHost({
+      mcpNeeds: [{ server: "s", tools: tools.map((t) => t.name) }, { server: "u", tools: ["peek"] }],
+      requestConsent,
+    });
+
+    for (let i = 0; i < 16; i++) {
+      host.handleMessage(msg(target, registerMsg(400 + i, { tool: `t${i}` })));
+      await tick();
+      ackWatchId(target, 400 + i);
+    }
+    expect(requestConsent).toHaveBeenCalledTimes(1); // one grant covers every "s" tool
+
+    host.handleMessage(msg(target, { method: "mcp/watch", id: 500, params: { server: "u", tool: "peek", input: {} } }));
+    await tick();
+    expect(posted(target)).toHaveBeenCalledWith(expect.objectContaining({ id: 500, result: { ok: false, error: { code: "bad_request", message: expect.any(String) } } }), "*");
+    expect(requestConsent).toHaveBeenCalledTimes(1); // NOT prompted for "u" — the cap fired first
+    expect(getMcpConsent("g1", "u")).toBeNull(); // no lingering grant written for the cap-rejected server
   });
 });
 
@@ -544,5 +652,130 @@ describe("mcpUiHost — mcp/watch security guards", () => {
     host.handleMessage({ data: { jsonrpc: "2.0", method: "mcp/unwatch", id: 122, params: { watchId: w1 } }, source: { other: true } } as unknown as MessageEvent);
     await tick();
     expect(posted(target)).not.toHaveBeenCalledWith(expect.objectContaining({ id: 122 }), "*");
+  });
+});
+
+describe("mcpUiHost — mcp/invalidate", () => {
+  // Three live watches: two on server "s" (tools "read"/"list", both input {}), one on server "t"
+  // (tool "peek"). Every entry gets its one initial successful poll during setup, then the callSpy's call
+  // count is cleared so each test can assert exactly which entries invalidate actually re-polled.
+  async function setupThreeWatches(over: Partial<UiHostDeps> = {}) {
+    vi.spyOn(playMcpServersRoute, "call").mockResolvedValue(serversEnvelope(
+      { server: "s", tools: [{ name: "read", readOnlyHint: true }, { name: "list", readOnlyHint: true }], configDigest: "d1" },
+      { server: "t", tools: [{ name: "peek", readOnlyHint: true }], configDigest: "e1" },
+    ));
+    const callSpy = vi.spyOn(playMcpCallRoute, "call").mockResolvedValue({ ok: true, payload: { v: 1 }, content: [] });
+    const { schedule } = mkSchedule();
+    const { host, target, requestConsent } = mkHost({
+      mcpNeeds: [{ server: "s", tools: ["read", "list"] }, { server: "t", tools: ["peek"] }],
+      schedule,
+      ...over,
+    });
+    host.handleMessage(msg(target, registerMsg(300, { tool: "read" })));
+    await tick();
+    const wRead = ackWatchId(target, 300);
+    host.handleMessage(msg(target, registerMsg(301, { tool: "list" })));
+    await tick();
+    const wList = ackWatchId(target, 301);
+    host.handleMessage(msg(target, { method: "mcp/watch", id: 302, params: { server: "t", tool: "peek", input: {} } }));
+    await tick();
+    const wPeek = ackWatchId(target, 302);
+    callSpy.mockClear();
+    return { host, target, requestConsent, callSpy, wRead, wList, wPeek };
+  }
+
+  it("no-arg invalidate drops lastGood and re-polls every non-stopped entry exactly once, once the floor allows it", async () => {
+    const { host, target, callSpy, wRead, wList, wPeek } = await setupThreeWatches();
+    vi.setSystemTime(FLOOR_MS); // clear the post-register floor so invalidate's re-poll is actually allowed
+    host.handleMessage(msg(target, { method: "mcp/invalidate", id: 310 }));
+    await tick();
+    expect(posted(target)).toHaveBeenCalledWith(expect.objectContaining({ id: 310, result: { ok: true } }), "*");
+    expect(callSpy).toHaveBeenCalledTimes(3); // one re-poll per live entry, no more
+    for (const w of [wRead, wList, wPeek]) {
+      const notifies = watchNotifies(target, w);
+      expect(notifies[notifies.length - 1].params?._meta?.["ai.agentgem/watch"]).toEqual({ watchId: w, type: "data" });
+    }
+  });
+
+  it("invalidate before the 30s floor elapses is floor-respected: no early re-poll", async () => {
+    const { host, target, callSpy } = await setupThreeWatches();
+    // Still at t=0 — the floor set by each entry's initial poll (nextAllowedAt = 30000) hasn't elapsed.
+    host.handleMessage(msg(target, { method: "mcp/invalidate", id: 311 }));
+    await tick();
+    expect(callSpy).not.toHaveBeenCalled();
+  });
+
+  it("{server} narrows to every entry on that server, leaving other servers' watches untouched", async () => {
+    const { host, target, callSpy, wRead, wList, wPeek } = await setupThreeWatches();
+    vi.setSystemTime(FLOOR_MS);
+    host.handleMessage(msg(target, { method: "mcp/invalidate", id: 312, params: { server: "s" } }));
+    await tick();
+    expect(callSpy).toHaveBeenCalledTimes(2); // "read" + "list", both on "s"
+    expect(watchNotifies(target, wRead).length).toBeGreaterThan(1);
+    expect(watchNotifies(target, wList).length).toBeGreaterThan(1);
+    expect(watchNotifies(target, wPeek)).toHaveLength(1); // "t" untouched — still just its original poll
+  });
+
+  it("{server, tool} narrows to exactly the matching identity", async () => {
+    const { host, target, callSpy, wRead, wList } = await setupThreeWatches();
+    vi.setSystemTime(FLOOR_MS);
+    host.handleMessage(msg(target, { method: "mcp/invalidate", id: 313, params: { server: "s", tool: "read" } }));
+    await tick();
+    expect(callSpy).toHaveBeenCalledTimes(1);
+    expect(watchNotifies(target, wRead).length).toBeGreaterThan(1);
+    expect(watchNotifies(target, wList)).toHaveLength(1); // "list" untouched
+  });
+
+  it("{server, tool, input} narrows via mcpIdentity to exactly that one watch, even with a same-server/tool sibling on different input", async () => {
+    const { host, target, callSpy, wRead } = await setupThreeWatches();
+    // A second "s"/"read" watch, but with a DIFFERENT input — a distinct identity that shares server+tool
+    // with wRead.
+    host.handleMessage(msg(target, { method: "mcp/watch", id: 320, params: { server: "s", tool: "read", input: { id: 7 } } }));
+    await tick();
+    const wRead2 = ackWatchId(target, 320);
+    callSpy.mockClear();
+
+    vi.setSystemTime(FLOOR_MS);
+    host.handleMessage(msg(target, { method: "mcp/invalidate", id: 321, params: { server: "s", tool: "read", input: {} } }));
+    await tick();
+    expect(callSpy).toHaveBeenCalledTimes(1); // only the input:{} identity re-polled
+    expect(watchNotifies(target, wRead).length).toBeGreaterThan(1);
+    expect(watchNotifies(target, wRead2)).toHaveLength(1); // the other input's watch untouched
+  });
+
+  it("a STOPPED entry is skipped — invalidate never resurrects it", async () => {
+    const { host, target, callSpy, wPeek, wRead } = await setupThreeWatches();
+    // Stop "peek" (server "t") on its own poll; "s"'s two watches poll normally in the same round.
+    callSpy.mockImplementation(async (_client: unknown, args: { body: { server: string } }) =>
+      args.body.server === "t"
+        ? { ok: false, error: { code: "server_config_changed", message: "reconfigured" } }
+        : { ok: true, payload: { v: 1 }, content: [] });
+    vi.setSystemTime(FLOOR_MS);
+    host.wakeWatches();
+    await tick();
+    const peekNotifiesAfterStop = watchNotifies(target, wPeek);
+    expect(peekNotifiesAfterStop[peekNotifiesAfterStop.length - 1].params?._meta?.["ai.agentgem/watch"]).toEqual({ watchId: wPeek, type: "error" });
+    expect((peekNotifiesAfterStop[peekNotifiesAfterStop.length - 1].params?.structuredContent as { stop?: boolean }).stop).toBe(true);
+
+    callSpy.mockClear();
+    callSpy.mockResolvedValue({ ok: true, payload: { v: 2 }, content: [] });
+    vi.setSystemTime(FLOOR_MS * 2); // "s"'s two watches' floor (reset by the round above) needs to elapse too
+    host.handleMessage(msg(target, { method: "mcp/invalidate", id: 330 })); // no-arg: would match everything if not for the stop
+    await tick();
+    expect(callSpy).toHaveBeenCalledTimes(2); // only "s"'s two live entries — "t" is skipped, not resurrected
+    expect(watchNotifies(target, wPeek)).toEqual(peekNotifiesAfterStop); // unchanged since the stop
+    expect(watchNotifies(target, wRead).length).toBeGreaterThan(1); // the live sibling DID get re-polled
+  });
+
+  it("an entry whose consent was revoked before invalidate stops rather than refetching", async () => {
+    const { host, target, callSpy, wRead } = await setupThreeWatches();
+    clearMcpConsent("g1", "s"); // simulate a grant revoked between polls (e.g. withdrawn elsewhere)
+    vi.setSystemTime(FLOOR_MS);
+    host.handleMessage(msg(target, { method: "mcp/invalidate", id: 340, params: { server: "s", tool: "read" } }));
+    await tick();
+    expect(callSpy).not.toHaveBeenCalled(); // stop-and-retract short-circuits before ever calling /call
+    const notifies = watchNotifies(target, wRead);
+    expect(notifies[notifies.length - 1].params?._meta?.["ai.agentgem/watch"]).toEqual({ watchId: wRead, type: "error" });
+    expect((notifies[notifies.length - 1].params?.structuredContent as { stop?: boolean }).stop).toBe(true);
   });
 });

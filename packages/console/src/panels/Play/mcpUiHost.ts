@@ -549,6 +549,18 @@ export function createUiHost(deps: UiHostDeps): UiHost {
       reply(d.id, { ok: false, error: { code: "server_not_connected", message: `MCP server "${server}" is not installed` } });
       return;
     }
+    // Cap 16 — fast pre-consent reject (Task 3 review minor #1): only a genuinely NEW identity is gated;
+    // re-registering (or rejoining a stopped) one already occupying a slot never grows the map, so
+    // `watches.has(identity)` true always skips this. Checked here, BEFORE the consent decision below, so
+    // a register that's already going to be cap-rejected never wastes a prompt, writes a lingering grant,
+    // or burns a watchIdSeq value — mirrors handleMcpCall's early manifest fast-reject. An await (the
+    // consent prompt) sits between this read and the eventual `watches.set` further down, so this check
+    // alone isn't the atomic authority over the map — it only spares the common (non-racing) case its
+    // wasted prompt. The authoritative check-and-set stays immediately before `watches.set`, unchanged.
+    if (!watches.has(identity) && watches.size >= 16) {
+      reply(d.id, { ok: false, error: { code: "bad_request", message: "too many active watches (max 16)" } });
+      return;
+    }
     // The same digest-consent decision as mcp/call — granted+matching digest proceeds silently; a stale
     // or absent decision re-prompts. This is the ONLY path past this point; a coalesced join (below)
     // still runs it, so a stopped-then-rejoined identity always gets a fresh, real consent decision.
@@ -585,8 +597,10 @@ export function createUiHost(deps: UiHostDeps): UiHost {
       }
       return;
     }
-    // Cap 16: only gates a genuinely NEW identity — re-registering (or rejoining a stopped) one already
-    // occupying a slot never grows the map.
+    // Cap 16 — authoritative re-check, immediately before `watches.set` below (no await in between): the
+    // early check above already rejected the common case pre-prompt, but a concurrent register could in
+    // principle have grown the map to 16 during THIS call's own consent-prompt await, so re-verify against
+    // fresh state right at the point of insertion rather than trusting the pre-await snapshot.
     if (!existing && watches.size >= 16) {
       reply(d.id, { ok: false, error: { code: "bad_request", message: "too many active watches (max 16)" } });
       return;
@@ -623,6 +637,49 @@ export function createUiHost(deps: UiHostDeps): UiHost {
     reply(d.id, { ok: true });
   }
 
+  // mcp/invalidate: force a re-poll of matching LIVE watches (server?/tool?/input?), used when the game
+  // knows its own action just invalidated a connector's cached read (e.g. it wrote via mcp/call) and wants
+  // its watches to reflect that now rather than waiting out the 30s floor. Never touches a STOPPED entry —
+  // invalidate is a re-poll nudge, not a resurrection path; a watch that already stopped (authz revoked,
+  // connector reconfigured) stays stopped until a fresh mcp/watch register runs the full interactive
+  // consent decision again. Clearing `lastGood` BEFORE runPoll means a watcher joining while the re-poll is
+  // in flight sees no stale cached snapshot, not the pre-invalidate one. runPoll itself re-checks
+  // consent/digest (via pollOnce) and single-flights, so an entry whose consent was revoked stops rather
+  // than refetching, and an entry already in flight just gets coalesced (flagged dirty) instead of firing a
+  // second call.
+  function handleInvalidate(d: RpcMessage): void {
+    const server = d.params?.server as string | undefined;
+    const tool = d.params?.tool as string | undefined;
+    // `input` is only meaningful alongside both server and tool (it narrows to one mcpIdentity); presence,
+    // not value, decides whether it's in play — an explicit `input: undefined` reads the same as omitted.
+    const hasInput = d.params != null && Object.prototype.hasOwnProperty.call(d.params, "input");
+    let matches: WatchEntry[];
+    if (server !== undefined && tool !== undefined && hasInput) {
+      let key: string;
+      try {
+        key = mcpIdentity(server, tool, d.params?.input).key;
+      } catch {
+        reply(d.id, { ok: true }); // an input that can't be normalized can't identify any live watch — no-op
+        return;
+      }
+      const entry = watches.get(key);
+      matches = entry ? [entry] : [];
+    } else {
+      matches = [];
+      for (const entry of watches.values()) {
+        if (server !== undefined && entry.server !== server) continue;
+        if (tool !== undefined && entry.tool !== tool) continue;
+        matches.push(entry);
+      }
+    }
+    for (const entry of matches) {
+      if (entry.stoppedReason) continue; // never resurrect a stopped watch
+      entry.lastGood = undefined;
+      runPoll(entry);
+    }
+    reply(d.id, { ok: true });
+  }
+
   function handleMessage(e: MessageEvent): void {
     if (e.source !== deps.target) return;            // only our own sealed iframe — the security boundary
     const d = e.data as RpcMessage | null;
@@ -652,6 +709,7 @@ export function createUiHost(deps: UiHostDeps): UiHost {
     if (d.method === "mcp/list") { void handleMcpList(d); return; }
     if (d.method === "mcp/watch") { void handleWatch(d); return; }
     if (d.method === "mcp/unwatch") { handleUnwatch(d); return; }
+    if (d.method === "mcp/invalidate") { handleInvalidate(d); return; }
     if (d.method === "ui/open-link") { void handleOpenLink(d); return; }
     if (d.method === "ui/copy-command") { void handleCopy(d); return; }
     if (d.method === "ui/message") { handleUnsupportedAction(d, "send-message"); return; }
