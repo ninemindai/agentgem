@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { createClient, defineRoute, type Client } from "@agentback/client";
+import { MCP_ERROR_CODES } from "../panels/Play/mcpErrors.js";
 
 // Minimal client-side schemas: validate ONLY what the UI reads. Zod strips the
 // server's extra artifact fields. When a shared browser-safe contract package is
@@ -1128,6 +1129,31 @@ export const playPublishRoute = defineRoute("POST", "/api/play/publish", {
 export const playSessionDataRoute = defineRoute("GET", "/api/play/session-data", {
   query: z.object({ name: z.string(), sessionId: z.string().optional(), agent: z.string().optional() }),
   response: z.object({ meta: z.record(z.string(), z.unknown()), timeline: z.array(z.object({ role: z.string(), tsMs: z.number(), text: z.string() })) }),
+});
+
+const McpErrorCodeEnum = z.enum(MCP_ERROR_CODES);
+export const playMcpCallRoute = defineRoute("POST", "/api/play/mcp/call", {
+  body: z.object({ name: z.string(), server: z.string(), tool: z.string(), input: z.unknown().optional(), expectedConfigDigest: z.string().optional() }),
+  response: z.object({
+    ok: z.boolean(),
+    payload: z.unknown().optional(),
+    content: z.array(z.unknown()).optional(),
+    error: z.object({ code: McpErrorCodeEnum, message: z.string() }).optional(),
+  }),
+});
+export const playMcpServersRoute = defineRoute("GET", "/api/play/mcp/servers", {
+  query: z.object({ name: z.string() }),
+  response: z.object({
+    servers: z.array(z.object({
+      server: z.string(),
+      configDigest: z.string().optional(),
+      tools: z.array(z.object({
+        name: z.string(),
+        description: z.string().optional(),
+        annotations: z.object({ readOnlyHint: z.boolean().optional(), destructiveHint: z.boolean().optional() }).optional(),
+      })),
+    })),
+  }),
 });
 
 export const makeClient = (apiBase: string): Client => createClient({ baseURL: apiBase });
