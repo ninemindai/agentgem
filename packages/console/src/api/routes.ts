@@ -184,7 +184,14 @@ export const GemRequestSchema = z.object({
   name: z.string().optional(),
   checks: z.array(GemCheckSchema).optional(),
 });
-const GemArtifactSchema = z.object({ type: z.string(), name: z.string() });
+// description/content are DECLARED, not just tolerated: this parse strips undeclared
+// keys, and Mine's Distill → Gem viewer renders the skill artifact's content.
+const GemArtifactSchema = z.object({
+  type: z.string(),
+  name: z.string(),
+  description: z.string().optional(),
+  content: z.string().optional(),
+});
 const SecretRequirementSchema = z.object({ name: z.string() });
 export const GemSchema = z.object({
   name: z.string(),
