@@ -603,6 +603,23 @@ completion-clears regression test were added by `/plan-eng-review` of PR #469
 (decisions D2-D9; outside-voice pass by Codex concurred on the Stop-invalidation
 and degraded-label points).
 
+**Implementation addendum (2026-07-17, branch `studio-resume-impl`):** executed
+as planned with four reviewed deviations/refinements from the plan's literal
+snippets, each with a covering test:
+1. `submit()` gained a `busy || !input.trim()` guard, with text captured before
+   `setInput("")` — React batching otherwise let the trailing clear clobber the
+   already-running branch's `setInput(message)` restore, and Enter-while-busy
+   silently wiped the composer.
+2. A non-ok `/state` response now **throws** into the catch/`failStreak` path
+   instead of reading as `{alive:false}` — the server 200s `{alive:false}` for
+   unknown chats, so non-ok is only ever a server/transport error and must not
+   unlock the composer mid-turn.
+3. The completion branch reconciles (`loadStudioSession` → `setMsgs`) **before**
+   `setBusy(false)`, closing a clobber window against a racing send.
+4. Test waits use `await vi.advanceTimersByTimeAsync(…)` + synchronous `getBy*`
+   (RTL's `waitFor` does not drive Vitest fake timers), and one `queryByText`
+   is `{ selector: "div" }`-narrowed, paired with `getByDisplayValue`.
+
 ## GSTACK REVIEW REPORT
 
 | Review | Trigger | Why | Runs | Status | Findings |
