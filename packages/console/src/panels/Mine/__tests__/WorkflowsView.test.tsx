@@ -1,4 +1,4 @@
-import { describe, it, expect, afterEach, vi } from "vitest";
+import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import { render, screen, fireEvent, cleanup } from "@testing-library/react";
 
 afterEach(cleanup);
@@ -43,6 +43,10 @@ function syncStream(events: ScorecardStreamEvent[]) {
 }
 
 describe("WorkflowsView", () => {
+  const ORIGINAL_HASH = window.location.hash;
+  beforeEach(() => { window.location.hash = ""; });
+  afterEach(() => { window.location.hash = ORIGINAL_HASH; });
+
   it("shows the scoring skeleton before any event", () => {
     render(<WorkflowsView apiBase="http://localhost:0" scope="*" openStream={silentStream} />);
     expect(screen.getByText(/scoring your goldmine/i)).toBeTruthy();
@@ -147,5 +151,35 @@ describe("WorkflowsView", () => {
     // grouped gem cards
     expect(screen.getByText("Deploy workflow")).toBeTruthy();
     expect(screen.getByText("Test workflow")).toBeTruthy();
+  });
+
+  it("done with workflows renders the Group by switcher with Value active", () => {
+    const stream = syncStream([{ type: "done", scorecard: SCORECARD_WITH_WORKFLOWS, cached: false, updatedAt: null }]);
+    render(<WorkflowsView apiBase="http://localhost:0" scope="*" openStream={stream} />);
+    expect(screen.getByText("Group by")).toBeTruthy();
+    const value = screen.getByRole("button", { name: "Value" });
+    expect(value.getAttribute("aria-pressed")).toBe("true");
+  });
+
+  it("does not render Type or Maturity segments in PR-1", () => {
+    const stream = syncStream([{ type: "done", scorecard: SCORECARD_WITH_WORKFLOWS, cached: false, updatedAt: null }]);
+    render(<WorkflowsView apiBase="http://localhost:0" scope="*" openStream={stream} />);
+    expect(screen.queryByRole("button", { name: /^type$/i })).toBeNull();
+    expect(screen.queryByRole("button", { name: /^maturity$/i })).toBeNull();
+  });
+
+  it("does not render the Group by switcher in the empty doorway state", () => {
+    const stream = syncStream([{ type: "done", scorecard: EMPTY_SCORECARD, cached: false, updatedAt: null }]);
+    render(<WorkflowsView apiBase="http://localhost:0" scope="*" openStream={stream} />);
+    expect(screen.getByText(/no gems mined here yet/i)).toBeTruthy();
+    expect(screen.queryByText("Group by")).toBeNull();
+  });
+
+  it("clicking Value normalizes the hash to include group=value", () => {
+    window.location.hash = "#/mine";
+    const stream = syncStream([{ type: "done", scorecard: SCORECARD_WITH_WORKFLOWS, cached: false, updatedAt: null }]);
+    render(<WorkflowsView apiBase="http://localhost:0" scope="*" openStream={stream} />);
+    fireEvent.click(screen.getByRole("button", { name: "Value" }));
+    expect(window.location.hash).toContain("group=value");
   });
 });
