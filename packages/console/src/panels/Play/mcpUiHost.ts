@@ -16,9 +16,21 @@ import {
   CAP_TOOL, TOOL_CAP, HOST_TOOLS, type StreamHandle,
 } from "./mcpHostTools.js";
 import { playMcpCallRoute, playMcpServersRoute, makeClient } from "../../api/routes.js";
+import { mcpIdentity, McpIdentityError } from "./mcpIdentity.js";
 
 // The MCP Apps extension's protocol revision this host implements (ext-apps MVP, 2026-01-26).
 const PROTOCOL_VERSION = "2026-01-26";
+
+// The watch registry's poll cadence AND its rate floor — deliberately the SAME constant. Every
+// deps.schedule() call the registry makes (regular tick, floor-deferred retry, dirty follow-up) uses
+// this value, so "the next scheduled poll" and "the earliest a poll may legally run again" always
+// coincide; no separate floor-vs-interval bookkeeping is needed. (D2 spec: watches poll no more than
+// once per 30s per identity.)
+const POLL_INTERVAL_MS = 30_000;
+
+// authz-denial-or-reconfig codes that STOP a watch (retract + drop the grant) rather than just
+// reporting a transient error and keeping the last good result. Mirrors D2's mid-stream contract.
+const WATCH_STOP_CODES = new Set(["server_config_changed", "needs_reauth", "not_granted", "server_not_connected"]);
 
 export interface UiHostDeps {
   apiBase: string;
@@ -32,6 +44,13 @@ export interface UiHostDeps {
   openExternal?: (url: string) => void;              // 3.4: open-link's actual browser navigation, injected by the Runner
   copyText?: (text: string) => void;                 // copy-command's actual clipboard write, injected by the Runner
   mcpNeeds?: McpNeed[];                               // declared connector manifest (Runner, Task 6); absent = no connectors
+  // Watch-registry timing, injected so this module stays DOM-free (Task 3). `schedule` arms a one-shot
+  // timer and returns its cancel fn — the Runner supplies a real setTimeout wrapper (Task 6); a fake
+  // "manual clock" drives it in tests. `isHidden` reports the tab's current visibility. Both absent ->
+  // the registry still answers the FIRST poll of a register (so replay/consent/D11 stay fully testable)
+  // but never arms a recurring timer, i.e. a degraded "replay-only, no background polling" mode.
+  schedule?: (fn: () => void, ms: number) => () => void;
+  isHidden?: () => boolean;
 }
 
 export interface UiHost {
@@ -41,6 +60,21 @@ export interface UiHost {
   feedSessionData(sessionId: string, agent: string): void; // host-initiated "Replay yours" rebind
   rebindHygiene(file: string): void;                        // host-initiated hygiene-stream rebind (session picker)
   pushHostContext(partial: Record<string, unknown>): void;  // host-initiated host-context-changed push (fullscreen toggle)
+  wakeWatches(): void;                                       // host-initiated visibility catch-up (Runner's visibilitychange listener, Task 6)
+}
+
+// A registered `mcp/watch`'s poll state (router-internal). One entry per mcpIdentity(server,tool,body)
+// key; N watchIds can share one entry (coalesced polling). `epoch` bumps whenever this identity's entry
+// is replaced (a fresh register after the old one stopped) so an async continuation from the OLD entry
+// can tell it's obsolete even if a NEW entry now occupies the same map key.
+interface WatchEntry {
+  identity: string; epoch: number;
+  server: string; tool: string; body: unknown;
+  watchers: Map<number, true>;
+  lastGood?: { payload: unknown; content: unknown[]; storedAt: number };
+  stoppedReason?: string;
+  inFlight: boolean; dirty: boolean; nextAllowedAt: number;
+  cancelTimer?: () => void;
 }
 
 // A tool as loadServers() reports it: name plus the annotations D11's readOnlyHint gate reads (Task 3).
@@ -69,6 +103,13 @@ export function createUiHost(deps: UiHostDeps): UiHost {
   // server -> last-seen configDigest; `undefined` means "not installed". Refreshed by loadServers() before
   // every consent decision so a swapped/uninstalled connector is caught even mid-session.
   const mcpDigests = new Map<string, string | undefined>();
+  // The watch registry: identity (mcpIdentity key) -> its poll state, capped at 16 live identities.
+  // watchOwners is the reverse index (watchId -> identity) so unwatch is O(1) instead of scanning every
+  // entry's watchers map.
+  const watches = new Map<string, WatchEntry>();
+  const watchOwners = new Map<number, string>();
+  let entryEpochSeq = 0;
+  let watchIdSeq = 1;
 
   const post = (msg: unknown) => deps.target.postMessage(msg, "*");
   const stale = (gen: number) => gen !== generation;
@@ -85,6 +126,17 @@ export function createUiHost(deps: UiHostDeps): UiHost {
       _meta: { "ai.agentgem/stream": { toolName } },
     },
   });
+  // Watch notifications ride the same tool-result notification channel as the tools/call stream, but
+  // tagged under a DISTINCT _meta key (`ai.agentgem/watch` vs `ai.agentgem/stream`) carrying the
+  // watchId, so Task 5's shim can route a chunk to the right watchTool() subscriber instead of the
+  // generic streaming-tool handler.
+  const notifyWatch = (watchId: number, type: "data" | "error", payload: unknown) => post({
+    jsonrpc: "2.0", method: "ui/notifications/tool-result",
+    params: { content: [], structuredContent: payload, _meta: { "ai.agentgem/watch": { watchId, type } } },
+  });
+  const notifyEntry = (entry: WatchEntry, type: "data" | "error", payload: unknown) => {
+    for (const watchId of entry.watchers.keys()) notifyWatch(watchId, type, payload);
+  };
   const register = (gen: number, handle: StreamHandle) => {
     if (stale(gen)) { try { handle.close(); } catch { /* ignore */ } } else handles.add(handle);
   };
@@ -326,6 +378,251 @@ export function createUiHost(deps: UiHostDeps): UiHost {
     reply(d.id, res);
   }
 
+  // Arm this entry's next poll timer, ms away (>= POLL_INTERVAL_MS — see the const's comment). Cancels
+  // any timer already armed for this entry first, so re-arming never leaves two live timers racing.
+  // No-ops when the host wasn't given a scheduler (Task 6 not wired) — the degraded replay-only mode.
+  function armTimer(entry: WatchEntry): void {
+    if (!deps.schedule) return;
+    if (entry.cancelTimer) { try { entry.cancelTimer(); } catch { /* ignore */ } }
+    const waitMs = Math.max(POLL_INTERVAL_MS, entry.nextAllowedAt - Date.now());
+    entry.cancelTimer = deps.schedule(() => { entry.cancelTimer = undefined; runPoll(entry); }, waitMs);
+  }
+
+  // The single place that decides whether an entry gets a NEXT timer at all: stopped entries never do;
+  // a hidden tab gets none either (deps.isHidden — no point polling what nobody's looking at), and
+  // relies entirely on wakeWatches() to catch up once the Runner reports visibility returning.
+  function scheduleNext(entry: WatchEntry): void {
+    if (entry.stoppedReason) return;
+    if (deps.isHidden?.()) return;
+    armTimer(entry);
+  }
+
+  // Set stoppedReason, drop the grant that's no longer valid (config changed out from under it, or an
+  // authz denial), cancel the timer, and retract — notify every current watcher with `stop:true` so the
+  // shim can surface "this watch ended" rather than silently going quiet. The entry itself is KEPT (not
+  // deleted from `watches`): a late in-flight poll from before the stop still finds it (via the epoch/gen
+  // re-check in pollOnce) and drops rather than crashing on a missing entry; existing watchIds can still
+  // be explicitly unwatched. A NEW register on this identity won't join it (handleWatch's `stoppedReason`
+  // check) — it always re-runs the full interactive consent decision and creates a fresh entry instead.
+  function stopWatch(entry: WatchEntry, code: string, message?: string): void {
+    entry.stoppedReason = code;
+    if (entry.cancelTimer) { try { entry.cancelTimer(); } catch { /* ignore */ } entry.cancelTimer = undefined; }
+    clearMcpConsent(deps.name, entry.server);
+    mcpDigests.delete(entry.server);
+    notifyEntry(entry, "error", { ok: false, error: { code, message: message ?? "the connector grant was retracted" }, stop: true });
+  }
+
+  // The single-flight gate every trigger (initial register, interval tick, visibility catch-up) funnels
+  // through: an in-flight poll just gets flagged dirty (coalesced into exactly one follow-up once it's
+  // free); a poll that isn't allowed yet (the 30s floor hasn't elapsed since the last one STARTED) just
+  // re-arms rather than calling early. Only once both gates clear does it actually flip inFlight and
+  // kick off pollOnce — capturing this identity's epoch and the router's generation BEFORE the first
+  // await, so pollOnce's completion can tell whether it's still the entry anyone cares about.
+  function runPoll(entry: WatchEntry): void {
+    if (entry.stoppedReason) return;
+    if (entry.inFlight) { entry.dirty = true; return; }
+    const now = Date.now();
+    if (now < entry.nextAllowedAt) { scheduleNext(entry); return; }
+    entry.inFlight = true;
+    entry.nextAllowedAt = now + POLL_INTERVAL_MS;
+    const epoch = entry.epoch;
+    const gen = generation;
+    void pollOnce(entry, epoch, gen);
+  }
+
+  async function pollOnce(entry: WatchEntry, epoch: number, gen: number): Promise<void> {
+    const identity = entry.identity;
+    // Non-interactive re-check: the poll reuses the registration's grant and NEVER prompts (D2 mirrors
+    // window.claude.mcp here). If something else already dropped the grant (another handler saw
+    // server_config_changed and cleared it) there's no point calling — stop-and-retract right away.
+    const digest = mcpDigests.get(entry.server);
+    const c = getMcpConsent(deps.name, entry.server);
+    const grantedNow = digest !== undefined && c?.decision === "granted" && c.digest === digest;
+    if (!grantedNow) {
+      if (watches.get(identity) === entry && entry.epoch === epoch && !stale(gen)) {
+        stopWatch(entry, digest === undefined ? "server_not_connected" : "not_granted");
+      }
+      entry.inFlight = false;
+      return;
+    }
+    let res: { ok: boolean; payload?: unknown; content?: unknown[]; error?: { code: string; message: string } };
+    try {
+      res = await playMcpCallRoute.call(makeClient(deps.apiBase), {
+        body: { name: deps.name, server: entry.server, tool: entry.tool, input: entry.body, expectedConfigDigest: digest },
+      });
+    } catch {
+      res = { ok: false, error: { code: "server_unavailable", message: "could not reach the connector service" } };
+    }
+    // Entry-epoch + generation re-check — load-bearing: this is the ONLY thing standing between a
+    // torn-down/replaced/stale-game entry and a notify or cache-write that shouldn't happen. Every
+    // async continuation in this registry re-reads the registry and checks both before acting.
+    if (watches.get(identity) !== entry || entry.epoch !== epoch || stale(gen)) {
+      entry.inFlight = false;
+      return;
+    }
+    if (res.ok) {
+      entry.lastGood = { payload: res.payload, content: res.content ?? [], storedAt: Date.now() };
+      notifyEntry(entry, "data", { ok: true, payload: res.payload, content: res.content ?? [] });
+      entry.inFlight = false;
+      afterPoll(entry);
+      return;
+    }
+    const code = res.error?.code ?? "upstream_error";
+    if (WATCH_STOP_CODES.has(code)) {
+      entry.inFlight = false;
+      stopWatch(entry, code, res.error?.message);
+      return;
+    }
+    // Transient (server_unavailable/tool_error/upstream_error/...): report it live, but keep lastGood —
+    // a replay for a NEW watcher must never hand out a stale transient error, only the last good result.
+    notifyEntry(entry, "error", { ok: false, error: res.error });
+    entry.inFlight = false;
+    afterPoll(entry);
+  }
+
+  // Runs after every poll that didn't stop the watch. `dirty` means at least one trigger (interval tick,
+  // visibility catch-up) arrived while this poll was in flight and wants exactly one follow-up — honor it
+  // by attempting a poll right away rather than waiting for whatever timer happens to be armed next;
+  // runPoll's own inFlight/floor gates decide whether that attempt actually calls now or just re-arms, so
+  // this can never race ahead of the 30s floor. No dirty trigger -> just keep the normal interval alive.
+  function afterPoll(entry: WatchEntry): void {
+    if (entry.dirty) { entry.dirty = false; runPoll(entry); return; }
+    scheduleNext(entry);
+  }
+
+  // Host-initiated visibility catch-up (Runner's visibilitychange listener, Task 6 calls this when the
+  // tab becomes visible again). Every live, non-stopped entry gets a runPoll() nudge — the single-flight
+  // + floor gates inside runPoll decide whether that actually fires a call now or just re-arms.
+  function wakeWatches(): void {
+    for (const entry of watches.values()) {
+      if (entry.stoppedReason) continue;
+      runPoll(entry);
+    }
+  }
+
+  // mcp/watch: register a POLLED read against a connector tool. Reuses mcp/call's exact manifest +
+  // digest-consent decision (no bypass), plus two watch-only gates D8 doesn't need: D11 (the tool must
+  // be server-declared read-only — watch polls it unattended, so an unannotated or mutating tool is
+  // fail-closed rejected) and the 16-identity cap. A register for an identity that's already live
+  // coalesces (adds a watchId, no new poll); one already STOPPED is never joined — it's replaced by a
+  // fresh entry that goes through the full consent decision again, same as any new identity.
+  async function handleWatch(d: RpcMessage): Promise<void> {
+    const server = d.params?.server as string | undefined;
+    const tool = d.params?.tool as string | undefined;
+    const input = d.params?.input;
+    const gen = generation;
+    if (!server || !tool) {
+      reply(d.id, { ok: false, error: { code: "bad_request", message: "mcp/watch requires server and tool" } });
+      return;
+    }
+    let identity: string, body: unknown;
+    try {
+      const r = mcpIdentity(server, tool, input);
+      identity = r.key; body = r.body;
+    } catch (err) {
+      reply(d.id, { ok: false, error: { code: "bad_request", message: err instanceof McpIdentityError ? err.message : "invalid input" } });
+      return;
+    }
+    const need = mcpNeeds.find((n) => n.server === server);
+    if (!need || !need.tools.includes(tool)) {
+      reply(d.id, { ok: false, error: { code: "not_in_manifest", message: `"${server}"/"${tool}" is not in this miniapp's declared connectors` } });
+      return;
+    }
+    let serverMap: Map<string, { tools: McpServerTool[]; configDigest?: string }>;
+    try {
+      serverMap = await loadServers();
+    } catch {
+      if (!stale(gen)) reply(d.id, { ok: false, error: { code: "server_unavailable", message: "could not reach the connector service" } });
+      return;
+    }
+    if (stale(gen)) return;
+    // D11: watch polls this tool unattended, forever, with no per-call consent prompt — so it fail-closed
+    // requires the SERVER to have declared the tool side-effect-free. Absent annotations (unknown safety)
+    // are rejected exactly like an explicit readOnlyHint:false; only an explicit `true` passes.
+    const toolInfo = serverMap.get(server)?.tools.find((t) => t.name === tool);
+    if (toolInfo?.annotations?.readOnlyHint !== true) {
+      reply(d.id, { ok: false, error: { code: "bad_request", message: `tool "${tool}" is not declared read-only (readOnlyHint must be true) — watch requires a read-only tool` } });
+      return;
+    }
+    const digest = mcpDigests.get(server);
+    if (digest === undefined) {
+      reply(d.id, { ok: false, error: { code: "server_not_connected", message: `MCP server "${server}" is not installed` } });
+      return;
+    }
+    // The same digest-consent decision as mcp/call — granted+matching digest proceeds silently; a stale
+    // or absent decision re-prompts. This is the ONLY path past this point; a coalesced join (below)
+    // still runs it, so a stopped-then-rejoined identity always gets a fresh, real consent decision.
+    const c = getMcpConsent(deps.name, server);
+    if (c?.decision === "granted" && c.digest === digest) {
+      // proceed — matching-digest grant already on file
+    } else if (c?.decision === "denied" && c.digest === digest) {
+      reply(d.id, { ok: false, error: { code: "not_granted", message: "consent denied" } });
+      return;
+    } else {
+      const ok = await deps.requestConsent("mcp:" + server, mcpDetail(server));
+      if (stale(gen)) return;
+      setMcpConsent(deps.name, server, ok ? "granted" : "denied", digest);
+      if (!ok) { reply(d.id, { ok: false, error: { code: "not_granted", message: "consent denied" } }); return; }
+    }
+
+    const watchId = watchIdSeq++;
+    const existing = watches.get(identity);
+    if (existing && !existing.stoppedReason) {
+      // Coalesce: join the live entry, no new poll. Ack first, then deliver any cached lastGood as a
+      // microtask (never synchronously inside the handler) — and re-verify epoch/gen/membership at that
+      // point too, since a microtask is still an async continuation under the same contract as a poll.
+      existing.watchers.set(watchId, true);
+      watchOwners.set(watchId, identity);
+      reply(d.id, { watchId });
+      if (existing.lastGood) {
+        const snap = existing.lastGood;
+        const capturedEpoch = existing.epoch;
+        queueMicrotask(() => {
+          if (watches.get(identity) !== existing || existing.epoch !== capturedEpoch || stale(gen)) return;
+          if (!existing.watchers.has(watchId)) return;
+          notifyWatch(watchId, "data", { ok: true, payload: snap.payload, content: snap.content });
+        });
+      }
+      return;
+    }
+    // Cap 16: only gates a genuinely NEW identity — re-registering (or rejoining a stopped) one already
+    // occupying a slot never grows the map.
+    if (!existing && watches.size >= 16) {
+      reply(d.id, { ok: false, error: { code: "bad_request", message: "too many active watches (max 16)" } });
+      return;
+    }
+    const entry: WatchEntry = {
+      identity, epoch: ++entryEpochSeq, server, tool, body,
+      watchers: new Map([[watchId, true]]),
+      inFlight: false, dirty: false, nextAllowedAt: 0,
+    };
+    watches.set(identity, entry);
+    watchOwners.set(watchId, identity);
+    reply(d.id, { watchId });
+    runPoll(entry);
+  }
+
+  // mcp/unwatch: idempotent — an unknown or already-removed watchId is a silent no-op, not an error (the
+  // shim may race a stop-retract with its own unwatch). When the last watcher for an identity leaves, the
+  // timer is cancelled and the entry is deleted outright (not kept, unlike a stop — there's nothing to
+  // protect a later poll from: there IS no later poll, the timer's gone).
+  function handleUnwatch(d: RpcMessage): void {
+    const watchId = d.params?.watchId as number | undefined;
+    if (typeof watchId !== "number") { reply(d.id, { ok: true }); return; }
+    const identity = watchOwners.get(watchId);
+    if (identity === undefined) { reply(d.id, { ok: true }); return; }
+    watchOwners.delete(watchId);
+    const entry = watches.get(identity);
+    if (entry) {
+      entry.watchers.delete(watchId);
+      if (entry.watchers.size === 0) {
+        if (entry.cancelTimer) { try { entry.cancelTimer(); } catch { /* ignore */ } entry.cancelTimer = undefined; }
+        watches.delete(identity);
+      }
+    }
+    reply(d.id, { ok: true });
+  }
+
   function handleMessage(e: MessageEvent): void {
     if (e.source !== deps.target) return;            // only our own sealed iframe — the security boundary
     const d = e.data as RpcMessage | null;
@@ -353,6 +650,8 @@ export function createUiHost(deps: UiHostDeps): UiHost {
     if (d.method === "tools/call") { void handleCall(d); return; }
     if (d.method === "mcp/call") { void handleMcpCall(d); return; }
     if (d.method === "mcp/list") { void handleMcpList(d); return; }
+    if (d.method === "mcp/watch") { void handleWatch(d); return; }
+    if (d.method === "mcp/unwatch") { handleUnwatch(d); return; }
     if (d.method === "ui/open-link") { void handleOpenLink(d); return; }
     if (d.method === "ui/copy-command") { void handleCopy(d); return; }
     if (d.method === "ui/message") { handleUnsupportedAction(d, "send-message"); return; }
@@ -411,7 +710,15 @@ export function createUiHost(deps: UiHostDeps): UiHost {
     chatPromise = null;
     feeding = false;
     mcpDigests.clear();
+    // Teardown: cancel every watch's timer (so no orphaned poll ever fires against a torn-down game) and
+    // drop the registry outright — the generation bump above already makes any in-flight poll's
+    // continuation drop on resolve, this just stops NEW ones from ever being scheduled.
+    for (const entry of watches.values()) {
+      if (entry.cancelTimer) { try { entry.cancelTimer(); } catch { /* ignore */ } entry.cancelTimer = undefined; }
+    }
+    watches.clear();
+    watchOwners.clear();
   }
 
-  return { handleMessage, dispose, bumpGeneration, feedSessionData, rebindHygiene, pushHostContext };
+  return { handleMessage, dispose, bumpGeneration, feedSessionData, rebindHygiene, pushHostContext, wakeWatches };
 }
