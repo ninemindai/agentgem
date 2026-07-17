@@ -13,7 +13,7 @@ import { useGitHubBind } from "../../identity/useGitHubBind.js";
 import { ConnectGitHub } from "../../identity/ConnectGitHub.js";
 import { useSplit } from "../../shell/useSplit.js";
 import { setStudioChat, clearChatId, clearStudioChat } from "./studioChatStore.js";
-import { loadStudioSession } from "./studioResume.js";
+import { loadStudioSession, loadStudioTranscript } from "./studioResume.js";
 import { resolvePublishAction, type PublishAction } from "./publishAction.js";
 import { parseTags } from "./parseTags.js";
 
@@ -121,6 +121,9 @@ export function Studio({
       .catch((e: unknown) => setLoadErr(e instanceof Error ? e.message : String(e)));
 
   const pollRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // Invalidates in-flight poll ticks: clearTimeout can't stop a tick that is mid-await,
+  // so unmount/Stop bump the generation and stale ticks bail instead of rescheduling.
+  const pollGenRef = useRef(0);
 
   useEffect(() => {
     refresh();
@@ -137,6 +140,7 @@ export function Studio({
     })();
     return () => {
       cancelled = true;
+      pollGenRef.current++; // orphan any in-flight tick — it may resume after this cleanup
       if (pollRef.current) clearTimeout(pollRef.current);
       closeRef.current?.();
     };
@@ -144,26 +148,49 @@ export function Studio({
   }, [apiBase, name]);
 
   // Poll /state until the background turn finishes, then refresh history + preview.
-  // eng-review C2: cap the poll so a genuinely wedged turn doesn't spin a silent spinner forever —
-  // after the cap, surface an actionable "still running — Stop?" instead. Guard against a 2nd loop.
+  // While it runs, re-read the durable transcript each tick so completed spans surface as
+  // live progress (Approach A). No give-up cap: a running turn is legitimately running — keep
+  // the correct busy lock, show movement, and leave Stop as the guaranteed recovery. Mild
+  // backoff after a ramp window keeps a long turn from re-parsing hot. pollGenRef invalidates
+  // the loop across unmount/Stop/re-entry — a stale tick must neither touch state nor reschedule.
   const POLL_MS = 1500;
-  const POLL_MAX = Math.round((10 * 60_000) / POLL_MS); // ~10 min
+  const POLL_SLOW_MS = 4000;
+  const RAMP_TICKS = Math.round((2 * 60_000) / POLL_MS); // fast for ~2 min, then back off
+  const OFFLINE_TICKS = 4; // consecutive /state failures before the label admits trouble
   function pollWhileRunning(id: string) {
     if (pollRef.current) { clearTimeout(pollRef.current); pollRef.current = null; } // never run two loops
+    const gen = ++pollGenRef.current;
     let ticks = 0;
+    let failStreak = 0;
     const tick = async () => {
       try {
         const st = await fetch(`${apiBase}/api/chat/${encodeURIComponent(id)}/state`).then((r) => r.ok ? r.json() : { alive: false });
+        if (gen !== pollGenRef.current) return; // stale loop (unmounted / stopped / superseded)
+        failStreak = 0;
         if (!st.alive || !st.running) {
           setBusy(false); setWorking("");
           const r = await loadStudioSession(apiBase, name);
+          if (gen !== pollGenRef.current) return;
           setMsgs(r.msgs);
           await refresh();
           return;
         }
-      } catch { /* transient — keep polling */ }
-      if (++ticks >= POLL_MAX) { setWorking(""); setStatus("agent still running — press Stop to end it"); return; }
-      pollRef.current = setTimeout(tick, POLL_MS);
+        // Still running — reflect live work and grow the log. Replace only when the transcript
+        // GREW: the durable log is append-only during a turn, so equal length ⇒ identical
+        // content, and adopting a same-length copy would re-fire the scroll-follow effect every
+        // tick (yanking a scrolled-up reader to the bottom). Growth-only also means the
+        // send()-path optimistic user message and a transient empty read never clobber the screen.
+        setWorking("working…");
+        const msgs = await loadStudioTranscript(apiBase, name);
+        if (gen !== pollGenRef.current) return;
+        setMsgs((cur) => (msgs.length > cur.length ? msgs : cur));
+      } catch {
+        // transient — keep polling, keep the last log; after a streak, tell the truth
+        if (gen !== pollGenRef.current) return;
+        if (++failStreak >= OFFLINE_TICKS) setWorking("can't reach the agent — retrying…");
+      }
+      ticks++;
+      pollRef.current = setTimeout(tick, ticks >= RAMP_TICKS ? POLL_SLOW_MS : POLL_MS);
     };
     pollRef.current = setTimeout(tick, POLL_MS);
   }
@@ -235,6 +262,7 @@ export function Studio({
   async function stop() {
     const id = chatId;
     if (pollRef.current) { clearTimeout(pollRef.current); pollRef.current = null; }
+    pollGenRef.current++; // a mid-flight tick must not resurrect the spinner after Stop
     closeRef.current?.(); closeRef.current = null;
     setBusy(false); setWorking("");
     setChatId(null);
@@ -260,10 +288,19 @@ export function Studio({
         onTool: (tool) => { setWorking(activity(tool)); setMsgs((m) => [...m, { role: "tool", title: tool.title ?? tool.kind ?? "tool", failed: tool.status === "failed" }]); },
         onDone: async () => { setBusy(false); setWorking(""); await refresh(); },
         onFailed: (e) => {
-          // A turn stays alive server-side after a stream drop (Task 3). "already running" (another
-          // tab/reload owns it) and a transient transport drop ("connection lost", emitted by
-          // studioStream.ts's EventSource error handler) both mean: reconcile via /state, don't fail.
-          if (id && (/already running/i.test(e) || e === "connection lost")) {
+          // A turn stays alive server-side after a stream drop (Task 3). "already running"
+          // (another window owns the turn) means the server REFUSED this message — un-append
+          // the optimistic copy and hand the text back to the composer, then reconcile.
+          // "connection lost" (transient transport drop) means the turn DID start with this
+          // message — reconcile via /state; the growth guard protects the optimistic copy.
+          if (id && /already running/i.test(e)) {
+            setMsgs((m) => (m.length && m[m.length - 1].role === "user" ? m.slice(0, -1) : m));
+            setInput(message);
+            setStatus("agent is still working — message not sent");
+            setWorking("resuming…"); pollWhileRunning(id);
+            return;
+          }
+          if (id && e === "connection lost") {
             setWorking("resuming…"); pollWhileRunning(id);
             return;
           }
@@ -274,7 +311,12 @@ export function Studio({
     } catch (e) { setBusy(false); setWorking(""); setStatus(`error: ${(e as Error).message}`); }
   }
 
-  function submit() { send(input); setInput(""); }
+  // Clear the composer BEFORE calling send, not after: when chatId is already known, send()
+  // runs synchronously all the way through to onFailed's "already running" restore (no await
+  // is hit), so setInput("") called after send() would win the state-update batch and clobber
+  // the restored text. Clearing first — with the text captured up front, since send() reads
+  // the argument, not `input` state — makes an in-send restore the LAST call, so it wins.
+  function submit() { const text = input; setInput(""); send(text); }
 
   // Save gates the seal; a gate failure becomes an actionable banner (offer to have the agent fix it).
   async function save(): Promise<boolean> {

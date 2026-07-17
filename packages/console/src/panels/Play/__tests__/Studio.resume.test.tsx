@@ -5,6 +5,7 @@ import { Studio } from "../Studio.js";
 import { setStudioChat, getStudioChat } from "../studioChatStore.js";
 import { IdentityProvider } from "../../../identity/IdentityProvider.js";
 import { playMiniappRoute } from "../../../api/routes.js";
+import { openStudioStream } from "../studioStream.js";
 
 // A dropped EventSource ("connection lost", from studioStream.ts's own error listener) must be
 // reconciled via /state, not rendered as a failure — the turn keeps running server-side (Task 3).
@@ -19,6 +20,11 @@ vi.mock("../studioStream.js", () => ({
 afterEach(() => { cleanup(); try { localStorage.clear(); } catch { /* ignore */ } vi.restoreAllMocks(); vi.unstubAllGlobals(); });
 
 const codex = [{ id: "codex", name: "Codex", available: true }];
+
+const inspectMeta = (sessionId: string) => ({
+  agent: "codex", sessionId, project: null, model: null, gitBranch: null,
+  startMs: 0, endMs: 0, msgs: 0, tokensIn: 0, tokensOut: 0, tokensCache: 0,
+});
 
 // Routes raw fetch by pathname; DELETE calls are recorded on the returned fn for assertion.
 function routeFetch(map: Record<string, unknown>) {
@@ -119,5 +125,270 @@ describe("Studio resume", () => {
     await screen.findByText(/resuming…/i);
     expect(screen.queryByText(/failed: connection lost/i)).toBeNull();
     expect(screen.getByTitle("kill the agent session")).toBe(stopBtn);
+  });
+
+  it("surfaces new transcript spans while a background turn is still running", async () => {
+    vi.useFakeTimers();
+    try {
+      setStudioChat("demo4", { chatId: "chat_4", sessionId: "sess_4", agent: "codex" });
+      let turns: unknown[] = []; // grows on the 2nd inspect read
+      const base = {
+        agent: "codex", sessionId: "sess_4", project: null, model: null, gitBranch: null,
+        startMs: 0, endMs: 0, msgs: 0, tokensIn: 0, tokensOut: 0, tokensCache: 0,
+      };
+      const fetchMock = vi.fn(async (url: string) => {
+        const path = new URL(url, "http://x").pathname;
+        if (path.includes("/api/inspect/session")) {
+          const body = { sessionId: "sess_4", agent: "codex", meta: base, turns };
+          turns = [{ id: "1", role: "assistant", tsMs: 0, tokens: { in: 0, out: 0, cache: 0 }, spans: [{ kind: "message", role: "assistant", text: "wiring it up…" }] }];
+          return { ok: true, status: 200, text: async () => JSON.stringify(body), json: async () => body } as unknown as Response;
+        }
+        if (path.includes("/api/chat/chat_4/state")) return { ok: true, json: async () => ({ alive: true, running: true }) } as unknown as Response;
+        return { ok: false, status: 404, json: async () => ({}) } as unknown as Response;
+      });
+      vi.stubGlobal("fetch", fetchMock);
+      vi.spyOn(playMiniappRoute, "call").mockResolvedValue({
+        name: "demo4", html: "<p>x</p>",
+        meta: { title: "Demo4", genre: "project-fun", createdFrom: { kind: "project", path: "/p", flavor: "node" }, engineVersion: "1" },
+      } as never);
+
+      render(<IdentityProvider apiBase=""><Studio apiBase="" name="demo4" agents={codex} agentId="codex" onAgentIdChange={() => {}} onBack={() => {}} /></IdentityProvider>);
+
+      // Mount resume shows the reconnecting label first; nothing built yet.
+      await vi.waitFor(() => expect(screen.getByText(/resuming…/i)).toBeTruthy());
+      // First still-running tick (1.5s) refreshes the transcript → the new span renders and the label flips to working.
+      await vi.advanceTimersByTimeAsync(1600);
+      await vi.waitFor(() => expect(screen.getByText("wiring it up…")).toBeTruthy());
+      expect(screen.getByText(/working…/i)).toBeTruthy();
+    } finally { vi.useRealTimers(); }
+  });
+
+  it("keeps polling (no give-up lock) after many ticks while still running", async () => {
+    vi.useFakeTimers();
+    try {
+      setStudioChat("demo5", { chatId: "chat_5", sessionId: "sess_5", agent: "codex" });
+      const fetchMock = routeFetch({
+        "/api/inspect/session": { sessionId: "sess_5", agent: "codex", meta: {
+          agent: "codex", sessionId: "sess_5", project: null, model: null, gitBranch: null,
+          startMs: 0, endMs: 0, msgs: 0, tokensIn: 0, tokensOut: 0, tokensCache: 0,
+        }, turns: [] },
+        "/api/chat/chat_5/state": { alive: true, running: true },
+      });
+      vi.stubGlobal("fetch", fetchMock);
+      vi.spyOn(playMiniappRoute, "call").mockResolvedValue({
+        name: "demo5", html: "<p>x</p>",
+        meta: { title: "Demo5", genre: "project-fun", createdFrom: { kind: "project", path: "/p", flavor: "node" }, engineVersion: "1" },
+      } as never);
+
+      render(<IdentityProvider apiBase=""><Studio apiBase="" name="demo5" agents={codex} agentId="codex" onAgentIdChange={() => {}} onBack={() => {}} /></IdentityProvider>);
+
+      await vi.advanceTimersByTimeAsync(0); // flush the mount effect's fetch chain
+      const stopBtn = screen.getByTitle("kill the agent session");
+      // Advance well past the old ~10-min cap; the spinner must still be live and Stop must still recover.
+      await vi.advanceTimersByTimeAsync(15 * 60_000);
+      expect(screen.getByText(/working…/i)).toBeTruthy();
+      fireEvent.click(stopBtn);
+      await vi.waitFor(() => expect((fetchMock as unknown as { deleted?: string }).deleted).toBe("/api/chat/chat_5"));
+      await vi.waitFor(() => expect(screen.getByText("session stopped")).toBeTruthy());
+      // Stop invalidated the poll generation: a stale tick must neither resurrect the
+      // spinner nor keep fetching.
+      const callsAfterStop = fetchMock.mock.calls.length;
+      await vi.advanceTimersByTimeAsync(60_000);
+      expect(fetchMock.mock.calls.length).toBe(callsAfterStop);
+      expect(screen.queryByText(/working…/i)).toBeNull();
+    } finally { vi.useRealTimers(); }
+  });
+
+  it("clears busy and renders the final transcript when the turn completes (regression: never-unlocks)", async () => {
+    vi.useFakeTimers();
+    try {
+      setStudioChat("demo6", { chatId: "chat_6", sessionId: "sess_6", agent: "codex" });
+      let stateCalls = 0;
+      const finalTurns = [{ id: "1", role: "assistant", tsMs: 0, tokens: { in: 0, out: 0, cache: 0 }, spans: [{ kind: "message", role: "assistant", text: "all done" }] }];
+      const fetchMock = vi.fn(async (url: string) => {
+        const path = new URL(url, "http://x").pathname;
+        if (path.includes("/api/chat/chat_6/state")) {
+          stateCalls++; // mount read + tick 1 report running; tick 2 reports done
+          return { ok: true, json: async () => ({ alive: true, running: stateCalls <= 2 }) } as unknown as Response;
+        }
+        if (path.includes("/api/inspect/session")) {
+          const body = { sessionId: "sess_6", agent: "codex", meta: inspectMeta("sess_6"), turns: stateCalls >= 2 ? finalTurns : [] };
+          return { ok: true, status: 200, text: async () => JSON.stringify(body), json: async () => body } as unknown as Response;
+        }
+        return { ok: false, status: 404, json: async () => ({}) } as unknown as Response;
+      });
+      vi.stubGlobal("fetch", fetchMock);
+      vi.spyOn(playMiniappRoute, "call").mockResolvedValue({
+        name: "demo6", html: "<p>x</p>",
+        meta: { title: "Demo6", genre: "project-fun", createdFrom: { kind: "project", path: "/p", flavor: "node" }, engineVersion: "1" },
+      } as never);
+
+      render(<IdentityProvider apiBase=""><Studio apiBase="" name="demo6" agents={codex} agentId="codex" onAgentIdChange={() => {}} onBack={() => {}} /></IdentityProvider>);
+
+      await vi.waitFor(() => expect(screen.getByText(/resuming…/i)).toBeTruthy());
+      await vi.advanceTimersByTimeAsync(5000); // tick 1 running → tick 2 sees running:false
+      await vi.waitFor(() => expect(screen.getByText("all done")).toBeTruthy());
+      expect(screen.queryByText(/working…|resuming…/i)).toBeNull(); // spinner gone
+      expect((screen.getByPlaceholderText(/ask the agent/i) as HTMLTextAreaElement).disabled).toBe(false); // composer re-enabled
+    } finally { vi.useRealTimers(); }
+  });
+
+  it("does not drop the optimistic user message while the transcript is behind (growth-only guard)", async () => {
+    vi.useFakeTimers();
+    try {
+      setStudioChat("demo7", { chatId: "chat_7", sessionId: "sess_7", agent: "codex" });
+      let mounted = false;
+      const fetchMock = vi.fn(async (url: string) => {
+        const path = new URL(url, "http://x").pathname;
+        if (path.includes("/api/chat/chat_7/state")) {
+          const running = mounted; mounted = true; // idle at mount; running for the send-reconcile poll
+          return { ok: true, json: async () => ({ alive: true, running }) } as unknown as Response;
+        }
+        if (path.includes("/api/inspect/session")) {
+          const body = { sessionId: "sess_7", agent: "codex", meta: inspectMeta("sess_7"), turns: [] }; // never catches up
+          return { ok: true, status: 200, text: async () => JSON.stringify(body), json: async () => body } as unknown as Response;
+        }
+        return { ok: false, status: 404, json: async () => ({}) } as unknown as Response;
+      });
+      vi.stubGlobal("fetch", fetchMock);
+      vi.spyOn(playMiniappRoute, "call").mockResolvedValue({
+        name: "demo7", html: "<p>x</p>",
+        meta: { title: "Demo7", genre: "project-fun", createdFrom: { kind: "project", path: "/p", flavor: "node" }, engineVersion: "1" },
+      } as never);
+
+      render(<IdentityProvider apiBase=""><Studio apiBase="" name="demo7" agents={codex} agentId="codex" onAgentIdChange={() => {}} onBack={() => {}} /></IdentityProvider>);
+
+      await vi.advanceTimersByTimeAsync(0); // flush the mount effect's fetch chain
+      const sendBtn = screen.getByRole("button", { name: "Send" });
+      fireEvent.change(screen.getByPlaceholderText(/ask the agent/i), { target: { value: "keep going" } });
+      fireEvent.click(sendBtn); // stream mock fires onFailed("connection lost") → reconcile-poll
+      await vi.waitFor(() => expect(screen.getByText(/resuming…/i)).toBeTruthy());
+      await vi.advanceTimersByTimeAsync(3200); // two ticks with an empty (behind) transcript
+      expect(screen.getByText("keep going")).toBeTruthy(); // optimistic message survives
+    } finally { vi.useRealTimers(); }
+  });
+
+  it("keeps polling through a transient /state failure and still completes", async () => {
+    vi.useFakeTimers();
+    try {
+      setStudioChat("demo8", { chatId: "chat_8", sessionId: "sess_8", agent: "codex" });
+      let stateCalls = 0;
+      const fetchMock = vi.fn(async (url: string) => {
+        const path = new URL(url, "http://x").pathname;
+        if (path.includes("/api/chat/chat_8/state")) {
+          stateCalls++;
+          if (stateCalls === 2) throw new Error("socket hiccup"); // first poll tick fails
+          return { ok: true, json: async () => ({ alive: true, running: stateCalls < 3 }) } as unknown as Response;
+        }
+        if (path.includes("/api/inspect/session")) {
+          const body = { sessionId: "sess_8", agent: "codex", meta: inspectMeta("sess_8"), turns: [] };
+          return { ok: true, status: 200, text: async () => JSON.stringify(body), json: async () => body } as unknown as Response;
+        }
+        return { ok: false, status: 404, json: async () => ({}) } as unknown as Response;
+      });
+      vi.stubGlobal("fetch", fetchMock);
+      vi.spyOn(playMiniappRoute, "call").mockResolvedValue({
+        name: "demo8", html: "<p>x</p>",
+        meta: { title: "Demo8", genre: "project-fun", createdFrom: { kind: "project", path: "/p", flavor: "node" }, engineVersion: "1" },
+      } as never);
+
+      render(<IdentityProvider apiBase=""><Studio apiBase="" name="demo8" agents={codex} agentId="codex" onAgentIdChange={() => {}} onBack={() => {}} /></IdentityProvider>);
+
+      await vi.waitFor(() => expect(screen.getByText(/resuming…/i)).toBeTruthy());
+      await vi.advanceTimersByTimeAsync(5000); // tick 1 throws → tick 2 completes
+      await vi.waitFor(() => expect(screen.queryByText(/resuming…|working…/i)).toBeNull());
+    } finally { vi.useRealTimers(); }
+  });
+
+  it("stops polling when the panel unmounts (no orphan loop)", async () => {
+    vi.useFakeTimers();
+    try {
+      setStudioChat("demo9", { chatId: "chat_9", sessionId: "sess_9", agent: "codex" });
+      const fetchMock = routeFetch({
+        "/api/inspect/session": { sessionId: "sess_9", agent: "codex", meta: inspectMeta("sess_9"), turns: [] },
+        "/api/chat/chat_9/state": { alive: true, running: true },
+      });
+      vi.stubGlobal("fetch", fetchMock);
+      vi.spyOn(playMiniappRoute, "call").mockResolvedValue({
+        name: "demo9", html: "<p>x</p>",
+        meta: { title: "Demo9", genre: "project-fun", createdFrom: { kind: "project", path: "/p", flavor: "node" }, engineVersion: "1" },
+      } as never);
+
+      const { unmount } = render(<IdentityProvider apiBase=""><Studio apiBase="" name="demo9" agents={codex} agentId="codex" onAgentIdChange={() => {}} onBack={() => {}} /></IdentityProvider>);
+
+      await vi.waitFor(() => expect(screen.getByText(/resuming…/i)).toBeTruthy());
+      await vi.advanceTimersByTimeAsync(1600); // let the loop take at least one tick
+      const calls = fetchMock.mock.calls.length;
+      unmount();
+      await vi.advanceTimersByTimeAsync(60_000);
+      expect(fetchMock.mock.calls.length).toBe(calls); // generation guard: nothing after unmount
+    } finally { vi.useRealTimers(); }
+  });
+
+  it("admits connection trouble after repeated /state failures instead of claiming work", async () => {
+    vi.useFakeTimers();
+    try {
+      setStudioChat("demo10", { chatId: "chat_10", sessionId: "sess_10", agent: "codex" });
+      let stateCalls = 0;
+      const fetchMock = vi.fn(async (url: string) => {
+        const path = new URL(url, "http://x").pathname;
+        if (path.includes("/api/chat/chat_10/state")) {
+          stateCalls++;
+          if (stateCalls > 1) throw new Error("server unreachable"); // mount succeeds; every poll tick fails
+          return { ok: true, json: async () => ({ alive: true, running: true }) } as unknown as Response;
+        }
+        if (path.includes("/api/inspect/session")) {
+          const body = { sessionId: "sess_10", agent: "codex", meta: inspectMeta("sess_10"), turns: [] };
+          return { ok: true, status: 200, text: async () => JSON.stringify(body), json: async () => body } as unknown as Response;
+        }
+        return { ok: false, status: 404, json: async () => ({}) } as unknown as Response;
+      });
+      vi.stubGlobal("fetch", fetchMock);
+      vi.spyOn(playMiniappRoute, "call").mockResolvedValue({
+        name: "demo10", html: "<p>x</p>",
+        meta: { title: "Demo10", genre: "project-fun", createdFrom: { kind: "project", path: "/p", flavor: "node" }, engineVersion: "1" },
+      } as never);
+
+      render(<IdentityProvider apiBase=""><Studio apiBase="" name="demo10" agents={codex} agentId="codex" onAgentIdChange={() => {}} onBack={() => {}} /></IdentityProvider>);
+
+      await vi.waitFor(() => expect(screen.getByText(/resuming…/i)).toBeTruthy());
+      await vi.advanceTimersByTimeAsync(4 * 1500 + 500); // OFFLINE_TICKS consecutive failures
+      await vi.waitFor(() => expect(screen.getByText(/can't reach the agent — retrying…/i)).toBeTruthy());
+    } finally { vi.useRealTimers(); }
+  });
+
+  it("restores the message to the composer when the server rejects it (already running)", async () => {
+    vi.useFakeTimers();
+    try {
+      setStudioChat("demo11", { chatId: "chat_11", sessionId: "sess_11", agent: "codex" });
+      vi.mocked(openStudioStream).mockImplementationOnce(
+        (_apiBase: string, _chatId: string, _message: string, h: { onFailed: (e: string) => void }) => {
+          h.onFailed("a turn is already running for this chat");
+          return () => {};
+        });
+      const fetchMock = routeFetch({
+        "/api/inspect/session": { sessionId: "sess_11", agent: "codex", meta: inspectMeta("sess_11"), turns: [] },
+        "/api/chat/chat_11/state": { alive: true, running: false }, // idle at mount; reconcile-poll resolves fast
+      });
+      vi.stubGlobal("fetch", fetchMock);
+      vi.spyOn(playMiniappRoute, "call").mockResolvedValue({
+        name: "demo11", html: "<p>x</p>",
+        meta: { title: "Demo11", genre: "project-fun", createdFrom: { kind: "project", path: "/p", flavor: "node" }, engineVersion: "1" },
+      } as never);
+
+      render(<IdentityProvider apiBase=""><Studio apiBase="" name="demo11" agents={codex} agentId="codex" onAgentIdChange={() => {}} onBack={() => {}} /></IdentityProvider>);
+
+      await vi.advanceTimersByTimeAsync(0); // flush the mount effect's fetch chain
+      const sendBtn = screen.getByRole("button", { name: "Send" });
+      fireEvent.change(screen.getByPlaceholderText(/ask the agent/i), { target: { value: "second thought" } });
+      fireEvent.click(sendBtn);
+
+      await vi.waitFor(() => expect(screen.getByText("agent is still working — message not sent")).toBeTruthy());
+      // { selector: "div" } excludes the composer textarea: React mirrors a controlled
+      // textarea's value into its text-node children on update, so a bare queryByText
+      // would false-positive on the very restore this test is checking for (see below).
+      expect(screen.queryByText("second thought", { selector: "div" })).toBeNull(); // un-appended from the log
+      expect(screen.getByDisplayValue("second thought")).toBeTruthy();       // back in the composer
+    } finally { vi.useRealTimers(); }
   });
 });
