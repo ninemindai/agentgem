@@ -74,16 +74,42 @@ function heroSentenceText(scorecard: Scorecard): string {
   return `You're sitting on a goldmine: ${parts.join(", ")}.`;
 }
 
-function LedgerRow({ display }: { display: number[] }) {
+// "mined from" prefix + the scope clause both exist so the reveal is honest about
+// what it actually scanned: the scorecard silently caps discovery at the most
+// recent `projectsScanned` projects, so the surface must say so (eng-review
+// requirement) rather than imply the full history was covered.
+function LedgerRow({ display, projectsScanned }: { display: number[]; projectsScanned: number }) {
   const [sessions, days, hours, tokens] = display;
   return (
-    <div className="reveal-ledger">
-      <span className="reveal-ledger-item"><b>{sessions}</b> sessions</span>
-      <span className="reveal-ledger-item"><b>{days}</b> days</span>
-      <span className="reveal-ledger-item"><b>{hours}</b> active hours</span>
-      <span className="reveal-ledger-item"><b>{fmtTokens(tokens)}</b> tokens</span>
-    </div>
+    <>
+      <div className="reveal-ledger">
+        <span className="reveal-ledger-item">mined from <b>{sessions}</b> sessions</span>
+        <span className="reveal-ledger-item"><b>{days}</b> days</span>
+        <span className="reveal-ledger-item"><b>{hours}</b> active hours</span>
+        <span className="reveal-ledger-item"><b>{fmtTokens(tokens)}</b> tokens</span>
+      </div>
+      {projectsScanned > 0 && (
+        <p className="reveal-scope">across your {projectsScanned} most recent projects</p>
+      )}
+    </>
   );
+}
+
+/** Which asset clauses are suppressed (a zero count) get exactly one earn-it
+ *  line explaining why — never silent. Battle-tested-zero and portable-zero
+ *  each get their own line; if both are zero, one combined line replaces both
+ *  rather than stacking two. */
+function earnItLine(showBattleTested: boolean, showPortable: boolean): string | null {
+  if (!showBattleTested && !showPortable) {
+    return "nothing battle-tested or portable yet — workflows earn both by proving out across sessions, then running outside this machine";
+  }
+  if (!showBattleTested) {
+    return "none battle-tested yet — workflows earn it by proving out across sessions.";
+  }
+  if (!showPortable) {
+    return "nothing portable yet — battle-tested workflows become portable when they run outside this machine";
+  }
+  return null;
 }
 
 function GoldmineHero({ scorecard, display, projectsScanned }: { scorecard: Scorecard; display: number[]; projectsScanned: number }) {
@@ -92,6 +118,7 @@ function GoldmineHero({ scorecard, display, projectsScanned }: { scorecard: Scor
   const showPortable = scorecard.portable > 0;
   const candidate = pickTopWorkflow(scorecard);
   const unreadCount = Math.max(0, projectsScanned - scorecard.projects.length);
+  const earnIt = earnItLine(showBattleTested, showPortable);
 
   return (
     <>
@@ -101,11 +128,7 @@ function GoldmineHero({ scorecard, display, projectsScanned }: { scorecard: Scor
         {showBattleTested && <> — <b className="reveal-emerald">{battleTested} battle-tested</b>{showPortable ? "," : ""}</>}
         {showPortable && <> {showBattleTested ? "" : "—"} <b>{portable} ready to share</b></>}.
       </h1>
-      {!showPortable && (
-        <p className="reveal-earnit">
-          nothing portable yet — battle-tested workflows become portable when they run outside this machine
-        </p>
-      )}
+      {earnIt && <p className="reveal-earnit">{earnIt}</p>}
       {scorecard.degraded && unreadCount > 0 && (
         <p className="reveal-degrade">couldn&#39;t read {unreadCount} projects</p>
       )}
@@ -176,14 +199,14 @@ function RevealContent({ mode, onDismiss, data }: { mode: RevealMode; onDismiss:
   } else if (codexHeavy) {
     body = (
       <>
-        <LedgerRow display={ledgerDisplay} />
+        <LedgerRow display={ledgerDisplay} projectsScanned={summary.projectsScanned} />
         <p className="reveal-claude-only">{CLAUDE_ONLY_TEXT}</p>
       </>
     );
   } else {
     body = (
       <>
-        <LedgerRow display={ledgerDisplay} />
+        <LedgerRow display={ledgerDisplay} projectsScanned={summary.projectsScanned} />
         {scorecard
           ? <GoldmineHero scorecard={scorecard} display={heroDisplay} projectsScanned={summary.projectsScanned} />
           : slow
