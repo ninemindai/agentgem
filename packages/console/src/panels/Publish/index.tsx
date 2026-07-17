@@ -92,6 +92,7 @@ export const publishPage = defineConsolePage({
   icon: "⇧",
   order: 30,
   phase: "build", category: "projects",
+  hidden: true, // registry publish is disabled in code; panel stays routable, just off the rail
   route: "#/publish",
   component: ({ apiBase }) => <RegistryPublish apiBase={apiBase} />,
 });

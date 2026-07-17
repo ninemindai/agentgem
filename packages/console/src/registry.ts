@@ -1,6 +1,6 @@
-import type { ConsolePage, Phase, ArtifactCategory } from "./contract.js";
+import type { ConsolePage, Phase, ArtifactCategory, DisclosureGroup } from "./contract.js";
 export { defineConsolePage } from "./contract.js";
-export type { ConsolePage, Phase, ArtifactCategory } from "./contract.js";
+export type { ConsolePage, Phase, ArtifactCategory, DisclosureGroup } from "./contract.js";
 
 /** Order of the artifact sub-labels, per phase. Observe leads with Usage (Overview is the
  *  home dashboard) and drops Configuration to the bottom; Build leads with Setup (Curate is
@@ -45,12 +45,14 @@ export function sortedPages(pages: ConsolePage[]): ConsolePage[] {
   return [...pages].sort((a, b) => a.order - b.order);
 }
 
-/** Every page is either {phase, category} or {footer:true} — never neither, never
- *  half of the phase pair. A miswired page (e.g. a lost `category` field in the
- *  migration) fails loudly here instead of silently vanishing from the sidebar. */
+/** Every page is either {phase, category}, {footer:true}, or {group:...} — never neither,
+ *  never half of the phase pair. A `group` alone is valid on its own (the rail model doesn't
+ *  need phase/category to place a page), but a miswired page with none of the three (e.g. a
+ *  lost `category` field in the migration) fails loudly here instead of silently vanishing
+ *  from the sidebar. */
 function assertPlacement(pages: ConsolePage[]): void {
   for (const p of pages) {
-    if (p.footer) continue;
+    if (p.footer || p.group) continue;
     if (p.phase && !p.category) throw new Error(`ConsolePage ${p.id} has a phase but no category`);
     if (p.category && !p.phase) throw new Error(`ConsolePage ${p.id} has a category but no phase`);
     if (!p.phase && !p.category) throw new Error(`ConsolePage ${p.id} has neither phase/category nor footer`);
@@ -74,4 +76,35 @@ export function phaseGroups(
 /** Phase-independent footer items (Settings). */
 export function footerPages(pages: ConsolePage[]): ConsolePage[] {
   return sortedPages(pages).filter((p) => p.footer);
+}
+
+/** Rail disclosure groups, in display order, each with its section label. */
+const DISCLOSURE_GROUPS: { key: DisclosureGroup; label: string }[] = [
+  { key: "make", label: "Make" },
+  { key: "evidence", label: "Evidence" },
+  { key: "background", label: "Background" },
+  { key: "power", label: "Power tools" },
+];
+
+/** The cold-console rail: an always-visible `foreground` (no group, no footer — Overview,
+ *  Curate, Gems) plus the four disclosure groups, populated only once `unlocked`. Locked,
+ *  `groups` is empty — nothing behind the rail's fold is worth rendering yet. `hidden` pages
+ *  (e.g. Publish, disabled in code) never appear in either. Footer pages are out of scope
+ *  here; the Shell keeps reading those from `footerPages`. */
+export function railModel(
+  pages: ConsolePage[],
+  unlocked: boolean,
+): { foreground: ConsolePage[]; groups: { key: DisclosureGroup; label: string; pages: ConsolePage[] }[] } {
+  const ordered = sortedPages(pages); // duplicate-id guard
+  assertPlacement(ordered);
+  const visible = ordered.filter((p) => !p.hidden);
+  const foreground = visible.filter((p) => !p.group && !p.footer);
+  const groups = unlocked
+    ? DISCLOSURE_GROUPS.map(({ key, label }) => ({
+        key,
+        label,
+        pages: visible.filter((p) => p.group === key),
+      })).filter((g) => g.pages.length > 0)
+    : [];
+  return { foreground, groups };
 }

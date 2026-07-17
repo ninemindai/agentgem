@@ -117,6 +117,7 @@ export const materializePage = defineConsolePage({
   order: 10,
   phase: "build", category: "projects",
   requiresGem: true,
+  group: "make", hiddenUntilUnlock: true,
   route: "#/materialize",
   component: ({ apiBase }) => <Materialize apiBase={apiBase} />,
 });

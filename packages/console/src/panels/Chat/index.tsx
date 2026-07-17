@@ -301,6 +301,7 @@ export const chatPage = defineConsolePage({
   icon: "💬",
   order: 20,
   phase: "observe", category: "sessions",
+  group: "power", hiddenUntilUnlock: true,
   route: "#/chat",
   component: Chat,
 });

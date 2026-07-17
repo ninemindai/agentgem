@@ -337,6 +337,7 @@ export const reviewsPage = defineConsolePage({
   icon: "📝",
   order: 40,
   phase: "build", category: "projects",
+  group: "power", hiddenUntilUnlock: true,
   route: "#/reviews",
   component: ({ apiBase }) => <Reviews apiBase={apiBase} />,
   badge: (apiBase) => <ReviewBadge apiBase={apiBase} />,
