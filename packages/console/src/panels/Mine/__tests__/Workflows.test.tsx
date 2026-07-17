@@ -29,6 +29,9 @@ const defaultProps = {
   result: null,
   error: null,
   apiBase: "http://localhost:0",
+  group: "value" as const,
+  inventory: [],
+  miniapps: [],
 };
 
 // Find the <li class="gem-card"> that contains a given card name, for scoping queries
@@ -243,6 +246,93 @@ describe("MineWorkflows", () => {
 
       await waitFor(() => expect(screen.getByText("mint failed")).toBeTruthy());
       wfSpy.mockRestore();
+    });
+  });
+
+  // ── Type/Maturity grouping + cross-source composition ─────────────────────
+
+  const INVENTORY = [
+    { key: "skills", label: "Skills", items: [{ name: "pdf-skill", invocations: 3, lastUsedMs: 10 }] },
+  ];
+  const MINIAPPS = [{ name: "wordle-clone", title: "Wordle Clone", genre: "puzzle" }];
+
+  describe("Type/Maturity axes", () => {
+    it("group=type shows Workflows/Skills/Miniapps group headers", () => {
+      render(<MineWorkflows {...defaultProps} group="type" inventory={INVENTORY} miniapps={MINIAPPS} />);
+      expect(screen.getByText("Workflows")).toBeTruthy();
+      expect(screen.getByText("Skills")).toBeTruthy();
+      expect(screen.getByText("Miniapps")).toBeTruthy();
+    });
+
+    it("group=maturity shows Raw/Distilled group headers", () => {
+      render(<MineWorkflows {...defaultProps} group="maturity" inventory={INVENTORY} miniapps={MINIAPPS} />);
+      expect(screen.getByText("Raw")).toBeTruthy();     // workflows
+      expect(screen.getByText("Distilled")).toBeTruthy(); // skill + miniapp
+    });
+
+    it("does not render a gaps group under Type or Maturity", () => {
+      render(<MineWorkflows {...defaultProps} group="type" />);
+      expect(screen.queryByText("Gaps")).toBeNull();
+      expect(screen.queryByText("missing tests")).toBeNull();
+    });
+
+    it("value grouping shows no filter chips", () => {
+      render(<MineWorkflows {...defaultProps} group="value" inventory={INVENTORY} miniapps={MINIAPPS} />);
+      expect(screen.queryByRole("group", { name: /filter by value/i })).toBeNull();
+      expect(screen.queryByRole("button", { name: "Battle-tested" })).toBeNull();
+    });
+
+    it("type grouping shows filter chips, and Battle-tested filters the set", () => {
+      render(<MineWorkflows {...defaultProps} group="type" inventory={INVENTORY} miniapps={MINIAPPS} />);
+      expect(screen.getByRole("button", { name: "All" })).toBeTruthy();
+      // Unfiltered: every value bucket is represented.
+      expect(screen.getByText("Deploy workflow")).toBeTruthy();   // worth-sharing
+      expect(screen.getByText("Release workflow")).toBeTruthy();  // battle-tested
+      expect(screen.getByText("pdf-skill")).toBeTruthy();         // battle-tested (3 invocations)
+      expect(screen.getByText("wordle-clone")).toBeTruthy();      // reusable, not published
+
+      fireEvent.click(screen.getByRole("button", { name: "Battle-tested" }));
+
+      expect(screen.getByText("Release workflow")).toBeTruthy();
+      expect(screen.getByText("pdf-skill")).toBeTruthy();
+      expect(screen.queryByText("Deploy workflow")).toBeNull();
+      expect(screen.queryByText("wordle-clone")).toBeNull();
+    });
+
+    it("maturity grouping also shows filter chips", () => {
+      render(<MineWorkflows {...defaultProps} group="maturity" inventory={INVENTORY} miniapps={MINIAPPS} />);
+      expect(screen.getByRole("button", { name: "Worth sharing" })).toBeTruthy();
+    });
+  });
+
+  // ── Non-workflow card actions ───────────────────────────────────────────────
+
+  describe("Non-workflow card actions", () => {
+    const ORIGINAL_HASH = window.location.hash;
+    beforeEach(() => { window.location.hash = ""; });
+    afterEach(() => { window.location.hash = ORIGINAL_HASH; });
+
+    it("miniapp card shows a Play button; clicking it navigates to #/play", () => {
+      render(<MineWorkflows {...defaultProps} group="type" inventory={[]} miniapps={MINIAPPS} />);
+      const card = cardFor("wordle-clone");
+      fireEvent.click(within(card).getByRole("button", { name: "Play" }));
+      expect(window.location.hash).toBe("#/play");
+    });
+
+    it("skill card's Open button navigates to #/curate", () => {
+      render(<MineWorkflows {...defaultProps} group="type" inventory={INVENTORY} miniapps={[]} />);
+      const card = cardFor("pdf-skill");
+      fireEvent.click(within(card).getByRole("button", { name: "Open" }));
+      expect(window.location.hash).toBe("#/curate");
+    });
+
+    it("skill card's Run hygiene targets scope 'all' (no project root)", () => {
+      render(<MineWorkflows {...defaultProps} group="type" inventory={INVENTORY} miniapps={[]} />);
+      const card = cardFor("pdf-skill");
+      fireEvent.click(within(card).getByRole("button", { name: /run hygiene/i }));
+      expect(consumePendingRubricRun()).toEqual({
+        rubric: "context-hygiene", scope: "all", autorun: true,
+      });
     });
   });
 });

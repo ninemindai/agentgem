@@ -71,7 +71,7 @@ function inventoryGems(groups: LedgerGroup[], publishedNames: Set<string>): Unif
         ? "battle-tested"
         : "reusable";
       const provenance = item.invocations > 0
-        ? `used in ${item.invocations} session${item.invocations === 1 ? "" : "s"}`
+        ? `used ${item.invocations} time${item.invocations === 1 ? "" : "s"}`
         : item.source
         ? `source: ${item.source}`
         : "not yet used";

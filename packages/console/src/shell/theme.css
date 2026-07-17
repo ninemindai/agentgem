@@ -1863,6 +1863,15 @@ button.scorecard-intent { line-height: 1.4; }
 .mine-gaps-row { border: 1px solid var(--line); border-radius: var(--radius); padding: 0.5rem 0.75rem; margin-bottom: 0.4rem; color: var(--ink-soft); font-size: 0.875rem; }
 .mine-build-result { margin: 0 0 0.75rem; color: var(--emerald); font-size: 0.875rem; }
 
+/* Value cross-filter chips, shown under Type/Maturity grouping only (see
+   VALUE_FILTERS in Workflows.tsx) — echoes .play-seg's active-state look as a
+   wrapping pill row instead of a fixed segmented control. */
+.mine-filter-bar { display: flex; flex-wrap: wrap; gap: 8px; margin: 0 0 14px; }
+.mine-filter-chip { font: 600 12px var(--font-ui); padding: 6px 12px; border: 1px solid var(--line); border-radius: 999px; background: var(--paper); color: var(--ink-soft); cursor: pointer; }
+.mine-filter-chip:hover { border-color: var(--accent); }
+.mine-filter-chip.is-active { background: var(--ink); color: var(--raised); border-color: var(--ink); }
+.mine-filter-chip:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+
 /* ── Gem card ── the Mine grid's unit: name is the primary read, the reserved
    score slot on the right supports it (never out-shouts it). Mirrors .play-card's
    raised/hover-lift language. */

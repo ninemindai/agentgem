@@ -160,13 +160,13 @@ describe("toUnifiedGems: inventory - skills/subagents/rubrics/lessons", () => {
     expect(gems[0].value).toBe("reusable");
   });
 
-  it("provenance: used-in-N-sessions phrasing when invocations > 0", () => {
+  it("provenance: used-N-times phrasing when invocations > 0", () => {
     const gems = toUnifiedGems({
       workflows: [],
       inventory: inventoryGroups({ skills: [{ name: "pdf", invocations: 1, lastUsedMs: 10 }] }),
       miniapps: [],
     });
-    expect(gems[0].provenance).toBe("used in 1 session");
+    expect(gems[0].provenance).toBe("used 1 time");
   });
 
   it("provenance: source phrasing when zero invocations but a source is present", () => {
