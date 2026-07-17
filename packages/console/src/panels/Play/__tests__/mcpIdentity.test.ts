@@ -20,6 +20,11 @@ describe("mcpIdentity", () => {
   it("treats undefined/absent input as the same empty call", () => {
     expect(mcpIdentity("gh", "list").key).toBe(mcpIdentity("gh", "list", undefined).key);
   });
+  it("does not collide across (server, tool) pairs that straddle the old delimiters", () => {
+    expect(mcpIdentity("s", "1|tool:2").key).not.toBe(mcpIdentity("s|tool:1", "2").key);
+    expect(mcpIdentity("server:gh", "list").key).not.toBe(mcpIdentity("server", "gh|tool:list").key);
+    expect(mcpIdentity("a", "b|tool:c").key).not.toBe(mcpIdentity("a|tool:b", "c").key);
+  });
   it("REJECTS unsupported values with McpIdentityError", () => {
     for (const bad of [{ d: new Date() }, { n: NaN }, { i: Infinity }, { f: () => 1 }, { b: 10n }] as unknown[]) {
       expect(() => mcpIdentity("gh", "list", bad)).toThrow(McpIdentityError);
