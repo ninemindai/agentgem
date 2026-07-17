@@ -1829,6 +1829,14 @@ button.scorecard-intent { line-height: 1.4; }
 .scorecard-bar-fill { height: 100%; background: var(--accent); border-radius: 999px; transition: width .3s ease; }
 .scorecard-counts-live li { font-variant-numeric: tabular-nums; }
 
+/* Placeholder grid shown under the scanning header / initial skeleton, echoing
+   the eventual grouped grid instead of a blank gap. */
+.mine-loading-grid { margin-top: 18px; }
+
+/* Recoverable failed-scan state: message + Retry, not a blank board. */
+.mine-retry-state { max-width: 46ch; margin: 44px auto; text-align: center; }
+.mine-retry { margin-top: 10px; }
+
 /* ── Mine Workflows ─────────────────────────── */
 .mine-workflows { margin-top: 1.5rem; }
 .mine-workflows h3 { font-size: 0.85rem; font-weight: 600; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); margin-bottom: 0.75rem; }
