@@ -2,13 +2,18 @@ import { useMemo, useState } from "react";
 import type { Scorecard, WorkflowDetail } from "../../api/routes.js";
 import { scorecardWorkflowRoute, createGemShareRoute, makeClient } from "../../api/routes.js";
 import type { WorkflowCardModel } from "./groupWorkflows.js";
-import { GemCard } from "./GemCard.js";
+import { GemCard, type GemScore } from "./GemCard.js";
 import { toUnifiedGems, groupGemsByValue, groupGemsByType, groupGemsByMaturity, type UnifiedGem, type ValueBucket, type Miniapp } from "./unifiedGems.js";
 import type { LedgerGroup } from "../shared/ledgerModel.js";
 import { ShareLinks } from "./ShareLinks.js";
 import { PROJECT_HYGIENE_SHORTCUT, launchRubricRun } from "../../rubricShortcuts.js";
+import type { ProjectHygiene } from "./useHygieneScores.js";
 
 type CreateGemShare = (body: { kind: "gem"; name: string; provenance: string; generatedAtMs: number }) => Promise<{ id: string; url: string }>;
+
+// Stable empty fallback for callers (mainly tests) that omit `hygiene` — avoids a
+// fresh Map allocation on every render when no hygiene prop is supplied.
+const EMPTY_HYGIENE: Map<string, ProjectHygiene> = new Map();
 
 // The cross-filter chip row shown under Type/Maturity grouping (hidden under Value,
 // since the value axis's own group headers already carry that dimension).
@@ -19,7 +24,7 @@ const VALUE_FILTERS: { key: ValueBucket | "all"; label: string }[] = [
   { key: "reusable", label: "Reusable" },
 ];
 
-export function MineWorkflows({ data, onBuild, building, result, error, apiBase, createGemShare, group, inventory, miniapps }: {
+export function MineWorkflows({ data, onBuild, building, result, error, apiBase, createGemShare, group, inventory, miniapps, hygiene }: {
   data: Scorecard;
   onBuild: (selections: { root: string; keys: string[] }[], name: string) => void;
   building: boolean;
@@ -30,6 +35,9 @@ export function MineWorkflows({ data, onBuild, building, result, error, apiBase,
   group: "value" | "type" | "maturity";
   inventory: LedgerGroup[];
   miniapps: Miniapp[];
+  // Optional: WorkflowsView is the only real caller and always supplies it; defaults to
+  // empty so existing tests that don't care about hygiene scores don't need updating.
+  hygiene?: Map<string, ProjectHygiene>;
 }) {
   const [expanded, setExpanded] = useState<Record<string, boolean>>({});
   const [details, setDetails] = useState<Record<string, WorkflowDetail>>({});
@@ -125,6 +133,18 @@ export function MineWorkflows({ data, onBuild, building, result, error, apiBase,
   // produce a cache key.
   const workflowCacheKey = (gem: UnifiedGem): string | undefined =>
     gem.type === "workflow" ? `${gem.root}:${gem.key}` : undefined;
+
+  // Only workflow gems carry a project root, so only they have a hygiene score to
+  // back-fill — every other gem type keeps the reserved slot's existing null/signal
+  // behavior in GemCard untouched.
+  const hygieneMap = hygiene ?? EMPTY_HYGIENE;
+  const scoreFor = (gem: UnifiedGem): GemScore => {
+    if (gem.type !== "workflow") return null;
+    const h = hygieneMap.get(gem.root!);
+    if (h?.running) return "running";
+    if (h && h.score !== null) return { value: h.score, tone: h.tone ?? "warn", label: "hygiene" };
+    return null;
+  };
 
   const onOpen = (gem: UnifiedGem) => {
     if (gem.type === "workflow") { toggleExpand(gem.root!, gem.key!); return; }
@@ -223,7 +243,7 @@ export function MineWorkflows({ data, onBuild, building, result, error, apiBase,
                   <GemCard
                     key={gem.id}
                     gem={gem}
-                    score={null}
+                    score={scoreFor(gem)}
                     expanded={cacheKey ? expanded[cacheKey] : undefined}
                     onOpen={onOpen}
                     onDistill={(g) => { if (!building) onBuild([{ root: g.root!, keys: [g.key!] }], g.name); }}

@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
-import { render, screen, fireEvent, cleanup } from "@testing-library/react";
+import { render, screen, fireEvent, cleanup, within } from "@testing-library/react";
 
 afterEach(cleanup);
 import { WorkflowsView } from "../WorkflowsView.js";
@@ -7,6 +7,8 @@ import type { ScorecardStreamEvent } from "../scorecardStream.js";
 import type { Scorecard, Inventory, Usage } from "../../../api/routes.js";
 import * as routes from "../../../api/routes.js";
 import * as rubricShortcuts from "../../../rubricShortcuts.js";
+import * as activity from "../../../notify/ActivityProvider.js";
+import * as rubricStreamModule from "../../Rubrics/rubricStream.js";
 
 const EMPTY_INVENTORY: Inventory = { skills: [], subagents: [], mcpServers: [], instructions: [], hooks: [], rubrics: [] };
 const EMPTY_USAGE: Usage = { artifacts: [] };
@@ -60,7 +62,11 @@ function syncStream(events: ScorecardStreamEvent[]) {
 
 describe("WorkflowsView", () => {
   const ORIGINAL_HASH = window.location.hash;
-  beforeEach(() => { window.location.hash = ""; stubUnifiedSources(); });
+  beforeEach(() => {
+    window.location.hash = "";
+    stubUnifiedSources();
+    vi.spyOn(activity, "useActivity").mockReturnValue({ runs: [] });
+  });
   afterEach(() => { window.location.hash = ORIGINAL_HASH; vi.restoreAllMocks(); });
 
   it("shows the scoring skeleton before any event", () => {
@@ -223,5 +229,51 @@ describe("WorkflowsView", () => {
     render(<WorkflowsView apiBase="http://localhost:0" scope="*" openStream={stream} />);
     fireEvent.click(screen.getByRole("button", { name: "Value" }));
     expect(window.location.hash).toContain("group=value");
+  });
+
+  // ── Jobs strip + per-card hygiene back-fill ─────────────────────────────────
+
+  describe("jobs strip + hygiene score back-fill", () => {
+    it("with no rubric runs, the strip is absent and cards show Run hygiene (existing behavior)", () => {
+      const stream = syncStream([{ type: "done", scorecard: SCORECARD_WITH_WORKFLOWS, cached: false, updatedAt: null }]);
+      render(<WorkflowsView apiBase="http://localhost:0" scope="*" openStream={stream} />);
+      expect(screen.queryByRole("status")).toBeNull();
+      const card = screen.getByText("Deploy workflow").closest("li")!;
+      expect(within(card).getByRole("button", { name: /run hygiene/i })).toBeTruthy();
+    });
+
+    it("a running context-hygiene run for /projects/alpha shows the jobs strip and re-scoring state on its card", () => {
+      vi.spyOn(activity, "useActivity").mockReturnValue({
+        runs: [{ id: "r1", kind: "rubric", paramsKey: "context-hygiene:project:/projects/alpha:", status: "running", phase: "scanning", startedAt: Date.now() }],
+      });
+      const stream = syncStream([{ type: "done", scorecard: SCORECARD_WITH_WORKFLOWS, cached: false, updatedAt: null }]);
+      render(<WorkflowsView apiBase="http://localhost:0" scope="*" openStream={stream} />);
+
+      const strip = screen.getByRole("status");
+      expect(strip).toBeTruthy();
+      expect(within(strip).getByRole("link", { name: /view queue/i }).getAttribute("href")).toBe("#/rubrics");
+
+      const card = screen.getByText("Deploy workflow").closest("li")!;
+      expect(within(card).getByText(/re-scoring/i)).toBeTruthy();
+      expect(within(card).queryByText(/run hygiene/i)).toBeNull();
+    });
+
+    it("a done context-hygiene run for /projects/alpha fills the alpha card's score slot from the rubric stream", () => {
+      vi.spyOn(activity, "useActivity").mockReturnValue({
+        runs: [{ id: "r1", kind: "rubric", paramsKey: "context-hygiene:project:/projects/alpha:", status: "done", phase: "", startedAt: 1 }],
+      });
+      vi.spyOn(rubricStreamModule, "openRubricStream").mockImplementation((_client, _params, onEvent) => {
+        onEvent({ type: "done", report: { hygiene: { score: 84, verdict: "bounded" } } as any, cached: true, updatedAt: 1 });
+        return () => {};
+      });
+      const stream = syncStream([{ type: "done", scorecard: SCORECARD_WITH_WORKFLOWS, cached: false, updatedAt: null }]);
+      render(<WorkflowsView apiBase="http://localhost:0" scope="*" openStream={stream} />);
+
+      expect(screen.queryByRole("status")).toBeNull(); // run is done, not running — no strip
+      const card = screen.getByText("Deploy workflow").closest("li")!;
+      expect(within(card).getByText("84")).toBeTruthy();
+      expect(within(card).getByText("hygiene")).toBeTruthy();
+      expect(within(card).queryByText(/run hygiene/i)).toBeNull();
+    });
   });
 });

@@ -8,6 +8,9 @@ import { MineWorkflows } from "./Workflows.js";
 import { GemCardSkeleton } from "./GemCardSkeleton.js";
 import { PROJECT_HYGIENE_SHORTCUT, launchRubricRun } from "../../rubricShortcuts.js";
 import type { Miniapp } from "./unifiedGems.js";
+import { useMineRubricRuns } from "./mineJobs.js";
+import { useHygieneScores } from "./useHygieneScores.js";
+import { JobsStrip } from "./JobsStrip.js";
 
 type Progress = { done: number; total: number; label: string; partial: { breadth: number; battleTested: number; portable: number } };
 
@@ -143,6 +146,13 @@ export function WorkflowsView({ apiBase, scope, openStream = openScorecardStream
 
   const onRescan = () => { freshRef.current = true; setReloadKey((k) => k + 1); };
 
+  // Mine-local jobs strip + per-card hygiene back-fill. Called unconditionally (Rules
+  // of Hooks) even while loading/empty/failed — roots is [] until a scorecard lands,
+  // which useHygieneScores already treats as "nothing to fetch".
+  const runs = useMineRubricRuns();
+  const roots = [...new Set((scorecard?.projects ?? []).map((p) => p.root))];
+  const hygiene = useHygieneScores(roots, runs, apiBase);
+
   const onRunHygiene = () => launchRubricRun({
     rubric: PROJECT_HYGIENE_SHORTCUT.rubric,
     scope: scope === "*" ? "all" : "project",
@@ -189,6 +199,7 @@ export function WorkflowsView({ apiBase, scope, openStream = openScorecardStream
               )}
               <ScorecardHero data={scorecard} updatedAt={scorecardUpdatedAt} onRescan={onRescan} />
               <GroupBySwitcher group={group} onChange={onGroupChange} />
+              <JobsStrip runs={runs} />
               <MineWorkflows
                 data={scorecard}
                 onBuild={onBuild}
@@ -199,6 +210,7 @@ export function WorkflowsView({ apiBase, scope, openStream = openScorecardStream
                 group={group}
                 inventory={inventory}
                 miniapps={miniapps}
+                hygiene={hygiene}
               />
             </>
         : phase === "failed"
