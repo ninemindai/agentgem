@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, vi } from "vitest";
-import { transcriptToMsgs, loadStudioSession } from "../studioResume.js";
+import { transcriptToMsgs, loadStudioSession, loadStudioTranscript } from "../studioResume.js";
 import { setStudioChat, getStudioChat } from "../studioChatStore.js";
 import type { TranscriptTurn } from "../../../api/routes.js";
 
@@ -47,6 +47,33 @@ describe("transcriptToMsgs", () => {
       { role: "user", text: "first" },
       { role: "user", text: "here is a log\n---\nUser: kept literally" },
     ]);
+  });
+});
+
+describe("loadStudioTranscript", () => {
+  beforeEach(() => { try { localStorage.clear(); } catch { /* ignore */ } vi.restoreAllMocks(); });
+
+  it("returns [] when nothing is stored (no fetch)", async () => {
+    const fetchMock = mockFetch({});
+    vi.stubGlobal("fetch", fetchMock);
+    expect(await loadStudioTranscript("", "demo")).toEqual([]);
+    expect(fetchMock).not.toHaveBeenCalled(); // no session pointer → no round-trip
+  });
+
+  it("maps the durable transcript to studio msgs", async () => {
+    setStudioChat("demo", { chatId: "chat_1", sessionId: "sess_1", agent: "claude" });
+    vi.stubGlobal("fetch", mockFetch({
+      "/api/inspect/session": { sessionId: "sess_1", agent: "claude", meta, turns: [
+        { id: "1", role: "assistant", tsMs: 0, tokens: { in: 0, out: 0, cache: 0 }, spans: [{ kind: "message", role: "assistant", text: "on it" }] },
+      ] },
+    }));
+    expect(await loadStudioTranscript("", "demo")).toEqual([{ role: "agent", text: "on it" }]);
+  });
+
+  it("returns [] when the transcript read fails (404)", async () => {
+    setStudioChat("demo", { chatId: "chat_1", sessionId: "sess_1", agent: "claude" });
+    vi.stubGlobal("fetch", mockFetch({})); // inspect/session → 404 → route throws
+    expect(await loadStudioTranscript("", "demo")).toEqual([]);
   });
 });
 

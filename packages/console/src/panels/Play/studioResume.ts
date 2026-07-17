@@ -39,18 +39,26 @@ export function transcriptToMsgs(turns: TranscriptTurn[]): StudioMsg[] {
 
 export type StudioResume = { msgs: StudioMsg[]; chatId: string | null; sessionId: string | null; running: boolean };
 
-export async function loadStudioSession(apiBase: string, name: string): Promise<StudioResume> {
+// Transcript-only read, reused by loadStudioSession and by Studio's resume poll (so a
+// running turn's completed spans surface as it works). No session pointer → [], no round-trip.
+// A 404 (opened-but-no-output, or file gone) or any read failure → [], never throws.
+export async function loadStudioTranscript(apiBase: string, name: string): Promise<StudioMsg[]> {
   const stored = getStudioChat(name);
-  if (!stored) return { msgs: [], chatId: null, sessionId: null, running: false };
-
-  // History from the durable transcript. 404 (opened-but-no-output, or file gone) → empty, not an error.
-  let msgs: StudioMsg[] = [];
+  if (!stored) return [];
   try {
     const view = await inspectSessionRoute.call(makeClient(apiBase), {
       query: { id: stored.sessionId, agent: stored.agent as "claude" | "codex" },
     });
-    msgs = transcriptToMsgs(view.turns);
-  } catch { msgs = []; }
+    return transcriptToMsgs(view.turns);
+  } catch { return []; }
+}
+
+export async function loadStudioSession(apiBase: string, name: string): Promise<StudioResume> {
+  const stored = getStudioChat(name);
+  if (!stored) return { msgs: [], chatId: null, sessionId: null, running: false };
+
+  // History from the durable transcript. 404 / read failure → empty, not an error.
+  const msgs = await loadStudioTranscript(apiBase, name);
 
   // Liveness — only the in-memory ChatManager knows. No chatId stored → treat as dead.
   let alive = false, running = false;
