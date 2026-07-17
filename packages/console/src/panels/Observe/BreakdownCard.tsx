@@ -37,7 +37,7 @@ export function TokensByProjectCard({ rows, activeProject, onPick, onClear }: {
           const active = r.project !== null && r.project === activeProject;
           const share = total > 0 ? ` · ${Math.round((r.tokens / total) * 100)}%` : "";
           return (
-            <li key={r.project ?? "null"} className={"obs-usage-row" + (active ? " is-active" : "")}
+            <li key={r.project ?? " unassigned"} className={"obs-usage-row" + (active ? " is-active" : "")}
               aria-current={active || undefined}>
               <div className="obs-usage-head">
                 {r.project === null
