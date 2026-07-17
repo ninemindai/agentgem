@@ -1,7 +1,6 @@
 import { useState } from "react";
 import type { Scorecard } from "../../api/routes.js";
 import { createShareRoute, makeClient } from "../../api/routes.js";
-import { renderCardSvg } from "./card.js";
 import { ShareLinks } from "./ShareLinks.js";
 import { RefreshButton } from "../../shell/RefreshButton.js";
 import { timeAgo } from "../../util/timeAgo.js";
@@ -18,45 +17,25 @@ export function ScorecardHero({ data, apiBase = "", createShare, onRescan, updat
   const doCreate: CreateShare = createShare ?? ((body) => createShareRoute.call(makeClient(apiBase), { body }));
   const [shareUrl, setShareUrl] = useState<string | null>(null);
   const { busy, slow, err, run } = useShareMint();
-  const svg = renderCardSvg(counts);
-  const svgDataUri = `data:image/svg+xml;utf8,${encodeURIComponent(svg)}`;
 
-  // Mint the hosted certificate URL and reveal the share options inline. The card itself is already
-  // rendered client-side; the only wait here is the network create (which can be a cold start on the
-  // hosted backend), so useShareMint shows a spinner and, past ~3s, a "waking the server" hint
-  // instead of a silent "Sharing…". No native share sheet — desktop app; inline links are the path.
+  // Mint the hosted certificate URL and reveal the share options inline. The wait here is the
+  // network create (which can be a cold start on the hosted backend), so useShareMint shows a
+  // spinner and, past ~3s, a "waking the server" hint instead of a silent "Sharing…". No native
+  // share sheet — desktop app; inline links are the path.
   const onShare = () => run(async () => {
     const { url } = await doCreate({ kind: "certificate", counts, generatedAtMs: data.generatedAtMs });
     setShareUrl(url);
   });
-
-  const downloadPng = () => {
-    const img = new Image();
-    img.onload = () => {
-      const c = document.createElement("canvas");
-      c.width = 1200; c.height = 630;
-      c.getContext("2d")!.drawImage(img, 0, 0);
-      c.toBlob((b) => {
-        if (!b) return;
-        const a = document.createElement("a");
-        a.href = URL.createObjectURL(b); a.download = "agentgem-goldmine.png"; a.click();
-        URL.revokeObjectURL(a.href);
-      }, "image/png");
-    };
-    img.src = svgDataUri;
-  };
 
   return (
     <section className="scorecard-hero" aria-label="Goldmine scorecard">
       <h2>Your log holds <strong>{data.breadth} reusable workflows</strong></h2>
       <p className="scorecard-stats">{data.battleTested} battle-tested · {data.portable} worth sharing</p>
       {data.gaps.length > 0 && <p className="scorecard-gaps">Next: {data.gaps.join(" · ")}</p>}
-      <img className="scorecard-card" src={svgDataUri} alt="Goldmine certificate" width={480} />
       <div className="scorecard-actions">
         <button className="scorecard-share" onClick={onShare} disabled={busy}>
-          {busy ? <><span className="scorecard-spin" aria-hidden="true" />Creating link…</> : "Share your goldmine"}
+          {busy ? <><span className="scorecard-spin" aria-hidden="true" />Creating link…</> : "Share my goldmine"}
         </button>
-        <button className="scorecard-download" onClick={downloadPng}>Download PNG</button>
         {updatedAt != null && (
           <span className="ledger-muted" style={{ marginRight: 8 }}>updated {timeAgo(updatedAt)}</span>
         )}
