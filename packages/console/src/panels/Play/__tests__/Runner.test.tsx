@@ -3,8 +3,8 @@ import { describe, it, expect, afterEach, vi } from "vitest";
 import { createRef } from "react";
 import { render, cleanup, waitFor, screen, fireEvent } from "@testing-library/react";
 import { Runner, type RunnerHandle } from "../Runner.js";
-import { playSessionDataRoute, inventoryRoute } from "../../../api/routes.js";
-import { getConsent } from "../consent.js";
+import { playSessionDataRoute, inventoryRoute, playMcpCallRoute, playMcpServersRoute } from "../../../api/routes.js";
+import { getConsent, getMcpConsent } from "../consent.js";
 import * as watchStream from "../../Watch/watchStream.js";
 import * as hygieneStream from "../../Watch/hygieneStream.js";
 import * as studioStream from "../studioStream.js";
@@ -234,6 +234,45 @@ describe("Runner", () => {
       params: { content: [], structuredContent: { kind: "delta", text: "hi there" }, _meta: { "ai.agentgem/stream": { toolName: "agentgem_invoke_agent" } } },
     }), "*");
     vi.unstubAllGlobals();
+  });
+
+  it("mcp connector: PROMPTS a fresh consent card naming the server + declared tools, and Allow leads to the brokered call (D13)", async () => {
+    vi.spyOn(playMcpServersRoute, "call").mockResolvedValue({ servers: [{ server: "github", tools: [{ name: "list_pull_requests" }, { name: "list_commits" }], configDigest: "d1" }] });
+    const call = vi.spyOn(playMcpCallRoute, "call").mockResolvedValue({ ok: true, payload: { count: 2 }, content: [] });
+    const { container } = render(<Runner html="<p>x</p>" name="mcp1" apiBase="" mcpNeeds={[{ server: "github", tools: ["list_pull_requests", "list_commits"] }]} />);
+    const win = (container.querySelector("iframe") as HTMLIFrameElement).contentWindow as Window;
+    const post = vi.spyOn(win, "postMessage").mockImplementation(() => {});
+    const id = rpcId++;
+    fromIframe(win, { jsonrpc: "2.0", id, method: "mcp/call", params: { server: "github", tool: "list_pull_requests", input: {} } });
+
+    await waitFor(() => expect(screen.getByText("“mcp1” wants to use the github connector")).toBeTruthy());
+    expect(screen.getByText(/Tools: list_pull_requests, list_commits/)).toBeTruthy(); // names every declared tool, not just the one called
+    expect(call).not.toHaveBeenCalled(); // not brokered before consent
+
+    fireEvent.click(screen.getByText("Allow"));
+    await waitFor(() => expect(call).toHaveBeenCalled());
+    await waitFor(() => expect(post).toHaveBeenCalledWith(expect.objectContaining({ id, result: expect.objectContaining({ ok: true, payload: { count: 2 } }) }), "*"));
+    // the ROUTER's digest-pinned mcp-consent cache records the grant...
+    expect(getMcpConsent("mcp1", "github")).toEqual({ decision: "granted", digest: "d1" });
+    // ...but the per-cap consent cache (open-link/copy-command/regular caps) is never touched for mcp: —
+    // that cache is what requestConsent deliberately skips consulting for an mcp: cap.
+    expect(getConsent("mcp1", "mcp:github")).toBeNull();
+  });
+
+  it("mcp connector: Deny records nothing brokered and does not populate the per-cap cache", async () => {
+    vi.spyOn(playMcpServersRoute, "call").mockResolvedValue({ servers: [{ server: "github", tools: [{ name: "list_pull_requests" }], configDigest: "d1" }] });
+    const call = vi.spyOn(playMcpCallRoute, "call").mockResolvedValue({ ok: true, payload: {}, content: [] });
+    const { container } = render(<Runner html="<p>x</p>" name="mcp2" apiBase="" mcpNeeds={[{ server: "github", tools: ["list_pull_requests"] }]} />);
+    const win = (container.querySelector("iframe") as HTMLIFrameElement).contentWindow as Window;
+    vi.spyOn(win, "postMessage").mockImplementation(() => {});
+    fromIframe(win, { jsonrpc: "2.0", id: rpcId++, method: "mcp/call", params: { server: "github", tool: "list_pull_requests", input: {} } });
+
+    await waitFor(() => expect(screen.getByText("Deny")).toBeTruthy());
+    fireEvent.click(screen.getByText("Deny"));
+    await new Promise((r) => setTimeout(r, 20));
+    expect(call).not.toHaveBeenCalled();
+    expect(getMcpConsent("mcp2", "github")).toEqual({ decision: "denied", digest: "d1" });
+    expect(getConsent("mcp2", "mcp:github")).toBeNull();
   });
 
   it("a thumbnail (interactive=false) never prompts for a gated capability", async () => {
