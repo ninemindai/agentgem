@@ -15,11 +15,12 @@ const meta = { title: "Pulse", genre: "project-fun" as const, createdFrom: { kin
 
 // References window.agentgemApp so ensureClientShim injects transport; a <canvas> for the gate.
 //
-// The connector calls are gated on `window.agentgemApp.mcp` — NOT yet defined by the shipped client
-// shim (mcpAppClient.ts only exposes callTool/openLink/etc so far; `agentgemApp.mcp` is a later PR's
-// wire-up). Gating the call keeps gameGate's jsdom load-smoke from executing a TypeError on
-// `.mcp.callTool(...)` of undefined — the literal/dynamic call text is still physically present in
-// the script body for capabilityScan's static regexes to find, which is all these tests exercise.
+// The connector calls are gated on `window.agentgemApp.mcp`, which PR-3a's shim arm now defines
+// unconditionally (mcpAppClient.ts) — so this guard passes at gate time too. That's harmless: a
+// literal callTool(...) just queues an unresolved sendRequest() promise in jsdom (no host to reply,
+// no throw). The gating is kept anyway so the fixtures still read the same way pre- and post-shim,
+// and the literal/dynamic call text is still physically present in the script body for
+// capabilityScan's static regexes to find, which is all these tests exercise.
 const mcpHtml = (js: string) =>
   `<!doctype html><html><body><canvas></canvas><script>if (window.agentgemApp && window.agentgemApp.mcp) { ${js} }</script></body></html>`;
 
