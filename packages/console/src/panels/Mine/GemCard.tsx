@@ -68,7 +68,6 @@ function Actions({ gem, onOpen, onDistill, onShare, onPlay }: Pick<GemCardProps,
     return (
       <div className="gem-card__acts">
         <button type="button" className="gem-card__act gem-card__act--primary" onClick={() => onPlay(gem)}>Play</button>
-        <button type="button" className="gem-card__act" onClick={() => onShare(gem)}>Share</button>
       </div>
     );
   }
@@ -76,9 +75,11 @@ function Actions({ gem, onOpen, onDistill, onShare, onPlay }: Pick<GemCardProps,
     <div className="gem-card__acts">
       <button type="button" className="gem-card__act gem-card__act--primary" onClick={() => onOpen(gem)}>Open</button>
       {gem.type === "workflow" && (
-        <button type="button" className="gem-card__act" onClick={() => onDistill(gem)}>Distill → Gem</button>
+        <>
+          <button type="button" className="gem-card__act" onClick={() => onDistill(gem)}>Distill → Gem</button>
+          <button type="button" className="gem-card__act" onClick={() => onShare(gem)}>Share</button>
+        </>
       )}
-      <button type="button" className="gem-card__act" onClick={() => onShare(gem)}>Share</button>
     </div>
   );
 }

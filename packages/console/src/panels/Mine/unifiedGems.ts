@@ -111,6 +111,9 @@ export function toUnifiedGems(input: {
   workflows: WorkflowCardModel[];
   inventory: LedgerGroup[];
   miniapps: Miniapp[];
+  // Optional and not yet fed by any caller — until a publish-status source lands, no name
+  // is ever "published" and the Shared maturity bucket is simply omitted (empty groups are
+  // dropped by groupGemsByMaturity).
   publishedNames?: Set<string>;
 }): UnifiedGem[] {
   const publishedNames = input.publishedNames ?? new Set<string>();
