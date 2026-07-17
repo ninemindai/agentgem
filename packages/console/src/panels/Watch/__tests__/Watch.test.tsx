@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, afterEach } from "vitest";
 import { render, screen, fireEvent, waitFor, cleanup } from "@testing-library/react";
 import { Watch, sandboxDoc } from "../index.js";
+import { readWatchAlertPrefs, writeWatchAlertPrefs } from "../../../notify/watchAlertPrefs.js";
 
 class FakeES {
   static last: FakeES | null = null;
@@ -81,5 +82,46 @@ describe("Watch panel", () => {
     expect(screen.getByRole("tab", { name: "Feed" })).toBeTruthy();
     expect(screen.getByRole("tab", { name: "Artifact" })).toBeTruthy();
     expect(screen.queryByRole("tab", { name: "Dashboard" })).toBeNull();
+  });
+
+  const SESSION2 = { ...SESSION, id: "sess-2", file: "/w/.claude/projects/p/sess-2.jsonl", project: "shop" };
+  const PENDING_ATTN = {
+    id: "sess-1", file: SESSION.file, agent: "claude", project: "site",
+    state: "pending", pendingKey: 4, pendingToolName: "Bash", stalledMs: 30000,
+  };
+
+  // fetch stub answering both endpoints; localStorage cleared for pref isolation
+  function stubWatchFetch(sessions: unknown[], attention: unknown[]) {
+    vi.stubGlobal("fetch", vi.fn(async (url: string) => ({
+      ok: true,
+      json: async () => (String(url).includes("/attention") ? { sessions: attention } : { sessions }),
+    })) as unknown as typeof fetch);
+  }
+
+  it("shows a needs-input badge on a pending session row", async () => {
+    localStorage.clear();
+    stubWatchFetch([SESSION], [PENDING_ATTN]);
+    render(<Watch apiBase="" />);
+    expect(await screen.findByText(/needs input/i)).toBeTruthy();
+  });
+
+  it("bell toggle moves prefs to selected mode excluding the muted session", async () => {
+    localStorage.clear();
+    stubWatchFetch([SESSION, SESSION2], []);
+    render(<Watch apiBase="" />);
+    await screen.findByText("site");
+    const bells = screen.getAllByRole("button", { name: "Toggle alerts for this session" });
+    fireEvent.click(bells[0]); // mute sess-1
+    expect(readWatchAlertPrefs()).toEqual({ mode: "selected", files: [SESSION2.file] });
+  });
+
+  it("master switch re-enables alerts for all sessions", async () => {
+    localStorage.clear();
+    writeWatchAlertPrefs({ mode: "selected", files: [] });
+    stubWatchFetch([SESSION], []);
+    render(<Watch apiBase="" />);
+    await screen.findByText("site");
+    fireEvent.click(screen.getByRole("checkbox", { name: /alert on all sessions/i }));
+    expect(readWatchAlertPrefs().mode).toBe("all");
   });
 });

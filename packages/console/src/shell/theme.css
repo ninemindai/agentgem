@@ -2241,3 +2241,17 @@ button.scorecard-intent { line-height: 1.4; }
 .play-caps-pick { border: 0; padding: 0; margin: 10px 0; }
 .play-caps-pick legend { font-size: 12px; opacity: 0.7; padding: 0; }
 .play-caps-pick__row { display: flex; gap: 8px; align-items: center; font-size: 13px; margin-top: 4px; }
+
+/* Watch: needs-input alerts */
+.watch-session-row { position: relative; }
+.watch-session-row .watch-bell {
+  position: absolute; right: 8px; bottom: 8px;
+  border: none; background: none; cursor: pointer;
+  font-size: 14px; opacity: .45; padding: 2px;
+}
+.watch-session-row .watch-bell.is-on { opacity: 1; }
+.watch-all-alerts { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; opacity: .85; }
+.watch-attn-banner {
+  margin: 0 0 8px; padding: 8px 12px; border-radius: 8px; font-size: 13px;
+  color: var(--accent); border: 1px solid rgba(154,51,36,.4); background: #fbeee9;
+}

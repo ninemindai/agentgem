@@ -3,6 +3,8 @@ import { defineConsolePage } from "../../registry.js";
 import { fetchSessions, openWatchStream, type WatchSession, type ArtifactVersion } from "./watchStream.js";
 import { SessionFeed } from "./SessionFeed.js";
 import { sandboxDoc } from "./sandboxDoc.js";
+import { readWatchAlertPrefs, writeWatchAlertPrefs, enrolledFiles, type WatchAlertPrefs } from "../../notify/watchAlertPrefs.js";
+import type { AttentionSessionSnap } from "../../notify/events.js";
 
 export { sandboxDoc };
 
@@ -89,12 +91,37 @@ export function Watch({ apiBase }: { apiBase: string }) {
   // Dashboard lens (generated once + cached per transcript); the live side
   // keeps Feed (events) and Artifact (sandboxed HTML).
   const [view, setView] = useState<"feed" | "artifact">("feed");
+  const [attention, setAttention] = useState<Map<string, AttentionSessionSnap>>(new Map());
+  const [alertPrefs, setAlertPrefs] = useState<WatchAlertPrefs>(readWatchAlertPrefs);
 
   const loadSessions = () => {
     fetchSessions(apiBase).then(setSessions).catch(() => setSessions([]));
   };
 
   useEffect(loadSessions, [apiBase]);
+
+  useEffect(() => {
+    let alive = true;
+    const load = () =>
+      fetch(`${apiBase}/api/watch/attention`)
+        .then((r) => (r.ok ? r.json() : { sessions: [] }))
+        .then((d: { sessions: AttentionSessionSnap[] }) => {
+          if (alive) setAttention(new Map(d.sessions.map((s) => [s.file, s])));
+        })
+        .catch(() => { /* best-effort */ });
+    void load();
+    const h = setInterval(load, 5000);
+    return () => { alive = false; clearInterval(h); };
+  }, [apiBase]);
+
+  const allFiles = (sessions ?? []).map((s) => s.file);
+  const enrolled = enrolledFiles(alertPrefs, allFiles);
+  const setPrefs = (p: WatchAlertPrefs) => { writeWatchAlertPrefs(p); setAlertPrefs(p); };
+  const toggleBell = (file: string) => {
+    const next = new Set(enrolled);
+    if (next.has(file)) next.delete(file); else next.add(file);
+    setPrefs(next.size === allFiles.length ? { mode: "all", files: [] } : { mode: "selected", files: [...next] });
+  };
 
   return (
     <section className="analyze">
@@ -110,6 +137,14 @@ export function Watch({ apiBase }: { apiBase: string }) {
           <div className="run-status" style={{ justifyContent: "space-between", marginBottom: 6 }}>
             <span style={{ fontWeight: 600 }}>Active sessions</span>
             <button type="button" className="ledger-view" onClick={loadSessions}>Refresh</button>
+            <label className="watch-all-alerts">
+              <input
+                type="checkbox"
+                checked={alertPrefs.mode === "all"}
+                onChange={(e) => setPrefs(e.target.checked ? { mode: "all", files: [] } : { mode: "selected", files: [...enrolled] })}
+              />
+              Alert on all sessions
+            </label>
           </div>
           <ul className="analyze-list" style={{ maxHeight: 520, overflowY: "auto" }}>
             {sessions === null && <li className="ledger-empty">Loading…</li>}
@@ -117,7 +152,7 @@ export function Watch({ apiBase }: { apiBase: string }) {
               <li className="ledger-empty">No sessions active in the last few hours.</li>
             )}
             {(sessions ?? []).map((s) => (
-              <li key={s.file}>
+              <li key={s.file} className="watch-session-row">
                 <button
                   type="button"
                   className={"analyze-row" + (selected === s.file ? " is-active" : "")}
@@ -127,10 +162,19 @@ export function Watch({ apiBase }: { apiBase: string }) {
                   <div className="analyze-row-head">
                     <span className="analyze-name">{s.project ?? s.id.slice(0, 8)}</span>
                     <span className="ws-chip">{s.agent}</span>
+                    {attention.get(s.file)?.state === "pending" && (
+                      <span className="run-badge run-running watch-attn" title="An approval prompt (or a long tool run) is blocking this session">⏸ needs input</span>
+                    )}
                   </div>
                   <div style={{ fontSize: 12, opacity: 0.7 }}>
                     {s.msgs} msgs · {ageLabel(s.ageMs)}{s.model ? ` · ${s.model}` : ""}
                   </div>
+                </button>
+                <button type="button" className={"watch-bell" + (enrolled.has(s.file) ? " is-on" : "")}
+                  aria-label="Toggle alerts for this session" aria-pressed={enrolled.has(s.file)}
+                  title={enrolled.has(s.file) ? "Alerts on — click to mute this session" : "Alerts off — click to enable"}
+                  onClick={() => toggleBell(s.file)}>
+                  {enrolled.has(s.file) ? "🔔" : "🔕"}
                 </button>
               </li>
             ))}
@@ -142,6 +186,11 @@ export function Watch({ apiBase }: { apiBase: string }) {
           {!selected && <p className="ledger-empty">Select a session to watch it.</p>}
           {selected && (
             <>
+              {attention.get(selected)?.state === "pending" && (
+                <p className="watch-attn-banner" role="status">
+                  ⏸ Waiting on approval for {attention.get(selected)?.pendingToolName ?? "a tool"} (or a long tool run) — this session needs your input.
+                </p>
+              )}
               <div className="feed-toggle" role="tablist" aria-label="watch mode" style={{ marginBottom: 8 }}>
                 <button type="button" role="tab" aria-selected={view === "feed"}
                   className={"ledger-view" + (view === "feed" ? " is-active" : "")} onClick={() => setView("feed")}>Feed</button>
