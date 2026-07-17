@@ -48,3 +48,35 @@ export function getConsent(name: string, cap: string): Decision | null {
 export function setConsent(name: string, cap: string, v: Decision): void {
   try { localStorage.setItem(key(name, cap), v); } catch { /* private mode / disabled storage */ }
 }
+
+// MCP connector consent (spec D8). Distinct key namespace + a {decision, digest} VALUE, not the bare
+// "granted"/"denied" string the per-cap scheme uses — the digest pins consent to the connector's
+// server-provided config identity so a swapped/shadowed gem (D9) forces a fresh decision. Reads FAIL
+// CLOSED: a bare string, malformed JSON, or a missing digest is treated as "no decision", never as a
+// grant — a legacy or tampered value can never silently authorize a connector.
+type McpDecision = "granted" | "denied";
+export interface McpConsent { decision: McpDecision; digest: string }
+const mcpKey = (name: string, server: string) => `agentgem:play:mcp-consent:${name}:${server}`;
+
+export function getMcpConsent(name: string, server: string): McpConsent | null {
+  try {
+    const raw = localStorage.getItem(mcpKey(name, server));
+    if (!raw) return null;
+    const v = JSON.parse(raw) as unknown;
+    if (typeof v !== "object" || v === null) return null;
+    const d = (v as { decision?: unknown }).decision;
+    const h = (v as { digest?: unknown }).digest;
+    if ((d !== "granted" && d !== "denied") || typeof h !== "string" || h.length === 0) return null;
+    return { decision: d, digest: h };
+  } catch { return null; }
+}
+
+export function setMcpConsent(name: string, server: string, decision: McpDecision, digest: string): void {
+  try { localStorage.setItem(mcpKey(name, server), JSON.stringify({ decision, digest })); } catch { /* disabled storage */ }
+}
+
+// Drop a connector's remembered decision so the next call re-prompts. Called when the server reports
+// the connector's config changed out from under a grant (server_config_changed).
+export function clearMcpConsent(name: string, server: string): void {
+  try { localStorage.removeItem(mcpKey(name, server)); } catch { /* disabled storage */ }
+}
