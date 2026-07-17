@@ -395,4 +395,33 @@ describe("Reveal — hard failure", () => {
     await screen.findByText("You're sitting on a goldmine:");
     expect(summarySpy).toHaveBeenCalledTimes(2);
   });
+
+  // Fix (final-review P0 sweep, item 5): summary succeeding but the scorecard STREAM
+  // failing used to trigger the same full-page DiagnosticBlock as a summary failure,
+  // discarding the already-rendered usage ledger. Now only the goldmine/scorecard
+  // section itself degrades — the ledger (and masthead/dismiss) stay up.
+  it("summary ok + scorecard stream failed: usage ledger still renders, with a scoped diagnostic (working retry) in place of just the goldmine section", async () => {
+    vi.spyOn(routes.homeSummaryRoute, "call").mockResolvedValue(SUMMARY);
+    let calls = 0;
+    const openStream = vi.fn((_client: unknown, onEvent: (e: ScorecardStreamEvent) => void) => {
+      calls++;
+      if (calls === 1) onEvent({ type: "failed", message: "stream connection error" });
+      else onEvent({ type: "done", scorecard: SCORECARD, cached: false, updatedAt: 1 });
+      return () => {};
+    });
+    render(<Reveal apiBase="" mode="ceremony" onDismiss={() => {}} openStream={openStream} />);
+
+    // The usage ledger rendered — a full-page diagnostic would have hidden it.
+    expect(await screen.findByText("412")).toBeTruthy();
+    // The diagnostic itself is scoped: it shows, but doesn't replace the ledger above.
+    expect(screen.getByText("/api/scorecard/stream")).toBeTruthy();
+    expect(screen.getByText("Couldn't load your session reveal.")).toBeTruthy();
+    // Ceremony mode's own chrome (migration headline + dismiss) is untouched.
+    expect(screen.getByText("AgentGem has a new home screen — here's what your sessions add up to.")).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Take me to my console" })).toBeTruthy();
+
+    fireEvent.click(screen.getByRole("button", { name: "Try again" }));
+    await screen.findByText("You're sitting on a goldmine:");
+    expect(openStream).toHaveBeenCalledTimes(2);
+  });
 });

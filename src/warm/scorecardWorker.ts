@@ -15,8 +15,8 @@
 // process-wide DatabaseSync shared with the endpoint, and `observe`, whose cache is
 // main-thread heap state).
 import { parentPort, workerData } from "node:worker_threads";
-import { transcriptToken, readAnalysisCache, writeAnalysisCache } from "@agentgem/insight";
-import { collectScorecard, selectScorecardRoots, scorecardTranscriptPaths, defaultScorecardDeps } from "../gem/scorecard.js";
+import { readAnalysisCache, writeAnalysisCache } from "@agentgem/insight";
+import { collectScorecard, selectScorecardRoots, scorecardTranscriptPaths, scorecardCacheToken, defaultScorecardDeps } from "../gem/scorecard.js";
 import { SCORECARD_CACHE_ROOT } from "../gem/scorecard.js";
 
 export interface ScorecardWarmInput { dir?: string; force?: boolean; nowMs: number }
@@ -25,7 +25,7 @@ export interface ScorecardWarmInput { dir?: string; force?: boolean; nowMs: numb
 export function warmScorecardSync({ dir, force, nowMs }: ScorecardWarmInput): "warmed" | "hit" {
   const bucket = defaultScorecardDeps.bucketTranscripts(dir);
   const roots = selectScorecardRoots(dir, undefined, defaultScorecardDeps);
-  const token = transcriptToken(scorecardTranscriptPaths(roots, bucket));
+  const token = scorecardCacheToken(scorecardTranscriptPaths(roots, bucket));
   if (!force && readAnalysisCache(SCORECARD_CACHE_ROOT, token)) return "hit";
   const sc = collectScorecard(dir, undefined, nowMs, { bucket });
   if (!sc.degraded) writeAnalysisCache(SCORECARD_CACHE_ROOT, token, sc, nowMs);

@@ -345,7 +345,7 @@ import {
   PlaybookPublishBodySchema, PlaybookPublishResponseSchema,
   ArtifactContentQuerySchema, ArtifactContentSchema,
 } from "./schemas.js";
-import { collectScorecard, selectScorecardRoots, scorecardTranscriptPaths, defaultScorecardDeps, isPortable, type Scorecard } from "./gem/scorecard.js";
+import { collectScorecard, selectScorecardRoots, scorecardTranscriptPaths, scorecardCacheToken, defaultScorecardDeps, isPortable, type Scorecard } from "./gem/scorecard.js";
 import { preparePlaybook } from "./gem/playbookPrepareCore.js";
 import { publishPlaybookCore } from "./gem/playbookPublishCore.js";
 import { postShare } from "./gem/shareClient.js";
@@ -985,7 +985,7 @@ export class GemController {
     const projects = parseProjectsQuery(input.query.projects);
     const roots = selectScorecardRoots(dir, projects);
     const bucket = bucketTranscriptsByCwd(resolveDirs(dir).claudeDir);
-    const token = transcriptToken(scorecardTranscriptPaths(roots, bucket));
+    const token = scorecardCacheToken(scorecardTranscriptPaths(roots, bucket));
     const cached = readAnalysisCache("__scorecard__", token) as z.infer<typeof ScorecardSchema> | null;
     if (cached) return cached;
     const sc = collectScorecard(dir, roots, Date.now(), { bucket });

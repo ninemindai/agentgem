@@ -143,6 +143,22 @@ export const SCORECARD_PROJECT_PREFIX = "scorecard:";
 // Cache key for the aggregate scorecard (distinct from per-project keys). Shared by
 // the SSE route (scorecard.stream.controller.ts) and the warm worker.
 export const SCORECARD_CACHE_ROOT = "__scorecard__";
+
+// Bump whenever the aggregate `Scorecard`/`WorkflowItem` shape gains fields (e.g. the
+// `sessions`/`lastSeenMs` addition above) — a pre-upgrade cached entry lacks the new
+// fields and would otherwise be served as-is (console defaults render "from 0
+// sessions" with no re-scan affordance). Folded ONLY into the aggregate cache's own
+// token below; `transcriptToken` itself, and every per-project cache entry (keyed
+// under SCORECARD_PROJECT_PREFIX, verified safe — provenance is required there), are
+// untouched, so this can't force an unrelated per-project rescan.
+const SCORECARD_SCHEMA_VERSION = 2;
+
+/** Token for the AGGREGATE scorecard cache (SCORECARD_CACHE_ROOT) only — folds the
+ *  schema version in on top of the content-derived `transcriptToken`, so an entry
+ *  written under an older schema misses and a fresh scan runs. */
+export function scorecardCacheToken(paths: string[]): string {
+  return `${transcriptToken(paths)}:sc${SCORECARD_SCHEMA_VERSION}`;
+}
 type CachedProjectLoad = { label: string; candidates: ProcedureCandidate[]; reflections: Reflection[] };
 
 /** Load one project's deterministic candidates, cache-first when deps expose a cache.

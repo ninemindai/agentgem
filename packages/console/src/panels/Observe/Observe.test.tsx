@@ -1,10 +1,30 @@
 import { describe, it, expect, afterEach, vi } from "vitest";
-import { render, screen, cleanup, fireEvent, within } from "@testing-library/react";
+import { render, screen, cleanup, fireEvent, within, act } from "@testing-library/react";
 
-afterEach(() => { cleanup(); vi.unstubAllGlobals(); window.location.hash = ""; });
+afterEach(() => { cleanup(); vi.unstubAllGlobals(); vi.useRealTimers(); window.location.hash = ""; });
 import { Dashboard } from "./Dashboard.js";
 import { Observe } from "./index.js";
-import { ObservePayloadSchema, type ObservePayload } from "../../api/routes.js";
+import { ObservePayloadSchema, type ObservePayload, type Scorecard } from "../../api/routes.js";
+import type { ScorecardStreamEvent } from "../Mine/scorecardStream.js";
+
+// A controllable override for the scorecard stream, used only by the poll-regression
+// test below — every other test in this file leaves `impl` null and falls straight
+// through to the real `openScorecardStream` (still driven by the fetch mock above),
+// so nothing else in this file changes behavior.
+const streamOverride = vi.hoisted(() => ({
+  impl: null as ((client: unknown, onEvent: (e: ScorecardStreamEvent) => void, opts?: unknown) => () => void) | null,
+}));
+vi.mock("../Mine/scorecardStream.js", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("../Mine/scorecardStream.js")>();
+  return {
+    ...actual,
+    openScorecardStream: (client: unknown, onEvent: (e: ScorecardStreamEvent) => void, opts?: unknown) =>
+      streamOverride.impl
+        ? streamOverride.impl(client, onEvent, opts)
+        : actual.openScorecardStream(client as never, onEvent, opts as never),
+  };
+});
+afterEach(() => { streamOverride.impl = null; });
 
 const res = (body: unknown) =>
   ({ ok: true, status: 200, text: async () => JSON.stringify(body) }) as unknown as Response;
@@ -330,5 +350,89 @@ describe("ObservePayloadSchema version-skew defaults", () => {
       expect(parsed.data.byProject).toEqual([]);
       expect(parsed.data.topSessions).toEqual([]);
     }
+  });
+});
+
+// REGRESSION (final-review P0 fix wave, item 1): Observe/index.tsx picks its mode from
+// its OWN `useHomeState` instance, and the first-gem ceremony (rendered inside Reveal,
+// itself owning a THIRD `useHomeState` instance) POSTs `revealSeen: true` server-side
+// the moment the CTA's build resolves. If Observe's mode-selecting instance also polled
+// (the pre-fix bug — polling was unconditional), it would notice that flip on its very
+// next tick and switch Observe from Reveal to ReturningOverview, unmounting the
+// just-rendered GemCeremony before the user can click "Open in Curate". Only Shell may
+// poll now (`{ poll: true }`, opted in from Shell.tsx alone) — this test pins that
+// Observe's instance stays quiet even once the server has genuinely flipped.
+describe("Observe — ceremony survives a server-side revealSeen flip (home-state poll regression)", () => {
+  const SUMMARY = {
+    usage: { sessions: 412, spanDays: 148, activeMs: 63 * 3_600_000, tokensIn: 200_000_000, tokensOut: 91_000_000, tokensCache: 0 },
+    claudeSessions: 412,
+    gate: { usageEmpty: false, claudeBelowGate: false },
+    scorecardCached: false,
+    projectsScanned: 5,
+    projectsCap: 8,
+  };
+  const SCORECARD: Scorecard = {
+    breadth: 17, battleTested: 6, portable: 4,
+    gaps: [],
+    projects: [{
+      root: "/p", label: "p",
+      breadth: 17, battleTested: 6, portable: 4,
+      workflows: [{ key: "a", name: "Ship a feature branch", confidence: "high", portable: true, sessions: 12, lastSeenMs: 10 }],
+    }],
+    generatedAtMs: 1000, degraded: false,
+  };
+  const GEM = {
+    name: "Ship-a-feature-branch",
+    createdFrom: "/home/.claude",
+    artifacts: [{ type: "skill", name: "Ship-a-feature-branch" }],
+    checks: [],
+    requiredSecrets: [],
+  };
+
+  it("completing the first-gem CTA build, then 2+ poll intervals of server-side revealSeen:true, leaves the ceremony mounted", async () => {
+    vi.useFakeTimers();
+    // Mutable server-side home state — POSTs from RevealContent's own `useHomeState`
+    // instance (fired by the CTA's `onBuilt`) merge into this, exactly like a real
+    // server's one-way unlock/revealSeen record.
+    let homeState = { existingUser: true, revealSeen: false, unlocked: false };
+    const fetchMock = vi.fn(async (url: string | URL, init?: RequestInit) => {
+      const u = String(url);
+      const method = (init?.method ?? "GET").toUpperCase();
+      const json = (body: unknown) => ({ ok: true, status: 200, text: async () => JSON.stringify(body) }) as unknown as Response;
+      if (u.includes("/api/home/state")) {
+        if (method === "POST") homeState = { ...homeState, ...JSON.parse(String(init?.body ?? "{}")) };
+        return json(homeState);
+      }
+      if (u.includes("/api/home/summary")) return json(SUMMARY);
+      if (u.includes("/api/scorecard/build")) return json(GEM);
+      if (u.includes("/api/playbook/prepare")) return json({ skills: [], lessons: [], root: "/p", degraded: false, preparing: false });
+      if (u.includes("/api/observe/raw")) return json({ sessions: [] });
+      return json({});
+    });
+    vi.stubGlobal("fetch", fetchMock);
+    streamOverride.impl = (_client, onEvent) => {
+      onEvent({ type: "done", scorecard: SCORECARD, cached: false, updatedAt: 1 });
+      return () => {};
+    };
+
+    window.location.hash = "#/overview";
+    render(<Observe apiBase="" />);
+    await act(async () => { await vi.advanceTimersByTimeAsync(0); });
+
+    const cta = screen.getByRole("button", { name: "Turn your top workflow into a Gem" });
+    fireEvent.click(cta);
+    await act(async () => { await vi.advanceTimersByTimeAsync(0); });
+
+    expect(screen.getByRole("button", { name: "Open in Curate" })).toBeTruthy();
+    // The ceremony's build has already flipped the server-side record...
+    expect(homeState).toMatchObject({ unlocked: true, revealSeen: true });
+
+    // ...so advance well past 2 of Shell's poll intervals (5s each). Pre-fix, Observe's
+    // own instance polled too and would have picked this up here, unmounting the
+    // ceremony by switching to ReturningOverview.
+    await act(async () => { await vi.advanceTimersByTimeAsync(11_000); });
+
+    expect(screen.getByRole("button", { name: "Open in Curate" })).toBeTruthy();
+    expect(screen.queryByText(/nothing to inspect yet/i)).toBeNull();
   });
 });

@@ -275,7 +275,20 @@ function RevealContent({ mode, onDismiss, data, apiBase }: { mode: RevealMode; o
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [phase]);
 
-  const failedEndpoint = summaryError ? "/api/home/summary" : streamError && !scorecard ? "/api/scorecard/stream" : null;
+  const summaryFailed = !!summaryError;
+  const streamFailedNoScorecard = !!streamError && !scorecard;
+  // The specific combination this degrades gracefully: summary loaded fine, and
+  // we're in the plain (non-cold, non-Codex-heavy) rich-data path — the ONLY body
+  // that renders the goldmine/scorecard section at all — but the scorecard stream
+  // itself failed. Every other failure combination (summary itself failed, or the
+  // stream fails while cold/Codex-heavy) keeps the prior full-page diagnostic,
+  // which is out of scope here.
+  const goldmineOnlyFailed = streamFailedNoScorecard && !!summary && !cold && !codexHeavy;
+  const failedEndpoint = summaryFailed
+    ? "/api/home/summary"
+    : streamFailedNoScorecard && !goldmineOnlyFailed
+      ? "/api/scorecard/stream"
+      : null;
 
   let body: ReactNode;
   if (firstGem.phase === "built" && firstGem.gem) {
@@ -301,16 +314,20 @@ function RevealContent({ mode, onDismiss, data, apiBase }: { mode: RevealMode; o
     body = (
       <>
         <LedgerRow display={ledgerDisplay} projectsScanned={summary.projectsScanned} />
-        {scorecard
-          ? <GoldmineHero
-              scorecard={scorecard} display={heroDisplay} projectsScanned={summary.projectsScanned}
-              candidate={candidate} candidates={candidates} buildPhase={firstGem.phase}
-              onBuildClick={() => { if (candidate) firstGem.build(candidate); }}
-              onSelectCandidate={setSelectedCandidate}
-            />
-          : slow
-            ? <p className="reveal-assaying">still assaying your workflows…</p>
-            : <p className="reveal-scanning">scoring your goldmine…</p>}
+        {goldmineOnlyFailed
+          // The usage ledger above already rendered fine — only the goldmine/scorecard
+          // section itself degrades, instead of a full-page diagnostic discarding it.
+          ? <DiagnosticBlock path="/api/scorecard/stream" onRetry={retry} />
+          : scorecard
+            ? <GoldmineHero
+                scorecard={scorecard} display={heroDisplay} projectsScanned={summary.projectsScanned}
+                candidate={candidate} candidates={candidates} buildPhase={firstGem.phase}
+                onBuildClick={() => { if (candidate) firstGem.build(candidate); }}
+                onSelectCandidate={setSelectedCandidate}
+              />
+            : slow
+              ? <p className="reveal-assaying">still assaying your workflows…</p>
+              : <p className="reveal-scanning">scoring your goldmine…</p>}
       </>
     );
   }

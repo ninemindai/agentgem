@@ -16,13 +16,14 @@ import {
   selectScorecardRoots,
   aggregateScorecard,
   scorecardTranscriptPaths,
+  scorecardCacheToken,
   defaultScorecardDeps,
   loadProjectCached,
   SCORECARD_CACHE_ROOT,
   type ProjectLoad,
   type ScorecardDeps,
 } from "./gem/scorecard.js";
-import { transcriptToken, writeAnalysisCache, readAnalysisCacheEntry, readAnalysisCacheLatest } from "@agentgem/insight";
+import { writeAnalysisCache, readAnalysisCacheEntry, readAnalysisCacheLatest } from "@agentgem/insight";
 import { createLogger } from "@agentgem/base";
 import { pump } from "./sse/pump.js";
 import { ScorecardStreamQuery, ScorecardEvent } from "./scorecard.stream.schema.js";
@@ -86,7 +87,7 @@ export class ScorecardController {
 
         const bucket = deps.bucketTranscripts(dir);
         const paths = scorecardTranscriptPaths(roots, bucket);
-        const token = transcriptToken(paths);
+        const token = scorecardCacheToken(paths);
 
         // Exact cache hit (unless Re-scan): finalize without re-scanning.
         if (!fresh) {
