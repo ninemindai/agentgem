@@ -28,6 +28,7 @@ ${hostStyleScript()}
   var pending = {};                       // JSON-RPC id -> { resolve, reject } for in-flight tools/call
   var queue = [];                         // tools/call messages built before the handshake is ready
   var subs = {};                          // JSON-RPC method (or "*") -> [cb] for streamed notifications
+  var watchSubs = {};                     // host watchId -> handler for a live mcp.watchTool() subscription
   var initIds = {};                       // ids used for ui/initialize (each retry gets a fresh one)
   var iv = null;                          // handshake retry interval
 
@@ -88,7 +89,47 @@ ${hostStyleScript()}
           throw err;
         });
       },
-      listTools: function () { return sendRequest("mcp/list", {}); }
+      listTools: function () { return sendRequest("mcp/list", {}); },
+      // watchTool: registers a polled read via mcp/watch and returns a SYNCHRONOUS unsubscribe(). The
+      // host assigns the watchId (mcp/watch's ack, see mcpUiHost.ts's handleWatch) and only THEN is the
+      // handler added to watchSubs — so unsubscribe() called before the ack lands can't remove something
+      // that was never registered; it just marks state.cancelled so the ack continuation (below) skips
+      // registration and fires mcp/unwatch itself instead. Called after the ack, unsubscribe() removes
+      // the handler and fires mcp/unwatch immediately — both branches make the handler stop firing
+      // synchronously, before the function returns.
+      watchTool: function (server, tool, input, handler, opts) {
+        var state = { cancelled: false, watchId: null };
+        sendRequest("mcp/watch", { server: server, tool: tool, input: input }).then(
+          function (r) {
+            if (state.cancelled) {
+              if (r && typeof r.watchId === "number") post({ jsonrpc: "2.0", method: "mcp/unwatch", params: { watchId: r.watchId } });
+              return;
+            }
+            if (!r || typeof r.watchId !== "number") {
+              var regErr = (r && r.error) || { code: "watch_failed", message: "watch registration failed" };
+              try { handler({ type: "error", error: regErr }); } catch (e) { /* handler threw */ }
+              return;
+            }
+            state.watchId = r.watchId;
+            watchSubs[r.watchId] = handler;
+          },
+          function (err) {
+            if (state.cancelled) return;
+            try { handler({ type: "error", error: { code: "watch_failed", message: (err && err.message) || "watch registration failed" } }); } catch (e) { /* handler threw */ }
+          }
+        );
+        return function unsubscribe() {
+          if (state.cancelled) return;
+          state.cancelled = true;
+          if (state.watchId != null) {
+            delete watchSubs[state.watchId];
+            post({ jsonrpc: "2.0", method: "mcp/unwatch", params: { watchId: state.watchId } });
+          }
+        };
+      },
+      invalidate: function (server, tool, input) {
+        return sendRequest("mcp/invalidate", { server: server, tool: tool, input: input });
+      }
     }
   };
   window.agentgemApp = api;
@@ -96,6 +137,25 @@ ${hostStyleScript()}
   function dispatch(method, payload) {
     var list = (subs[method] || []).concat(subs["*"] || []);
     for (var i = 0; i < list.length; i++) { try { list[i](payload); } catch (err) { /* subscriber threw */ } }
+  }
+
+  // Routes a watch notification's payload to its watchTool() handler by host watchId. stop:true on an
+  // error payload is the host's retraction marker (mcpUiHost.ts's stopWatch, on server_config_changed /
+  // authz denial) — deliver it to the handler same as any error, but ALSO clean up the local sub and
+  // fire mcp/unwatch ourselves so the host's 16-watch cap slot isn't held forever waiting on a game that
+  // may never notice the watch died (the T3 review's exact concern).
+  function routeWatch(watchId, type, payload) {
+    var h = watchSubs[watchId];
+    if (!h) return;                          // unknown, or already unsubscribed/cleaned-up watch — drop it
+    var stop = type === "error" && payload && payload.stop === true;
+    if (stop) delete watchSubs[watchId];
+    if (type === "data") {
+      try { h({ type: "data", result: { payload: payload && payload.payload, content: (payload && payload.content) || [] } }); } catch (e) { /* handler threw */ }
+      return;
+    }
+    var err = (payload && payload.error) || { code: "upstream_error", message: "watch error" };
+    try { h({ type: "error", error: err }); } catch (e) { /* handler threw */ }
+    if (stop) post({ jsonrpc: "2.0", method: "mcp/unwatch", params: { watchId: watchId } });
   }
 
   function applyHostContext(ctx) {
@@ -142,6 +202,8 @@ ${hostStyleScript()}
       return;
     }
     if (d.method === "ui/notifications/tool-result" && d.params) {   // spec: params IS a CallToolResult
+      var w = (d.params._meta || {})["ai.agentgem/watch"];
+      if (w) { routeWatch(w.watchId, w.type, d.params.structuredContent); return; }  // watchTool() channel, not the generic stream
       var s = (d.params._meta || {})["ai.agentgem/stream"] || {};
       var evt = { toolName: s.toolName, chunk: d.params.structuredContent };  // FROZEN shape the games expect
       dispatch("ui/notifications/tool-result", evt);

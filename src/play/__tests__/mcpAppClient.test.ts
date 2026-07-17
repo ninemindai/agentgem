@@ -24,6 +24,8 @@ type Win = {
     mcp: {
       callTool(server: string, tool: string, input?: unknown): Promise<{ payload: unknown; content: unknown }>;
       listTools(): Promise<unknown>;
+      watchTool(server: string, tool: string, input: unknown, handler: (e: unknown) => void, opts?: unknown): () => void;
+      invalidate(server?: string, tool?: string, input?: unknown): Promise<unknown>;
     };
   };
   addEventListener(type: string, cb: (e: { data: unknown; source: unknown }) => void): void;
@@ -295,6 +297,209 @@ describe("mcpAppClient shim", () => {
       const result = await child.agentgemApp.mcp.listTools();
       expect(posted).toContainEqual(expect.objectContaining({ method: "mcp/list", params: {} }));
       expect(result).toEqual(serversReply);
+    });
+  });
+
+  describe("mcp connectors (agentgemApp.mcp.watchTool / invalidate)", () => {
+    function initOnly(child: Win, parent: Win, posted: Array<{ jsonrpc?: string; id?: number; method?: string; params?: unknown }>, extra: (msg: { id?: number; method?: string; params?: unknown }) => void): void {
+      parent.postMessage = (msg) => {
+        posted.push(msg);
+        if (msg.method === "ui/initialize") { child.deliver({ jsonrpc: "2.0", id: msg.id, result: { protocolVersion: "x", _meta: { "ai.agentgem/host": { tools: [] } } } }, parent); return; }
+        extra(msg);
+      };
+    }
+
+    it("posts mcp/watch with {server,tool,input} and delivers {type:'data', result} on a matching watch notification", async () => {
+      const child = makeWindow();
+      const parent = makeWindow();
+      child.parent = parent;
+      const posted: Array<{ jsonrpc?: string; id?: number; method?: string; params?: unknown }> = [];
+      initOnly(child, parent, posted, (msg) => {
+        if (msg.method === "mcp/watch") child.deliver({ jsonrpc: "2.0", id: msg.id, result: { watchId: 5 } }, parent);
+      });
+      runShim(child);
+
+      const events: unknown[] = [];
+      const unsubscribe = child.agentgemApp.mcp.watchTool("github", "list_pull_requests", { repo: "x" }, (e) => events.push(e));
+      expect(typeof unsubscribe).toBe("function");
+      await new Promise((r) => setTimeout(r, 0)); // let the mcp/watch ack settle
+
+      expect(posted).toContainEqual(expect.objectContaining({ method: "mcp/watch", params: { server: "github", tool: "list_pull_requests", input: { repo: "x" } } }));
+
+      child.deliver(
+        {
+          jsonrpc: "2.0",
+          method: "ui/notifications/tool-result",
+          params: { content: [], structuredContent: { ok: true, payload: { count: 1 }, content: [] }, _meta: { "ai.agentgem/watch": { watchId: 5, type: "data" } } },
+        },
+        parent,
+      );
+
+      expect(events).toEqual([{ type: "data", result: { payload: { count: 1 }, content: [] } }]);
+    });
+
+    it("delivers {type:'error', error} on a transient error notification without auto-unwatching", async () => {
+      const child = makeWindow();
+      const parent = makeWindow();
+      child.parent = parent;
+      const posted: Array<{ jsonrpc?: string; id?: number; method?: string; params?: unknown }> = [];
+      initOnly(child, parent, posted, (msg) => {
+        if (msg.method === "mcp/watch") child.deliver({ jsonrpc: "2.0", id: msg.id, result: { watchId: 7 } }, parent);
+      });
+      runShim(child);
+
+      const events: unknown[] = [];
+      child.agentgemApp.mcp.watchTool("github", "list_pull_requests", {}, (e) => events.push(e));
+      await new Promise((r) => setTimeout(r, 0));
+      posted.length = 0;
+
+      child.deliver(
+        {
+          jsonrpc: "2.0",
+          method: "ui/notifications/tool-result",
+          params: { content: [], structuredContent: { ok: false, error: { code: "upstream_error", message: "boom" } }, _meta: { "ai.agentgem/watch": { watchId: 7, type: "error" } } },
+        },
+        parent,
+      );
+
+      expect(events).toEqual([{ type: "error", error: { code: "upstream_error", message: "boom" } }]);
+      expect(posted.some((m) => m.method === "mcp/unwatch")).toBe(false); // transient — the host cap slot stays held
+    });
+
+    it("delivers a stop:true error to the handler AND auto-fires mcp/unwatch, then drops further events for that watchId", async () => {
+      // T3 review contract: the host emits a stop marker on server_config_changed/authz retraction, and
+      // the shim must free the host-side cap slot itself rather than waiting for the game to notice.
+      const child = makeWindow();
+      const parent = makeWindow();
+      child.parent = parent;
+      const posted: Array<{ jsonrpc?: string; id?: number; method?: string; params?: unknown }> = [];
+      initOnly(child, parent, posted, (msg) => {
+        if (msg.method === "mcp/watch") child.deliver({ jsonrpc: "2.0", id: msg.id, result: { watchId: 9 } }, parent);
+      });
+      runShim(child);
+
+      const events: unknown[] = [];
+      child.agentgemApp.mcp.watchTool("github", "list_pull_requests", {}, (e) => events.push(e));
+      await new Promise((r) => setTimeout(r, 0));
+      posted.length = 0;
+
+      child.deliver(
+        {
+          jsonrpc: "2.0",
+          method: "ui/notifications/tool-result",
+          params: {
+            content: [], structuredContent: { ok: false, error: { code: "server_config_changed", message: "retracted" }, stop: true },
+            _meta: { "ai.agentgem/watch": { watchId: 9, type: "error" } },
+          },
+        },
+        parent,
+      );
+
+      expect(events).toEqual([{ type: "error", error: { code: "server_config_changed", message: "retracted" } }]);
+      expect(posted).toContainEqual(expect.objectContaining({ method: "mcp/unwatch", params: { watchId: 9 } }));
+
+      events.length = 0;
+      child.deliver(
+        {
+          jsonrpc: "2.0",
+          method: "ui/notifications/tool-result",
+          params: { content: [], structuredContent: { ok: true, payload: {}, content: [] }, _meta: { "ai.agentgem/watch": { watchId: 9, type: "data" } } },
+        },
+        parent,
+      );
+      expect(events).toEqual([]); // sub was cleaned up on the stop event — no further delivery
+    });
+
+    it("post-ack unsubscribe() synchronously stops handler calls and fires mcp/unwatch", async () => {
+      const child = makeWindow();
+      const parent = makeWindow();
+      child.parent = parent;
+      const posted: Array<{ jsonrpc?: string; id?: number; method?: string; params?: unknown }> = [];
+      initOnly(child, parent, posted, (msg) => {
+        if (msg.method === "mcp/watch") child.deliver({ jsonrpc: "2.0", id: msg.id, result: { watchId: 3 } }, parent);
+      });
+      runShim(child);
+
+      const events: unknown[] = [];
+      const unsubscribe = child.agentgemApp.mcp.watchTool("github", "list_pull_requests", {}, (e) => events.push(e));
+      await new Promise((r) => setTimeout(r, 0)); // ack settles, handler is now registered
+      posted.length = 0;
+
+      unsubscribe(); // synchronous — no await between this and the assertions below
+      expect(posted).toContainEqual(expect.objectContaining({ method: "mcp/unwatch", params: { watchId: 3 } }));
+
+      child.deliver(
+        {
+          jsonrpc: "2.0",
+          method: "ui/notifications/tool-result",
+          params: { content: [], structuredContent: { ok: true, payload: {}, content: [] }, _meta: { "ai.agentgem/watch": { watchId: 3, type: "data" } } },
+        },
+        parent,
+      );
+      expect(events).toEqual([]); // no handler call after unsubscribe
+    });
+
+    it("pre-ack unsubscribe() neutralizes the handler synchronously and the ack handler unwatches immediately once it lands, never registering the handler", async () => {
+      const child = makeWindow();
+      const parent = makeWindow();
+      child.parent = parent;
+      const posted: Array<{ jsonrpc?: string; id?: number; method?: string; params?: unknown }> = [];
+      let resolveWatch: (() => void) | null = null;
+      initOnly(child, parent, posted, (msg) => {
+        if (msg.method === "mcp/watch") resolveWatch = () => child.deliver({ jsonrpc: "2.0", id: msg.id, result: { watchId: 11 } }, parent);
+      });
+      runShim(child);
+
+      const events: unknown[] = [];
+      const unsubscribe = child.agentgemApp.mcp.watchTool("github", "list_pull_requests", {}, (e) => events.push(e));
+      unsubscribe(); // called BEFORE the mcp/watch ack resolves — must neutralize synchronously
+      expect(posted.some((m) => m.method === "mcp/unwatch")).toBe(false); // no host watchId known yet — nothing to unwatch
+
+      resolveWatch!(); // the ack lands late
+      await new Promise((r) => setTimeout(r, 0));
+      expect(posted).toContainEqual(expect.objectContaining({ method: "mcp/unwatch", params: { watchId: 11 } })); // ack handler unwatches right away
+
+      child.deliver(
+        {
+          jsonrpc: "2.0",
+          method: "ui/notifications/tool-result",
+          params: { content: [], structuredContent: { ok: true, payload: {}, content: [] }, _meta: { "ai.agentgem/watch": { watchId: 11, type: "data" } } },
+        },
+        parent,
+      );
+      expect(events).toEqual([]); // handler was never registered
+    });
+
+    it("delivers a one-time {type:'error'} when the mcp/watch registration itself fails (ok:false ack)", async () => {
+      const child = makeWindow();
+      const parent = makeWindow();
+      child.parent = parent;
+      const posted: Array<{ jsonrpc?: string; id?: number; method?: string; params?: unknown }> = [];
+      initOnly(child, parent, posted, (msg) => {
+        if (msg.method === "mcp/watch") child.deliver({ jsonrpc: "2.0", id: msg.id, result: { ok: false, error: { code: "not_granted", message: "consent denied" } } }, parent);
+      });
+      runShim(child);
+
+      const events: unknown[] = [];
+      child.agentgemApp.mcp.watchTool("github", "list_pull_requests", {}, (e) => events.push(e));
+      await new Promise((r) => setTimeout(r, 0));
+
+      expect(events).toEqual([{ type: "error", error: { code: "not_granted", message: "consent denied" } }]);
+    });
+
+    it("invalidate posts mcp/invalidate with {server,tool,input} and resolves the host's reply", async () => {
+      const child = makeWindow();
+      const parent = makeWindow();
+      child.parent = parent;
+      const posted: Array<{ jsonrpc?: string; id?: number; method?: string; params?: unknown }> = [];
+      initOnly(child, parent, posted, (msg) => {
+        if (msg.method === "mcp/invalidate") child.deliver({ jsonrpc: "2.0", id: msg.id, result: { ok: true } }, parent);
+      });
+      runShim(child);
+
+      const result = await child.agentgemApp.mcp.invalidate("github", "list_pull_requests", { repo: "x" });
+      expect(posted).toContainEqual(expect.objectContaining({ method: "mcp/invalidate", params: { server: "github", tool: "list_pull_requests", input: { repo: "x" } } }));
+      expect(result).toEqual({ ok: true });
     });
   });
 
