@@ -112,6 +112,20 @@ describe("railModel", () => {
     ]);
   });
 
+  it("gates each grouped page on its own hiddenUntilUnlock, not just the unlocked flag", () => {
+    const mixed = [
+      page({ id: "always-on", phase: "build", category: "projects", group: "power" }), // no hiddenUntilUnlock
+      page({ id: "gated-a", phase: "build", category: "projects", group: "power", hiddenUntilUnlock: true }),
+      page({ id: "gated-b", phase: "build", category: "projects", group: "power", hiddenUntilUnlock: true }),
+    ];
+    const locked = railModel(mixed, false);
+    expect(locked.groups.map((g) => g.key)).toEqual(["power"]);
+    expect(locked.groups[0].pages.map((p) => p.id)).toEqual(["always-on"]);
+
+    const unlocked = railModel(mixed, true);
+    expect(unlocked.groups[0].pages.map((p) => p.id)).toEqual(["always-on", "gated-a", "gated-b"]);
+  });
+
   it("omits empty groups", () => {
     const model = railModel(
       [page({ id: "overview", phase: "observe", category: "usage" }), page({ id: "mine", group: "background" })],

@@ -52,6 +52,9 @@ export function sortedPages(pages: ConsolePage[]): ConsolePage[] {
  *  from the sidebar. */
 function assertPlacement(pages: ConsolePage[]): void {
   for (const p of pages) {
+    // Grouped pages skip the phase/category consistency checks below entirely — a deliberate
+    // tradeoff, since the rail model places them by `group` alone and doesn't care whether
+    // their (now-legacy) phase/category pair is well-formed.
     if (p.footer || p.group) continue;
     if (p.phase && !p.category) throw new Error(`ConsolePage ${p.id} has a phase but no category`);
     if (p.category && !p.phase) throw new Error(`ConsolePage ${p.id} has a category but no phase`);
@@ -87,10 +90,13 @@ const DISCLOSURE_GROUPS: { key: DisclosureGroup; label: string }[] = [
 ];
 
 /** The cold-console rail: an always-visible `foreground` (no group, no footer — Overview,
- *  Curate, Gems) plus the four disclosure groups, populated only once `unlocked`. Locked,
- *  `groups` is empty — nothing behind the rail's fold is worth rendering yet. `hidden` pages
- *  (e.g. Publish, disabled in code) never appear in either. Footer pages are out of scope
- *  here; the Shell keeps reading those from `footerPages`. */
+ *  Curate, Gems) plus the four disclosure groups. A grouped page appears in its group once
+ *  `unlocked`; while locked, it appears only if it does NOT carry `hiddenUntilUnlock` — today
+ *  every grouped page does, so `groups` comes out empty until unlock, but a future page that's
+ *  grouped without `hiddenUntilUnlock` would show up immediately. Groups that end up with no
+ *  pages are omitted. `hidden` pages (e.g. Publish, disabled in code) never appear in either,
+ *  locked or unlocked. Footer pages are out of scope here; the Shell keeps reading those from
+ *  `footerPages`. */
 export function railModel(
   pages: ConsolePage[],
   unlocked: boolean,
@@ -99,12 +105,10 @@ export function railModel(
   assertPlacement(ordered);
   const visible = ordered.filter((p) => !p.hidden);
   const foreground = visible.filter((p) => !p.group && !p.footer);
-  const groups = unlocked
-    ? DISCLOSURE_GROUPS.map(({ key, label }) => ({
-        key,
-        label,
-        pages: visible.filter((p) => p.group === key),
-      })).filter((g) => g.pages.length > 0)
-    : [];
+  const groups = DISCLOSURE_GROUPS.map(({ key, label }) => ({
+    key,
+    label,
+    pages: visible.filter((p) => p.group === key && (unlocked || !p.hiddenUntilUnlock)),
+  })).filter((g) => g.pages.length > 0);
   return { foreground, groups };
 }
