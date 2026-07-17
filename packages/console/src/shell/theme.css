@@ -1848,6 +1848,9 @@ button.scorecard-intent { line-height: 1.4; }
 .mine-badge { font-size: 0.65rem; font-weight: 600; padding: 0.1rem 0.45rem; border-radius: 999px; letter-spacing: .04em; }
 .mine-badge-bt { background: color-mix(in srgb, var(--accent) 15%, transparent); color: var(--accent); }
 .mine-badge-portable { background: color-mix(in srgb, var(--emerald) 15%, transparent); color: var(--emerald); }
+.mine-badge-shared { background: color-mix(in srgb, var(--gold) 15%, transparent); color: var(--gold); }
+.mine-badge-genre { background: color-mix(in srgb, var(--muted) 15%, transparent); color: var(--muted); }
+.gem-card__usage { font: 500 11.5px var(--font-ui); color: var(--muted); }
 
 /* ── Value-grouped gem grid ── one header per GemGroup, then either a .play-grid
    of GemCards or (for the "gaps" group, which has no workflow behind it) a plain

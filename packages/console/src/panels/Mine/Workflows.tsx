@@ -1,8 +1,9 @@
 import { useState } from "react";
 import type { Scorecard, WorkflowDetail } from "../../api/routes.js";
 import { scorecardWorkflowRoute, createGemShareRoute, makeClient } from "../../api/routes.js";
-import { groupWorkflowsByValue, type WorkflowCardModel } from "./groupWorkflows.js";
+import type { WorkflowCardModel } from "./groupWorkflows.js";
 import { GemCard } from "./GemCard.js";
+import { toUnifiedGems, groupGemsByValue, type UnifiedGem } from "./unifiedGems.js";
 import { ShareLinks } from "./ShareLinks.js";
 import { PROJECT_HYGIENE_SHORTCUT, launchRubricRun } from "../../rubricShortcuts.js";
 
@@ -78,10 +79,18 @@ export function MineWorkflows({ data, onBuild, building, result, error, apiBase,
     }
   };
 
-  const groups = groupWorkflowsByValue(data);
+  const workflows: WorkflowCardModel[] = data.projects.flatMap((p) =>
+    p.workflows.map((w) => ({
+      root: p.root, projectLabel: p.label,
+      key: w.key, name: w.name, confidence: w.confidence, portable: w.portable,
+      sessions: w.sessions, lastSeenMs: w.lastSeenMs,
+    })),
+  );
+  const gems = toUnifiedGems({ workflows, inventory: [], miniapps: [] });
+  const groups = groupGemsByValue(gems, data.gaps);
 
-  const renderDetail = (card: WorkflowCardModel) => {
-    const cacheKey = `${card.root}:${card.key}`;
+  const renderDetail = (gem: UnifiedGem) => {
+    const cacheKey = `${gem.root}:${gem.key}`;
     return (
       <div className="mine-wf-detail">
         {detailLoading[cacheKey] && <span>Loading…</span>}
@@ -103,7 +112,7 @@ export function MineWorkflows({ data, onBuild, building, result, error, apiBase,
           );
         })()}
         {shareErrors[cacheKey] && <span className="obs-error">{shareErrors[cacheKey]}</span>}
-        {(sharing.has(cacheKey) || shareUrls[cacheKey]) && <ShareLinks url={shareUrls[cacheKey]} title={card.name} />}
+        {(sharing.has(cacheKey) || shareUrls[cacheKey]) && <ShareLinks url={shareUrls[cacheKey]} title={gem.name} />}
       </div>
     );
   };
@@ -129,20 +138,21 @@ export function MineWorkflows({ data, onBuild, building, result, error, apiBase,
             group.gaps.map((gap, i) => <div className="mine-gaps-row" key={i}>{gap}</div>)
           ) : (
             <ul className="play-grid">
-              {group.items.map((card) => {
-                const cacheKey = `${card.root}:${card.key}`;
+              {group.items.map((gem) => {
+                const cacheKey = `${gem.root}:${gem.key}`;
                 return (
                   <GemCard
                     key={cacheKey}
-                    card={card}
+                    gem={gem}
                     score={null}
                     expanded={expanded[cacheKey]}
-                    onOpen={(c) => toggleExpand(c.root, c.key)}
-                    onDistill={(c) => { if (!building) onBuild([{ root: c.root, keys: [c.key] }], c.name); }}
-                    onShare={(c) => void shareWorkflow(c.root, c.key, c.name)}
-                    onRunHygiene={(c) => launchRubricRun({ rubric: PROJECT_HYGIENE_SHORTCUT.rubric, scope: "project", root: c.root })}
+                    onOpen={(g) => toggleExpand(g.root!, g.key!)}
+                    onDistill={(g) => { if (!building) onBuild([{ root: g.root!, keys: [g.key!] }], g.name); }}
+                    onShare={(g) => void shareWorkflow(g.root!, g.key!, g.name)}
+                    onRunHygiene={(g) => launchRubricRun({ rubric: PROJECT_HYGIENE_SHORTCUT.rubric, scope: "project", root: g.root! })}
+                    onPlay={() => {}}
                   >
-                    {renderDetail(card)}
+                    {renderDetail(gem)}
                   </GemCard>
                 );
               })}

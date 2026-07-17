@@ -1,24 +1,34 @@
 import type { ReactNode } from "react";
-import type { WorkflowCardModel } from "./groupWorkflows.js";
+import type { GemType, UnifiedGem } from "./unifiedGems.js";
 
 // The presentational gem card for the Mine grid. Callback-driven and data-free so it
-// unit-tests without network; the parent (grid/data layer) supplies WorkflowCardModel
-// and wires the callbacks to real actions. The score slot is reserved but never computed
-// here — PR-1 always passes null/undefined (renders "Run hygiene →"); a later PR fills it.
+// unit-tests without network; the parent (grid/data layer) supplies UnifiedGem and wires
+// the callbacks to real actions. The score slot is reserved but never computed here for
+// scorable gems (renders "Run hygiene →" when score is null); a later PR fills it.
 export type GemScore = { value: number; tone: "good" | "warn"; label: string } | "running" | null;
 
 export type GemCardProps = {
-  card: WorkflowCardModel;
+  gem: UnifiedGem;
   score?: GemScore;
   expanded?: boolean;
-  onRunHygiene: (card: WorkflowCardModel) => void;
-  onOpen: (card: WorkflowCardModel) => void;
-  onDistill: (card: WorkflowCardModel) => void;
-  onShare: (card: WorkflowCardModel) => void;
+  onRunHygiene: (gem: UnifiedGem) => void;
+  onOpen: (gem: UnifiedGem) => void;
+  onDistill: (gem: UnifiedGem) => void;
+  onShare: (gem: UnifiedGem) => void;
+  onPlay: (gem: UnifiedGem) => void;
   children?: ReactNode;
 };
 
-function ScoreSlot({ card, score, onRunHygiene }: Pick<GemCardProps, "card" | "score" | "onRunHygiene">) {
+const TYPE_ICON: Record<GemType, string> = {
+  workflow: "🔁",
+  skill: "🧩",
+  subagent: "🤖",
+  lesson: "📝",
+  rubric: "📐",
+  miniapp: "🎮",
+};
+
+function ScoreSlot({ gem, score, onRunHygiene }: Pick<GemCardProps, "gem" | "score" | "onRunHygiene">) {
   if (score === "running") {
     return (
       <span className="warming-pill gem-card__rescoring">
@@ -29,7 +39,7 @@ function ScoreSlot({ card, score, onRunHygiene }: Pick<GemCardProps, "card" | "s
   }
   if (score == null) {
     return (
-      <button type="button" className="gem-card__run" onClick={() => onRunHygiene(card)}>
+      <button type="button" className="gem-card__run" onClick={() => onRunHygiene(gem)}>
         Run hygiene →
       </button>
     );
@@ -42,34 +52,70 @@ function ScoreSlot({ card, score, onRunHygiene }: Pick<GemCardProps, "card" | "s
   );
 }
 
-export function GemCard({ card, score, expanded, onRunHygiene, onOpen, onDistill, onShare, children }: GemCardProps) {
-  const provenance = card.sessions === 0
-    ? `distilled · ${card.projectLabel}`
-    : `distilled from ${card.sessions} session${card.sessions === 1 ? "" : "s"} · ${card.projectLabel}`;
+function SignalSlot({ gem }: { gem: UnifiedGem }) {
+  const { signal } = gem;
+  if (signal.kind === "usage") {
+    return <span className="gem-card__usage">{signal.invocations} use{signal.invocations === 1 ? "" : "s"}</span>;
+  }
+  if (signal.kind === "genre") {
+    return <span className="mine-badge mine-badge-genre">{signal.genre}</span>;
+  }
+  return null;
+}
+
+function Actions({ gem, onOpen, onDistill, onShare, onPlay }: Pick<GemCardProps, "gem" | "onOpen" | "onDistill" | "onShare" | "onPlay">) {
+  if (gem.type === "miniapp") {
+    return (
+      <div className="gem-card__acts">
+        <button type="button" className="gem-card__act gem-card__act--primary" onClick={() => onPlay(gem)}>Play</button>
+        <button type="button" className="gem-card__act" onClick={() => onShare(gem)}>Share</button>
+      </div>
+    );
+  }
+  return (
+    <div className="gem-card__acts">
+      <button type="button" className="gem-card__act gem-card__act--primary" onClick={() => onOpen(gem)}>Open</button>
+      {gem.type === "workflow" && (
+        <button type="button" className="gem-card__act" onClick={() => onDistill(gem)}>Distill → Gem</button>
+      )}
+      <button type="button" className="gem-card__act" onClick={() => onShare(gem)}>Share</button>
+    </div>
+  );
+}
+
+export function GemCard({ gem, score, expanded, onRunHygiene, onOpen, onDistill, onShare, onPlay, children }: GemCardProps) {
+  const showBattleTestedBadges = gem.signal.kind === "confidence";
+  const showSharedBadge = gem.maturity === "shared";
+  const hasBadges = showBattleTestedBadges || showSharedBadge;
 
   return (
     <li className="gem-card">
       <div className="gem-card__top">
-        <span className="gem-card__icon" aria-hidden="true">🔁</span>
+        <span className="gem-card__icon" aria-hidden="true">{TYPE_ICON[gem.type]}</span>
         <div className="gem-card__stack">
-          <p className="gem-card__name" title={card.name}>{card.name}</p>
-          <p className="gem-card__prov" title={provenance}>{provenance}</p>
+          <p className="gem-card__name" title={gem.name}>{gem.name}</p>
+          <p className="gem-card__prov" title={gem.provenance}>{gem.provenance}</p>
         </div>
         <div className="gem-card__score-slot">
-          <ScoreSlot card={card} score={score} onRunHygiene={onRunHygiene} />
+          {gem.scorable ? (
+            <ScoreSlot gem={gem} score={score} onRunHygiene={onRunHygiene} />
+          ) : (
+            <SignalSlot gem={gem} />
+          )}
         </div>
       </div>
-      {(card.confidence === "high" || card.portable) && (
+      {hasBadges && (
         <div className="gem-card__badges">
-          {card.confidence === "high" && <span className="mine-badge mine-badge-bt">battle-tested</span>}
-          {card.portable && <span className="mine-badge mine-badge-portable">portable</span>}
+          {showBattleTestedBadges && gem.signal.kind === "confidence" && (
+            <>
+              {gem.signal.confidence === "high" && <span className="mine-badge mine-badge-bt">battle-tested</span>}
+              {gem.signal.portable && <span className="mine-badge mine-badge-portable">portable</span>}
+            </>
+          )}
+          {showSharedBadge && <span className="mine-badge mine-badge-shared">shared</span>}
         </div>
       )}
-      <div className="gem-card__acts">
-        <button type="button" className="gem-card__act gem-card__act--primary" onClick={() => onOpen(card)}>Open</button>
-        <button type="button" className="gem-card__act" onClick={() => onDistill(card)}>Distill → Gem</button>
-        <button type="button" className="gem-card__act" onClick={() => onShare(card)}>Share</button>
-      </div>
+      <Actions gem={gem} onOpen={onOpen} onDistill={onDistill} onShare={onShare} onPlay={onPlay} />
       {expanded && <div className="gem-card__detail">{children}</div>}
     </li>
   );
