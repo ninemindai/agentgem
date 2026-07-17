@@ -35,6 +35,16 @@ describe("QuickShareButton", () => {
     expect(createGemShare).not.toHaveBeenCalled();
   });
 
+  it("dismisses the link panel via the close button", async () => {
+    const createGemShare = vi.fn(async () => ({ id: "abc", url: "https://agentgem.ai/share/abc" }));
+    render(<QuickShareButton apiBase="" name="my-setup" provenance="" createGemShare={createGemShare} />);
+    fireEvent.click(screen.getByRole("button", { name: /share link/i }));
+    const close = await screen.findByRole("button", { name: /close link panel/i });
+    fireEvent.click(close);
+    expect(screen.queryByRole("link", { name: "X" })).toBeNull();
+    expect(screen.queryByRole("button", { name: /close link panel/i })).toBeNull();
+  });
+
   it("shows the Publish upgrade nudge after success and fires onUpgrade", async () => {
     const createGemShare = vi.fn(async () => ({ id: "a", url: "https://agentgem.ai/share/a" }));
     const onUpgrade = vi.fn();

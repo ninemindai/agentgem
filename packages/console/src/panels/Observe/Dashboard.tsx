@@ -44,19 +44,10 @@ export function Dashboard({ data, range, onRange, filter, onFilter, pending, onR
         <h2 className="obs-title">Overview</h2>
         {pending && <span className="obs-pending-pill">Updating…</span>}
         <RangeTabs range={range} onRange={onRange} />
-        {onPublishSetup && (
-          <button type="button" className="obs-range-btn obs-share-setup" onClick={onPublishSetup}>
-            Publish ↗
-          </button>
-        )}
-        {onRefresh && <RefreshButton onClick={onRefresh} busy={pending} />}
-      </div>
-
-      {resolveSetupShare && (
-        <div className="obs-share-strip">
-          {/* Light path: resolve builds provenance from a fresh inventory scan at
-              click time. The header "Publish ↗" is the persistent upgrade path, so
-              no post-mint nudge here. */}
+        {resolveSetupShare && (
+          /* Light path: resolve builds provenance from a fresh inventory scan at
+             click time. The header "Publish ↗" is the persistent upgrade path, so
+             no post-mint nudge here. */
           <QuickShareButton
             apiBase={apiBase}
             name="my-setup"
@@ -64,8 +55,14 @@ export function Dashboard({ data, range, onRange, filter, onFilter, pending, onR
             title="My agent setup"
             resolve={resolveSetupShare}
           />
-        </div>
-      )}
+        )}
+        {onPublishSetup && (
+          <button type="button" className="obs-range-btn obs-share-setup" onClick={onPublishSetup}>
+            Publish ↗
+          </button>
+        )}
+        {onRefresh && <RefreshButton onClick={onRefresh} busy={pending} />}
+      </div>
 
       <ObserveFilters data={data} filter={filter} onFilter={onFilter} />
 
