@@ -58,29 +58,61 @@ export interface ListOpts {
   limit?: number;
 }
 
-/**
- * List recently-active transcripts across all watchable agents, newest first.
- * Reads metadata only, degrading past malformed files rather than throwing.
- */
-export function listActiveSessions(opts: ListOpts = {}): WatchSession[] {
+type ParsedMeta = NonNullable<ReturnType<NonNullable<SourceSpec["parseMeta"]>>>;
+type MetaCache = Map<string, { mtimeMs: number; stat: ParsedMeta }>;
+
+function listSessionsCore(opts: ListOpts, cache?: MetaCache): WatchSession[] {
   const now = opts.now ?? Date.now();
   const withinMs = opts.withinMs ?? 6 * 60 * 60 * 1000;
   const limit = opts.limit ?? 30;
 
   const out: WatchSession[] = [];
+  const seen = new Set<string>();
   for (const c of candidates(opts.baseDir)) {
     if (now - c.mtimeMs > withinMs) break; // sorted newest-first → the rest are older
     if (out.length >= limit) break;
-    let text: string; try { text = readFileSync(c.file, "utf8"); } catch { continue; }
-    const stat = c.spec.parseMeta!(text, c.file);
-    if (!stat) continue;
+    let stat: ParsedMeta;
+    const hit = cache?.get(c.file);
+    if (hit && hit.mtimeMs === c.mtimeMs) {
+      stat = hit.stat;
+    } else {
+      let text: string; try { text = readFileSync(c.file, "utf8"); } catch { continue; }
+      const parsed = c.spec.parseMeta!(text, c.file);
+      if (!parsed) continue;
+      stat = parsed;
+      cache?.set(c.file, { mtimeMs: c.mtimeMs, stat });
+    }
+    seen.add(c.file);
     out.push({
       id: stat.sessionId, file: c.file, agent: c.spec.id,
       project: stat.project, model: stat.model, msgs: stat.msgs,
       startMs: stat.startMs, endMs: stat.endMs, ageMs: Math.max(0, now - c.mtimeMs),
     });
   }
+  if (cache) for (const key of cache.keys()) if (!seen.has(key)) cache.delete(key); // aged-out sessions
   return out;
+}
+
+/**
+ * List recently-active transcripts across all watchable agents, newest first.
+ * Reads metadata only, degrading past malformed files rather than throwing.
+ * Uncached — every call re-reads and re-parses each candidate. Fine for
+ * on-demand callers; anything polling should hold a createSessionLister().
+ */
+export function listActiveSessions(opts: ListOpts = {}): WatchSession[] {
+  return listSessionsCore(opts);
+}
+
+/**
+ * Per-instance cached lister (cache lives in the closure — no module-scoped
+ * state). Meta is cached per file keyed by mtime, so steady-state polls cost a
+ * stat per candidate instead of a full read + parse; `ageMs` is always derived
+ * from the fresh stat. Entries for sessions that age out of the window are
+ * swept so the cache stays bounded.
+ */
+export function createSessionLister(): (opts?: ListOpts) => WatchSession[] {
+  const cache: MetaCache = new Map();
+  return (opts: ListOpts = {}) => listSessionsCore(opts, cache);
 }
 
 // A path is inside a root only if, once resolved, it is the root or sits beneath it

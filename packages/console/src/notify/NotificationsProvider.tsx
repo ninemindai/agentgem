@@ -1,6 +1,6 @@
 import { useEffect, useRef } from "react";
 import { useToast } from "../shell/Toast.js";
-import { detectWarm, detectDream, detectAttention, type WarmSnapshot, type DreamSnapshot, type AttentionSnapshot, type NotifyEvent } from "./events.js";
+import { detectWarm, detectDream, detectAttention, carryVanishedPending, type WarmSnapshot, type DreamSnapshot, type AttentionSnapshot, type NotifyEvent } from "./events.js";
 import { dispatch } from "./dispatch.js";
 import { osNotify } from "./osNotify.js";
 import { readNotifyPref } from "./prefs.js";
@@ -54,7 +54,9 @@ export function NotificationsProvider({ apiBase }: { apiBase: string }): null {
           const next = (await ar.json()) as AttentionSnapshot;
           const enrolled = enrolledFiles(readWatchAlertPrefs(), next.sessions.map((s) => s.file));
           for (const e of detectAttention(attnPrev.current, next, enrolled)) fire(e);
-          attnPrev.current = next;
+          // Keep vanished pending sessions in the baseline so a transient dropout
+          // can't re-toast the same stall when the session reappears.
+          attnPrev.current = carryVanishedPending(attnPrev.current, next);
         }
       } catch {
         /* best-effort — a failed poll leaves the baseline untouched */

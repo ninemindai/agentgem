@@ -12,7 +12,7 @@
 // SessionFeed.toItems) and counting them would flag a permanent false pending.
 import { statSync, readFileSync } from "node:fs";
 import type { SessionEvent } from "@agentgem/insight";
-import { listActiveSessions, sourceForFile, type ListOpts } from "./watchSessions.js";
+import { createSessionLister, sourceForFile, type ListOpts } from "./watchSessions.js";
 
 export type AttentionState = "pending" | "busy" | "idle";
 
@@ -73,13 +73,16 @@ interface FoldCacheEntry { mtimeMs: number; openCount: number; firstIndex: numbe
  */
 export function createAttentionLister(): (opts?: ListOpts) => AttentionSession[] {
   const cache = new Map<string, FoldCacheEntry>();
+  // Cached discovery too: this lister sits on the console's 5s poll, and the plain
+  // listActiveSessions re-reads + re-parses every candidate transcript per call.
+  const listSessions = createSessionLister();
 
   return (opts: ListOpts = {}) => {
     const now = opts.now ?? Date.now();
     const out: AttentionSession[] = [];
     const seen = new Set<string>();
 
-    for (const s of listActiveSessions(opts)) {
+    for (const s of listSessions(opts)) {
       seen.add(s.file);
       const spec = sourceForFile(s.file, opts.baseDir);
       if (!spec?.detectEvents) continue;
