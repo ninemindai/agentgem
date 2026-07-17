@@ -2,7 +2,7 @@ import { describe, it, expect, vi, afterEach } from "vitest";
 import { render, cleanup, act, screen } from "@testing-library/react";
 import * as routes from "../../api/routes.js";
 import { useRevealData } from "./useRevealData.js";
-import { openScorecardStream, type ScorecardStreamEvent } from "../Mine/scorecardStream.js";
+import type { openScorecardStream, ScorecardStreamEvent } from "../Mine/scorecardStream.js";
 
 afterEach(() => { cleanup(); vi.restoreAllMocks(); vi.useRealTimers(); });
 
