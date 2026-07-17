@@ -285,6 +285,78 @@ describe("Runner", () => {
     expect(inv).not.toHaveBeenCalled();
   });
 
+  it("mcp/watch: polls on the injected setTimeout-based clock, and unmount cancels every future poll (Task 6 DOM wiring)", async () => {
+    vi.useFakeTimers();
+    try {
+      vi.spyOn(playMcpServersRoute, "call").mockResolvedValue({
+        servers: [{ server: "gh", tools: [{ name: "list_prs", annotations: { readOnlyHint: true } }], configDigest: "d1" }],
+      });
+      const call = vi.spyOn(playMcpCallRoute, "call").mockResolvedValue({ ok: true, payload: { n: 1 }, content: [] });
+      const { container, unmount } = render(
+        <Runner html="<p>x</p>" name="watchme" apiBase="" mcpNeeds={[{ server: "gh", tools: ["list_prs"] }]} />
+      );
+      const win = (container.querySelector("iframe") as HTMLIFrameElement).contentWindow as Window;
+      vi.spyOn(win, "postMessage").mockImplementation(() => {});
+      fromIframe(win, { jsonrpc: "2.0", id: rpcId++, method: "mcp/watch", params: { server: "gh", tool: "list_prs", input: {} } });
+
+      // vi.waitFor auto-advances fake timers while polling the assertion, unlike testing-library's own
+      // waitFor (which relies on a REAL setInterval — dead under vi.useFakeTimers()).
+      await vi.waitFor(() => expect(screen.getByText(/wants to use the gh connector/)).toBeTruthy());
+      fireEvent.click(screen.getByText("Allow"));
+
+      await vi.waitFor(() => expect(call).toHaveBeenCalledTimes(1)); // the FIRST poll (no floor wait for a fresh register)
+
+      await vi.advanceTimersByTimeAsync(30_000); // the Runner's injected scheduler arms the next poll's timer
+      expect(call).toHaveBeenCalledTimes(2); // a real setTimeout-driven poll fired, not a mock
+
+      unmount(); // tears down the host + clears every ref-tracked timer
+
+      await vi.advanceTimersByTimeAsync(120_000); // several more intervals' worth of time passes post-unmount
+      expect(call).toHaveBeenCalledTimes(2); // NOT called again — the timer was actually cancelled, not just orphaned
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("visibilitychange back to visible drives the host's wakeWatches catch-up; the listener is removed on unmount", async () => {
+    // Date-only fake timers (mirrors mcpUiHost.watch.test.ts's hidden-pause test): the 30s poll floor is
+    // gated on Date.now(), so a real test can't wait 30 real seconds — but setTimeout/queueMicrotask stay
+    // live, so the plain testing-library `waitFor` below still works.
+    vi.useFakeTimers({ toFake: ["Date"] });
+    try {
+      vi.setSystemTime(0);
+      vi.spyOn(playMcpServersRoute, "call").mockResolvedValue({
+        servers: [{ server: "gh", tools: [{ name: "list_prs", annotations: { readOnlyHint: true } }], configDigest: "d1" }],
+      });
+      const call = vi.spyOn(playMcpCallRoute, "call").mockResolvedValue({ ok: true, payload: { n: 1 }, content: [] });
+      const visSpy = vi.spyOn(document, "visibilityState", "get").mockReturnValue("hidden");
+      const { container, unmount } = render(
+        <Runner html="<p>x</p>" name="vis1" apiBase="" mcpNeeds={[{ server: "gh", tools: ["list_prs"] }]} />
+      );
+      const win = (container.querySelector("iframe") as HTMLIFrameElement).contentWindow as Window;
+      vi.spyOn(win, "postMessage").mockImplementation(() => {});
+      fromIframe(win, { jsonrpc: "2.0", id: rpcId++, method: "mcp/watch", params: { server: "gh", tool: "list_prs", input: {} } });
+      await waitFor(() => expect(screen.getByText(/wants to use the gh connector/)).toBeTruthy());
+      fireEvent.click(screen.getByText("Allow"));
+      await waitFor(() => expect(call).toHaveBeenCalledTimes(1)); // the initial register-time poll always runs, even while hidden
+
+      // Becoming visible fires the Runner's visibilitychange listener -> host.wakeWatches() -> a fresh poll,
+      // once the 30s floor has actually elapsed (visibility alone doesn't bypass it — D2).
+      visSpy.mockReturnValue("visible");
+      vi.setSystemTime(30_000);
+      fireEvent(document, new Event("visibilitychange"));
+      await waitFor(() => expect(call).toHaveBeenCalledTimes(2));
+
+      // After unmount, the (removed) listener must no longer reach the torn-down host.
+      unmount();
+      fireEvent(document, new Event("visibilitychange"));
+      await new Promise((r) => setTimeout(r, 20));
+      expect(call).toHaveBeenCalledTimes(2);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it("a second gated-cap request while a prompt is open replaces the prompt without orphaning the first promise", async () => {
     const inv = vi.spyOn(inventoryRoute, "call").mockResolvedValue({ skills: [{ name: "test" }], mcpServers: [], instructions: [], hooks: [], subagents: [] } as never);
     const { container } = render(<Runner html="<p>x</p>" name="g5" apiBase="" needs={["local-project-access"]} />);
