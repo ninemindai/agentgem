@@ -215,6 +215,101 @@ describe("Reveal — fire-gate branches", () => {
   });
 });
 
+describe("Reveal — CTA build (Task 6)", () => {
+  const HOME_STATE: routes.HomeState = { unlocked: false, existingUser: true, revealSeen: false };
+  const GEM: routes.Gem = {
+    name: "Ship-a-feature-branch",
+    createdFrom: "/home/.claude",
+    artifacts: [{ type: "skill", name: "Ship-a-feature-branch" }],
+    checks: [],
+    requiredSecrets: [],
+  };
+
+  function setUpRich() {
+    vi.spyOn(routes.homeSummaryRoute, "call").mockResolvedValue(SUMMARY);
+    vi.spyOn(routes.homeStateRoute, "call").mockResolvedValue(HOME_STATE);
+    const setHomeStateSpy = vi.spyOn(routes.setHomeStateRoute, "call").mockResolvedValue(HOME_STATE);
+    const openStream = doneStream(SCORECARD);
+    return { setHomeStateSpy, openStream };
+  }
+
+  it("click disables the CTA and posts scorecard/build exactly once, even on a synchronous double-click", async () => {
+    const { openStream } = setUpRich();
+    const buildSpy = vi.spyOn(routes.scorecardBuildRoute, "call").mockReturnValue(new Promise(() => {})); // never resolves
+    vi.spyOn(routes.playbookPrepareRoute, "call").mockResolvedValue({ skills: [], lessons: [], root: "/p", degraded: false, preparing: false });
+    render(<Reveal apiBase="" mode="ceremony" onDismiss={() => {}} openStream={openStream} />);
+
+    const cta = await screen.findByRole("button", { name: "Turn your top workflow into a Gem" });
+    fireEvent.click(cta);
+    fireEvent.click(cta);
+    await act(async () => {});
+
+    expect(buildSpy).toHaveBeenCalledTimes(1);
+    expect(buildSpy.mock.calls[0][1]).toEqual({
+      body: { name: "Ship-a-feature-branch", selections: [{ root: "/p", keys: ["a"] }] },
+    });
+    expect((cta as HTMLButtonElement).disabled).toBe(true);
+  });
+
+  it("success: renders the ceremony in place of the reveal body, and posts unlock + revealSeen", async () => {
+    const { openStream, setHomeStateSpy } = setUpRich();
+    vi.spyOn(routes.scorecardBuildRoute, "call").mockResolvedValue(GEM);
+    vi.spyOn(routes.playbookPrepareRoute, "call").mockResolvedValue({ skills: [], lessons: [], root: "/p", degraded: false, preparing: false });
+    render(<Reveal apiBase="" mode="ceremony" onDismiss={() => {}} openStream={openStream} />);
+
+    fireEvent.click(await screen.findByRole("button", { name: "Turn your top workflow into a Gem" }));
+
+    expect(await screen.findByText("Ship-a-feature-branch")).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Open in Curate" })).toBeTruthy();
+    // The ceremony replaces the normal reveal body — the hero/CTA are gone, and the
+    // returning-user dismiss button doesn't reappear alongside it.
+    expect(document.querySelector(".reveal-hero")).toBeNull();
+    expect(screen.queryByRole("button", { name: "Turn your top workflow into a Gem" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Take me to my console" })).toBeNull();
+
+    await act(async () => {});
+    const bodies = setHomeStateSpy.mock.calls.map((c) => c[1]?.body);
+    expect(bodies).toContainEqual({ unlocked: true });
+    expect(bodies).toContainEqual({ revealSeen: true });
+  });
+
+  it("build failure: preserves the candidate, shows the utility error line, and retry re-invokes the build", async () => {
+    const { openStream } = setUpRich();
+    const buildSpy = vi.spyOn(routes.scorecardBuildRoute, "call")
+      .mockRejectedValueOnce(new Error("boom"))
+      .mockResolvedValueOnce(GEM);
+    vi.spyOn(routes.playbookPrepareRoute, "call").mockResolvedValue({ skills: [], lessons: [], root: "/p", degraded: false, preparing: false });
+    render(<Reveal apiBase="" mode="ceremony" onDismiss={() => {}} openStream={openStream} />);
+
+    const cta = await screen.findByRole("button", { name: "Turn your top workflow into a Gem" });
+    fireEvent.click(cta);
+
+    expect(await screen.findByText("couldn't assemble the gem — try again")).toBeTruthy();
+    expect(screen.getByText(/Ship a feature branch/)).toBeTruthy(); // candidate still shown
+    expect((cta as HTMLButtonElement).disabled).toBe(false);
+
+    fireEvent.click(cta);
+    await screen.findByText("Ship-a-feature-branch");
+    expect(buildSpy).toHaveBeenCalledTimes(2);
+  });
+
+  it("enrichment (background distill) rejection is silenced and never unmounts the ceremony", async () => {
+    const errSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+    const { openStream } = setUpRich();
+    vi.spyOn(routes.scorecardBuildRoute, "call").mockResolvedValue(GEM);
+    vi.spyOn(routes.playbookPrepareRoute, "call").mockRejectedValue(new Error("distill unavailable"));
+    render(<Reveal apiBase="" mode="ceremony" onDismiss={() => {}} openStream={openStream} />);
+
+    fireEvent.click(await screen.findByRole("button", { name: "Turn your top workflow into a Gem" }));
+    expect(await screen.findByText("Ship-a-feature-branch")).toBeTruthy();
+
+    await act(async () => {});
+    expect(errSpy).toHaveBeenCalled();
+    expect(screen.getByText("Ship-a-feature-branch")).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Open in Curate" })).toBeTruthy();
+  });
+});
+
 describe("Reveal — hard failure", () => {
   it("shows a diagnostic with the failed path and Try again re-fetches", async () => {
     const summarySpy = vi.spyOn(routes.homeSummaryRoute, "call")
