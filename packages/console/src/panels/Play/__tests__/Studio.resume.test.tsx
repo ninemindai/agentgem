@@ -229,7 +229,8 @@ describe("Studio resume", () => {
       await vi.advanceTimersByTimeAsync(5000); // tick 1 running → tick 2 sees running:false
       await vi.waitFor(() => expect(screen.getByText("all done")).toBeTruthy());
       expect(screen.queryByText(/working…|resuming…/i)).toBeNull(); // spinner gone
-      expect((screen.getByPlaceholderText(/ask the agent/i) as HTMLTextAreaElement).disabled).toBe(false); // composer re-enabled
+      fireEvent.change(screen.getByPlaceholderText(/ask the agent/i), { target: { value: "one more thing" } });
+      expect((screen.getByRole("button", { name: "Send" }) as HTMLButtonElement).disabled).toBe(false); // busy cleared: Send is enabled again
     } finally { vi.useRealTimers(); }
   });
 
@@ -389,6 +390,83 @@ describe("Studio resume", () => {
       // would false-positive on the very restore this test is checking for (see below).
       expect(screen.queryByText("second thought", { selector: "div" })).toBeNull(); // un-appended from the log
       expect(screen.getByDisplayValue("second thought")).toBeTruthy();       // back in the composer
+    } finally { vi.useRealTimers(); }
+  });
+
+  it("does not wipe the restored composer text when Enter is pressed while still busy", async () => {
+    vi.useFakeTimers();
+    try {
+      // No pre-seeded studioChatStore entry for "demo12" (a fresh miniapp/chat, unlike the other
+      // tests): mount finds nothing to restore, so busy starts false and Send is clickable — the
+      // "already running" rejection (and the resulting busy lock) comes entirely from this send().
+      vi.mocked(openStudioStream).mockImplementationOnce(
+        (_apiBase: string, _chatId: string, _message: string, h: { onFailed: (e: string) => void }) => {
+          h.onFailed("a turn is already running for this chat");
+          return () => {};
+        });
+      const post = vi.fn();
+      vi.stubGlobal("fetch", vi.fn(async (url: string, init?: RequestInit) => {
+        if (String(url).includes("/api/chat") && init?.method === "POST") {
+          post(init);
+          return { ok: true, json: async () => ({ chatId: "chat_12", sessionId: "sess_12" }) } as unknown as Response;
+        }
+        // Still running if the poll's first tick ever fires (it shouldn't within this test) —
+        // keeps busy locked, matching what "already running" means (another window owns the turn).
+        if (String(url).includes("/state")) return { ok: true, json: async () => ({ alive: true, running: true }) } as unknown as Response;
+        return { ok: true, json: async () => ({}) } as unknown as Response;
+      }));
+      vi.spyOn(playMiniappRoute, "call").mockResolvedValue({
+        name: "demo12", html: "<p>x</p>",
+        meta: { title: "Demo12", genre: "project-fun", createdFrom: { kind: "project", path: "/p", flavor: "node" }, engineVersion: "1" },
+      } as never);
+
+      render(<IdentityProvider apiBase=""><Studio apiBase="" name="demo12" agents={codex} agentId="codex" onAgentIdChange={() => {}} onBack={() => {}} /></IdentityProvider>);
+
+      await vi.advanceTimersByTimeAsync(0); // flush the mount effect (no stored chat → no-op)
+      const textarea = screen.getByPlaceholderText(/ask the agent/i);
+      fireEvent.change(textarea, { target: { value: "second thought" } });
+      fireEvent.click(screen.getByRole("button", { name: "Send" }));
+
+      await vi.waitFor(() => expect(screen.getByDisplayValue("second thought")).toBeTruthy());
+      expect(post).toHaveBeenCalled();
+
+      // Pressing Enter while still busy must be a no-op — not wipe the just-restored text.
+      fireEvent.keyDown(textarea, { key: "Enter" });
+      expect(screen.getByDisplayValue("second thought")).toBeTruthy();
+    } finally { vi.useRealTimers(); }
+  });
+
+  it("keeps polling through a non-ok /state response and still completes", async () => {
+    vi.useFakeTimers();
+    try {
+      setStudioChat("demo13", { chatId: "chat_13", sessionId: "sess_13", agent: "codex" });
+      let stateCalls = 0;
+      const fetchMock = vi.fn(async (url: string) => {
+        const path = new URL(url, "http://x").pathname;
+        if (path.includes("/api/chat/chat_13/state")) {
+          stateCalls++;
+          if (stateCalls === 2) return { ok: false, status: 500, json: async () => ({}) } as unknown as Response; // first poll tick: transient 500
+          return { ok: true, json: async () => ({ alive: true, running: stateCalls < 3 }) } as unknown as Response;
+        }
+        if (path.includes("/api/inspect/session")) {
+          const body = { sessionId: "sess_13", agent: "codex", meta: inspectMeta("sess_13"), turns: [] };
+          return { ok: true, status: 200, text: async () => JSON.stringify(body), json: async () => body } as unknown as Response;
+        }
+        return { ok: false, status: 404, json: async () => ({}) } as unknown as Response;
+      });
+      vi.stubGlobal("fetch", fetchMock);
+      vi.spyOn(playMiniappRoute, "call").mockResolvedValue({
+        name: "demo13", html: "<p>x</p>",
+        meta: { title: "Demo13", genre: "project-fun", createdFrom: { kind: "project", path: "/p", flavor: "node" }, engineVersion: "1" },
+      } as never);
+
+      render(<IdentityProvider apiBase=""><Studio apiBase="" name="demo13" agents={codex} agentId="codex" onAgentIdChange={() => {}} onBack={() => {}} /></IdentityProvider>);
+
+      await vi.waitFor(() => expect(screen.getByText(/resuming…/i)).toBeTruthy());
+      await vi.advanceTimersByTimeAsync(1600); // tick 1: 500 — poll must survive it
+      expect(screen.getByText(/working…|resuming…/i)).toBeTruthy();
+      await vi.advanceTimersByTimeAsync(1600); // tick 2: completes
+      await vi.waitFor(() => expect(screen.queryByText(/resuming…|working…/i)).toBeNull());
     } finally { vi.useRealTimers(); }
   });
 });
