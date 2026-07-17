@@ -1847,6 +1847,54 @@ button.scorecard-intent { line-height: 1.4; }
 .mine-badge { font-size: 0.65rem; font-weight: 600; padding: 0.1rem 0.45rem; border-radius: 999px; letter-spacing: .04em; }
 .mine-badge-bt { background: color-mix(in srgb, var(--accent) 15%, transparent); color: var(--accent); }
 .mine-badge-portable { background: color-mix(in srgb, var(--emerald) 15%, transparent); color: var(--emerald); }
+
+/* ── Gem card ── the Mine grid's unit: name is the primary read, the reserved
+   score slot on the right supports it (never out-shouts it). Mirrors .play-card's
+   raised/hover-lift language. */
+.gem-card { list-style: none; display: flex; flex-direction: column; gap: 9px;
+  padding: 13px 14px; border: 1px solid var(--line); border-radius: var(--radius);
+  background: var(--raised); box-shadow: var(--shadow-sm);
+  transition: transform .16s cubic-bezier(.2,.7,.2,1), box-shadow .16s, border-color .16s; }
+.gem-card:hover { transform: translateY(-3px); box-shadow: var(--shadow-md); border-color: var(--muted); }
+.gem-card__top { display: flex; align-items: flex-start; gap: 9px; }
+.gem-card__icon { flex: none; font-size: 17px; line-height: 1.3; }
+.gem-card__stack { flex: 1; min-width: 0; }
+.gem-card__name { font: 600 15px var(--font-display); color: var(--ink); line-height: 1.25; margin: 0 0 3px;
+  min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.gem-card__prov { font: 400 12px var(--font-ui); color: var(--muted); margin: 0;
+  min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.gem-card__score-slot { flex: none; display: flex; align-items: center; }
+.gem-card__run { font: 600 11.5px var(--font-ui); color: var(--ink-soft); background: transparent;
+  border: 1px solid var(--line); border-radius: 999px; padding: 4px 10px; cursor: pointer; transition: .14s; }
+.gem-card__run:hover { border-color: var(--accent); color: var(--accent); }
+.gem-card__rescoring { padding: 3px 9px; font-size: 10.5px; }
+.gem-card__score-wrap { display: flex; flex-direction: column; align-items: flex-end; line-height: 1.15; }
+.gem-card__score { font: 600 15px var(--font-display); }
+.gem-card__score--good { color: var(--emerald); }
+.gem-card__score--warn { color: var(--gold); }
+.gem-card__score-label { font: 400 10px var(--font-ui); color: var(--muted); }
+.gem-card__badges { display: flex; flex-wrap: wrap; gap: 5px; }
+.gem-card__acts { display: flex; gap: 7px; margin-top: 2px; }
+.gem-card__act { font: 600 12px var(--font-ui); color: var(--ink-soft); background: var(--paper);
+  border: 1px solid var(--line); border-radius: 7px; padding: 6px 11px; cursor: pointer; transition: .14s; }
+.gem-card__act:hover { border-color: var(--muted); color: var(--ink); }
+.gem-card__act--primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+.gem-card__act--primary:hover { background: var(--accent-2); border-color: var(--accent-2); color: #fff; }
+.gem-card__detail { margin-top: 4px; padding-top: 10px; border-top: 1px solid var(--line); }
+
+/* Skeleton — same shimmer as the scorecard hero's placeholder. */
+.gem-card--skeleton { gap: 11px; }
+.gem-card__skel-icon, .gem-card__skel-line, .gem-card__skel-badge { background: linear-gradient(100deg,
+  var(--paper-2) 30%, var(--line-soft) 50%, var(--paper-2) 70%); background-size: 220% 100%;
+  animation: scorecard-shimmer 1.4s ease-in-out infinite; border-radius: 6px; }
+.gem-card__skel-icon { flex: none; width: 20px; height: 20px; border-radius: 5px; }
+.gem-card__skel-name { height: 15px; width: 70%; margin-bottom: 6px; }
+.gem-card__skel-prov { height: 11px; width: 50%; }
+.gem-card__skel-badge { height: 16px; width: 84px; border-radius: 999px; }
+@media (prefers-reduced-motion: reduce) {
+  .gem-card__skel-icon, .gem-card__skel-line, .gem-card__skel-badge { animation: none; }
+}
+
 .mine-build-bar { display: flex; align-items: center; gap: 0.75rem; margin-top: 1rem; }
 .mine-gem-name { flex: 1; background: var(--raised); border: 1px solid var(--line); border-radius: 6px; padding: 0.4rem 0.65rem; font-size: 0.875rem; color: var(--ink); outline: none; }
 .mine-gem-name:focus { border-color: var(--accent); }
