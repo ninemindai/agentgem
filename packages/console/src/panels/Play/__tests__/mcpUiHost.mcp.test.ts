@@ -87,6 +87,17 @@ describe("mcpUiHost — mcp/list", () => {
     }), "*");
   });
 
+  it("a granted consent pinned to a stale digest (config changed since) reports needsConsent, not granted", async () => {
+    vi.spyOn(playMcpServersRoute, "call").mockResolvedValue(serversEnvelope({ server: "github", tools: ["list_pull_requests", "list_commits"], configDigest: "d2" }));
+    setMcpConsent("g1", "github", "granted", "d1"); // granted against the OLD digest
+    const { host, target } = mkHost();
+    host.handleMessage(msg(target, { method: "mcp/list", id: 6 }));
+    await tick();
+    expect(posted(target)).toHaveBeenCalledWith(expect.objectContaining({
+      id: 6, result: { servers: [{ server: "github", tools: [], status: "needsConsent" }] },
+    }), "*");
+  });
+
   it("the connector's configDigest is NEVER present anywhere in the mcp/list reply", async () => {
     vi.spyOn(playMcpServersRoute, "call").mockResolvedValue(serversEnvelope({ server: "github", tools: ["list_pull_requests"], configDigest: "sekret-digest" }));
     setMcpConsent("g1", "github", "granted", "sekret-digest");
@@ -198,6 +209,31 @@ describe("mcpUiHost — mcp/call consent gate", () => {
     expect(callSpy).toHaveBeenCalledTimes(1); // no auto-loop
     expect(getMcpConsent("g1", "github")).toBeNull(); // consent cleared — next call re-prompts
     expect(posted(target)).toHaveBeenCalledWith(expect.objectContaining({ id: 18, result: { ok: false, error: { code: "server_config_changed", message: expect.any(String) } } }), "*");
+  });
+});
+
+describe("mcpUiHost — /servers unreachable (no hang)", () => {
+  it("mcp/call replies server_unavailable instead of hanging when playMcpServersRoute.call rejects", async () => {
+    vi.spyOn(playMcpServersRoute, "call").mockRejectedValue(new Error("network error"));
+    const callSpy = vi.spyOn(playMcpCallRoute, "call").mockResolvedValue({ ok: true });
+    const { host, target, requestConsent } = mkHost();
+    host.handleMessage(msg(target, { method: "mcp/call", id: 22, params: { server: "github", tool: "list_pull_requests", input: {} } }));
+    await tick();
+    expect(requestConsent).not.toHaveBeenCalled();
+    expect(callSpy).not.toHaveBeenCalled();
+    expect(posted(target)).toHaveBeenCalledWith(expect.objectContaining({
+      id: 22, result: { ok: false, error: { code: "server_unavailable", message: expect.any(String) } },
+    }), "*");
+  });
+
+  it("mcp/list replies every declared server as unavailable instead of hanging when playMcpServersRoute.call rejects", async () => {
+    vi.spyOn(playMcpServersRoute, "call").mockRejectedValue(new Error("network error"));
+    const { host, target } = mkHost();
+    host.handleMessage(msg(target, { method: "mcp/list", id: 23 }));
+    await tick();
+    expect(posted(target)).toHaveBeenCalledWith(expect.objectContaining({
+      id: 23, result: { servers: [{ server: "github", tools: [], status: "unavailable" }] },
+    }), "*");
   });
 });
 
