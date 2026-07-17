@@ -55,10 +55,23 @@ describe("scoreProject", () => {
     };
     const p = scoreProject(load);
     expect(p).toMatchObject({ root: "/r/alpha", label: "alpha", breadth: 3, battleTested: 2, portable: 1 });
-    // workflows sorted high-before-low; first entry is the high-confidence k1
-    expect(p.workflows[0]).toEqual({ key: "k1", name: "k1", confidence: "high", portable: true });
-    expect(p.workflows[1]).toEqual({ key: "k2", name: "k2", confidence: "high", portable: false });
-    expect(p.workflows[2]).toEqual({ key: "k3", name: "k3", confidence: "low", portable: false });
+    // workflows sorted high-before-low; first entry is the high-confidence k1.
+    // cand()'s default sessions:3 and empty provenance (lastSeenMs falls back to 0).
+    expect(p.workflows[0]).toEqual({ key: "k1", name: "k1", confidence: "high", portable: true, sessions: 3, lastSeenMs: 0 });
+    expect(p.workflows[1]).toEqual({ key: "k2", name: "k2", confidence: "high", portable: false, sessions: 3, lastSeenMs: 0 });
+    expect(p.workflows[2]).toEqual({ key: "k3", name: "k3", confidence: "low", portable: false, sessions: 3, lastSeenMs: 0 });
+  });
+
+  it("carries sessions from the candidate and lastSeenMs from the latest provenance occurrence", () => {
+    const c = cand({ key: "k1", priorConfidence: "high", sessions: 7, skeleton: { name: "k1", tools: ["Skill"] } as any });
+    c.provenance = { occurrences: [
+      { sessionId: "s1", transcript: "a.jsonl", messageIndices: [0], atMs: 100 },
+      { sessionId: "s2", transcript: "b.jsonl", messageIndices: [0], atMs: 300 },
+      { sessionId: "s3", transcript: "c.jsonl", messageIndices: [0], atMs: 200 },
+    ] };
+    const load: ProjectLoad = { root: "/r/beta", label: "beta", signal: sig("/r/beta"), reflections: [], candidates: [c] };
+    const p = scoreProject(load);
+    expect(p.workflows[0]).toMatchObject({ sessions: 7, lastSeenMs: 300 });
   });
 });
 

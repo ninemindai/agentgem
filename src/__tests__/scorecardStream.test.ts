@@ -6,9 +6,10 @@ import { ScorecardController, setScorecardDepsForTests, type ScorecardStreamDeps
 afterEach(() => setScorecardDepsForTests(null));
 
 // Each project gets its own unique key so breadth climbs 1→2→3 across calls.
+// provenance is required — scoreProject reads it (occurrences → lastSeenMs).
 const mkLoad = (key = "k") => ({
   signal: {} as never,
-  candidates: [{ key, priorConfidence: "high" as const, sessions: 3, skeleton: { name: key, tools: ["WebFetch"] } }],
+  candidates: [{ key, priorConfidence: "high" as const, sessions: 3, skeleton: { name: key, tools: ["WebFetch"] }, provenance: { occurrences: [] } }],
   reflections: [],
 });
 const baseDeps = (o: Partial<ScorecardStreamDeps>): ScorecardStreamDeps => ({

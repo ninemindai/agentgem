@@ -274,7 +274,7 @@ const ScorecardSchema = z.object({
   projects: z.array(z.object({
     root: z.string(), label: z.string(),
     breadth: z.number(), battleTested: z.number(), portable: z.number(),
-    workflows: z.array(z.object({ key: z.string(), name: z.string(), confidence: z.enum(["high", "medium", "low"]), portable: z.boolean() })),
+    workflows: z.array(z.object({ key: z.string(), name: z.string(), confidence: z.enum(["high", "medium", "low"]), portable: z.boolean(), sessions: z.number(), lastSeenMs: z.number() })),
   })),
   generatedAtMs: z.number(),
   degraded: z.boolean(),

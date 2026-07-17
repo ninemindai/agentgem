@@ -30,12 +30,18 @@ const MAX_GAPS = 5;
 const WORKFLOWS_PER_PROJECT = 12;
 // Perf bound: scanning a project re-reads the whole transcript store, so the
 // default (discover-all) path is capped to the most-recently-used projects.
-// Explicit `projects` queries bypass the cap.
-const MAX_PROJECTS = 12;
+// Explicit `projects` queries bypass the cap. Exported so home.controller.ts can
+// report it as `projectsCap` alongside the actual (possibly-capped) count.
+export const MAX_PROJECTS = 12;
 
 export type ScorecardProgress = { done: number; total: number; label: string; partial: { breadth: number; battleTested: number; portable: number } };
 
-export type WorkflowItem = { key: string; name: string; confidence: "high" | "medium" | "low"; portable: boolean };
+// `sessions`/`lastSeenMs` are evidence for the workflow, straight from the candidate:
+// `sessions` is the candidate's own distinct-session count (ProcedureGroup.sessions);
+// `lastSeenMs` is the latest occurrence timestamp recorded in its provenance (the
+// transcript record time of the most recent run) — 0 only when provenance carries no
+// occurrences (degenerate/test data; real candidates always have at least one).
+export type WorkflowItem = { key: string; name: string; confidence: "high" | "medium" | "low"; portable: boolean; sessions: number; lastSeenMs: number };
 
 export type ProjectLoad = {
   root: string;
@@ -76,7 +82,11 @@ export function scoreProject(load: ProjectLoad): ProjectGoldmine {
   const workflows: WorkflowItem[] = [...cs]
     .sort((a, b) => rank[a.priorConfidence] - rank[b.priorConfidence] || b.sessions - a.sessions)
     .slice(0, WORKFLOWS_PER_PROJECT)
-    .map((c) => ({ key: c.key, name: c.skeleton.name, confidence: c.priorConfidence, portable: isPortable(c) }));
+    .map((c) => ({
+      key: c.key, name: c.skeleton.name, confidence: c.priorConfidence, portable: isPortable(c),
+      sessions: c.sessions,
+      lastSeenMs: c.provenance.occurrences.reduce((max, o) => Math.max(max, o.atMs), 0),
+    }));
   return {
     root: load.root,
     label: load.label || basename(load.root),
