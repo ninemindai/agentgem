@@ -26,11 +26,19 @@ describe("ScorecardHero", () => {
   });
   it("has no interactive filter chip buttons in the hero", () => {
     const { container } = render(<ScorecardHero data={sc} />);
-    // Only share + download buttons — no chip toggles
+    // Only the share button — no chip toggles, no download
     const buttons = container.querySelectorAll("button");
-    expect(buttons.length).toBe(2);
-    expect(buttons[0].textContent).toMatch(/share your goldmine/i);
-    expect(buttons[1].textContent).toMatch(/download png/i);
+    expect(buttons.length).toBe(1);
+    expect(buttons[0].textContent).toMatch(/share my goldmine/i);
+  });
+  it("does not render the certificate image", () => {
+    const { container } = render(<ScorecardHero data={sc} />);
+    expect(container.querySelector("img.scorecard-card")).toBeNull();
+    expect(screen.queryByAltText(/goldmine certificate/i)).toBeNull();
+  });
+  it("does not render a download button", () => {
+    render(<ScorecardHero data={sc} />);
+    expect(screen.queryByText(/download png/i)).toBeNull();
   });
 });
 
@@ -40,7 +48,7 @@ describe("ScorecardHero share", () => {
   it("mints a hosted url and shows share intents", async () => {
     const createShare = vi.fn(async () => ({ id: "abc", url: "https://agentgem.ai/share/abc" }));
     render(<ScorecardHero data={data} createShare={createShare} />);
-    fireEvent.click(screen.getByText(/share your goldmine/i));
+    fireEvent.click(screen.getByText(/share my goldmine/i));
     await waitFor(() => expect(createShare).toHaveBeenCalledWith({ kind: "certificate", counts: { breadth: 14, battleTested: 3, portable: 5 }, generatedAtMs: 7 }));
     const link = await screen.findByRole("link", { name: "X" });
     expect(link.getAttribute("href")).toContain(encodeURIComponent("https://agentgem.ai/share/abc"));

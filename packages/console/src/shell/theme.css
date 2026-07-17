@@ -1391,10 +1391,6 @@ body::before {
 @media (prefers-reduced-motion: reduce) { .scorecard-spin { animation: none; } }
 .scorecard-pending { font-size: 12px; color: var(--muted); margin: 8px 0 0; animation: fade .2s ease both; }
 .scorecard-actions { display: flex; flex-wrap: wrap; gap: 9px; align-items: center; }
-.scorecard-download { font: 500 12.5px var(--font-ui); color: var(--ink-soft); background: transparent;
-  border: 1px solid var(--line); border-radius: 7px; padding: 6px 14px; cursor: pointer;
-  transition: border-color .14s, color .14s, background .14s; }
-.scorecard-download:hover { border-color: var(--accent); color: var(--accent); background: rgba(154, 51, 36, .05); }
 .scorecard-error { font-size: 12.5px; color: var(--accent); margin: 10px 0 0; }
 .scorecard-share-links { display: flex; flex-direction: column; gap: 11px; max-width: 540px;
   margin: 14px 0 0; padding-top: 14px; border-top: 1px solid var(--line-soft); animation: fade .25s ease both;
