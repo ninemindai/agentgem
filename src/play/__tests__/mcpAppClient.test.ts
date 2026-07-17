@@ -21,6 +21,10 @@ type Win = {
     updateModelContext(params: unknown): Promise<unknown>;
     requestDisplayMode(mode: string): Promise<unknown>;
     onNotification(m: string, cb: (x: unknown) => void): void;
+    mcp: {
+      callTool(server: string, tool: string, input?: unknown): Promise<{ payload: unknown; content: unknown }>;
+      listTools(): Promise<unknown>;
+    };
   };
   addEventListener(type: string, cb: (e: { data: unknown; source: unknown }) => void): void;
   removeEventListener(type: string, cb: (e: { data: unknown; source: unknown }) => void): void;
@@ -230,6 +234,67 @@ describe("mcpAppClient shim", () => {
       await vi.advanceTimersByTimeAsync(6 * 800 + 100);
       await assertion;
       vi.useRealTimers();
+    });
+  });
+
+  describe("mcp connectors (agentgemApp.mcp.callTool / listTools)", () => {
+    it("callTool posts mcp/call with {server,tool,input} and resolves {payload,content} when the envelope is ok", async () => {
+      const child = makeWindow();
+      const parent = makeWindow();
+      child.parent = parent;
+      const posted: Array<{ jsonrpc?: string; id?: number; method?: string; params?: unknown }> = [];
+      parent.postMessage = (msg) => {
+        posted.push(msg);
+        if (msg.method === "ui/initialize") { child.deliver({ jsonrpc: "2.0", id: msg.id, result: { protocolVersion: "x", _meta: { "ai.agentgem/host": { tools: [] } } } }, parent); return; }
+        if (msg.method === "mcp/call") {
+          child.deliver({ jsonrpc: "2.0", id: msg.id, result: { ok: true, payload: { count: 1 }, content: [{ type: "text", text: "one PR" }] } }, parent);
+          return;
+        }
+      };
+      runShim(child);
+      expect(child.agentgemApp.ready).toBe(true);
+
+      const result = await child.agentgemApp.mcp.callTool("github", "list_pull_requests", { repo: "x" });
+      expect(posted).toContainEqual(expect.objectContaining({ method: "mcp/call", params: { server: "github", tool: "list_pull_requests", input: { repo: "x" } } }));
+      expect(result).toEqual({ payload: { count: 1 }, content: [{ type: "text", text: "one PR" }] });
+    });
+
+    it("callTool throws an Error with .code (not just message) when the envelope is {ok:false, error}", async () => {
+      const child = makeWindow();
+      const parent = makeWindow();
+      child.parent = parent;
+      parent.postMessage = (msg) => {
+        if (msg.method === "ui/initialize") { child.deliver({ jsonrpc: "2.0", id: msg.id, result: { protocolVersion: "x", _meta: { "ai.agentgem/host": { tools: [] } } } }, parent); return; }
+        if (msg.method === "mcp/call") {
+          child.deliver({ jsonrpc: "2.0", id: msg.id, result: { ok: false, error: { code: "not_granted", message: "consent denied" } } }, parent);
+          return;
+        }
+      };
+      runShim(child);
+
+      let caught: unknown;
+      try { await child.agentgemApp.mcp.callTool("github", "list_pull_requests"); } catch (e) { caught = e; }
+      expect(caught).toBeInstanceOf(Error);
+      expect((caught as Error).message).toBe("consent denied");
+      expect((caught as Error & { code?: string }).code).toBe("not_granted");
+    });
+
+    it("listTools posts mcp/list with empty params and resolves the host's reply verbatim", async () => {
+      const child = makeWindow();
+      const parent = makeWindow();
+      child.parent = parent;
+      const posted: Array<{ jsonrpc?: string; id?: number; method?: string; params?: unknown }> = [];
+      const serversReply = { servers: [{ server: "github", tools: ["list_pull_requests"], status: "granted" }] };
+      parent.postMessage = (msg) => {
+        posted.push(msg);
+        if (msg.method === "ui/initialize") { child.deliver({ jsonrpc: "2.0", id: msg.id, result: { protocolVersion: "x", _meta: { "ai.agentgem/host": { tools: [] } } } }, parent); return; }
+        if (msg.method === "mcp/list") { child.deliver({ jsonrpc: "2.0", id: msg.id, result: serversReply }, parent); return; }
+      };
+      runShim(child);
+
+      const result = await child.agentgemApp.mcp.listTools();
+      expect(posted).toContainEqual(expect.objectContaining({ method: "mcp/list", params: {} }));
+      expect(result).toEqual(serversReply);
     });
   });
 

@@ -71,7 +71,25 @@ ${hostStyleScript()}
     // Resolves to the host's reply { mode }: the mode the host ACTUALLY applied, not necessarily the
     // one requested — the host may refuse (e.g. a thumbnail always refuses fullscreen), see mcpUiHost.ts.
     requestDisplayMode: function (mode) { return sendRequest("ui/request-display-mode", { mode: mode }); },
-    onNotification: function (method, cb) { (subs[method] || (subs[method] = [])).push(cb); }
+    onNotification: function (method, cb) { (subs[method] || (subs[method] = [])).push(cb); },
+    // MCP connectors (spec §4). Mirrors window.claude.mcp: callTool RESOLVES with {payload, content}
+    // on success and THROWS an McpError-shaped {code, message} on failure, so a claude.ai artifact ports
+    // nearly verbatim. The host router (mcpUiHost) replies with the server ENVELOPE as the JSON-RPC
+    // result (never a JSON-RPC error), so the structured code survives the generic resolve path above;
+    // this wrapper converts {ok:false, error} into the throw. listTools returns the host's
+    // consent-gated {servers:[{server, tools, status}]} verbatim (no digest is ever sent here).
+    mcp: {
+      callTool: function (server, tool, input) {
+        return sendRequest("mcp/call", { server: server, tool: tool, input: input }).then(function (r) {
+          if (r && r.ok) return { payload: r.payload, content: r.content };
+          var msg = (r && r.error && r.error.message) || "connector call failed";
+          var err = new Error(msg);
+          err.code = (r && r.error && r.error.code) || "upstream_error";
+          throw err;
+        });
+      },
+      listTools: function () { return sendRequest("mcp/list", {}); }
+    }
   };
   window.agentgemApp = api;
 

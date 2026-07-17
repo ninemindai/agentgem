@@ -1,5 +1,6 @@
 // packages/console/src/panels/Play/Runner.tsx
 import { forwardRef, useEffect, useImperativeHandle, useRef, useState, useCallback } from "react";
+import type { McpNeed } from "@agentgem/model";
 import { sandboxDoc } from "../Watch/sandboxDoc.js";
 import { fetchSessions, type WatchSession } from "../Watch/watchStream.js";
 import { createUiHost, type UiHost } from "./mcpUiHost.js";
@@ -31,8 +32,8 @@ export interface RunnerHandle {
 // maxHeight: an inline height budget (px). Without it the inline game is sized by width alone, so on a
 // wide, short screen it grows tall enough to push the studio composer below the fold.
 export const Runner = forwardRef<RunnerHandle,
-  { html: string; vw?: number; vh?: number; interactive?: boolean; name?: string; apiBase?: string; needs?: string[]; maxHeight?: number }
->(function Runner({ html, vw = 1200, vh = 780, interactive = true, name, apiBase, needs, maxHeight }, ref) {
+  { html: string; vw?: number; vh?: number; interactive?: boolean; name?: string; apiBase?: string; needs?: string[]; mcpNeeds?: McpNeed[]; maxHeight?: number }
+>(function Runner({ html, vw = 1200, vh = 780, interactive = true, name, apiBase, needs, mcpNeeds, maxHeight }, ref) {
   const boxRef = useRef<HTMLDivElement>(null);
   const iframeRef = useRef<HTMLIFrameElement>(null);
   const [scale, setScale] = useState(0.5);
@@ -52,11 +53,14 @@ export const Runner = forwardRef<RunnerHandle,
   // ask opens the modal and parks its resolver until Allow/Deny (decide()).
   // open-link and copy-command are special: they always show the `detail` (URL / clipboard text) and are
   // NEVER remembered — every call prompts fresh, so the exact string leaving the frame can't change unseen
-  // between grants. Every other gated cap uses the cache-backed decision.
+  // between grants. Every other gated cap uses the cache-backed decision. An `mcp:<server>` cap is a third
+  // kind of special: the router (mcpUiHost.ts) has ALREADY made the consent decision (it owns the
+  // digest-pinned mcp-consent cache) before ever calling requestConsent — reaching here at all means a
+  // fresh prompt is required, so this per-cap cache must not be consulted (or written back into) for it.
   const requestConsent = useCallback((cap: string, detail?: string): Promise<boolean> => {
     if (!interactive) return Promise.resolve(false);                 // thumbnails never prompt/feed sensitive caps
     if (name == null) return Promise.resolve(false);
-    if (cap !== "open-link" && cap !== "copy-command") {
+    if (cap !== "open-link" && cap !== "copy-command" && !cap.startsWith("mcp:")) {
       const decision = getConsent(name, cap);
       if (decision === "granted") return Promise.resolve(true);
       if (decision === "denied") return Promise.resolve(false);
@@ -101,20 +105,20 @@ export const Runner = forwardRef<RunnerHandle,
   const stableHostContext = useCallback(() => hostContextRef.current(), []);
 
   // Wire the sealed iframe to the router: create the host once its contentWindow exists and the gem declares
-  // needs, delegate every `message` to host.handleMessage, and invalidate it on teardown. The iframe has no
-  // `key`, so React reuses the same contentWindow across a game switch — bumpGeneration() (not dispose())
-  // is required here: it closes streams AND advances `generation`, so any in-flight continuation from the
-  // old game (e.g. a one-shot session-data fetch) sees `stale(gen)` and drops its reply instead of posting
-  // stale data into the new game's iframe.
+  // needs OR mcpNeeds (a connector-only miniapp has no entry in `needs` at all), delegate every `message` to
+  // host.handleMessage, and invalidate it on teardown. The iframe has no `key`, so React reuses the same
+  // contentWindow across a game switch — bumpGeneration() (not dispose()) is required here: it closes streams
+  // AND advances `generation`, so any in-flight continuation from the old game (e.g. a one-shot session-data
+  // fetch) sees `stale(gen)` and drops its reply instead of posting stale data into the new game's iframe.
   // NOTE: hostContext/fs are deliberately NOT in this dependency list — see stableHostContext above. Toggling
   // fullscreen must not tear down and recreate the host: that would call bumpGeneration(), closing every open
   // stream (e.g. a live-session-events subscription) and dropping any in-flight tools/call as stale.
   useEffect(() => {
-    if (name == null || apiBase == null || !needs?.length) return;   // apiBase="" (same-origin) is valid
+    if (name == null || apiBase == null || !(needs?.length || mcpNeeds?.length)) return;   // apiBase="" (same-origin) is valid
     const target = iframeRef.current?.contentWindow;
     if (!target) return;
     const host = createUiHost({
-      apiBase, name, needs, interactive, target, requestConsent, hostContext: stableHostContext,
+      apiBase, name, needs: needs ?? [], mcpNeeds, interactive, target, requestConsent, hostContext: stableHostContext,
       onDisplayMode: (m) => { const ok = interactive && m === "fullscreen"; setFs(ok); return ok ? "fullscreen" : "inline"; },
       openExternal: (url) => { window.open(url, "_blank", "noopener"); },
       copyText: (text) => { void navigator.clipboard?.writeText(text); },
@@ -123,7 +127,7 @@ export const Runner = forwardRef<RunnerHandle,
     const onMsg = (e: MessageEvent) => host.handleMessage(e);
     window.addEventListener("message", onMsg);
     return () => { window.removeEventListener("message", onMsg); host.bumpGeneration(); hostRef.current = null; };
-  }, [name, apiBase, needs, interactive, requestConsent, stableHostContext]);
+  }, [name, apiBase, needs, mcpNeeds, interactive, requestConsent, stableHostContext]);
 
   // Push host-context-changed on every fullscreen toggle, whether button- or request-driven, so the game
   // re-lays-out from the new dimensions instead of scaling a magnified vw×vh. Skip the very first render
@@ -176,12 +180,19 @@ export const Runner = forwardRef<RunnerHandle,
 
   const decide = (allow: boolean) => {
     // Re-validate the pending cap is still one this game declared — defends the grant against any
-    // future in-place name/needs swap while a prompt is open.
-    if (pending == null || name == null || !needs?.includes(pending)) {
+    // future in-place name/needs swap while a prompt is open. An `mcp:<server>` cap lives in `mcpNeeds`,
+    // not `needs`, so it's checked against that manifest instead.
+    const stillDeclared = pending != null && (pending.startsWith("mcp:")
+      ? mcpNeeds?.some((n) => n.server === pending.slice(4))
+      : needs?.includes(pending));
+    if (pending == null || name == null || !stillDeclared) {
       pendingResolve.current?.(false); pendingResolve.current = null; setPending(null); setPendingDetail(undefined); return;
     }
     // open-link / copy-command are never remembered — every call re-prompts, so don't cache their decision.
-    if (pending !== "open-link" && pending !== "copy-command") setConsent(name, pending, allow ? "granted" : "denied");
+    // mcp: caps are never remembered HERE either — the router (mcpUiHost.ts) owns the digest-pinned
+    // mcp-consent cache and records the decision itself; writing it into this per-cap cache too would just
+    // be a dead, never-read key.
+    if (pending !== "open-link" && pending !== "copy-command" && !pending.startsWith("mcp:")) setConsent(name, pending, allow ? "granted" : "denied");
     pendingResolve.current?.(allow);                                 // resume the router's gated call
     pendingResolve.current = null;
     setPending(null);
@@ -301,15 +312,37 @@ export const Runner = forwardRef<RunnerHandle,
         <div className="play-consent">
           <div className="play-consent__box">
             <div className="play-consent__ico">🔒</div>
-            <div className="play-consent__title">“{name}” wants to {CAP_LABEL[pending] ?? pending}</div>
-            {(pending === "open-link" || pending === "copy-command") && pendingDetail && (
-              <div className="play-consent__sub"><code>{pendingDetail}</code></div>
+            {pending.startsWith("mcp:") ? (
+              // mcp: caps (D13): the router already decided a fresh prompt is needed (it owns the
+              // digest-pinned mcp-consent cache, see requestConsent above) — this card just names the
+              // connector + the tools this miniapp declared against it, so the viewer approves the whole
+              // grant rather than a single blind call. `pendingDetail` is mcpUiHost's `mcpDetail(server)`,
+              // e.g. "github (tools: list_pull_requests, list_commits)".
+              <>
+                <div className="play-consent__title">“{name}” wants to use the {pending.slice(4)} connector</div>
+                {pendingDetail && (
+                  <div className="play-consent__sub">
+                    <code>Tools: {pendingDetail.replace(/^.*\(tools: (.*)\)$/, "$1")}</code>
+                  </div>
+                )}
+                <div className="play-consent__sub">
+                  Grants tool-level access to the connector, not approval for any specific query — the host
+                  does not check what the game asks an allowed tool to do.
+                </div>
+              </>
+            ) : (
+              <>
+                <div className="play-consent__title">“{name}” wants to {CAP_LABEL[pending] ?? pending}</div>
+                {(pending === "open-link" || pending === "copy-command") && pendingDetail && (
+                  <div className="play-consent__sub"><code>{pendingDetail}</code></div>
+                )}
+                <div className="play-consent__sub">
+                  {pending === "open-link" || pending === "copy-command"
+                    ? "The game stays sealed (no network of its own) — the host feeds this in only if you allow. Asked every time."
+                    : "The game stays sealed (no network of its own) — the host feeds this in only if you allow. Remembered for this game."}
+                </div>
+              </>
             )}
-            <div className="play-consent__sub">
-              {pending === "open-link" || pending === "copy-command"
-                ? "The game stays sealed (no network of its own) — the host feeds this in only if you allow. Asked every time."
-                : "The game stays sealed (no network of its own) — the host feeds this in only if you allow. Remembered for this game."}
-            </div>
             <div className="play-consent__btns">
               <button className="play-btn play-btn--primary" onClick={() => decide(true)}>Allow</button>
               <button className="play-btn" onClick={() => decide(false)}>Deny</button>
