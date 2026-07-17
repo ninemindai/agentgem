@@ -677,7 +677,10 @@ export const ScorecardSchema = z.object({
   projects: z.array(z.object({
     root: z.string(), label: z.string(),
     breadth: z.number(), battleTested: z.number(), portable: z.number(),
-    workflows: z.array(z.object({ key: z.string(), name: z.string(), confidence: z.enum(["high", "medium", "low"]), portable: z.boolean() })),
+    workflows: z.array(z.object({
+      key: z.string(), name: z.string(), confidence: z.enum(["high", "medium", "low"]), portable: z.boolean(),
+      sessions: z.number().default(0), lastSeenMs: z.number().default(0),
+    })),
   })),
   generatedAtMs: z.number(),
   degraded: z.boolean(),
@@ -700,6 +703,33 @@ export type WorkflowDetail = z.infer<typeof WorkflowDetailSchema>;
 export const scorecardWorkflowRoute = defineRoute("GET", "/api/scorecard/workflow", {
   query: z.object({ dir: z.string().optional(), root: z.string(), key: z.string() }),
   response: WorkflowDetailSchema,
+});
+
+// First-run "reveal" home screen: one composed read model (usage totals, the
+// Claude-only fire-gate input + its flags, whether a scorecard is already cached,
+// and honest project-scan scope). Every field defaults so an older/mismatched
+// server response still parses.
+export const HomeSummarySchema = z.object({
+  usage: z.object({
+    sessions: z.number().default(0),
+    spanDays: z.number().default(0),
+    activeMs: z.number().default(0),
+    tokensIn: z.number().default(0),
+    tokensOut: z.number().default(0),
+    tokensCache: z.number().default(0),
+  }).default({ sessions: 0, spanDays: 0, activeMs: 0, tokensIn: 0, tokensOut: 0, tokensCache: 0 }),
+  claudeSessions: z.number().default(0),
+  gate: z.object({
+    usageEmpty: z.boolean().default(true),
+    claudeBelowGate: z.boolean().default(true),
+  }).default({ usageEmpty: true, claudeBelowGate: true }),
+  scorecardCached: z.boolean().default(false),
+  projectsScanned: z.number().default(0),
+  projectsCap: z.number().default(0),
+});
+export type HomeSummary = z.infer<typeof HomeSummarySchema>;
+export const homeSummaryRoute = defineRoute("GET", "/api/home/summary", {
+  response: HomeSummarySchema,
 });
 
 export const createShareRoute = defineRoute("POST", "/api/share", {
