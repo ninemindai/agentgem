@@ -6,6 +6,9 @@ describe("formatters", () => {
     expect(fmtTokens(300)).toBe("300");
     expect(fmtTokens(950_00)).toBe("95k");
     expect(fmtTokens(1_200_000)).toBe("1.2M");
+    expect(fmtTokens(12_127_300_000)).toBe("12.1B");
+    expect(fmtTokens(1_000_000_000)).toBe("1B");
+    expect(fmtTokens(999_500_000)).toBe("999.5M");
   });
   it("fmtDuration scales", () => {
     expect(fmtDuration(30_000)).toBe("30s");
