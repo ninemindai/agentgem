@@ -1,27 +1,22 @@
 import { describe, it, expect, vi, afterEach, beforeEach } from "vitest";
-import { render, screen, fireEvent, cleanup, waitFor } from "@testing-library/react";
+import { render, screen, fireEvent, cleanup, waitFor, within } from "@testing-library/react";
 
 afterEach(cleanup);
 import { MineWorkflows } from "../Workflows.js";
 import type { Scorecard, WorkflowDetail } from "../../../api/routes.js";
 import * as routes from "../../../api/routes.js";
+import { consumePendingRubricRun } from "../../../pendingAnalyze.js";
 
 const SCORECARD: Scorecard = {
-  breadth: 5, battleTested: 2, portable: 1, gaps: [], degraded: false, generatedAtMs: 0,
+  breadth: 5, battleTested: 2, portable: 1, gaps: ["missing tests", "no CI pipeline"], degraded: false, generatedAtMs: 0,
   projects: [
     {
       root: "/projects/alpha", label: "alpha",
       breadth: 3, battleTested: 2, portable: 1,
       workflows: [
-        { key: "wf-a", name: "Deploy workflow", confidence: "high", portable: true },
-        { key: "wf-b", name: "Test workflow", confidence: "medium", portable: false },
-      ],
-    },
-    {
-      root: "/projects/beta", label: "beta",
-      breadth: 2, battleTested: 0, portable: 0,
-      workflows: [
-        { key: "wf-c", name: "Lint workflow", confidence: "low", portable: false },
+        { key: "wf-a", name: "Deploy workflow", confidence: "high", portable: true, sessions: 7, lastSeenMs: 1000 },
+        { key: "wf-b", name: "Release workflow", confidence: "high", portable: false, sessions: 5, lastSeenMs: 2000 },
+        { key: "wf-c", name: "Test workflow", confidence: "medium", portable: false, sessions: 2, lastSeenMs: 3000 },
       ],
     },
   ],
@@ -29,8 +24,6 @@ const SCORECARD: Scorecard = {
 
 const defaultProps = {
   data: SCORECARD,
-  filter: "all" as const,
-  onFilter: vi.fn(),
   onBuild: vi.fn(),
   building: false,
   result: null,
@@ -38,101 +31,101 @@ const defaultProps = {
   apiBase: "http://localhost:0",
 };
 
+// Find the <li class="gem-card"> that contains a given card name, for scoping queries
+// to a single card instead of relying on render order across groups.
+const cardFor = (name: string) => screen.getByText(name).closest("li")!;
+
 describe("MineWorkflows", () => {
-  it("renders workflow names", () => {
+  it("renders Value group headers with counts", () => {
     render(<MineWorkflows {...defaultProps} />);
-    expect(screen.getByText("Deploy workflow")).toBeTruthy();
-    expect(screen.getByText("Test workflow")).toBeTruthy();
-    expect(screen.getByText("Lint workflow")).toBeTruthy();
+    expect(screen.getByText("Battle-tested")).toBeTruthy();
+    expect(screen.getByText("Worth sharing")).toBeTruthy();
+    expect(screen.getByText("Reusable")).toBeTruthy();
   });
 
-  it("renders battle-tested badge for high confidence workflows", () => {
+  it("groups a portable+high workflow under Worth sharing", () => {
     render(<MineWorkflows {...defaultProps} />);
-    expect(screen.getByText("battle-tested")).toBeTruthy();
+    const group = screen.getByText("Worth sharing").closest(".mine-group") as HTMLElement;
+    expect(within(group).getByText("Deploy workflow")).toBeTruthy();
   });
 
-  it("renders portable badge for portable workflows", () => {
+  it("groups a high non-portable workflow under Battle-tested", () => {
     render(<MineWorkflows {...defaultProps} />);
-    expect(screen.getByText("portable")).toBeTruthy();
+    const group = screen.getByText("Battle-tested").closest(".mine-group") as HTMLElement;
+    expect(within(group).getByText("Release workflow")).toBeTruthy();
   });
 
-  it("Build button is disabled when nothing is selected", () => {
+  it("groups a medium-confidence workflow under Reusable", () => {
     render(<MineWorkflows {...defaultProps} />);
-    const btn = screen.getByRole("button", { name: /build gem/i });
-    expect((btn as HTMLButtonElement).disabled).toBe(true);
+    const group = screen.getByText("Reusable").closest(".mine-group") as HTMLElement;
+    expect(within(group).getByText("Test workflow")).toBeTruthy();
   });
 
-  it("calls onBuild with correct selections after toggling a checkbox", () => {
+  it("renders gaps as gap rows, not gem cards", () => {
+    render(<MineWorkflows {...defaultProps} />);
+    expect(screen.getByText("missing tests")).toBeTruthy();
+    expect(screen.getByText("no CI pipeline")).toBeTruthy();
+    expect(screen.getByText("missing tests").className).toBe("mine-gaps-row");
+  });
+
+  it("each card shows name, provenance, and the Run hygiene affordance", () => {
+    render(<MineWorkflows {...defaultProps} />);
+    const card = cardFor("Deploy workflow");
+    expect(within(card).getByText(/distilled from 7 sessions · alpha/i)).toBeTruthy();
+    expect(within(card).getByRole("button", { name: /run hygiene/i })).toBeTruthy();
+  });
+
+  it("the batch build bar and checkboxes are gone", () => {
+    render(<MineWorkflows {...defaultProps} />);
+    expect(screen.queryByRole("button", { name: /build gem/i })).toBeNull();
+    expect(screen.queryByRole("checkbox")).toBeNull();
+    expect(screen.queryByPlaceholderText(/gem name/i)).toBeNull();
+  });
+
+  it("clicking Distill calls onBuild with a single-workflow selection", () => {
     const onBuild = vi.fn();
     render(<MineWorkflows {...defaultProps} onBuild={onBuild} />);
-    const checkbox = screen.getByRole("checkbox", { name: /deploy workflow/i });
-    fireEvent.click(checkbox);
-    const btn = screen.getByRole("button", { name: /build gem \(1\)/i });
-    expect((btn as HTMLButtonElement).disabled).toBe(false);
-    fireEvent.click(btn);
+    const card = cardFor("Deploy workflow");
+    fireEvent.click(within(card).getByRole("button", { name: /distill/i }));
     expect(onBuild).toHaveBeenCalledWith(
       [{ root: "/projects/alpha", keys: ["wf-a"] }],
-      "goldmine-gem",
+      "Deploy workflow",
     );
   });
 
-  it("renders success result", () => {
-    render(
-      <MineWorkflows
-        {...defaultProps}
-        result={{ name: "my-gem", skills: ["deploy", "lint"] }}
-      />,
-    );
+  it("Distill is a no-op while a build is already in flight", () => {
+    const onBuild = vi.fn();
+    render(<MineWorkflows {...defaultProps} onBuild={onBuild} building />);
+    const card = cardFor("Deploy workflow");
+    fireEvent.click(within(card).getByRole("button", { name: /distill/i }));
+    expect(onBuild).not.toHaveBeenCalled();
+    expect(screen.getByText(/building/i)).toBeTruthy();
+  });
+
+  it("renders the build result in an inline banner", () => {
+    render(<MineWorkflows {...defaultProps} result={{ name: "my-gem", skills: ["deploy", "lint"] }} />);
     expect(screen.getByText(/built/i)).toBeTruthy();
     expect(screen.getByText("my-gem")).toBeTruthy();
     expect(screen.getByText(/2 skills/i)).toBeTruthy();
   });
 
-  it("filter='battleTested' shows only high-confidence workflows and hides projects with no matches", () => {
-    render(<MineWorkflows {...defaultProps} filter="battleTested" />);
-    expect(screen.getByText("Deploy workflow")).toBeTruthy();
-    expect(screen.queryByText("Test workflow")).toBeNull();
-    expect(screen.queryByText("Lint workflow")).toBeNull();
-    expect(screen.queryByText("beta")).toBeNull();
+  it("renders the build error in an inline banner", () => {
+    render(<MineWorkflows {...defaultProps} error="boom" />);
+    expect(screen.getByText("boom")).toBeTruthy();
   });
 
-  // Filter chip tests
-  it("renders filter chips under the heading", () => {
+  it("clicking Run hygiene launches the project hygiene rubric shortcut for that card's root", () => {
     render(<MineWorkflows {...defaultProps} />);
-    expect(screen.getByRole("button", { name: /^all$/i })).toBeTruthy();
-    expect(screen.getByRole("button", { name: /battle-tested/i })).toBeTruthy();
-    expect(screen.getByRole("button", { name: /worth sharing/i })).toBeTruthy();
+    const card = cardFor("Deploy workflow");
+    fireEvent.click(within(card).getByRole("button", { name: /run hygiene/i }));
+    expect(consumePendingRubricRun()).toEqual({
+      rubric: "context-hygiene", scope: "project", root: "/projects/alpha", autorun: true,
+    });
   });
 
-  it("filter chip shows counts from scorecard data", () => {
-    render(<MineWorkflows {...defaultProps} />);
-    expect(screen.getByRole("button", { name: /battle-tested \(2\)/i })).toBeTruthy();
-    expect(screen.getByRole("button", { name: /worth sharing \(1\)/i })).toBeTruthy();
-  });
+  // ── Open / detail expansion ─────────────────────────────────────────────────
 
-  it("clicking battle-tested chip calls onFilter with 'battleTested'", () => {
-    const onFilter = vi.fn();
-    render(<MineWorkflows {...defaultProps} onFilter={onFilter} />);
-    fireEvent.click(screen.getByRole("button", { name: /battle-tested/i }));
-    expect(onFilter).toHaveBeenCalledWith("battleTested");
-  });
-
-  it("clicking active battle-tested chip calls onFilter with 'all'", () => {
-    const onFilter = vi.fn();
-    render(<MineWorkflows {...defaultProps} filter="battleTested" onFilter={onFilter} />);
-    fireEvent.click(screen.getByRole("button", { name: /battle-tested/i }));
-    expect(onFilter).toHaveBeenCalledWith("all");
-  });
-
-  it("active chip has is-active class and aria-pressed='true'", () => {
-    render(<MineWorkflows {...defaultProps} filter="battleTested" />);
-    const chip = screen.getByRole("button", { name: /battle-tested/i });
-    expect(chip.classList.contains("is-active")).toBe(true);
-    expect(chip.getAttribute("aria-pressed")).toBe("true");
-  });
-
-  // Per-row view expander tests
-  it("clicking ▸ on a row fetches and renders workflow detail", async () => {
+  it("clicking Open fetches and renders workflow detail", async () => {
     const detail: WorkflowDetail = {
       key: "wf-a", name: "Deploy workflow",
       description: "Automates the deploy pipeline",
@@ -143,8 +136,8 @@ describe("MineWorkflows", () => {
     const spy = vi.spyOn(routes.scorecardWorkflowRoute, "call").mockResolvedValue(detail);
 
     render(<MineWorkflows {...defaultProps} />);
-    const expandBtns = screen.getAllByRole("button", { name: /expand detail/i });
-    fireEvent.click(expandBtns[0]);
+    const card = cardFor("Deploy workflow");
+    fireEvent.click(within(card).getByRole("button", { name: /^open$/i }));
 
     await waitFor(() => {
       expect(screen.getByText("Automates the deploy pipeline")).toBeTruthy();
@@ -152,7 +145,7 @@ describe("MineWorkflows", () => {
     expect(screen.getByText(/push to main/i)).toBeTruthy();
     expect(screen.getByText(/gh, docker/i)).toBeTruthy();
     expect(screen.getByText("Build image")).toBeTruthy();
-    expect(screen.getByText(/from 7 sessions/i)).toBeTruthy();
+    expect(screen.getByText("from 7 sessions")).toBeTruthy();
 
     expect(spy).toHaveBeenCalledWith(
       expect.anything(),
@@ -165,8 +158,8 @@ describe("MineWorkflows", () => {
     const spy = vi.spyOn(routes.scorecardWorkflowRoute, "call").mockRejectedValue(new Error("network error"));
 
     render(<MineWorkflows {...defaultProps} />);
-    const expandBtns = screen.getAllByRole("button", { name: /expand detail/i });
-    fireEvent.click(expandBtns[0]);
+    const card = cardFor("Deploy workflow");
+    fireEvent.click(within(card).getByRole("button", { name: /^open$/i }));
 
     await waitFor(() => {
       expect(screen.getByText("network error")).toBeTruthy();
@@ -174,7 +167,7 @@ describe("MineWorkflows", () => {
     spy.mockRestore();
   });
 
-  it("does not refetch detail on second expand", async () => {
+  it("does not refetch detail on second Open", async () => {
     const detail: WorkflowDetail = {
       key: "wf-a", name: "Deploy workflow", description: "desc",
       triggers: [], tools: [], mutating: false, steps: [], sessions: 1,
@@ -183,89 +176,29 @@ describe("MineWorkflows", () => {
     const spy = vi.spyOn(routes.scorecardWorkflowRoute, "call").mockResolvedValue(detail);
 
     render(<MineWorkflows {...defaultProps} />);
-    const expandBtns = screen.getAllByRole("button", { name: /expand detail/i });
+    const card = cardFor("Deploy workflow");
+    const openBtn = within(card).getByRole("button", { name: /^open$/i });
 
-    fireEvent.click(expandBtns[0]);
+    fireEvent.click(openBtn);
     await waitFor(() => { expect(screen.getByText("desc")).toBeTruthy(); });
 
     // Collapse then re-expand
-    fireEvent.click(screen.getAllByRole("button", { name: /collapse detail/i })[0]);
-    fireEvent.click(screen.getAllByRole("button", { name: /expand detail/i })[0]);
+    fireEvent.click(openBtn);
+    fireEvent.click(openBtn);
 
     expect(spy).toHaveBeenCalledTimes(1);
     spy.mockRestore();
   });
 
-  // Cross-project same-key collision test
-  it("two projects sharing the same workflow key expand to distinct details", async () => {
-    const SHARED_KEY_SCORECARD: Scorecard = {
-      breadth: 2, battleTested: 0, portable: 0, gaps: [], degraded: false, generatedAtMs: 0,
-      projects: [
-        {
-          root: "/projects/alpha", label: "alpha",
-          breadth: 1, battleTested: 0, portable: 0,
-          workflows: [{ key: "deploy", name: "Alpha Deploy", confidence: "medium", portable: false }],
-        },
-        {
-          root: "/projects/beta", label: "beta",
-          breadth: 1, battleTested: 0, portable: 0,
-          workflows: [{ key: "deploy", name: "Beta Deploy", confidence: "medium", portable: false }],
-        },
-      ],
-    };
+  // ── Share ────────────────────────────────────────────────────────────────
 
-    const alphaDetail: WorkflowDetail = {
-      key: "deploy", name: "Alpha Deploy", description: "Alpha-specific deploy pipeline",
-      triggers: [], tools: [], mutating: false, steps: [], sessions: 3,
-      confidence: "medium", portable: false,
-    };
-    const betaDetail: WorkflowDetail = {
-      key: "deploy", name: "Beta Deploy", description: "Beta-specific deploy pipeline",
-      triggers: [], tools: [], mutating: false, steps: [], sessions: 7,
-      confidence: "medium", portable: false,
-    };
-
-    const spy = vi.spyOn(routes.scorecardWorkflowRoute, "call").mockImplementation(
-      (_client, input) => {
-        const { root } = (input as { query: { root: string; key: string } }).query;
-        return Promise.resolve(root === "/projects/alpha" ? alphaDetail : betaDetail);
-      },
-    );
-
-    render(<MineWorkflows {...defaultProps} data={SHARED_KEY_SCORECARD} />);
-    const expandBtns = screen.getAllByRole("button", { name: /expand detail/i });
-    // Expand alpha row (index 0) then beta row (index 1)
-    fireEvent.click(expandBtns[0]);
-    await waitFor(() => { expect(screen.getByText("Alpha-specific deploy pipeline")).toBeTruthy(); });
-
-    fireEvent.click(expandBtns[1]);
-    await waitFor(() => { expect(screen.getByText("Beta-specific deploy pipeline")).toBeTruthy(); });
-
-    // Both details must be visible simultaneously (distinct cache entries)
-    expect(screen.getByText("Alpha-specific deploy pipeline")).toBeTruthy();
-    expect(screen.getByText("Beta-specific deploy pipeline")).toBeTruthy();
-
-    spy.mockRestore();
-  });
-
-  // ── Per-row Share button ────────────────────────────────────────────────────
-
-  describe("per-row Share button", () => {
+  describe("Share", () => {
     beforeEach(() => {
-      // Stub canvas APIs for jsdom
       vi.spyOn(HTMLCanvasElement.prototype, "getContext").mockReturnValue(null);
       vi.spyOn(HTMLCanvasElement.prototype, "toBlob").mockImplementation(function (cb) { cb(new Blob()); });
       vi.stubGlobal("URL", { createObjectURL: vi.fn().mockReturnValue("blob:mock"), revokeObjectURL: vi.fn() });
-      Object.defineProperty(navigator, "share", {
-        value: undefined,
-        configurable: true,
-        writable: true,
-      });
-      Object.defineProperty(navigator, "canShare", {
-        value: undefined,
-        configurable: true,
-        writable: true,
-      });
+      Object.defineProperty(navigator, "share", { value: undefined, configurable: true, writable: true });
+      Object.defineProperty(navigator, "canShare", { value: undefined, configurable: true, writable: true });
     });
 
     afterEach(() => {
@@ -273,133 +206,7 @@ describe("MineWorkflows", () => {
       vi.unstubAllGlobals();
     });
 
-    it("renders a Share button on each workflow row", () => {
-      render(<MineWorkflows {...defaultProps} />);
-      // There are 3 workflows → 3 Share buttons
-      const shareBtns = screen.getAllByRole("button", { name: /^share /i });
-      expect(shareBtns.length).toBe(3);
-    });
-
-    it("clicking Share triggers detail fetch if not cached", async () => {
-      const detail: WorkflowDetail = {
-        key: "wf-a", name: "Deploy workflow", description: "desc",
-        triggers: [], tools: [], mutating: false, steps: [], sessions: 1,
-        confidence: "high", portable: true,
-      };
-      const spy = vi.spyOn(routes.scorecardWorkflowRoute, "call").mockResolvedValue(detail);
-
-      render(<MineWorkflows {...defaultProps} />);
-      const shareBtn = screen.getAllByRole("button", { name: /^share deploy workflow/i })[0];
-      fireEvent.click(shareBtn);
-
-      await waitFor(() => {
-        expect(spy).toHaveBeenCalledWith(
-          expect.anything(),
-          { query: { root: "/projects/alpha", key: "wf-a" } },
-        );
-      });
-      spy.mockRestore();
-    });
-
-    it("does not refetch detail on share if already cached via expander", async () => {
-      const detail: WorkflowDetail = {
-        key: "wf-a", name: "Deploy workflow", description: "cached",
-        triggers: [], tools: [], mutating: false, steps: [], sessions: 2,
-        confidence: "high", portable: true,
-      };
-      const spy = vi.spyOn(routes.scorecardWorkflowRoute, "call").mockResolvedValue(detail);
-
-      render(<MineWorkflows {...defaultProps} />);
-      // First open via expander to populate cache
-      const expandBtns = screen.getAllByRole("button", { name: /expand detail/i });
-      fireEvent.click(expandBtns[0]);
-      await waitFor(() => { expect(spy).toHaveBeenCalledTimes(1); });
-
-      // Now click Share — should NOT make a second fetch
-      const shareBtn = screen.getAllByRole("button", { name: /^share deploy workflow/i })[0];
-      fireEvent.click(shareBtn);
-      await waitFor(() => { /* let any async work settle */ });
-      expect(spy).toHaveBeenCalledTimes(1);
-      spy.mockRestore();
-    });
-
-    it("clicking the workflow name expands the detail", async () => {
-      const detail: WorkflowDetail = {
-        key: "wf-a", name: "Deploy workflow",
-        description: "Name-click triggered description",
-        triggers: [], tools: [], mutating: false, steps: [], sessions: 3,
-        confidence: "high", portable: true,
-      };
-      const spy = vi.spyOn(routes.scorecardWorkflowRoute, "call").mockResolvedValue(detail);
-
-      render(<MineWorkflows {...defaultProps} />);
-      const nameEl = screen.getByText("Deploy workflow");
-      fireEvent.click(nameEl);
-
-      await waitFor(() => {
-        expect(screen.getByText("Name-click triggered description")).toBeTruthy();
-      });
-      expect(spy).toHaveBeenCalledWith(
-        expect.anything(),
-        { query: { root: "/projects/alpha", key: "wf-a" } },
-      );
-      spy.mockRestore();
-    });
-
-    it("toggle button and workflow name are in the same li container", () => {
-      render(<MineWorkflows {...defaultProps} />);
-      // Find the toggle for the first workflow
-      const toggleBtn = screen.getAllByRole("button", { name: /expand detail/i })[0];
-      const nameEl = screen.getByText("Deploy workflow");
-      // Both should share the same parent <li>
-      expect(toggleBtn.parentElement).toBe(nameEl.parentElement);
-    });
-  });
-
-  // ── Build-result Share button ────────────────────────────────────────────────
-
-  describe("build-result Share button", () => {
-    beforeEach(() => {
-      vi.spyOn(HTMLCanvasElement.prototype, "getContext").mockReturnValue(null);
-      vi.spyOn(HTMLCanvasElement.prototype, "toBlob").mockImplementation(function (cb) { cb(new Blob()); });
-      vi.stubGlobal("URL", { createObjectURL: vi.fn().mockReturnValue("blob:mock"), revokeObjectURL: vi.fn() });
-      Object.defineProperty(navigator, "share", {
-        value: undefined,
-        configurable: true,
-        writable: true,
-      });
-      Object.defineProperty(navigator, "canShare", {
-        value: undefined,
-        configurable: true,
-        writable: true,
-      });
-    });
-
-    afterEach(() => {
-      vi.restoreAllMocks();
-      vi.unstubAllGlobals();
-    });
-
-    it("renders a Share gem button when result is set", () => {
-      render(
-        <MineWorkflows
-          {...defaultProps}
-          result={{ name: "my-gem", skills: ["deploy", "lint"] }}
-        />,
-      );
-      expect(screen.getByRole("button", { name: /share my-gem gem/i })).toBeTruthy();
-    });
-
-    it("does not render Share gem button when result is null", () => {
-      render(<MineWorkflows {...defaultProps} result={null} />);
-      expect(screen.queryByRole("button", { name: /share .* gem/i })).toBeNull();
-    });
-  });
-
-  // ── Hosted share (Task 8) ───────────────────────────────────────────────────
-
-  describe("hosted gem share (Task 8)", () => {
-    it("per-workflow Share mints a gem link and shows ShareLinks", async () => {
+    it("clicking Share mints a gem link and shows ShareLinks", async () => {
       const detail: WorkflowDetail = {
         key: "wf-a", name: "Deploy workflow", description: "desc",
         triggers: [], tools: [], mutating: false, steps: [], sessions: 5,
@@ -408,79 +215,34 @@ describe("MineWorkflows", () => {
       const wfSpy = vi.spyOn(routes.scorecardWorkflowRoute, "call").mockResolvedValue(detail);
       const createGemShare = vi.fn(async () => ({ id: "g1", url: "https://agentgem.ai/share/g1" }));
       render(<MineWorkflows {...defaultProps} createGemShare={createGemShare} />);
-      fireEvent.click(screen.getAllByRole("button", { name: /^share deploy workflow/i })[0]);
+
+      const card = cardFor("Deploy workflow");
+      fireEvent.click(within(card).getByRole("button", { name: /^share$/i }));
+
       await waitFor(() => expect(createGemShare).toHaveBeenCalledWith(
         expect.objectContaining({ kind: "gem", name: "Deploy workflow", provenance: "Distilled from 5 sessions" }),
       ));
+      // The share route call implies the card is now expanded, since ShareLinks renders
+      // inside the detail slot.
       expect(await screen.findByRole("link", { name: "X" })).toBeTruthy();
       wfSpy.mockRestore();
     });
 
-    it("per-build Share gem mints a gem link and shows ShareLinks", async () => {
-      const createGemShare = vi.fn(async () => ({ id: "g2", url: "https://agentgem.ai/share/g2" }));
-      render(
-        <MineWorkflows
-          {...defaultProps}
-          result={{ name: "my-gem", skills: ["deploy", "lint"] }}
-          createGemShare={createGemShare}
-        />,
-      );
-      fireEvent.click(screen.getByRole("button", { name: /share my-gem gem/i }));
-      await waitFor(() => expect(createGemShare).toHaveBeenCalledWith(expect.objectContaining({ kind: "gem", name: "my-gem", provenance: "2 skills" })));
-      expect(await screen.findByRole("link", { name: "X" })).toBeTruthy();
-    });
-
-    it("per-workflow Share sets detailError on failure", async () => {
-      const createGemShare = vi.fn(async () => { throw new Error("mint failed"); });
+    it("sets an inline error when the share mint fails", async () => {
       const detail: WorkflowDetail = {
         key: "wf-a", name: "Deploy workflow", description: "desc",
         triggers: [], tools: [], mutating: false, steps: [], sessions: 1,
         confidence: "high", portable: true,
       };
       const wfSpy = vi.spyOn(routes.scorecardWorkflowRoute, "call").mockResolvedValue(detail);
+      const createGemShare = vi.fn(async () => { throw new Error("mint failed"); });
       render(<MineWorkflows {...defaultProps} createGemShare={createGemShare} />);
-      const shareBtn = screen.getAllByRole("button", { name: /^share deploy workflow/i })[0];
-      fireEvent.click(shareBtn);
+
+      const card = cardFor("Deploy workflow");
+      fireEvent.click(within(card).getByRole("button", { name: /^share$/i }));
+
       await waitFor(() => expect(screen.getByText("mint failed")).toBeTruthy());
       wfSpy.mockRestore();
     });
-
-    it("per-build Share gem sets shareErrors on failure", async () => {
-      const createGemShare = vi.fn(async () => { throw new Error("mint failed"); });
-      render(
-        <MineWorkflows
-          {...defaultProps}
-          result={{ name: "my-gem", skills: ["deploy", "lint"] }}
-          createGemShare={createGemShare}
-        />,
-      );
-      fireEvent.click(screen.getByRole("button", { name: /share my-gem gem/i }));
-      await waitFor(() => expect(screen.getByText("mint failed")).toBeTruthy());
-    });
-  });
-
-  // Stale-selection note test
-  it("shows stale-selection note when selected key is hidden by filter", () => {
-    render(<MineWorkflows {...defaultProps} />);
-    // Select a medium-confidence workflow (wf-b)
-    const checkbox = screen.getByRole("checkbox", { name: /test workflow/i });
-    fireEvent.click(checkbox);
-    // No hidden note yet (filter=all)
-    expect(screen.queryByText(/hidden by filter/i)).toBeNull();
-
-    // Now re-render with battleTested filter — wf-b won't be visible
-    cleanup();
-    render(
-      <MineWorkflows
-        {...defaultProps}
-        filter="battleTested"
-      />,
-    );
-    // wf-b is not in this render's pre-selected set (state is reset), so we test via
-    // a scenario where selection is passed and filter hides it.
-    // The hidden note appears when selected keys are not in visible set.
-    // This is tested through the rendered component; since state resets on remount,
-    // just verify the note isn't shown when nothing is selected.
-    expect(screen.queryByText(/hidden by filter/i)).toBeNull();
   });
 });
