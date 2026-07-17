@@ -1070,6 +1070,12 @@ export const PLAY_CAPS = [
 ] as const;
 const PlayCapEnum = z.enum(PLAY_CAPS);
 const PlayNeedsSchema = z.array(PlayCapEnum).optional();
+// Mirrors McpNeedSchema/McpNeedsSchema in src/schemas.ts (backed by @agentgem/model's McpNeed) — the
+// connector manifest a miniapp declares. Missing from the client-side echo, this field is silently
+// stripped on the way through the response schema (see the file header note), so `meta.mcpNeeds`
+// never reaches the UI even though the server sends it (Task 6 wiring gap).
+const McpNeedSchema = z.object({ server: z.string(), tools: z.array(z.string()) });
+const PlayMcpNeedsSchema = z.array(McpNeedSchema).optional();
 const PlaySourceSchema = z.discriminatedUnion("kind", [
   z.object({ kind: z.literal("session"), agent: z.string(), project: z.string().optional(), sessionId: z.string(), summary: z.string() }),
   z.object({ kind: z.literal("skill"), skillName: z.string(), sourceId: z.string().optional() }),
@@ -1080,6 +1086,7 @@ const PlaySourceSchema = z.discriminatedUnion("kind", [
 const PlayMetaSchema = z.object({
   title: z.string(), genre: z.enum(["replay", "skill-run", "project-fun", "session-heatmap"]),
   createdFrom: PlaySourceSchema, engineVersion: z.string().default("1"), needs: PlayNeedsSchema,
+  mcpNeeds: PlayMcpNeedsSchema,
 });
 
 export const playMiniappsRoute = defineRoute("GET", "/api/play/miniapps", {
@@ -1089,7 +1096,7 @@ export const playMiniappRoute = defineRoute("GET", "/api/play/miniapp", {
   query: z.object({ name: z.string() }),
   response: z.object({
     name: z.string(), html: z.string(),
-    meta: z.object({ title: z.string(), genre: z.string(), createdFrom: PlaySourceSchema, engineVersion: z.string(), needs: PlayNeedsSchema }),
+    meta: z.object({ title: z.string(), genre: z.string(), createdFrom: PlaySourceSchema, engineVersion: z.string(), needs: PlayNeedsSchema, mcpNeeds: PlayMcpNeedsSchema }),
     share: z.object({ shareId: z.string(), url: z.string(), sharedAtMs: z.number() }).optional(),
   }),
 });
@@ -1116,6 +1123,9 @@ export const playSaveRoute = defineRoute("POST", "/api/play/save", {
     name: z.string(),
     commit: z.string().nullable(),
     prunedNeeds: z.array(PlayCapEnum).default([]),
+    // Advisory only (never blocking) — Studio doesn't act on it, but declaring the field keeps the
+    // client schema from stripping it, mirroring src/schemas.ts's PlaySaveResponseSchema.
+    mcpWarnings: z.array(z.string()).default([]),
   }),
 });
 export const playDeleteRoute = defineRoute("POST", "/api/play/delete", {

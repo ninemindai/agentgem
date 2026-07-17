@@ -1,5 +1,6 @@
 // packages/console/src/panels/Play/Studio.tsx
 import { useEffect, useRef, useState } from "react";
+import type { McpNeed } from "@agentgem/model";
 import { makeClient, playMiniappRoute, playSaveRoute, publishSetupRoute, publishStatusRoute, reviewGroupsRoute, reviewRequestRoute } from "../../api/routes.js";
 import { AgentSelector, type PlayAgent } from "./AgentSelector.js";
 import { CapabilityStrip } from "./CapabilityStrip.js";
@@ -64,7 +65,7 @@ export function Studio({
   // not just fresh html state.
   const [runnerGen, setRunnerGen] = useState(0);
   const [loadErr, setLoadErr] = useState<string | null>(null);   // preview fetch failed → say so, don't fake it
-  const [meta, setMeta] = useState<{ title: string; genre: string; needs?: string[] } | null>(null);
+  const [meta, setMeta] = useState<{ title: string; genre: string; needs?: string[]; mcpNeeds?: McpNeed[] } | null>(null);
   const [pruned, setPruned] = useState<string[]>([]);
   const [status, setStatus] = useState("");
   const [gate, setGate] = useState<string[] | null>(null);       // seal failures → actionable banner
@@ -284,6 +285,9 @@ export function Studio({
         title: cur.meta.title, genre: cur.meta.genre as "replay" | "skill-run" | "project-fun" | "session-heatmap",
         createdFrom: cur.meta.createdFrom, engineVersion: cur.meta.engineVersion,
         ...(cur.meta.needs ? { needs: cur.meta.needs } : {}),
+        // mcpNeeds is declared-authoritative (D10) — the server merges declared∪derived, so dropping
+        // it here would lose a wrapper-structured declaration the static scan can't re-derive.
+        ...(cur.meta.mcpNeeds ? { mcpNeeds: cur.meta.mcpNeeds } : {}),
       } } });
       // The save is the reconciliation. Adopt the meta we just read and stored, minus what the save
       // pruned, so the strip tells the truth and <Runner needs> renegotiates on the correct set.
@@ -294,7 +298,9 @@ export function Studio({
       const prunedNeeds = (res.prunedNeeds ?? []) as string[];
       setPruned(prunedNeeds);
       const needs = (cur.meta.needs ?? []).filter((n) => !prunedNeeds.includes(n));
-      setMeta({ title: cur.meta.title, genre: cur.meta.genre, ...(needs.length ? { needs } : {}) });
+      // mcpNeeds is never pruned (declared-authoritative) — carry it forward as-is so <Runner
+      // mcpNeeds> stays correct after a save, the same way `needs` is reconciled above.
+      setMeta({ title: cur.meta.title, genre: cur.meta.genre, ...(needs.length ? { needs } : {}), ...(cur.meta.mcpNeeds?.length ? { mcpNeeds: cur.meta.mcpNeeds } : {}) });
       setStatus("saved ✓"); return true;
     } catch (e) {
       const failures = parseGateFailure((e as Error).message);
@@ -634,7 +640,7 @@ export function Studio({
               onClick={() => { setRunnerGen((g) => g + 1); void refresh(); }}>↻</button>
           </div>
           <div className="play-plate" ref={plateRef}>
-            {html ? <Runner key={runnerGen} ref={runnerRef} html={html} name={name} apiBase={apiBase} needs={meta?.needs} maxHeight={plateMax} />
+            {html ? <Runner key={runnerGen} ref={runnerRef} html={html} name={name} apiBase={apiBase} needs={meta?.needs} mcpNeeds={meta?.mcpNeeds} maxHeight={plateMax} />
               : loadErr ? (
                 <div className="play-plate__state">
                   <b>Couldn't load the preview</b>

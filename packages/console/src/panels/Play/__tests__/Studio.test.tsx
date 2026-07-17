@@ -163,7 +163,7 @@ describe("Studio", () => {
 
   it("announces a prune after save and drops the capability from the strip", async () => {
     renderStudio(["invoke-agent"]);
-    vi.spyOn(playSaveRoute, "call").mockResolvedValue({ name: "g1", commit: "abc1234", prunedNeeds: ["invoke-agent"] });
+    vi.spyOn(playSaveRoute, "call").mockResolvedValue({ name: "g1", commit: "abc1234", prunedNeeds: ["invoke-agent"], mcpWarnings: [] });
     expect(await screen.findByText(/run a local AI agent on your machine/i)).toBeTruthy();
 
     // The Save button is gone from the toolbar — Share saves first, and pauses at the cover
