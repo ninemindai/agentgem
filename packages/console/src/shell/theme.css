@@ -891,23 +891,15 @@ body::before {
 .analyze-row .ledger-view:disabled { opacity: .55; cursor: default; }
 .run-badge.run-running { animation: pulse 1.2s ease-in-out infinite; }
 
-/* Watch → Feed: live session-event cards (message bubbles + tool call/result). The
+/* Watch → Feed: the live session renders through the History turn tree (tv-*);
+ * .feed only adds the scrolling viewport the tail-follow sticks to. The
  * Feed|Artifact toggle reuses .ledger-view; .is-active gives the picked tab an accent. */
 .feed-toggle { display: flex; gap: 6px; }
 .feed-toggle .ledger-view.is-active { color: var(--accent); border-bottom: 2px solid var(--accent); }
-.feed { display: flex; flex-direction: column; gap: 8px; max-height: 560px; overflow-y: auto; }
-.feed-card { border: 1px solid var(--line-soft); border-radius: 8px; background: var(--paper); padding: 8px 10px; }
-.feed-msg-role { font: 600 10px/1 var(--font-ui); letter-spacing: .08em; text-transform: uppercase; color: var(--muted); }
-.feed-msg-text { margin-top: 4px; white-space: pre-wrap; font: 14px/1.55 var(--font-ui); color: var(--ink); }
-.feed-msg-user { border-left: 3px solid var(--accent); }
-.feed-tool.is-error { border-color: var(--accent); }
-.feed-tool-head { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
-.feed-tool-icon { font-size: 14px; }
-.feed-tool-name { font: 600 13px/1 var(--font-ui); color: var(--ink); }
-.feed-tool-arg { flex: 1; min-width: 0; font: 12px/1.4 var(--font-mono); color: var(--ink-soft);
-  overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.feed-tool-out { margin: 8px 0 0; padding: 8px; max-height: 220px; overflow: auto; border-radius: 6px;
-  background: var(--paper-2); font: 12px/1.5 var(--font-mono); color: var(--ink-soft); white-space: pre-wrap; }
+.feed { max-height: 560px; overflow-y: auto; }
+/* tv-turns is a column flexbox; inside a capped viewport its items must overflow
+ * and scroll, not flex-shrink into slivers (tv-turn clips via overflow: hidden). */
+.feed > * { flex-shrink: 0; }
 
 /* Watch → Dashboard: double-buffered, cross-faded iframes (design D2) */
 .dash-frames { position: relative; width: 100%; height: 560px; }
@@ -1639,6 +1631,8 @@ button.scorecard-intent { line-height: 1.4; }
   background: none; border: 0; cursor: pointer; padding: 6px 10px; font: 600 12px/1 var(--font-ui); color: var(--ink);
 }
 .tv-tool-name { font-family: var(--font-mono); }
+.tv-tool-arg { flex: 1; min-width: 0; font: 400 12px/1.4 var(--font-mono); color: var(--ink-soft);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .tv-tool-err { color: var(--accent); font-weight: 700; font-size: 11px; }
 .tv-tool-body { padding: 0 10px 10px 10px; }
 .tv-tool-label { text-transform: uppercase; letter-spacing: .08em; font-size: 10px; margin: 6px 0 2px; }
