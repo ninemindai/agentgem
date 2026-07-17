@@ -145,43 +145,44 @@ describe("GemCard", () => {
     expect(onShare).toHaveBeenCalledWith(workflowGem);
   });
 
-  it("skill: shows the hygiene score slot and Open/Share, no Distill", () => {
+  it("skill: shows the hygiene score slot and Open, no Distill/Share", () => {
     render(<GemCard gem={skillGem} score={null} {...noopHandlers} />);
     expect(screen.getByRole("button", { name: /run hygiene/i })).toBeTruthy();
     expect(screen.getByRole("button", { name: "Open" })).toBeTruthy();
-    expect(screen.getByRole("button", { name: "Share" })).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "Share" })).toBeNull();
     expect(screen.queryByRole("button", { name: /distill/i })).toBeNull();
   });
 
-  it("subagent: shows the hygiene score slot and Open/Share, no Distill", () => {
+  it("subagent: shows the hygiene score slot and Open, no Distill/Share", () => {
     render(<GemCard gem={subagentGem} score={null} {...noopHandlers} />);
     expect(screen.getByRole("button", { name: /run hygiene/i })).toBeTruthy();
     expect(screen.queryByRole("button", { name: /distill/i })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Share" })).toBeNull();
   });
 
-  it("lesson: shows Open/Share, no hygiene slot, no Distill", () => {
+  it("lesson: shows Open, no hygiene slot, no Distill/Share", () => {
     render(<GemCard gem={lessonGem} {...noopHandlers} />);
     expect(screen.getByRole("button", { name: "Open" })).toBeTruthy();
-    expect(screen.getByRole("button", { name: "Share" })).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "Share" })).toBeNull();
     expect(screen.queryByRole("button", { name: /run hygiene/i })).toBeNull();
     expect(screen.queryByRole("button", { name: /distill/i })).toBeNull();
     expect(screen.getByText("0 uses")).toBeTruthy();
   });
 
-  it("rubric: shows Open/Share, no hygiene slot, no Distill", () => {
+  it("rubric: shows Open, no hygiene slot, no Distill/Share", () => {
     render(<GemCard gem={rubricGem} {...noopHandlers} />);
     expect(screen.getByRole("button", { name: "Open" })).toBeTruthy();
-    expect(screen.getByRole("button", { name: "Share" })).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "Share" })).toBeNull();
     expect(screen.queryByRole("button", { name: /run hygiene/i })).toBeNull();
     expect(screen.queryByRole("button", { name: /distill/i })).toBeNull();
   });
 
-  it("miniapp: shows Play + Share, no Open/Distill/hygiene, and shows the genre chip in the score slot", () => {
+  it("miniapp: shows Play only, no Open/Distill/Share/hygiene, and shows the genre chip in the score slot", () => {
     const onPlay = vi.fn();
     render(<GemCard gem={miniappGem} {...noopHandlers} onPlay={onPlay} />);
     fireEvent.click(screen.getByRole("button", { name: "Play" }));
     expect(onPlay).toHaveBeenCalledWith(miniappGem);
-    expect(screen.getByRole("button", { name: "Share" })).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "Share" })).toBeNull();
     expect(screen.queryByRole("button", { name: "Open" })).toBeNull();
     expect(screen.queryByRole("button", { name: /distill/i })).toBeNull();
     expect(screen.queryByRole("button", { name: /run hygiene/i })).toBeNull();

@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import type { Scorecard, WorkflowDetail } from "../../api/routes.js";
 import { scorecardWorkflowRoute, createGemShareRoute, makeClient } from "../../api/routes.js";
 import type { WorkflowCardModel } from "./groupWorkflows.js";
@@ -94,14 +94,21 @@ export function MineWorkflows({ data, onBuild, building, result, error, apiBase,
     }
   };
 
-  const workflows: WorkflowCardModel[] = data.projects.flatMap((p) =>
-    p.workflows.map((w) => ({
-      root: p.root, projectLabel: p.label,
-      key: w.key, name: w.name, confidence: w.confidence, portable: w.portable,
-      sessions: w.sessions, lastSeenMs: w.lastSeenMs,
-    })),
-  );
-  const gems = toUnifiedGems({ workflows, inventory, miniapps });
+  // Recomputing this flatten + compose is the expensive part (scales with total gem
+  // count), so it's memoized on the inputs that actually change it — not on unrelated
+  // state like filter-chip toggles, expand/collapse, or share progress.
+  const gems = useMemo(() => {
+    const workflows: WorkflowCardModel[] = data.projects.flatMap((p) =>
+      p.workflows.map((w) => ({
+        root: p.root, projectLabel: p.label,
+        key: w.key, name: w.name, confidence: w.confidence, portable: w.portable,
+        sessions: w.sessions, lastSeenMs: w.lastSeenMs,
+      })),
+    );
+    // publishedNames not yet fed — "Shared" maturity + shared badge stay dormant until a
+    // publish-status source lands (follow-up).
+    return toUnifiedGems({ workflows, inventory, miniapps });
+  }, [data, inventory, miniapps]);
   // The value cross-filter only applies under Type/Maturity — the value axis's own
   // group headers already carry that dimension, and its chip row is hidden there.
   const filteredGems = group !== "value" && valueFilter !== "all"
