@@ -240,7 +240,16 @@ export function createUiHost(deps: UiHostDeps): UiHost {
   // exists purely to pin consent, not to be forwarded to the sealed iframe.
   async function handleMcpList(d: RpcMessage): Promise<void> {
     const gen = generation;
-    const serverMap = await loadServers();
+    let serverMap: Map<string, { tools: { name: string }[]; configDigest?: string }>;
+    try {
+      serverMap = await loadServers();
+    } catch {
+      // /servers is unreachable (miniapp deleted mid-session, network blip, core error) — reply the same
+      // degraded shape as a not-installed server so the miniapp renders its no-connector state instead of
+      // hanging forever on an unsettled callTool/listTools promise (see handleMcpCall's twin catch below).
+      if (!stale(gen)) reply(d.id, { servers: mcpNeeds.map((need) => ({ server: need.server, tools: [] as string[], status: "unavailable" as const })) });
+      return;
+    }
     if (stale(gen)) return;
     const servers = mcpNeeds.map((need) => {
       const digest = serverMap.get(need.server)?.configDigest;
@@ -269,7 +278,15 @@ export function createUiHost(deps: UiHostDeps): UiHost {
       reply(d.id, { ok: false, error: { code: "not_in_manifest", message: `"${server}"/"${tool}" is not in this miniapp's declared connectors` } });
       return;
     }
-    await loadServers();
+    try {
+      await loadServers();
+    } catch {
+      // Same rejection as handleMcpList's catch (e.g. the miniapp was deleted from the registry mid-session
+      // so /servers 404s, or the core errors) — reply a coded error rather than letting the handler promise
+      // reject under `void handleMcpCall(d)`, which would leave the shim's callTool promise unsettled forever.
+      if (!stale(gen)) reply(d.id, { ok: false, error: { code: "server_unavailable", message: "could not reach the connector service" } });
+      return;
+    }
     if (stale(gen)) return;
     const digest = mcpDigests.get(server);
     if (digest === undefined) {
