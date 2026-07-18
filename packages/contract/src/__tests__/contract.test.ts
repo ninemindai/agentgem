@@ -9,7 +9,7 @@ import {
   reviewResubmitPayload,
   type CatalogManifest,
 } from "../index.js";
-import { bindSigningPayload } from "../index.js";  // add to the existing import list
+import { bindSigningPayload } from "../index.js";
 
 describe("@agentgem/contract catalog surface", () => {
   it("clampGrade floors to 1..3 and is NaN-safe", () => {
