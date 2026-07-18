@@ -6,7 +6,7 @@
 // UI, not a blocking publish flow.
 import type { Identity } from "@agentgem/model";
 import { createLogger } from "@agentgem/base";
-import { myGemsSigningPayload } from "@agentgem/aggregator/catalog";
+import { myGemsSigningPayload } from "@agentgem/contract";
 
 const log = createLogger("share");
 
