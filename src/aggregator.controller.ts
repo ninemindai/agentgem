@@ -7,7 +7,7 @@ import { api, get, post, AgentError } from "@agentback/openapi";
 import { inject } from "@agentback/core";
 import { DrizzleBindings } from "@agentback/drizzle";
 import type { AppDb, makeAuth } from "@agentgem/aggregator";
-import { AUTH_BINDING } from "./auth/mount.js";
+import { AUTH_BINDING } from "./hostedBindings.js";
 import { ingestAttestation, ingestGemAdoption } from "@agentgem/aggregator";
 import { popularity, coOccurrence, adoption, overview, coOccurrenceMatrix, modelBenchmark, effectiveness, gemAdoption } from "@agentgem/aggregator";
 import { popularSkills, popularSkillGroups } from "@agentgem/aggregator";
