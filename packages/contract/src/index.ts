@@ -4,3 +4,4 @@
 export const CONTRACT_PACKAGE = "@agentgem/contract";
 
 export * from "./catalog.js";
+export * from "./binding.js";

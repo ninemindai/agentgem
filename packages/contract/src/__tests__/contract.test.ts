@@ -9,6 +9,7 @@ import {
   reviewResubmitPayload,
   type CatalogManifest,
 } from "../index.js";
+import { bindSigningPayload } from "../index.js";  // add to the existing import list
 
 describe("@agentgem/contract catalog surface", () => {
   it("clampGrade floors to 1..3 and is NaN-safe", () => {
@@ -30,5 +31,14 @@ describe("@agentgem/contract catalog surface", () => {
     expect(reviewActionPayload("approve", "req1", "pk", 1000)).toContain("approve");
     expect(reviewSubmitPayload(m, "g1", "pk", 1000)).toContain("review-submit");
     expect(reviewResubmitPayload(m, "req1", "pk", 1000)).toContain("review-resubmit");
+  });
+});
+
+describe("@agentgem/contract binding surface", () => {
+  it("bindSigningPayload hashes the token (never signs it raw) and is deterministic", () => {
+    const p = bindSigningPayload("pk", "secret-token", 1000);
+    expect(p).toBe(bindSigningPayload("pk", "secret-token", 1000)); // deterministic
+    expect(p).not.toContain("secret-token");                        // token is hashed, not raw
+    expect(bindSigningPayload("pk", "other", 1000)).not.toBe(p);    // commits to the token
   });
 });
