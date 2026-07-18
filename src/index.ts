@@ -32,12 +32,22 @@ export { serverHost } from "./appCommon.js";
 // from "../index.js".
 export { installGracefulShutdown, warmEnabled } from "./appCommon.js";
 
-export async function createApp(port: number): Promise<RestApplication> {
+// The aggregator-mount seam (spec §5d seam 2). Runs between buildCommonApp and
+// finalizeCommonApp — the position mountAggregator occupies today. OSS defaults to
+// mountAggregator (behavior unchanged); a downstream entry supplies its own mount.
+export type AggregatorMount = (
+  app: RestApplication,
+  server: Awaited<RestApplication["restServer"]>,
+  env: NodeJS.ProcessEnv,
+) => Promise<void>;
+
+export async function createApp(port: number, mount: AggregatorMount = mountAggregator): Promise<RestApplication> {
+  const env = process.env;
   const { app, server } = await buildCommonApp(port);
   // Aggregator + gating + better-auth + stars/reviews/catalog/groups/gemShares/usage/handles/
-  // account + OG cards + the GitHub App + registry upload-publish (Task 4: extracted into
-  // serverAggregator.ts, no behaviour change).
-  await mountAggregator(app, server, process.env);
+  // account + OG cards + the GitHub App + registry upload-publish. Injected via the mount
+  // seam; defaults to mountAggregator so the OSS entry is unchanged (Task 4).
+  await mount(app, server, env);
   // The console's Benchmark tab reads the hosted benchmark NETWORK (k-anon, cross-producer) at
   // /api/benchmark in every mode — that data lives on the hosted aggregator, never in the local
   // pglite. The desktop client entry mounts this proxy; the server entry (npx / dev) must too, or
