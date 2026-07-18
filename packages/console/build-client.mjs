@@ -22,6 +22,25 @@ const result = await build({
   write: false,
   loader: { ".css": "css" },
   outdir: out,
+  // Build-time extension seam: a downstream build sets AGENTGEM_CONSOLE_EXTRA to an
+  // absolute path exporting `extraPages: ConsolePage[]`; esbuild swaps the OSS stub
+  // for it. Unset in OSS → the empty stub compiles in, zero behavior change.
+  // Note: esbuild's built-in `alias` option only accepts bare package-style
+  // specifiers (it rejects any key starting with "." or "/" as "Invalid alias
+  // name"), so a relative specifier like "./extraPages.js" can't be aliased that
+  // way. An onResolve plugin achieves the same swap for a relative import.
+  plugins: process.env.AGENTGEM_CONSOLE_EXTRA
+    ? [
+        {
+          name: "agentgem-console-extra",
+          setup(b) {
+            b.onResolve({ filter: /^\.\/extraPages\.js$/ }, () => ({
+              path: process.env.AGENTGEM_CONSOLE_EXTRA,
+            }));
+          },
+        },
+      ]
+    : [],
 });
 
 let js = "";
