@@ -4,11 +4,10 @@
 // Records a server-verified pubkey -> account binding. Two proofs combine: the ed25519
 // signature proves key possession; the token (verified live by AccountVerifier) proves
 // account possession. Replays are idempotent; a signedAt freshness window blocks stale tokens.
-import { createHash } from "node:crypto";
 import { sql } from "drizzle-orm";
 import type { Auth, BetterAuthOptions } from "better-auth";
 import { verify } from "@agentgem/model";
-import { canonicalJSON } from "@agentgem/insight";
+import { bindSigningPayload } from "@agentgem/contract";
 import type { AppDb } from "./schema.js";
 import { accountBindings } from "./schema.js";
 import type { AccountVerifier, OrgMembership } from "./accountVerifier.js";
@@ -18,19 +17,17 @@ import { claimHandleIfUnset } from "./handles.js";
 import { ensureBetterAuthUser } from "./auth/migrateAccounts.js";
 import { mintSession } from "./auth/mintSession.js";
 
+// Re-exported from @agentgem/contract (the neutral home) so existing importers of the bare
+// @agentgem/aggregator package specifier (which surfaces this via index.ts's `export * from
+// "./binding.js"`) are unaffected while the definition moves out of the aggregator. See Phase 2a.
+export { bindSigningPayload } from "@agentgem/contract";
+
 export interface BindRequest { pubkey: string; token: string; signedAt: number; signature: string; }
 export type BindResult =
   | { bound: true; provider: string; login: string; accountId: string; avatarUrl?: string; sessionToken?: string; expiresAt?: string }
   | { bound: false; rejected: "bad-signature" | "stale" | "unknown-producer" | "provider-error" };
 
 const FRESHNESS_MS = 300_000;
-
-/** The exact string the client signs and the server verifies. Signs over sha256(token) — never the
- *  raw token — so the secret stays out of the canonical (loggable) payload. */
-export function bindSigningPayload(pubkey: string, token: string, signedAt: number): string {
-  const tokenHash = createHash("sha256").update(token).digest("hex");
-  return canonicalJSON({ pubkey, signedAt, tokenHash });
-}
 
 export async function recordBinding<O extends BetterAuthOptions>(
   db: AppDb, req: BindRequest, verifier: AccountVerifier, now: number = Date.now(),

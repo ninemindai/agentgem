@@ -186,6 +186,9 @@ importers:
 
   packages/aggregator:
     dependencies:
+      '@agentgem/contract':
+        specifier: workspace:*
+        version: link:../contract
       '@agentgem/insight':
         specifier: workspace:*
         version: link:../insight

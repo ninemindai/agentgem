@@ -39,6 +39,7 @@
     "build": "tsc -b"
   },
   "dependencies": {
+    "@agentgem/contract": "workspace:*",
     "@agentgem/insight": "workspace:*",
     "@agentgem/model": "workspace:*",
     "@better-auth/passkey": "^1.6.23",
