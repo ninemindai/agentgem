@@ -1,3 +1,6 @@
+// Consumer test for @agentgem/contract, in root src/ so the root `pnpm test` gate
+// (vitest over dist/**) actually runs it — package-local tests under packages/*/src
+// are not reached by that glob (same reason marketplace gets its own CI step).
 import { describe, it, expect } from "vitest";
 import {
   clampGrade,
@@ -7,9 +10,9 @@ import {
   reviewActionPayload,
   reviewSubmitPayload,
   reviewResubmitPayload,
+  bindSigningPayload,
   type CatalogManifest,
-} from "../index.js";
-import { bindSigningPayload } from "../index.js";
+} from "@agentgem/contract";
 
 describe("@agentgem/contract catalog surface", () => {
   it("clampGrade floors to 1..3 and is NaN-safe", () => {
