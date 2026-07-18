@@ -9,7 +9,7 @@ import { readWorkspace, createWorkspace } from "@agentgem/base";
 import { readGemArchive } from "@agentgem/archive";
 import { exportGem, importGem } from "@agentgem/distribute";
 import { loadOrCreateIdentity } from "@agentgem/model";
-import type { CatalogManifest } from "@agentgem/aggregator";
+import type { CatalogManifest } from "@agentgem/contract";
 import { postReviewRequest, postReviewResubmit, postReviewAction, fetchReviewArchive } from "./gem/reviewClient.js";
 import { executableArtifacts, hasExecutable } from "./gem/hostedInstall.js";
 import { readSession, clearSession, bindConfig } from "./bind/bindCore.js";

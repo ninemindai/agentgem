@@ -5,7 +5,7 @@
 import type { Identity } from "@agentgem/model";
 import { InvalidInputError } from "@agentgem/model";
 import { createLogger } from "@agentgem/base";
-import { catalogSigningPayload, type CatalogManifest } from "@agentgem/aggregator/catalog";
+import { catalogSigningPayload, type CatalogManifest } from "@agentgem/contract";
 
 const log = createLogger("share");
 

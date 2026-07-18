@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: MIT
 // Browse-only public gem catalog: flatten the registry index's discovery metadata and cache it.
 import type { RegistryIndex } from "@agentgem/distribute";
-import { type CatalogRow, clampGrade } from "@agentgem/aggregator/catalog";
+import { type CatalogRow, clampGrade } from "@agentgem/contract";
 import { createLogger } from "@agentgem/base";
 
 const log = createLogger("catalog");

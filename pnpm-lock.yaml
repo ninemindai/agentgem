@@ -105,6 +105,9 @@ importers:
       '@agentgem/capture':
         specifier: workspace:*
         version: link:packages/capture
+      '@agentgem/contract':
+        specifier: workspace:*
+        version: link:packages/contract
       '@agentgem/deploy':
         specifier: workspace:*
         version: link:packages/deploy
