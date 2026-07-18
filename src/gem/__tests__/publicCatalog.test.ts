@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: MIT
 import { describe, it, expect } from "vitest";
 import { mapDbToGems } from "../publicCatalog.js";
-import type { CatalogRow } from "@agentgem/aggregator";
+import type { CatalogRow } from "@agentgem/contract";
 
 describe("mapDbToGems", () => {
   it("maps an installable DB row with its artifacts through to the browse gem", () => {
