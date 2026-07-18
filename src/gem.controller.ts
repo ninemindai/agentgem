@@ -399,7 +399,7 @@ import { DrizzleBindings } from "@agentback/drizzle";
 import type { AppDb, makeAuth } from "@agentgem/aggregator";
 import { listCatalogGems } from "@agentgem/aggregator/catalog";
 import { resolvePublishedBy } from "./registry/publishedBy.js";
-import { AUTH_BINDING } from "./auth/mount.js";
+import { AUTH_BINDING } from "./hostedBindings.js";
 import { GemTypeRegistry, defaultGemTypeRegistry, resolvePublishType } from "./gem/gemTypeRegistry.js";
 import { resolveDirs, resolveProject, agentgemHome, workspaceArtifactPath, parseWorkspaceArtifactPath } from "@agentgem/model";
 import { pickFolder } from "./pickFolder.js";

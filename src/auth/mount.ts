@@ -1,12 +1,13 @@
 // Copyright (c) 2026 NineMind, Inc.
 // SPDX-License-Identifier: MIT
 import type { makeAuth } from "@agentgem/aggregator";
-import { BindingKey } from "@agentback/core";
 
 // DI binding for the single app-wide better-auth instance (Plan 1b) — lets controllers that are
 // resolved through the framework's context (e.g. GemController) inject it the same way they inject
-// the drizzle client, instead of threading it through every constructor by hand.
-export const AUTH_BINDING = BindingKey.create<ReturnType<typeof makeAuth> | undefined>("agentgem.auth");
+// the drizzle client, instead of threading it through every constructor by hand. Moved to
+// hostedBindings.ts (Phase 2a.2) so kept-OSS controllers don't import this hosted module; re-exported
+// here so any importer still using auth/mount's AUTH_BINDING keeps working.
+export { AUTH_BINDING } from "../hostedBindings.js";
 
 type ExpressApp = { all(p: string, h: (req: any, res: any) => unknown): unknown };
 
