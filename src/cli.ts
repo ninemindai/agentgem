@@ -7,6 +7,7 @@
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
+import { dispatchExtra } from "./extraCommands.js";
 // `run` is imported lazily on the default (start-the-server) path below, like every subcommand here.
 // A static import pulls the whole server graph — routes, DI container, aggregator — into `agentgem
 // --help`, which never starts a server. The publish bundler keeps `./index.js` external to cli.js, so
@@ -133,6 +134,11 @@ async function main(argv: string[]): Promise<void> {
     process.exitCode = await runIndexSourcesCommand();
     return;
   }
+
+  // Downstream builds register extra subcommands here (empty in OSS). Consulted after
+  // the built-in subcommands and before the default start-the-server path.
+  const extra = await dispatchExtra(argv);
+  if (extra !== null) { process.exitCode = extra; return; }
 
   const portArg = opt("-p", "--port");
   const port = Number(portArg ?? process.env.PORT ?? 4317);
