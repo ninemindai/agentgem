@@ -23,7 +23,12 @@ import { watchPage } from "./panels/Watch/index.js";
 import { playPage } from "./panels/Play/index.js";
 import { arcadePage } from "./panels/Arcade/index.js";
 import { reviewsPage } from "./panels/Reviews/index.js";
+import { extraPages } from "./extraPages.js";
 
 // Yours / Received / Get-more are folded into the single tabbed `gemsPage` (Variant B);
 // their component bodies are reused inside packages/console/src/panels/Gems/Gems.tsx.
-export const pages: ConsolePage[] = [observePage, sessionsPage, recallPage, setupPage, watchPage, rubricsPage, dreamingPage, benchmarkPage, optimizePage, minePage, curatePage, materializePage, gemsPage, publishPage, reviewsPage, sourcesPage, rubricLibraryPage, settingsPage, memoryPage, deployPage, chatPage, playPage, arcadePage];
+export const corePages: ConsolePage[] = [observePage, sessionsPage, recallPage, setupPage, watchPage, rubricsPage, dreamingPage, benchmarkPage, optimizePage, minePage, curatePage, materializePage, gemsPage, publishPage, reviewsPage, sourcesPage, rubricLibraryPage, settingsPage, memoryPage, deployPage, chatPage, playPage, arcadePage];
+
+// The composed list the shell renders. corePages is the open-core set; extraPages
+// is empty in OSS and alias-swapped by a downstream build (see extraPages.ts).
+export const pages: ConsolePage[] = [...corePages, ...extraPages];
