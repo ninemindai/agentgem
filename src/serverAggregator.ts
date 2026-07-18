@@ -19,7 +19,8 @@ import { resolveAggregatorDb, type AppDb, migrateAccountsToBetterAuth, backfillU
 import { mountGating } from "./gating.js";
 import { installHandoff } from "./auth/handoff.js";
 import { mountAuth } from "./auth/mount.js";
-import { AUTH_BINDING } from "./hostedBindings.js";
+import { AUTH_BINDING, PUBLISHED_BY_RESOLVER, type PublishedByResolver } from "./hostedBindings.js";
+import { resolvePublishedBy } from "./registry/publishedBy.js";
 import { deriveRpId } from "./auth/passkeyRpId.js";
 import { makeAuth } from "@agentgem/aggregator";
 import { installStars } from "./stars/install.js";
@@ -114,6 +115,13 @@ export async function mountAggregator(
       passkeyRpId: deriveRpId(env.AGENTGEM_PASSKEY_RP_ID, env.AGENTGEM_SESSION_COOKIE_DOMAIN),
     });
     app.bind(AUTH_BINDING).to(auth);
+    // Lets GemController resolve the verified publishedBy handle without importing the hosted
+    // registry/publishedBy module directly (see hostedBindings.ts) — unbound in the pure client,
+    // where registryPublish's publishedBy stays undefined exactly as resolvePublishedBy already
+    // returns without a live db/auth. Cast: the neutral PublishedByResolver type's `db` param is
+    // `unknown` (hostedBindings.ts stays decoupled from the hosted AppDb type); resolvePublishedBy's
+    // concrete `db: AppDb | undefined` is a narrower, safe specialization of that at this call site.
+    app.bind(PUBLISHED_BY_RESOLVER).to(resolvePublishedBy as PublishedByResolver);
     // Desktop→web SSO handoff (1b-Task 4): registered BEFORE mountAuth's catch-all below. better-auth
     // now owns the real "/api/auth" prefix, so these two paths ("/api/auth/handoff/start",
     // "/api/auth/handoff/redeem") sit UNDER better-auth's own catch-all namespace — Express dispatches

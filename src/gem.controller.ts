@@ -398,8 +398,7 @@ import { RestBindings } from "@agentback/rest";
 import { DrizzleBindings } from "@agentback/drizzle";
 import type { AppDb, makeAuth } from "@agentgem/aggregator";
 import { listCatalogGems } from "@agentgem/aggregator/catalog";
-import { resolvePublishedBy } from "./registry/publishedBy.js";
-import { AUTH_BINDING } from "./hostedBindings.js";
+import { AUTH_BINDING, PUBLISHED_BY_RESOLVER } from "./hostedBindings.js";
 import { GemTypeRegistry, defaultGemTypeRegistry, resolvePublishType } from "./gem/gemTypeRegistry.js";
 import { resolveDirs, resolveProject, agentgemHome, workspaceArtifactPath, parseWorkspaceArtifactPath } from "@agentgem/model";
 import { pickFolder } from "./pickFolder.js";
@@ -476,6 +475,7 @@ export class GemController {
     @inject(RestBindings.HTTP_REQUEST, { optional: true }) private req?: { headers: Record<string, string | undefined> },
     @inject(DrizzleBindings.CLIENT, { optional: true }) private db?: AppDb,
     @inject(AUTH_BINDING, { optional: true }) private auth?: ReturnType<typeof makeAuth>,
+    @inject(PUBLISHED_BY_RESOLVER, { optional: true }) private resolvePublishedBy?: import("./hostedBindings.js").PublishedByResolver,
   ) {}
 
   @get("/inventory", { query: DirQuerySchema, response: InventorySchema })
@@ -1531,7 +1531,7 @@ export class GemController {
     const gem = readGemArchive(readWorkspace(input.body.workspace).files); // WorkspaceDetail exposes .files, not .gem
     const type = resolvePublishType(this.gemTypes, input.body.type, gem);
     const index = await source.getIndex();
-    const publishedBy = await resolvePublishedBy(this.req, this.auth, this.db);
+    const publishedBy = this.resolvePublishedBy ? await this.resolvePublishedBy(this.req, this.auth, this.db) : undefined;
     return publishGem({
       gem, scope: input.body.scope, name: input.body.name, version: input.body.version,
       dependencies: input.body.dependencies, index, publisher: githubRegistryPublisher(cfg),
