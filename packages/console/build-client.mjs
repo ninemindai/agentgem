@@ -4,13 +4,21 @@
 // (readFileSync), exactly like the vanilla index.html — no static middleware.
 import { build } from "esbuild";
 import { mkdirSync, writeFileSync } from "node:fs";
-import { dirname, join } from "node:path";
+import { dirname, join, isAbsolute } from "node:path";
 import { fileURLToPath } from "node:url";
 import { buildManifest } from "./pwa-manifest.mjs";
 import { ICON_192 } from "./pwa-icons.mjs";
 
 const here = dirname(fileURLToPath(import.meta.url));
 const out = join(here, "dist");
+
+// The extension-seam target (see the `plugins` note below) is redirected to as-is,
+// so it must be an absolute path — a relative one would resolve against esbuild's
+// cwd and silently miss. Fail fast with a clear message instead.
+const extraPagesModule = process.env.AGENTGEM_CONSOLE_EXTRA;
+if (extraPagesModule && !isAbsolute(extraPagesModule)) {
+  throw new Error(`AGENTGEM_CONSOLE_EXTRA must be an absolute path, got: ${extraPagesModule}`);
+}
 
 const result = await build({
   entryPoints: [join(here, "src", "main.tsx")],
@@ -23,19 +31,19 @@ const result = await build({
   loader: { ".css": "css" },
   outdir: out,
   // Build-time extension seam: a downstream build sets AGENTGEM_CONSOLE_EXTRA to an
-  // absolute path exporting `extraPages: ConsolePage[]`; esbuild swaps the OSS stub
-  // for it. Unset in OSS → the empty stub compiles in, zero behavior change.
+  // absolute path exporting `extraPages: ConsolePage[]`; esbuild swaps the empty stub
+  // for it. Unset → the empty stub compiles in, zero behavior change.
   // Note: esbuild's built-in `alias` option only accepts bare package-style
   // specifiers (it rejects any key starting with "." or "/" as "Invalid alias
   // name"), so a relative specifier like "./extraPages.js" can't be aliased that
   // way. An onResolve plugin achieves the same swap for a relative import.
-  plugins: process.env.AGENTGEM_CONSOLE_EXTRA
+  plugins: extraPagesModule
     ? [
         {
           name: "agentgem-console-extra",
           setup(b) {
             b.onResolve({ filter: /^\.\/extraPages\.js$/ }, () => ({
-              path: process.env.AGENTGEM_CONSOLE_EXTRA,
+              path: extraPagesModule,
             }));
           },
         },
