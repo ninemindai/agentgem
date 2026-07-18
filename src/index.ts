@@ -32,9 +32,9 @@ export { serverHost } from "./appCommon.js";
 // from "../index.js".
 export { installGracefulShutdown, warmEnabled } from "./appCommon.js";
 
-// The aggregator-mount seam (spec §5d seam 2). Runs between buildCommonApp and
-// finalizeCommonApp — the position mountAggregator occupies today. OSS defaults to
-// mountAggregator (behavior unchanged); a downstream entry supplies its own mount.
+// The aggregator-mount seam. Runs between buildCommonApp and finalizeCommonApp —
+// the position mountAggregator occupies today. Defaults to mountAggregator
+// (behavior unchanged); a downstream entry can supply its own mount.
 export type AggregatorMount = (
   app: RestApplication,
   server: Awaited<RestApplication["restServer"]>,
@@ -46,7 +46,7 @@ export async function createApp(port: number, mount: AggregatorMount = mountAggr
   const { app, server } = await buildCommonApp(port);
   // Aggregator + gating + better-auth + stars/reviews/catalog/groups/gemShares/usage/handles/
   // account + OG cards + the GitHub App + registry upload-publish. Injected via the mount
-  // seam; defaults to mountAggregator so the OSS entry is unchanged (Task 4).
+  // seam; defaults to mountAggregator so the default entry is unchanged.
   await mount(app, server, env);
   // The console's Benchmark tab reads the hosted benchmark NETWORK (k-anon, cross-producer) at
   // /api/benchmark in every mode — that data lives on the hosted aggregator, never in the local

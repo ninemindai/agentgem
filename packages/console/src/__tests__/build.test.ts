@@ -23,3 +23,20 @@ describe("build-client", () => {
     expect(mani.icons.length).toBe(3);
   });
 });
+
+describe("build-client extension seam", () => {
+  // Guards the AGENTGEM_CONSOLE_EXTRA override path — the seam's whole purpose. Without
+  // this, a refactor of build-client.mjs could silently break injection and the fast
+  // unit test (which only checks the empty-stub composition) would still pass.
+  it("swaps the extraPages stub for a downstream module when AGENTGEM_CONSOLE_EXTRA is set", () => {
+    const fixture = join(pkg, "src", "__tests__", "fixtures", "extraPagesInjectionFixture.ts");
+    execFileSync("node", ["build-client.mjs"], {
+      cwd: pkg,
+      env: { ...process.env, AGENTGEM_CONSOLE_EXTRA: fixture },
+    });
+    const html = readFileSync(join(pkg, "dist", "index.html"), "utf8");
+    // The fixture's marker route reaches the bundle only if the plugin redirected
+    // ./extraPages.js to it; the empty stub would never contain this string.
+    expect(html).toContain("AGENTGEM_EXTRA_SEAM_SMOKE");
+  }, 60000);
+});

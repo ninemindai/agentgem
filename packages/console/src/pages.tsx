@@ -29,6 +29,6 @@ import { extraPages } from "./extraPages.js";
 // their component bodies are reused inside packages/console/src/panels/Gems/Gems.tsx.
 export const corePages: ConsolePage[] = [observePage, sessionsPage, recallPage, setupPage, watchPage, rubricsPage, dreamingPage, benchmarkPage, optimizePage, minePage, curatePage, materializePage, gemsPage, publishPage, reviewsPage, sourcesPage, rubricLibraryPage, settingsPage, memoryPage, deployPage, chatPage, playPage, arcadePage];
 
-// The composed list the shell renders. corePages is the open-core set; extraPages
-// is empty in OSS and swapped by a downstream build's esbuild onResolve plugin (see extraPages.ts).
+// The composed list the shell renders. corePages is the built-in set; extraPages
+// is empty here and swapped by a downstream build's esbuild onResolve plugin (see extraPages.ts).
 export const pages: ConsolePage[] = [...corePages, ...extraPages];
