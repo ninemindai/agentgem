@@ -14,5 +14,8 @@
   "files": ["dist"],
   "scripts": {
     "build": "tsc -b"
+  },
+  "dependencies": {
+    "@agentgem/insight": "workspace:*"
   }
 }
