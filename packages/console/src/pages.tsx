@@ -30,5 +30,5 @@ import { extraPages } from "./extraPages.js";
 export const corePages: ConsolePage[] = [observePage, sessionsPage, recallPage, setupPage, watchPage, rubricsPage, dreamingPage, benchmarkPage, optimizePage, minePage, curatePage, materializePage, gemsPage, publishPage, reviewsPage, sourcesPage, rubricLibraryPage, settingsPage, memoryPage, deployPage, chatPage, playPage, arcadePage];
 
 // The composed list the shell renders. corePages is the open-core set; extraPages
-// is empty in OSS and alias-swapped by a downstream build (see extraPages.ts).
+// is empty in OSS and swapped by a downstream build's esbuild onResolve plugin (see extraPages.ts).
 export const pages: ConsolePage[] = [...corePages, ...extraPages];

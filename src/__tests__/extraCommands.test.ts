@@ -25,4 +25,10 @@ describe("dispatchExtra", () => {
   it("defaults to an empty table (no extra commands in OSS)", async () => {
     expect(await dispatchExtra(["anything"])).toBeNull();
   });
+
+  it("falls through (null) for prototype-chain keys, not just own keys", async () => {
+    expect(await dispatchExtra(["constructor"])).toBeNull();
+    expect(await dispatchExtra(["toString"])).toBeNull();
+    expect(await dispatchExtra(["__proto__"])).toBeNull();
+  });
 });
