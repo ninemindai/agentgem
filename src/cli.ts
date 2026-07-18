@@ -1,17 +1,18 @@
 #!/usr/bin/env node
 // Copyright (c) 2026 NineMind, Inc.
 // SPDX-License-Identifier: MIT
-// src/cli.ts — the `agentgem` command. A thin wrapper over run() in index.ts:
-// parses a couple of flags and starts the local server. Published as the `bin`
-// entry so `npx @ninemind/agentgem` and a global install both work.
+// src/cli.ts — the `agentgem` command. A thin wrapper over runClient() in client.ts:
+// parses a couple of flags and starts the local pure-client app (a client of the
+// hosted aggregator, not a local server). Published as the `bin` entry so
+// `npx @ninemind/agentgem` and a global install both work.
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
 import { dispatchExtra } from "./extraCommands.js";
-// `run` is imported lazily on the default (start-the-server) path below, like every subcommand here.
-// A static import pulls the whole server graph — routes, DI container, aggregator — into `agentgem
-// --help`, which never starts a server. The publish bundler keeps `./index.js` external to cli.js, so
-// this stays a real deferred import in the shipped tarball rather than an eagerly-evaluated inline.
+// `runClient` is imported lazily on the default (start-the-app) path below, like every subcommand
+// here. A static import pulls the whole app graph — routes, DI container — into `agentgem --help`,
+// which never starts anything. The publish bundler keeps `./client.js` external to cli.js, so this
+// stays a real deferred import in the shipped tarball rather than an eagerly-evaluated inline.
 
 function version(): string {
   try {
@@ -147,8 +148,8 @@ async function main(argv: string[]): Promise<void> {
     process.exit(1);
   }
 
-  const { run } = await import("./index.js");
-  await run(port);
+  const { runClient } = await import("./client.js");
+  await runClient(port);
 }
 
 main(process.argv.slice(2)).catch((err) => {
