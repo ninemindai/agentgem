@@ -89,4 +89,16 @@ describe("writeUploads", () => {
       { name: "x.bin", bytesBase64: "!!!not base64!!!", type: "application/octet-stream", role: "ship" },
     ])).toThrow(/base64/i);
   });
+
+  it("sanitizes a malformed MIME type before it enters the manifest/data URI", () => {
+    const counts = writeUploads(dir, [
+      { name: "logo.png", bytesBase64: png1x1, type: 'image/png"><script>', role: "ship" },
+    ]);
+    expect(counts).toEqual({ ship: 1, ref: 0 });
+    const manifest = JSON.parse(readFileSync(join(dir, "uploads", "assets.json"), "utf8"));
+    const logo = manifest.find((e: any) => e.file === "uploads/logo.png");
+    expect(logo.type).toBe("application/octet-stream");
+    expect(logo.dataUri).toMatch(/^data:application\/octet-stream;base64,/);
+    expect(logo.dataUri).not.toMatch(/<script>/);
+  });
 });
