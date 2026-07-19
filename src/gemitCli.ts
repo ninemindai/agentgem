@@ -101,7 +101,8 @@ export async function runGemitCommand(argv: string[], deps: GemitCliDeps = {}): 
   const { qualifying, scored } = await collect(parsed.dir, nowMs);
   const data = compute(qualifying, scored, nowMs);
 
-  const outPath = resolve(parsed.out ?? join(agentgemHome(), "reports", `gemit-${data.windowTo}.html`));
+  // agentgemHome() is the home ROOT (AGENTGEM_HOME override or ~); state lives under .agentgem.
+  const outPath = resolve(parsed.out ?? join(agentgemHome(), ".agentgem", "reports", `gemit-${data.windowTo}.html`));
   write(outPath, render(data));
 
   if (data.insufficient) {

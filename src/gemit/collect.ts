@@ -56,7 +56,9 @@ function toInput(s: SessionStat): GemitSessionInput {
     subagentNames: Object.keys(s.subagents ?? {}),
     skillCounts: s.skills,
     subagentCounts: s.subagents,
-    projectKey: s.cwd ?? s.project,
+    // Basename identity (matches the Observe UI's project notion): full cwd would
+    // count every worktree of one repo as a separate project.
+    projectKey: s.project ?? s.cwd ?? null,
   };
 }
 
