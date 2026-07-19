@@ -1,6 +1,6 @@
 // src/__tests__/uploads.test.ts   (ROOT — imports the built package)
 import { describe, it, expect, beforeEach } from "vitest";
-import { mkdtempSync, readFileSync, existsSync, readdirSync } from "node:fs";
+import { mkdtempSync, readFileSync, writeFileSync, existsSync, readdirSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { writeUploads, sanitizeUploadName, type UploadFile } from "@agentgem/play";
@@ -48,6 +48,17 @@ describe("writeUploads", () => {
     expect(readFileSync(join(dir, ".gitignore"), "utf8")).toMatch(/(^|\n)ref\/(\n|$)/);
     // no manifest when there are no ship files
     expect(existsSync(join(dir, "uploads", "assets.json"))).toBe(false);
+  });
+
+  it("appends ref/ to a pre-existing .gitignore without a trailing newline, newline-separated", () => {
+    writeFileSync(join(dir, ".gitignore"), "node_modules");
+    writeUploads(dir, [
+      { name: "spec.md", bytesBase64: b64("# spec"), type: "text/markdown", role: "reference" },
+    ]);
+    const gi = readFileSync(join(dir, ".gitignore"), "utf8");
+    expect(gi).toMatch(/(^|\n)node_modules(\n|$)/);
+    expect(gi).toMatch(/(^|\n)ref\/(\n|$)/);
+    expect(gi).not.toMatch(/node_modulesref/);
   });
 
   it("suffixes in-batch name collisions", () => {

@@ -50,7 +50,7 @@ export function writeUploads(dir: string, files: UploadFile[]): UploadCounts {
   if (!files.length) return { ship: 0, ref: 0 };
   if (files.length > MAX_FILES) throw new Error(`too many files: ${files.length} > ${MAX_FILES}`);
 
-  const decoded = files.map((f) => ({ f, buf: decode(f), name: sanitizeUploadName(f.name) }));
+  const decoded = files.map((f) => ({ f, buf: decode(f) }));
 
   let shipTotal = 0, refTotal = 0;
   for (const { f, buf } of decoded) {
@@ -103,7 +103,7 @@ export function writeUploads(dir: string, files: UploadFile[]): UploadCounts {
     const gi = join(dir, ".gitignore");
     const line = "ref/\n";
     const cur = existsSync(gi) ? readFileSync(gi, "utf8") : "";
-    if (!/(^|\n)ref\/(\n|$)/.test(cur)) writeFileSync(gi, cur + line);
+    if (!/(^|\n)ref\/(\n|$)/.test(cur)) writeFileSync(gi, cur && !cur.endsWith("\n") ? cur + "\n" + line : cur + line);
   }
   return { ship, ref };
 }
