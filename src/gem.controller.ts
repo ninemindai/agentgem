@@ -399,6 +399,7 @@ import { DrizzleBindings } from "@agentback/drizzle";
 import type { AppDb, makeAuth } from "@agentgem/aggregator";
 import { listCatalogGems } from "@agentgem/aggregator/catalog";
 import { AUTH_BINDING, PUBLISHED_BY_RESOLVER } from "./hostedBindings.js";
+import { introspectAll } from "./introspectAll.js";
 import { GemTypeRegistry, defaultGemTypeRegistry, resolvePublishType } from "./gem/gemTypeRegistry.js";
 import { resolveDirs, resolveProject, agentgemHome, workspaceArtifactPath, parseWorkspaceArtifactPath } from "@agentgem/model";
 import { pickFolder } from "./pickFolder.js";
@@ -1666,13 +1667,4 @@ function parseProjectsQuery(s: string | undefined): string[] {
   } catch {
     return [];
   }
-}
-
-// Compose the global inventory with project sections. Each root is the user's explicit
-// native-picker selection; we canonicalize to absolute paths and dedup.
-function introspectAll(dir: string | undefined, projects: string[] | undefined): ConfigInventory {
-  const inventory = introspectConfig(resolveDirs(dir));
-  const roots = (projects ?? []).map(resolveProject).filter((r, i, a) => r.length > 0 && a.indexOf(r) === i);
-  if (roots.length) inventory.projects = roots.map(introspectProject);
-  return inventory;
 }
