@@ -1128,13 +1128,21 @@ export const PlayStudioRequestSchema = z.object({
   genre: z.enum(["replay", "session-heatmap"]).optional(),
 });
 export const PlayStudioResponseSchema = z.object({ name: z.string() });
+// Author-supplied seed files (base64-in-JSON, the existing upload convention). `role` decides where they
+// land: ship→git-tracked uploads/ (inlined into the miniapp), reference→gitignored ref/ (build context).
+export const UploadFileSchema = z.object({
+  name: z.string().min(1),
+  bytesBase64: z.string(),
+  type: z.string().optional(),
+  role: z.enum(["ship", "reference"]),
+});
 // Import a miniapp from an existing self-contained HTML file. The HTML becomes the miniapp as-is (a
 // draft opened in the studio); the seal gate is enforced on Save, not import, so imperfect HTML can be
 // brought in and fixed by chatting with the agent.
-export const PlayImportRequestSchema = z.object({ title: z.string().min(1), html: z.string().min(1), name: z.string().optional() });
+export const PlayImportRequestSchema = z.object({ title: z.string().min(1), html: z.string().min(1), name: z.string().optional(), files: z.array(UploadFileSchema).optional() });
 // Create a miniapp from scratch — no source context. Seeds a blank sealed canvas + opens the studio;
 // `prompt` is optional creative direction handed to the studio agent.
-export const PlayBlankRequestSchema = z.object({ title: z.string().min(1), prompt: z.string().optional(), name: z.string().optional() });
+export const PlayBlankRequestSchema = z.object({ title: z.string().min(1), prompt: z.string().optional(), name: z.string().optional(), files: z.array(UploadFileSchema).optional() });
 
 // Host-brokered feed for a replay miniapp: its source-session transcript ({meta, timeline}), fetched on
 // demand so the sealed bundle stays tiny. Only session-sourced miniapps have it (else 404).
