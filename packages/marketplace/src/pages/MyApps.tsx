@@ -47,13 +47,14 @@ export function MyApps({ api, me }: { api: ReturnType<typeof makeApi>; me: Me | 
 
   if (!me) {
     const auth = makeAuth(defaultApiBase());
-    const signIn = (provider: "github" | "google") => auth.signIn(provider, window.location.href);
+    const signIn = (provider: "github" | "google" | "twitter") => auth.signIn(provider, window.location.href);
     return (
       <div className="ex-card">
         <p>Sign in to see the apps you&apos;ve published, including anything private.</p>
         <div className="ex-myapps-signin">
           <a href="#" className="ex-signin" onClick={(e) => { e.preventDefault(); signIn("github"); }}>Sign in with GitHub</a>
           <a href="#" className="ex-signin" onClick={(e) => { e.preventDefault(); signIn("google"); }}>Sign in with Google</a>
+          <a href="#" className="ex-signin" onClick={(e) => { e.preventDefault(); signIn("twitter"); }}>Sign in with X</a>
         </div>
       </div>
     );

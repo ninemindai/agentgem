@@ -94,6 +94,8 @@ export async function mountAggregator(
   const ghSecret = env.AGENTGEM_GITHUB_CLIENT_SECRET;
   const googleClientId = env.AGENTGEM_GOOGLE_CLIENT_ID;
   const googleClientSecret = env.AGENTGEM_GOOGLE_CLIENT_SECRET;
+  const twitterClientId = env.AGENTGEM_TWITTER_CLIENT_ID;
+  const twitterClientSecret = env.AGENTGEM_TWITTER_CLIENT_SECRET;
   const webOrigins = (env.AGENTGEM_WEB_ORIGINS ?? "").split(",").map((s) => s.trim()).filter(Boolean);
   // Hoisted so the route installers below (stars/reviews/catalog/groups/usage/orgsApi/registry) can
   // reuse the SAME instance resolveSession(auth, headers) resolves sessions through (Plan 1b) —
@@ -110,6 +112,8 @@ export async function mountAggregator(
       githubClientSecret: ghSecret,
       googleClientId,
       googleClientSecret,
+      twitterClientId,
+      twitterClientSecret,
       webOrigins,
       cookieDomain: env.AGENTGEM_SESSION_COOKIE_DOMAIN,
       passkeyRpId: deriveRpId(env.AGENTGEM_PASSKEY_RP_ID, env.AGENTGEM_SESSION_COOKIE_DOMAIN),

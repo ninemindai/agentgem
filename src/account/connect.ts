@@ -59,7 +59,7 @@ type Next = () => void;
 type ExpressApp = { get(p: string, h: (req: Req, res: Res, next: Next) => unknown): unknown };
 
 const sha256 = (s: string) => createHash("sha256").update(s).digest("hex");
-const KNOWN = new Set(["github", "google"]);
+const KNOWN = new Set(["github", "google", "twitter"]);
 
 // minimal duck-type of a better-auth social provider (only what this flow calls)
 interface Provider {

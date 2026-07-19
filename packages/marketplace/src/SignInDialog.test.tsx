@@ -15,9 +15,11 @@ describe("SignInDialog", () => {
     render(<SignInDialog {...base} onSocial={onSocial} onPasskey={onPasskey} passkeyAvailable={true} />);
     fireEvent.click(screen.getByRole("button", { name: /github/i }));
     fireEvent.click(screen.getByRole("button", { name: /google/i }));
+    fireEvent.click(screen.getByRole("button", { name: /with x/i }));
     fireEvent.click(screen.getByRole("button", { name: /passkey/i }));
     expect(onSocial).toHaveBeenNthCalledWith(1, "github");
     expect(onSocial).toHaveBeenNthCalledWith(2, "google");
+    expect(onSocial).toHaveBeenNthCalledWith(3, "twitter");
     expect(onPasskey).toHaveBeenCalledOnce();
   });
 

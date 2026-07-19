@@ -66,6 +66,25 @@ describe("connect flow", () => {
     expect(row?.provider).toBe("github");
   });
 
+  it("start: twitter (X) is an allowed provider and 302s to x.com's authorize endpoint when configured", async () => {
+    const db = await makeTestDb();
+    const auth = makeAuth({ db, ...authOpts, twitterClientId: "xid", twitterClientSecret: "xsec" });
+    const cookie = await mintBetterAuthCookieForTest(db, authOpts);
+    const who = await resolveSession(auth, { cookie });
+    if (!who) throw new Error("test setup: cookie did not resolve to a session");
+
+    const r = res();
+    await connectStartHandler(deps(db, auth))(req({ params: { provider: "twitter" }, headers: { cookie } }), r);
+
+    expect(r.code).toBe(302);
+    expect(r.redirected).toContain("https://x.com/i/oauth2/authorize");
+    const state = new URL(r.redirected!).searchParams.get("state");
+    expect(state).toBeTruthy();
+    const row = await consumeConnectState(db, sha256(state!));
+    expect(row?.currentUserId).toBe(who.accountId);
+    expect(row?.provider).toBe("twitter");
+  });
+
   it("callback shim: OUR state -> resolves identity, stashPendingLink, 302 /account?connect=ready", async () => {
     const db = await makeTestDb();
     const auth = makeAuth({ db, ...authOpts });

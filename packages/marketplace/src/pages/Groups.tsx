@@ -34,10 +34,10 @@ export function GroupsPanel({ me, base }: { me: Me | null; base: string }) {
   }, [me, search]);
 
   if (!me) {
-    const signIn = (p: "github" | "google") => makeAuth(base).signIn(p, window.location.href).catch((e) => setErr(String(e)));
+    const signIn = (p: "github" | "google" | "twitter") => makeAuth(base).signIn(p, window.location.href).catch((e) => setErr(String(e)));
     return (
       <div className="ex-card">
-        <p>Sign in to create and manage groups. <a href="#" className="ex-signin" onClick={(e) => { e.preventDefault(); signIn("github"); }}>Sign in with GitHub</a> <a href="#" className="ex-signin" onClick={(e) => { e.preventDefault(); signIn("google"); }}>Sign in with Google</a></p>
+        <p>Sign in to create and manage groups. <a href="#" className="ex-signin" onClick={(e) => { e.preventDefault(); signIn("github"); }}>Sign in with GitHub</a> <a href="#" className="ex-signin" onClick={(e) => { e.preventDefault(); signIn("google"); }}>Sign in with Google</a> <a href="#" className="ex-signin" onClick={(e) => { e.preventDefault(); signIn("twitter"); }}>Sign in with X</a></p>
         {err && <p className="ex-error">{err}</p>}
       </div>
     );

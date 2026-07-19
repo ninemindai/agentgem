@@ -24,8 +24,8 @@ export function GroupDetail({ id, me, base }: { id: string; me: Me | null; base:
   useEffect(() => { if (me) load(); }, [me, id]);
 
   if (!me) {
-    const signIn = (p: "github" | "google") => makeAuth(base).signIn(p, window.location.href).catch((e) => setErr(String(e)));
-    return <div className="ex-card"><p>Sign in to view this group. <a href="#" className="ex-signin" onClick={(e) => { e.preventDefault(); signIn("github"); }}>Sign in with GitHub</a> <a href="#" className="ex-signin" onClick={(e) => { e.preventDefault(); signIn("google"); }}>Sign in with Google</a></p>{err && <p className="ex-error">{err}</p>}</div>;
+    const signIn = (p: "github" | "google" | "twitter") => makeAuth(base).signIn(p, window.location.href).catch((e) => setErr(String(e)));
+    return <div className="ex-card"><p>Sign in to view this group. <a href="#" className="ex-signin" onClick={(e) => { e.preventDefault(); signIn("github"); }}>Sign in with GitHub</a> <a href="#" className="ex-signin" onClick={(e) => { e.preventDefault(); signIn("google"); }}>Sign in with Google</a> <a href="#" className="ex-signin" onClick={(e) => { e.preventDefault(); signIn("twitter"); }}>Sign in with X</a></p>{err && <p className="ex-error">{err}</p>}</div>;
   }
   if (notFound) return <div className="ex-card"><p className="ex-empty">Group not found, or you're not a member.</p></div>;
   if (members === null) return <div className="ex-card"><p className="ex-empty">Loading…</p></div>;

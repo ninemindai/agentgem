@@ -8,9 +8,10 @@ import { navigate } from "../nav";
 // The known, connectable providers (Task 3's socialProviders). `connected` from the API is
 // provider-agnostic (better-auth's own `account` table may carry ids this page doesn't know about,
 // e.g. "credential" for email/password sign-up) — render only these, never an exhaustive union.
-const KNOWN_PROVIDERS: { id: "github" | "google"; label: string }[] = [
+const KNOWN_PROVIDERS: { id: "github" | "google" | "twitter"; label: string }[] = [
   { id: "github", label: "GitHub" },
   { id: "google", label: "Google" },
+  { id: "twitter", label: "X" },
 ];
 
 // Flow B needs to know WHICH provider a collision was for, to target the right one at the bespoke
@@ -48,11 +49,11 @@ export function AccountPanel({ api, me, base }: { api: ReturnType<typeof makeApi
   // browsing blocked sessionStorage, or someone bookmarked/reloaded a stale `?error=` URL): the Merge
   // button is withheld rather than guessing a provider, since guessing wrong would start the wrong
   // OAuth round trip.
-  const [attemptedProvider] = useState<"github" | "google" | null>(() => {
+  const [attemptedProvider] = useState<"github" | "google" | "twitter" | null>(() => {
     try {
       const p = sessionStorage.getItem(CONNECT_ATTEMPT_KEY);
       sessionStorage.removeItem(CONNECT_ATTEMPT_KEY);
-      return p === "github" || p === "google" ? p : null;
+      return p === "github" || p === "google" || p === "twitter" ? p : null;
     } catch { return null; }
   });
   // Task 2/6's bespoke connect callback shim redirects here with one of these (see
@@ -97,19 +98,19 @@ export function AccountPanel({ api, me, base }: { api: ReturnType<typeof makeApi
   const passkeyAuth = useMemo(() => makePasskeyAuth(base), [base]);
 
   if (!me) {
-    const signIn = (provider: "github" | "google") => {
+    const signIn = (provider: "github" | "google" | "twitter") => {
       setLinkError(null);
       makeAuth(base).signIn(provider, window.location.href).catch((err) => setLinkError(err instanceof Error ? err.message : String(err)));
     };
     return (
       <div className="ex-card">
-        <p>Sign in to manage your connected accounts. <a href="#" className="ex-signin" onClick={(e) => { e.preventDefault(); signIn("github"); }}>Sign in with GitHub</a> <a href="#" className="ex-signin" onClick={(e) => { e.preventDefault(); signIn("google"); }}>Sign in with Google</a></p>
+        <p>Sign in to manage your connected accounts. <a href="#" className="ex-signin" onClick={(e) => { e.preventDefault(); signIn("github"); }}>Sign in with GitHub</a> <a href="#" className="ex-signin" onClick={(e) => { e.preventDefault(); signIn("google"); }}>Sign in with Google</a> <a href="#" className="ex-signin" onClick={(e) => { e.preventDefault(); signIn("twitter"); }}>Sign in with X</a></p>
         {linkError && <p className="ex-error">{linkError}</p>}
       </div>
     );
   }
 
-  const connect = (provider: "github" | "google") => {
+  const connect = (provider: "github" | "google" | "twitter") => {
     setLinkError(null);
     // Stash which provider this attempt is for BEFORE the redirect — see CONNECT_ATTEMPT_KEY.
     try { sessionStorage.setItem(CONNECT_ATTEMPT_KEY, provider); } catch { /* private mode etc. — Merge just won't be offered */ }
@@ -122,7 +123,7 @@ export function AccountPanel({ api, me, base }: { api: ReturnType<typeof makeApi
   };
 
   // Flow B: start the bespoke connect flow for the SAME provider the collision was for.
-  const mergeAccount = (provider: "github" | "google") => {
+  const mergeAccount = (provider: "github" | "google" | "twitter") => {
     makeAuth(base).connect(provider);
   };
 

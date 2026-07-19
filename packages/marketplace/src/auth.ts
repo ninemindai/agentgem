@@ -36,7 +36,7 @@ export function makeAuth(base: string) {
      *  handler instead. A non-2xx response, a 2xx with no (or empty) `url`, or a network failure
      *  all throw — this is the primary login path, so a caller MUST be able to catch/render the
      *  failure rather than have the click silently do nothing (see App.tsx's `signIn`). */
-    async signIn(provider: "github" | "google", returnTo: string): Promise<void> {
+    async signIn(provider: "github" | "google" | "twitter", returnTo: string): Promise<void> {
       const r = await fetch(base + "/api/auth/sign-in/social", {
         method: "POST",
         credentials: "include",
@@ -54,7 +54,7 @@ export function makeAuth(base: string) {
      *  If the OAuth round trip resolves to a provider already linked to a DIFFERENT account, better-auth
      *  redirects back to `returnTo` with `?error=account_already_linked_to_different_user` rather than
      *  rejecting this initial call — the caller (Account.tsx) reads that query param after the redirect. */
-    async linkSocial(provider: "github" | "google", returnTo: string): Promise<void> {
+    async linkSocial(provider: "github" | "google" | "twitter", returnTo: string): Promise<void> {
       const r = await fetch(base + "/api/auth/link-social", {
         method: "POST",
         credentials: "include",
@@ -72,7 +72,7 @@ export function makeAuth(base: string) {
      *  server-side rather than going through better-auth's POST-then-follow-`url` dance), so the
      *  caller just navigates the browser there directly — no fetch, nothing to await or catch. The
      *  session cookie rides along with the navigation like any other same-site GET. */
-    connect(provider: "github" | "google"): void {
+    connect(provider: "github" | "google" | "twitter"): void {
       window.location.assign(base + "/api/account/connect/" + provider);
     },
   };

@@ -56,7 +56,7 @@ export function App() {
   // Surface a failed sign-in (misconfigured provider, rate-limit, 5xx, network error) instead of
   // the click having zero visible effect — this is the primary login path, shared by the header
   // link and every loginUrl-triggered prompt (StarButton, review prompts, Team Pulse sign-in).
-  const signIn = (provider: "github" | "google" = "github") => {
+  const signIn = (provider: "github" | "google" | "twitter" = "github") => {
     setSignInError(null);
     auth.signIn(provider, window.location.href).catch((err) => setSignInError(err instanceof Error ? err.message : String(err)));
   };
