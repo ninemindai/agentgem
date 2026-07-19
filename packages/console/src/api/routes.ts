@@ -1162,11 +1162,18 @@ export const playStudioRoute = defineRoute("POST", "/api/play/studio", {
   body: z.object({ source: PlaySourceSchema, name: z.string().optional(), genre: z.enum(["replay", "session-heatmap"]).optional() }),
   response: z.object({ name: z.string() }),
 });
+// Client mirror of UploadFileSchema (src/schemas.ts) — `role` decides where a file lands server-side:
+// ship→git-tracked uploads/ (inlined into the miniapp), reference→gitignored ref/ (build context).
+const playUploadFileSchema = z.object({
+  name: z.string(), bytesBase64: z.string(), type: z.string().optional(), role: z.enum(["ship", "reference"]),
+});
 export const playImportRoute = defineRoute("POST", "/api/play/import", {
-  body: z.object({ title: z.string(), html: z.string(), name: z.string().optional() }), response: z.object({ name: z.string() }),
+  body: z.object({ title: z.string(), html: z.string(), name: z.string().optional(), files: z.array(playUploadFileSchema).optional() }),
+  response: z.object({ name: z.string() }),
 });
 export const playBlankRoute = defineRoute("POST", "/api/play/blank", {
-  body: z.object({ title: z.string(), prompt: z.string().optional(), name: z.string().optional() }), response: z.object({ name: z.string() }),
+  body: z.object({ title: z.string(), prompt: z.string().optional(), name: z.string().optional(), files: z.array(playUploadFileSchema).optional() }),
+  response: z.object({ name: z.string() }),
 });
 export const playSaveRoute = defineRoute("POST", "/api/play/save", {
   body: z.object({ name: z.string(), html: z.string(), meta: PlayMetaSchema }),
