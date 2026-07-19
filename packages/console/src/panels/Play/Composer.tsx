@@ -129,12 +129,24 @@ export function Composer({
   }
   async function addUploads(list: FileList | null | undefined) {
     if (!list?.length) return;
-    const next: Upload[] = [...uploads];
+    // Dedup by filename (current list + earlier in this batch) so chips stay uniquely keyed by name —
+    // a same-named collision would otherwise make setRole/removeUpload act on both React-key-collided rows.
+    const seen = new Set(uploads.map((u) => u.name));
+    const additions: Upload[] = [];
     for (const f of Array.from(list)) {
-      if (next.length >= MAX_FILES) { setError(`at most ${MAX_FILES} files`); break; }
-      next.push({ name: f.name, bytesBase64: await fileToBase64(f), type: f.type, size: f.size, role: "ship" });
+      if (seen.has(f.name)) { setError(`duplicate filename skipped: ${f.name}`); continue; }
+      if (uploads.length + additions.length >= MAX_FILES) { setError(`at most ${MAX_FILES} files`); break; }
+      seen.add(f.name);
+      additions.push({ name: f.name, bytesBase64: await fileToBase64(f), type: f.type, size: f.size, role: "ship" });
     }
-    setUploads(next);
+    if (!additions.length) return;
+    // Functional update + re-check against prev so a concurrent addUploads call can't clobber this one.
+    setUploads((prev) => {
+      const prevNames = new Set(prev.map((u) => u.name));
+      const merged = [...prev];
+      for (const a of additions) if (!prevNames.has(a.name)) { prevNames.add(a.name); merged.push(a); }
+      return merged;
+    });
   }
   function setUploadRole(name: string, role: "ship" | "reference") {
     setUploads((u) => u.map((x) => (x.name === name ? { ...x, role } : x)));
