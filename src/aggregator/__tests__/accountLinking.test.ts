@@ -237,7 +237,7 @@ describe("absorbAccount (Task 5: one-transaction attach fresh account + delete e
     expect((await db.execute(sql`select 1 from accounts where id = ${drop.id}`)).rows).toHaveLength(0); // anchor gone
   });
 
-  it("absorb refuses (merge-not-supported) when NEITHER account is fresh", async () => {
+  it("absorb refuses (merge-not-supported) when BOTH accounts have real data (gems), not just handles", async () => {
     const db = await makeTestDb();
     const auth = makeAuth({ db, ...opts, googleClientId: "g", googleClientSecret: "g" });
     const ctx = await auth.$context;
@@ -245,9 +245,12 @@ describe("absorbAccount (Task 5: one-transaction attach fresh account + delete e
     const b = await ctx.internalAdapter.createUser({ email: "abs-b@x.com", name: "B", emailVerified: false } as never);
     await upsertAccount(db, { provider: "github", accountId: "gh-abs-a", login: "absa", avatarUrl: null, id: a.id });
     await upsertAccount(db, { provider: "google", accountId: "go-abs-b", login: null, avatarUrl: null, id: b.id });
-    // both data-bearing (claimed handles) — neither side is safe to delete.
+    // Both hold a handle AND a gem — the gem is a NON-handle blocker, so neither side is drop-eligible
+    // even under Tier 1's handle-ignoring gate. A shallow re-parent would orphan one side's gem.
     await db.execute(sql`update "user" set handle = 'absa' where id = ${a.id}`);
     await db.execute(sql`update "user" set handle = 'absb' where id = ${b.id}`);
+    await db.execute(sql`insert into catalog_gems (gem_key, version, published_by, created_at_ms, owner_account_id) values ('ga','1','x',0,${a.id})`);
+    await db.execute(sql`insert into catalog_gems (gem_key, version, published_by, created_at_ms, owner_account_id) values ('gb','1','x',0,${b.id})`);
 
     const r = await absorbAccount(db, { current: a.id, other: b.id });
     expect(r).toEqual({ ok: false, reason: "merge-not-supported" });
@@ -277,6 +280,58 @@ describe("absorbAccount (Task 5: one-transaction attach fresh account + delete e
     expect((await db.execute(sql`select 1 from accounts where id = ${oth.id}`)).rows).toHaveLength(0);
   });
 
+  // Tier 1: a handle alone no longer bars the merge — the drop side's ONLY blocker is an auto-claimed
+  // handle (the standalone-X shape), so absorb folds it into the data-bearing survivor and RELEASES the
+  // dropped handle (it's deleted with the user row, so the name becomes reclaimable).
+  it("merges a handle-only account into the data-bearing survivor and frees the dropped handle", async () => {
+    const db = await makeTestDb();
+    const auth = makeAuth({ db, ...opts, googleClientId: "g", googleClientSecret: "g" });
+    const ctx = await auth.$context;
+    const keep = await ctx.internalAdapter.createUser({ email: "mk@x.com", name: "K", emailVerified: false } as never);
+    const drop = await ctx.internalAdapter.createUser({ email: "md@x.com", name: "D", emailVerified: false } as never);
+    await upsertAccount(db, { provider: "github", accountId: "gh-mk", login: "mk", avatarUrl: null, id: keep.id });
+    await upsertAccount(db, { provider: "twitter", accountId: "tw-md", login: "mdx", avatarUrl: null, id: drop.id });
+    await db.execute(sql`insert into account (id, user_id, account_id, provider_id, created_at, updated_at) values
+      (gen_random_uuid()::text, ${keep.id}, 'gh-mk', 'github', now(), now()),
+      (gen_random_uuid()::text, ${drop.id}, 'tw-md', 'twitter', now(), now())`);
+    // keep is data-bearing (a gem + its own handle); drop has ONLY an auto-claimed handle.
+    await db.execute(sql`insert into catalog_gems (gem_key, version, published_by, created_at_ms, owner_account_id) values ('mgem','1','x',0,${keep.id})`);
+    await db.execute(sql`update "user" set handle = 'keeph' where id = ${keep.id}`);
+    await db.execute(sql`update "user" set handle = 'droph' where id = ${drop.id}`);
+
+    const r = await absorbAccount(db, { current: keep.id, other: drop.id });
+    expect(r).toEqual({ ok: true, keep: keep.id });
+    expect(await connectedProviders(db, keep.id)).toEqual(["github", "twitter"]); // X folded in
+    expect((await db.execute(sql`select 1 from "user" where id = ${drop.id}`)).rows).toHaveLength(0); // dropped
+    // survivor keeps ITS handle; the dropped handle is freed (no row holds it now).
+    expect((await db.execute(sql`select handle from "user" where id = ${keep.id}`)).rows[0]).toMatchObject({ handle: "keeph" });
+    expect((await db.execute(sql`select 1 from "user" where lower(handle) = 'droph'`)).rows).toHaveLength(0);
+  });
+
+  // The user's exact scenario: a standalone-X account and a GitHub account, each with ONLY an
+  // auto-claimed handle and no other data. Both are drop-eligible, so the tie-break keeps the caller's
+  // session account (current) and releases the other's handle.
+  it("merges two handle-only accounts: current survives, the other's handle is freed", async () => {
+    const db = await makeTestDb();
+    const auth = makeAuth({ db, ...opts, googleClientId: "g", googleClientSecret: "g" });
+    const ctx = await auth.$context;
+    const cur = await ctx.internalAdapter.createUser({ email: "h-cur@x.com", name: "C", emailVerified: false } as never);
+    const oth = await ctx.internalAdapter.createUser({ email: "h-oth@x.com", name: "O", emailVerified: false } as never);
+    await upsertAccount(db, { provider: "twitter", accountId: "tw-cur", login: "curx", avatarUrl: null, id: cur.id });
+    await upsertAccount(db, { provider: "github", accountId: "gh-oth", login: "othgh", avatarUrl: null, id: oth.id });
+    await db.execute(sql`insert into account (id, user_id, account_id, provider_id, created_at, updated_at) values
+      (gen_random_uuid()::text, ${cur.id}, 'tw-cur', 'twitter', now(), now()),
+      (gen_random_uuid()::text, ${oth.id}, 'gh-oth', 'github', now(), now())`);
+    await db.execute(sql`update "user" set handle = 'curh' where id = ${cur.id}`);
+    await db.execute(sql`update "user" set handle = 'othh' where id = ${oth.id}`);
+
+    const r = await absorbAccount(db, { current: cur.id, other: oth.id });
+    expect(r).toEqual({ ok: true, keep: cur.id });
+    expect(await connectedProviders(db, cur.id)).toEqual(["github", "twitter"]);
+    expect((await db.execute(sql`select handle from "user" where id = ${cur.id}`)).rows[0]).toMatchObject({ handle: "curh" });
+    expect((await db.execute(sql`select 1 from "user" where lower(handle) = 'othh'`)).rows).toHaveLength(0); // freed
+  });
+
   it("refuses same-account absorb without touching anything", async () => {
     const db = await makeTestDb();
     const id = crypto.randomUUID();
@@ -287,8 +342,10 @@ describe("absorbAccount (Task 5: one-transaction attach fresh account + delete e
 
   // Proves Task 4's accountFreshness gate is actually consulted by absorb, not bypassed: `drop` has
   // no handle/gem/gem_archive/star/review (would look fresh under an old, shorter check list) but
-  // DOES have a usage_days row — one of the later FRESHNESS_CHECKS entries. If absorb used a stale or
-  // partial freshness check, this would wrongly succeed and silently drop the usage_days row's owner.
+  // DOES have a usage_days row — one of the later FRESHNESS_CHECKS entries. Under Tier 1 the handle is
+  // freeable, so `drop`'s non-droppability rides ENTIRELY on usage_days being checked: `keep` here also
+  // holds a gem so it can't be the drop side, which means a merge could only proceed by dropping the
+  // usage-bearing account. It must refuse — proving usage_days is still consulted, not bypassed.
   it("refuses to absorb an account that looks fresh under the first few checks but has a usage_days row", async () => {
     const db = await makeTestDb();
     const auth = makeAuth({ db, ...opts, googleClientId: "g", googleClientSecret: "g" });
@@ -297,7 +354,8 @@ describe("absorbAccount (Task 5: one-transaction attach fresh account + delete e
     const drop = await ctx.internalAdapter.createUser({ email: "abs-drop2@x.com", name: "D2", emailVerified: false } as never);
     await upsertAccount(db, { provider: "github", accountId: "gh-abs-keep2", login: "abskeep2", avatarUrl: null, id: keep.id });
     await upsertAccount(db, { provider: "google", accountId: "go-abs-drop2", login: null, avatarUrl: null, id: drop.id });
-    await db.execute(sql`update "user" set handle = 'abskeep2' where id = ${keep.id}`); // keep is data-bearing
+    // keep is data-bearing via a GEM (a handle alone would now be freeable, letting keep be the drop side).
+    await db.execute(sql`insert into catalog_gems (gem_key, version, published_by, created_at_ms, owner_account_id) values ('kg2','1','x',0,${keep.id})`);
     await db.execute(sql`insert into usage_days (account_id, machine, scope, date) values (${drop.id}, 'm', '', '2026-07-10')`);
 
     const r = await absorbAccount(db, { current: keep.id, other: drop.id });

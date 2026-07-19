@@ -161,7 +161,7 @@ export function AccountPanel({ api, me, base }: { api: ReturnType<typeof makeApi
       )}
       {connectStatus === "ready" && !absorbed && (
         <div>
-          <p>This merges the just-verified account — it has no gems, handle, or data — into this one.</p>
+          <p>This permanently merges the two accounts and can&apos;t be undone. The account that holds your gems and activity is kept and the other is removed; if the removed account had claimed an @handle, that handle is released (you can re-claim it afterward). If neither account has gems, the one you&apos;re signed in with now is kept.</p>
           <button type="button" className="ex-signin" disabled={absorbBusy} onClick={confirmAbsorb}>
             {absorbBusy ? "Connecting…" : "Connect"}
           </button>

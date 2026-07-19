@@ -181,7 +181,7 @@ describe("Account page", () => {
 
     render(<AccountPanel api={makeApi("https://api.x")} me={me} base="https://api.x" />);
 
-    expect(await screen.findByText(/merges the just-verified account/i)).toBeTruthy();
+    expect(await screen.findByText(/permanently merges the two accounts/i)).toBeTruthy();
     const confirmBtn = screen.getByRole("button", { name: "Connect" });
     fireEvent.click(confirmBtn);
 
