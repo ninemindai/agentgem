@@ -285,8 +285,6 @@ import { InvalidInputError, scorecardFloor, loadOrCreateIdentity } from "@agentg
 import { scaffoldChecks } from "@agentgem/build";
 import { materialize, compatibility } from "@agentgem/model";
 import type { TargetId } from "@agentgem/model";
-import { DEPLOY_REGISTRY, deployGem, deployTargetList } from "@agentgem/deploy";
-import type { DeployTargetId } from "@agentgem/deploy";
 import { createWorkspace, listWorkspaces, readWorkspace, renderTarget, deleteWorkspace } from "@agentgem/base";
 import { writeGemArchive, readGemArchive, readGemMeta } from "@agentgem/archive";
 import type { GemLock } from "@agentgem/archive";
@@ -296,14 +294,10 @@ import { exportGem, importGem } from "@agentgem/distribute";
 import { fetchGemBytes } from "@agentgem/distribute";
 import { sendBytes, receiveTicket, natsStoreFromEnv, assertConfigured, mintCredsFromEnv, fetchAndBurnCiphertext } from "@agentgem/transfer";
 import type { Gem } from "@agentgem/model";
-import { readDeployRecord, writeDeployRecord, clearDeployRecord } from "@agentgem/base";
-import type { DeployBackend } from "@agentgem/base";
 import { transcriptToken, readAnalysisCache, writeAnalysisCache } from "@agentgem/insight";
 import { readGlobalUsageCache, writeGlobalUsageCache, readGlobalUsageCacheStale } from "@agentgem/capture";
 import { computeGlobalUsage, getGlobalUsageIndexed, getGlobalUsageStale } from "@agentgem/capture";
 import { buildOffThreadParse } from "./coldBuildParser.js";
-import { undeployManagedAgent, anthropicPublishClient } from "@agentgem/deploy";
-import { undeployAgentcoreHarness, realAgentcoreControlClient } from "@agentgem/deploy";
 
 import type { ConfigInventory } from "@agentgem/model";
 import {
@@ -313,12 +307,9 @@ import {
   TransferSendRequestSchema, TransferSendResponseSchema, TransferReceiveRequestSchema, TransferReceiveResponseSchema,
   TransferTokenRequestSchema, TransferTokenResponseSchema,
   TransferCiphertextRequestSchema, TransferCiphertextResponseSchema,
-  PublishPreviewRequestSchema, PublishRequestSchema, PublishPreviewResponseSchema, PublishReadyResponseSchema, PublishResultSchema,
-  DeployTargetsResponseSchema, DeployReadyQuerySchema,
   ArchiveRequestSchema, ArchiveResponseSchema,
   CreateWorkspaceRequestSchema, WorkspaceQuerySchema, RenderRequestSchema, WorkspaceNameRequestSchema, WorkspaceSummarySchema, WorkspaceDetailSchema, RenderResultSchema, ListWorkspacesResponseSchema, DeleteWorkspaceResponseSchema,
   RunReadyQuerySchema, RunReadyResponseSchema, RunRequestSchema, RunStatusQuerySchema, RunStateSchema, RunStopRequestSchema, RunStopResponseSchema,
-  CredentialRequestSchema, CredentialResponseSchema,
   TestbedDetectQuerySchema, TestbedDetectResponseSchema,
   TestbedSuggestionQuerySchema, TestbedSuggestionResponseSchema,
   TestbedRecentsResponseSchema,
@@ -327,13 +318,11 @@ import {
   TestbedScaffoldRequestSchema, TestbedScaffoldResponseSchema,
   TestbedImportRequestSchema, TestbedImportResponseSchema,
   GemApplyRequestSchema, GemApplyResponseSchema, RubricInstallResultSchema,
-  AgentcoreReadyResponseSchema, AgentcoreDeployRequestSchema, AgentcoreStatusQuerySchema, AgentcoreDeployStateSchema,
   RegistryReadyResponseSchema, RegistryIndexResponseSchema,
   RegistrySearchQuerySchema, RegistrySearchResponseSchema, RegistryGemsResponseSchema,
   RegistryResolveRequestSchema, RegistryResolveResponseSchema,
   RegistryInstallRequestSchema, RegistryInstallResponseSchema,
   RegistryPublishRequestSchema, RegistryPublishResponseSchema,
-  UndeployRequestSchema, UndeployResponseSchema, DeployRecordQuerySchema, DeployRecordResponseSchema,
   WorkflowAnalyzeRequestSchema, WorkflowAnalyzeResponseSchema,
   DistilledSkillSchema, DistilledLessonSchema, WorkflowDraftWriteResponseSchema,
   GemRunRequestSchema, GemRunResponseSchema,
@@ -378,9 +367,7 @@ function kickOffBackgroundDistill(root: string): void {
     .finally(() => inFlightDistill.delete(root));
 }
 import { writeDistilledDraft, writeDistilledLesson, stageDraftsByEvidence, stageLessonsByEvidence } from "@agentgem/capture";
-import { runReadiness, startLocal, stopLocal, getRunStatus, deployVercel, deployCloudflare, undeployVercel, undeployCloudflare } from "@agentgem/run";
-import { setCredential } from "@agentgem/capture";
-import { agentcoreReadiness, deployAgentcore, getAgentcoreStatus } from "@agentgem/deploy";
+import { runReadiness, startLocal, stopLocal, getRunStatus } from "@agentgem/run";
 import { scaffoldTestbed, importArtifacts } from "@agentgem/testbed";
 import { materializeAndRunGem, materializeGemToTestbed, registerRun, registerVerify, AGENT_ADAPTERS, type AgentId } from "@agentgem/run";
 import { verifyGemAcrossAgents, deriveMatrixBaseDir } from "@agentgem/run";
@@ -398,7 +385,7 @@ import { RestBindings } from "@agentback/rest";
 import { DrizzleBindings } from "@agentback/drizzle";
 import type { AppDb, makeAuth } from "@agentgem/aggregator";
 import { listCatalogGems } from "@agentgem/aggregator/catalog";
-import { AUTH_BINDING, PUBLISHED_BY_RESOLVER } from "./hostedBindings.js";
+import { AUTH_BINDING, PUBLISHED_BY_RESOLVER, RUN_CLOUD_DISPATCH } from "./hostedBindings.js";
 import { introspectAll } from "./introspectAll.js";
 import { GemTypeRegistry, defaultGemTypeRegistry, resolvePublishType } from "./gem/gemTypeRegistry.js";
 import { resolveDirs, resolveProject, agentgemHome, workspaceArtifactPath, parseWorkspaceArtifactPath } from "@agentgem/model";
@@ -477,6 +464,7 @@ export class GemController {
     @inject(DrizzleBindings.CLIENT, { optional: true }) private db?: AppDb,
     @inject(AUTH_BINDING, { optional: true }) private auth?: ReturnType<typeof makeAuth>,
     @inject(PUBLISHED_BY_RESOLVER, { optional: true }) private resolvePublishedBy?: import("./hostedBindings.js").PublishedByResolver,
+    @inject(RUN_CLOUD_DISPATCH, { optional: true }) private runCloudDispatch?: import("./hostedBindings.js").RunCloudDispatch,
   ) {}
 
   @get("/inventory", { query: DirQuerySchema, response: InventorySchema })
@@ -1176,20 +1164,14 @@ export class GemController {
     return runReadiness();
   }
 
-  // OUTWARD-FACING (local machine): set + persist a server-side deploy/publish credential
-  // (allowlisted keys only) to ~/.agentgem/.env. The value is never logged or returned.
-  @post("/credential", { body: CredentialRequestSchema, response: CredentialResponseSchema })
-  async credential(input: { body: z.infer<typeof CredentialRequestSchema> }): Promise<z.infer<typeof CredentialResponseSchema>> {
-    setCredential(input.body.key, input.body.value);
-    return { ok: true };
-  }
-
-  // OUTWARD-FACING (local machine): run the rendered eve project locally or deploy it to Vercel.
+  // OUTWARD-FACING (local machine): run the rendered project locally; cloud modes delegate to
+  // the optional deploy dispatch (present when the deploy controller is registered).
   @post("/run", { body: RunRequestSchema, response: RunStateSchema })
   async run(input: { body: z.infer<typeof RunRequestSchema> }): Promise<z.infer<typeof RunStateSchema>> {
     const { name, mode } = input.body;
-    const state = mode === "cloudflare" ? await deployCloudflare(name) : mode === "vercel" ? await deployVercel(name, undefined, { eveAuth: input.body.eveAuth }) : await startLocal(name);
-    return state;
+    if (mode === "local") return startLocal(name);
+    if (!this.runCloudDispatch) throw new Error(`Run mode "${mode}" is not available.`);
+    return this.runCloudDispatch(mode, name, { eveAuth: input.body.eveAuth });
   }
 
   @get("/run-status", { query: RunStatusQuerySchema, response: RunStateSchema })
@@ -1200,104 +1182,6 @@ export class GemController {
   @post("/run/stop", { body: RunStopRequestSchema, response: RunStopResponseSchema })
   async runStop(input: { body: z.infer<typeof RunStopRequestSchema> }): Promise<z.infer<typeof RunStopResponseSchema>> {
     return stopLocal(input.body.name, input.body.target);
-  }
-
-  @get("/agentcore/deploy-ready", { query: PickQuerySchema, response: AgentcoreReadyResponseSchema })
-  async agentcoreDeployReady(_input: { query: z.infer<typeof PickQuerySchema> }): Promise<z.infer<typeof AgentcoreReadyResponseSchema>> {
-    return agentcoreReadiness();
-  }
-
-  // OUTWARD-FACING: shells the agentcore CLI to deploy the workspace's rendered project to AWS.
-  @post("/agentcore/deploy", { body: AgentcoreDeployRequestSchema, response: AgentcoreDeployStateSchema })
-  async agentcoreDeploy(input: { body: z.infer<typeof AgentcoreDeployRequestSchema> }): Promise<z.infer<typeof AgentcoreDeployStateSchema>> {
-    return deployAgentcore(input.body.name);
-  }
-
-  @get("/agentcore/deploy-status", { query: AgentcoreStatusQuerySchema, response: AgentcoreDeployStateSchema })
-  async agentcoreDeployStatus(input: { query: z.infer<typeof AgentcoreStatusQuerySchema> }): Promise<z.infer<typeof AgentcoreDeployStateSchema>> {
-    return getAgentcoreStatus(input.query.name);
-  }
-
-  @get("/deploy-targets", { query: PickQuerySchema, response: DeployTargetsResponseSchema })
-  async deployTargets(_input: { query: z.infer<typeof PickQuerySchema> }): Promise<z.infer<typeof DeployTargetsResponseSchema>> {
-    return { targets: deployTargetList() };
-  }
-
-  // Offline render of the deploy payload + skip/secret/skill lists. No network.
-  @post("/publish-preview", { body: PublishPreviewRequestSchema, response: PublishPreviewResponseSchema })
-  async publishPreview(input: { body: z.infer<typeof PublishPreviewRequestSchema> }): Promise<z.infer<typeof PublishPreviewResponseSchema>> {
-    const dirs = resolveDirs(input.body.dir);
-    const inventory = introspectAll(input.body.dir, input.body.projects);
-    const gem = buildGem(inventory, input.body.selection, { name: input.body.name ?? "gem", createdFrom: dirs.claudeDir, channels: input.body.channels });
-    const target = (input.body.target ?? "claude-managed") as DeployTargetId;
-    return DEPLOY_REGISTRY[target].preview(gem);
-  }
-
-  // Whether the server is configured for the deploy backend (the UI gates on this). Boolean only.
-  @get("/publish-ready", { query: DeployReadyQuerySchema, response: PublishReadyResponseSchema })
-  async publishReady(input: { query: z.infer<typeof DeployReadyQuerySchema> }): Promise<z.infer<typeof PublishReadyResponseSchema>> {
-    const target = (input.query.target ?? "claude-managed") as DeployTargetId;
-    return { ready: DEPLOY_REGISTRY[target].ready() };
-  }
-
-  // OUTWARD-FACING: gated network deploy through the selected backend. The key is read server-side
-  // (inside the registry's deploy) and never returned; only the redacted gem payload is sent.
-  @post("/publish", { body: PublishRequestSchema, response: PublishResultSchema })
-  async publish(input: { body: z.infer<typeof PublishRequestSchema> }): Promise<z.infer<typeof PublishResultSchema>> {
-    const dirs = resolveDirs(input.body.dir);
-    const inventory = introspectAll(input.body.dir, input.body.projects);
-    const gem = buildGem(inventory, input.body.selection, { name: input.body.name ?? "gem", createdFrom: dirs.claudeDir, channels: input.body.channels });
-    const target = (input.body.target ?? "claude-managed") as DeployTargetId;
-    const result = await deployGem(target, gem, input.body.requestId);
-    if (input.body.wsName) {
-      const at = new Date().toISOString();
-      if (result.kind === "managed-agent") {
-        writeDeployRecord(input.body.wsName, {
-          backend: "claude-managed", at,
-          agentId: result.agentId, environmentId: result.environmentId,
-          skillIds: result.registeredSkills.map((s) => s.skillId),
-        });
-      } else if (result.kind === "agentcore-harness") {
-        writeDeployRecord(input.body.wsName, { backend: "agentcore", at, harnessId: result.harnessId });
-      }
-    }
-    return result;
-  }
-
-  @post("/undeploy", { body: UndeployRequestSchema, response: UndeployResponseSchema })
-  async undeploy(input: { body: z.infer<typeof UndeployRequestSchema> }): Promise<z.infer<typeof UndeployResponseSchema>> {
-    const { name, target } = input.body;
-    if (target === "eve") {
-      const r = await undeployVercel(name);
-      if (!r.removed) throw new Error(`Vercel undeploy failed for "${name}". Check logs.`);
-      return { removed: true, logTail: r.logTail };
-    }
-    if (target === "flue") {
-      const r = await undeployCloudflare(name);
-      if (!r.removed) throw new Error(`Cloudflare undeploy failed for "${name}". Check logs.`);
-      return { removed: true, logTail: r.logTail };
-    }
-    if (target === "claude-managed") {
-      const key = process.env.ANTHROPIC_API_KEY;
-      if (!key) throw new Error("ANTHROPIC_API_KEY is not set — cannot undeploy from Claude Managed Agents.");
-      const rec = readDeployRecord(name, "claude-managed");
-      if (!rec) throw new Error(`No claude-managed deploy record for workspace "${name}".`);
-      await undeployManagedAgent(rec, anthropicPublishClient(key));
-      clearDeployRecord(name, "claude-managed");
-      return { removed: true };
-    }
-    // agentcore
-    const rec = readDeployRecord(name, "agentcore");
-    if (!rec) throw new Error(`No agentcore deploy record for workspace "${name}".`);
-    await undeployAgentcoreHarness(rec, realAgentcoreControlClient());
-    clearDeployRecord(name, "agentcore");
-    return { removed: true };
-  }
-
-  @get("/deploy-record", { query: DeployRecordQuerySchema, response: DeployRecordResponseSchema })
-  async deployRecord(input: { query: z.infer<typeof DeployRecordQuerySchema> }): Promise<z.infer<typeof DeployRecordResponseSchema>> {
-    const rec = readDeployRecord(input.query.name, input.query.backend as DeployBackend);
-    return { record: rec as Record<string, unknown> | null };
   }
 
   @get("/testbed/detect", { query: TestbedDetectQuerySchema, response: TestbedDetectResponseSchema })
