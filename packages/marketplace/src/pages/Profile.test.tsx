@@ -82,6 +82,21 @@ describe("Profile page", () => {
     expect(screen.getByRole("tab", { name: "Apps" }).getAttribute("aria-selected")).toBe("true");
     expect(screen.queryByRole("heading", { name: /^account$/i })).toBeNull();
   });
+
+  // Regression: a linkSocial collision returns to the bare profile path with ?error= and NO
+  // ?tab=account, so the owner must still land on the Account tab where the "Merge this account"
+  // recovery lives — not stranded on the default Apps tab with a dangling error.
+  it("routes an owner's linkSocial collision (?error=, no tab) to the Account tab so the merge recovery is reachable", async () => {
+    window.history.pushState({}, "", "/@octocat?error=account_already_linked_to_different_user");
+    // AccountPanel mounts PasskeysSection, which fetches — stub it so no real network call leaks.
+    vi.stubGlobal("fetch", vi.fn(async () => new Response("[]", { status: 200, headers: { "content-type": "application/json" } })));
+    const api = { getProfile: () => Promise.resolve(full), getAccountProviders: () => Promise.resolve({ connected: ["github"] }) } as never;
+    render(<Profile api={api} login="octocat" me={{ id:"1", name:"octocat", handle:"octocat", avatarUrl:null, orgs:[] }} base="" />);
+    const accountTab = await screen.findByRole("tab", { name: "Account" });
+    expect(accountTab.getAttribute("aria-selected")).toBe("true");
+    // AccountPanel's collision banner is rendered (the recovery entry point), not the Apps list.
+    expect(await screen.findByText(/already linked to another AgentGem account/i)).toBeTruthy();
+  });
 });
 
 describe("Profile own-orgs navigation", () => {
