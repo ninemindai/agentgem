@@ -11,8 +11,11 @@
 ## Global Constraints
 
 - **Node ≥ 24**, ESM only. Import sibling modules with the `.js` extension (`./foo.js`) even from `.ts`.
-- **Root tests run compiled `dist/`**: the root `test` script is `tsc -b && vitest run`, include glob `dist/**/__tests__/**/*.test.js`. So `@agentgem/play` tests live in `packages/play/src/__tests__/*.test.ts` and are run via `pnpm test` (which compiles first) — see [[test-setup-runs-compiled-dist]]. Clean stale `dist/` after renames.
+- **CI-gated tests live in ROOT `src/__tests__/*.test.ts`** and import play code via the built package `@agentgem/play` (NOT relative `packages/play/...`). The root `test` script is `tsc -b && vitest run` with include glob `dist/**/__tests__/**/*.test.js` — root src compiles to root `dist/__tests__/`, but `packages/play/src/__tests__/` compiles to `packages/play/dist/` which the glob does **NOT** collect. So a play-logic test placed under `packages/play/` runs nowhere. Mirror the existing `src/__tests__/playStudio.test.ts`: import `{ blankStudio, miniappsRoot, ... } from "@agentgem/play"`; `beforeEach` sets `process.env.AGENTGEM_HOME = mkdtempSync(...)`, `afterEach` does `rmSync(home, {recursive,force})` + `delete process.env.AGENTGEM_HOME`.
+- **Inner test loop** (play code is consumed as the built package, so rebuild first): `pnpm -w exec tsc -b && pnpm -w exec vitest run dist/__tests__/<file>.test.js`. Full sweep: `pnpm test`. See [[test-setup-runs-compiled-dist]] / [[deepsec-security-scan]] (CI gates root `dist/__tests__` only). Clean stale `dist/` after renames.
+- **Any new symbol a root test imports must be exported from `packages/play/src/index.ts`** (Task 1 exports `writeUploads`/`sanitizeUploadName`; `blankStudio`/`importStudio`/`studioBrief`/`miniappsRoot`/`miniappDir` already are).
 - **Console tests** run on TS directly (jsdom): `pnpm -C packages/console test`. jsdom asserts behavior, not appearance.
+- **The worktree needs `pnpm install`** before any build/test (controller runs it once up front).
 - **Every `ex-*`/`play-*` className must have a matching CSS rule** in `packages/console/src/shell/theme.css` (grep before finishing). Reuse `--ink`/`--surface`/`--accent`/`--line`/`--raised`/`--radius` tokens; mirror `.play-drop`/`.play-src-row`.
 - **The shipped miniapp is a single self-contained `index.html`** (no asset server). Ship-assets inline as `data:` URIs; the save gate (`gameGate.ts:22`) rejects any bundle > 1,500,000 bytes — hence the ship caps below.
 - **Limits (enforced client + server):** reference ≤ 20 files, ≤ 5 MB/file, ≤ 15 MB total; ship ≤ 500 KB/file, ≤ 1 MB total. Import path: `html` + `files` must fit the 25 MB JSON body cap.
@@ -41,7 +44,8 @@
 
 **Files:**
 - Create: `packages/play/src/uploads.ts`
-- Test: `packages/play/src/__tests__/uploads.test.ts`
+- Modify: `packages/play/src/index.ts` (export `writeUploads`/`sanitizeUploadName`/types — required so the root test can import them from `@agentgem/play`)
+- Test: `src/__tests__/uploads.test.ts` (root — CI-gated; imports the built `@agentgem/play`)
 
 **Interfaces:**
 - Consumes: nothing (leaf module). Uses `node:fs`, `node:path`.
@@ -51,16 +55,17 @@
   - `export interface UploadCounts { ship: number; ref: number }`
   - `export function writeUploads(dir: string, files: UploadFile[]): UploadCounts` — writes `uploads/<name>` (ship, tracked), `ref/<name>` (reference, gitignored via a `.gitignore` written in `dir`), and `uploads/assets.json` (ship manifest). Throws `Error` on limit breach / bad base64 / unsafe name. Returns per-role counts (0/0 when `files` is empty — caller may skip).
   - `export function sanitizeUploadName(raw: string): string` — single safe basename, preserved extension; throws on empty/`.`/`..`/traversal.
+  - All of the above re-exported from `packages/play/src/index.ts`.
 
 - [ ] **Step 1: Write the failing tests**
 
 ```ts
-// packages/play/src/__tests__/uploads.test.ts
+// src/__tests__/uploads.test.ts   (ROOT — imports the built package)
 import { describe, it, expect, beforeEach } from "vitest";
 import { mkdtempSync, readFileSync, existsSync, readdirSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { writeUploads, sanitizeUploadName, type UploadFile } from "../uploads.js";
+import { writeUploads, sanitizeUploadName, type UploadFile } from "@agentgem/play";
 
 const b64 = (s: string) => Buffer.from(s).toString("base64");
 const png1x1 = // a tiny real PNG
@@ -140,8 +145,8 @@ describe("writeUploads", () => {
 
 - [ ] **Step 2: Run tests to verify they fail**
 
-Run: `pnpm -w exec vitest run packages/play/src/__tests__/uploads.test.ts` (TS-direct is fine for a fast red; CI uses the compiled path)
-Expected: FAIL with "Cannot find module '../uploads.js'".
+Run: `pnpm -w exec tsc -b && pnpm -w exec vitest run dist/__tests__/uploads.test.js`
+Expected: FAIL — `@agentgem/play` has no `writeUploads` export (build error or import undefined).
 
 - [ ] **Step 3: Write `packages/play/src/uploads.ts`**
 
@@ -257,15 +262,23 @@ export function writeUploads(dir: string, files: UploadFile[]): UploadCounts {
   Note: replace the `require("node:fs")` read with a top-of-file `readFileSync` import (already imported? add it):
   change the import line to `import { writeFileSync, mkdirSync, existsSync, readFileSync } from "node:fs";` and use `readFileSync(gi, "utf8")` directly. Do not leave a `require` in ESM.
 
-- [ ] **Step 4: Run tests to verify they pass**
+- [ ] **Step 4: Export from the package index**
 
-Run: `pnpm -w exec vitest run packages/play/src/__tests__/uploads.test.ts`
+In `packages/play/src/index.ts`, add near the other studio exports:
+
+```ts
+export { writeUploads, sanitizeUploadName, type UploadFile, type UploadRole, type UploadCounts } from "./uploads.js";
+```
+
+- [ ] **Step 5: Run tests to verify they pass**
+
+Run: `pnpm -w exec tsc -b && pnpm -w exec vitest run dist/__tests__/uploads.test.js`
 Expected: PASS (all cases).
 
-- [ ] **Step 5: Commit**
+- [ ] **Step 6: Commit**
 
 ```bash
-git add packages/play/src/uploads.ts packages/play/src/__tests__/uploads.test.ts
+git add packages/play/src/uploads.ts packages/play/src/index.ts src/__tests__/uploads.test.ts
 git commit -m "feat(play): writeUploads — ship→uploads/, reference→gitignored ref/, manifest
 
 Co-Authored-By: Claude Opus 4.8 (1M context) <noreply@anthropic.com>"
@@ -276,8 +289,10 @@ Co-Authored-By: Claude Opus 4.8 (1M context) <noreply@anthropic.com>"
 ## Task 2: `MiniappMeta.uploads` + seed wiring + durable brief (play)
 
 **Files:**
-- Modify: `packages/play/src/miniapps.ts:20-23` (MiniappMeta), `packages/play/src/studio.ts` (blankStudio/importStudio/studioInstructions/studioBrief), `packages/play/src/index.ts` (re-export)
-- Test: `packages/play/src/__tests__/studioUploads.test.ts`
+- Modify: `packages/play/src/miniapps.ts:20-23` (MiniappMeta), `packages/play/src/studio.ts` (blankStudio/importStudio/studioInstructions/studioBrief)
+- Test: `src/__tests__/studioUploads.test.ts` (root — imports the built `@agentgem/play`)
+
+Note: `writeUploads` is already exported from `packages/play/src/index.ts` (Task 1 Step 4). `MiniappMeta`, `blankStudio`, `importStudio`, `studioBrief`, `miniappsRoot`, `miniappDir` are already exported.
 
 **Interfaces:**
 - Consumes: `writeUploads`, `UploadFile`, `UploadCounts` from Task 1.
@@ -290,20 +305,18 @@ Co-Authored-By: Claude Opus 4.8 (1M context) <noreply@anthropic.com>"
 - [ ] **Step 1: Write the failing test**
 
 ```ts
-// packages/play/src/__tests__/studioUploads.test.ts
-import { describe, it, expect, beforeEach } from "vitest";
-import { mkdtempSync, readFileSync, existsSync } from "node:fs";
+// src/__tests__/studioUploads.test.ts   (ROOT — imports the built package)
+import { describe, it, expect, beforeEach, afterEach } from "vitest";
+import { mkdtempSync, rmSync, readFileSync, existsSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { blankStudio, studioBrief } from "../studio.js";
-import { miniappDir, miniappsRoot } from "../miniapps.js";
+import { blankStudio, studioBrief, miniappDir, miniappsRoot } from "@agentgem/play";
 
 const b64 = (s: string) => Buffer.from(s).toString("base64");
 
-beforeEach(() => {
-  // Point the registry at a temp dir. AGENTGEM_HOME drives miniappsRoot() — see miniapps.ts.
-  process.env.AGENTGEM_HOME = mkdtempSync(join(tmpdir(), "ma-home-"));
-});
+let home: string;
+beforeEach(() => { home = mkdtempSync(join(tmpdir(), "ma-home-")); process.env.AGENTGEM_HOME = home; });
+afterEach(() => { rmSync(home, { recursive: true, force: true }); delete process.env.AGENTGEM_HOME; });
 
 describe("blankStudio with uploads", () => {
   it("writes ref/ + uploads/, records meta.uploads, and studioBrief names the dirs", async () => {
@@ -330,11 +343,11 @@ describe("blankStudio with uploads", () => {
 });
 ```
 
-  Note: confirm `miniappsRoot()` derives from `AGENTGEM_HOME` (grep `miniappsRoot` in `miniapps.ts`). If it reads a different env/base, set that instead in `beforeEach`.
+  Note: `miniappsRoot()` = `join(AGENTGEM_HOME, "miniapps")` (confirmed), so the temp `AGENTGEM_HOME` fully isolates the registry. This mirrors `src/__tests__/playStudio.test.ts`.
 
 - [ ] **Step 2: Run test to verify it fails**
 
-Run: `pnpm -w exec vitest run packages/play/src/__tests__/studioUploads.test.ts`
+Run: `pnpm -w exec tsc -b && pnpm -w exec vitest run dist/__tests__/studioUploads.test.js`
 Expected: FAIL (blankStudio ignores the 4th arg; no `meta.uploads`).
 
 - [ ] **Step 3: Add `uploads` to `MiniappMeta`**
@@ -401,23 +414,15 @@ export function studioBrief(name: string): string {
 }
 ```
 
-- [ ] **Step 5: Re-export from the package index**
+- [ ] **Step 5: Run tests to verify they pass**
 
-In `packages/play/src/index.ts`, add (near the other studio exports):
-
-```ts
-export { writeUploads, sanitizeUploadName, type UploadFile, type UploadRole, type UploadCounts } from "./uploads.js";
-```
-
-- [ ] **Step 6: Run tests to verify they pass**
-
-Run: `pnpm -w exec vitest run packages/play/src/__tests__/studioUploads.test.ts`
+Run: `pnpm -w exec tsc -b && pnpm -w exec vitest run dist/__tests__/studioUploads.test.js`
 Expected: PASS.
 
-- [ ] **Step 7: Commit**
+- [ ] **Step 6: Commit**
 
 ```bash
-git add packages/play/src/miniapps.ts packages/play/src/studio.ts packages/play/src/index.ts packages/play/src/__tests__/studioUploads.test.ts
+git add packages/play/src/miniapps.ts packages/play/src/studio.ts src/__tests__/studioUploads.test.ts
 git commit -m "feat(play): seed miniapps with uploads + durable meta.uploads brief
 
 Co-Authored-By: Claude Opus 4.8 (1M context) <noreply@anthropic.com>"
@@ -428,7 +433,7 @@ Co-Authored-By: Claude Opus 4.8 (1M context) <noreply@anthropic.com>"
 ## Task 3: Gitignore regression test (play)
 
 **Files:**
-- Test: `packages/play/src/__tests__/studioUploads.test.ts` (add cases)
+- Test: `src/__tests__/studioUploads.test.ts` (add cases — same root file as Task 2)
 
 **Interfaces:** consumes Task 2 (`blankStudio`) + `commitWithLock`/registry git.
 
@@ -437,7 +442,7 @@ This task exists on its own because the failure it guards — a private `ref/` f
 - [ ] **Step 1: Write the failing regression test**
 
 ```ts
-// append to packages/play/src/__tests__/studioUploads.test.ts
+// append to src/__tests__/studioUploads.test.ts (move this import to the top with the others)
 import { execFileSync } from "node:child_process";
 
 describe("ref/ never enters git", () => {
@@ -458,15 +463,15 @@ describe("ref/ never enters git", () => {
 });
 ```
 
-- [ ] **Step 2: Run to verify it passes** (Task 2 already writes the `.gitignore`, so this should pass immediately — it locks the behavior in)
+- [ ] **Step 2: Run to verify it passes** (Task 1 already writes the `.gitignore`, so this locks the behavior in)
 
-Run: `pnpm -w exec vitest run packages/play/src/__tests__/studioUploads.test.ts -t "ref/ never enters git"`
+Run: `pnpm -w exec tsc -b && pnpm -w exec vitest run dist/__tests__/studioUploads.test.js -t "ref/ never enters git"`
 Expected: PASS. If it FAILS, the `.gitignore` write in `writeUploads` (Task 1) is wrong — fix there, not here.
 
 - [ ] **Step 3: Commit**
 
 ```bash
-git add packages/play/src/__tests__/studioUploads.test.ts
+git add src/__tests__/studioUploads.test.ts
 git commit -m "test(play): regression — reference uploads never git-tracked
 
 Co-Authored-By: Claude Opus 4.8 (1M context) <noreply@anthropic.com>"
@@ -513,7 +518,7 @@ describe("play request schemas accept optional files", () => {
 
 - [ ] **Step 2: Run to verify it fails**
 
-Run: `pnpm -w exec vitest run src/__tests__/playUploads.test.ts`
+Run: `pnpm -w exec tsc -b && pnpm -w exec vitest run dist/__tests__/playUploads.test.js`
 Expected: FAIL — `.files` is stripped/undefined; bad-role case does not throw.
 
 - [ ] **Step 3: Add the schema**
@@ -565,7 +570,7 @@ In `src/play.controller.ts`, update the two handlers (lines 64-78):
 
 - [ ] **Step 5: Run to verify it passes**
 
-Run: `pnpm -w exec vitest run src/__tests__/playUploads.test.ts`
+Run: `pnpm -w exec tsc -b && pnpm -w exec vitest run dist/__tests__/playUploads.test.js`
 Expected: PASS.
 
 - [ ] **Step 6: Typecheck the workspace**
