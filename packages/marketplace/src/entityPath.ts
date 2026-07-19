@@ -25,6 +25,13 @@ export function gamePath(key: string): string {
   return `/games/${key}`;
 }
 
+/** A gemit steering-report card's key: <scope>/gemit-YYYY-MM-DD (shape fixed by the CLI's
+ *  --share publisher). Drives the invite chrome on the game page; a false negative just
+ *  renders the plain player, so the shape check stays strict. */
+export function isGemitKey(key: string): boolean {
+  return /^[^/]+\/gemit-\d{4}-\d{2}-\d{2}$/.test(key);
+}
+
 function safeDecode(segment: string): string {
   try {
     return decodeURIComponent(segment);

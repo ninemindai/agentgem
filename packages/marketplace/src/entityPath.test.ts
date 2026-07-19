@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { gamePath, parseGamePath, isPublishedKey } from "./entityPath";
+import { gamePath, parseGamePath, isPublishedKey, isGemitKey } from "./entityPath";
 
 describe("gamePath", () => {
   it("renders a published key raw, so the URL is copy-friendly", () => {
@@ -55,5 +55,15 @@ describe("isPublishedKey", () => {
 
   it("rejects a scope with no name", () => {
     expect(isPublishedKey("@acme")).toBe(false);
+  });
+});
+
+describe("isGemitKey", () => {
+  it("matches only the canonical <scope>/gemit-YYYY-MM-DD shape", () => {
+    expect(isGemitKey("raymondfeng/gemit-2026-07-19")).toBe(true);
+    expect(isGemitKey("@org/gemit-2026-01-01")).toBe(true);
+    expect(isGemitKey("raymondfeng/gemit-tools")).toBe(false);   // not a dated card
+    expect(isGemitKey("gemit-2026-07-19")).toBe(false);          // unlisted share id, no scope
+    expect(isGemitKey("acme/tetris")).toBe(false);
   });
 });
