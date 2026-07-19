@@ -32,9 +32,29 @@ export function Profile({ api, login, me, base }: { api: ReturnType<typeof makeA
   }, [api, login]);
 
   const isOwner = !!(me?.handle && me.handle.toLowerCase() === login.toLowerCase());
-  const requested = new URLSearchParams(search).get("tab") as TabId | null;
+  const params = new URLSearchParams(search);
+  const requested = params.get("tab") as TabId | null;
   const canSee = (t: (typeof TABS)[number]) => !t.owner || isOwner;
-  const active: TabId = TABS.find((t) => t.id === requested && canSee(t)) ? (requested as TabId) : "apps";
+  // A provider-link round-trip can land back here WITHOUT ?tab=account: linkSocial's errorCallbackURL
+  // returns to the bare profile path (window.location.pathname, no query — see Account.tsx `connect`),
+  // and the Flow-B connect callback carries only ?connect=. Route these recovery params to the account
+  // tab so AccountPanel's collision banner + "Merge this account" is actually reachable — otherwise the
+  // owner is stranded on the default Apps tab with a dangling ?error= they can't act on. (AccountPanel
+  // strips the params on mount via replaceState, which does NOT fire popstate, so `active` won't flip.)
+  const accountRecovery = isOwner && (
+    params.get("error") === "account_already_linked_to_different_user" ||
+    params.has("connect") ||
+    params.get("merge") === "1"
+  );
+  // Latch the account tab once recovery is seen: AccountPanel strips its ?error=/?connect=/?merge=
+  // params on mount (replaceState), so `accountRecovery` goes false on the next render — without this
+  // the tab would flip back to Apps mid-recovery and unmount the merge UI. An explicit ?tab= click
+  // still wins (the TABS.find branch below), so latching never traps the owner on Account.
+  const [recoveryLatched, setRecoveryLatched] = useState(false);
+  useEffect(() => { if (accountRecovery) setRecoveryLatched(true); }, [accountRecovery]);
+  const active: TabId = TABS.find((t) => t.id === requested && canSee(t)) ? (requested as TabId)
+    : (accountRecovery || recoveryLatched) ? "account"
+    : "apps";
   const setTab = (id: TabId) => navigate(`/@${encodeURIComponent(login)}?tab=${id}`);
 
   if (view.status === "loading") return <div className="ex-profile"><p className="ex-empty">Loading…</p></div>;
