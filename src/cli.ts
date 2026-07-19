@@ -48,7 +48,7 @@ Sharing a Gem (store-and-forward over NATS; set $NATS_URL, default nats://127.0.
   agentgem usage report [--backfill]    Push local daily usage rollups now (--backfill: full history, not just 30d)
   agentgem verify <archive-dir>         Verify a .gem archive across local agents (--agents claude,codex; --fetch)
   agentgem learn [root]                 Distill the latest session into the review queue (--session <id>; --dir <claude-home>)
-  agentgem gemit                        Score your last 30 days of agent steering into a local report (--dir <claude-home>; --no-open)
+  agentgem gemit                        Score your last 30 days of agent steering into a local report (--share publishes an unlisted card)
   agentgem sources install <src> <path>  Install a curated persona as a local skill (--dry-run)`;
 
 async function main(argv: string[]): Promise<void> {
