@@ -41,3 +41,37 @@ describe("Play", () => {
     await waitFor(() => expect(screen.getByText(/doesn't exist/i)).toBeTruthy());
   });
 });
+
+describe("gemit landing chrome", () => {
+  const gemitApi = () => apiStub({
+    getGameMeta: vi.fn().mockResolvedValue({ title: "Lapidary — Agent Steering Report", genre: "session-heatmap", version: "1.0.0" }),
+  });
+
+  it("renders CTA chrome + inline (non-fullscreen) player for a gemit key", async () => {
+    render(<Play api={gemitApi()} gemKey="tester/gemit-2026-07-19" />);
+    await waitFor(() => expect(screen.getByText(/What's your steering level\?/)).toBeTruthy());
+    expect(screen.getByText("npx -y @ninemind/agentgem gemit")).toBeTruthy();
+    // landing embeds the player; it must NOT mount into the fixed fullscreen overlay
+    expect(document.querySelector("iframe[sandbox]")).not.toBeNull();
+    expect(screen.getByRole("button", { name: /play fullscreen/i })).toBeTruthy();
+  });
+
+  it("copy button writes the one-liner to the clipboard", async () => {
+    const writeText = vi.fn();
+    vi.stubGlobal("navigator", { clipboard: { writeText } });
+    try {
+      render(<Play api={gemitApi()} gemKey="tester/gemit-2026-07-19" />);
+      await waitFor(() => expect(screen.getByText(/What's your steering level\?/)).toBeTruthy());
+      screen.getByRole("button", { name: /copy/i }).click();
+      expect(writeText).toHaveBeenCalledWith("npx -y @ninemind/agentgem gemit");
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+
+  it("keeps plain fullscreen play for non-gemit keys (no CTA)", async () => {
+    render(<Play api={apiStub()} gemKey="@acme/tetris" />);
+    await waitFor(() => expect(document.querySelector("iframe[sandbox]")).not.toBeNull());
+    expect(screen.queryByText(/What's your steering level\?/)).toBeNull();
+  });
+});
