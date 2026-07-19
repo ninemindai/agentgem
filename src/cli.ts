@@ -48,6 +48,7 @@ Sharing a Gem (store-and-forward over NATS; set $NATS_URL, default nats://127.0.
   agentgem usage report [--backfill]    Push local daily usage rollups now (--backfill: full history, not just 30d)
   agentgem verify <archive-dir>         Verify a .gem archive across local agents (--agents claude,codex; --fetch)
   agentgem learn [root]                 Distill the latest session into the review queue (--session <id>; --dir <claude-home>)
+  agentgem gemit                        Score your last 30 days of agent steering into a local report (--dir <claude-home>; --no-open)
   agentgem sources install <src> <path>  Install a curated persona as a local skill (--dry-run)`;
 
 async function main(argv: string[]): Promise<void> {
@@ -117,6 +118,13 @@ async function main(argv: string[]): Promise<void> {
   if (argv[0] === "learn") {
     const { runLearnCommand } = await import("./learnCli.js");
     process.exitCode = await runLearnCommand(argv.slice(1));
+    return;
+  }
+
+  // `agentgem gemit` — score the last 30 days of steering into a local HTML report.
+  if (argv[0] === "gemit") {
+    const { runGemitCommand } = await import("./gemitCli.js");
+    process.exitCode = await runGemitCommand(argv.slice(1));
     return;
   }
 
