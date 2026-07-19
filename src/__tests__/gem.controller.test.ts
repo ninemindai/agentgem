@@ -7,6 +7,7 @@ import { join } from "node:path";
 import supertest from "supertest";
 import { RestApplication } from "@agentback/rest";
 import { GemController } from "../gem.controller.js";
+import { registerDeploy } from "../deploy.controller.js";
 import { createServer } from "node:http";
 import { packTar, unpackTar, readGemArchive } from "@agentgem/archive";
 import { writeGemArchive } from "@agentgem/archive";
@@ -46,6 +47,7 @@ beforeAll(async () => {
   // mirror production (src/index.ts): raise the json body limit so gem bytes (>100kb) are accepted
   app.configure("servers.RestServer").to({ port: 0, host: "127.0.0.1", bodyParser: { json: { limit: "25mb" } } });
   app.restController(GemController);
+  registerDeploy(app);
   await app.start();
   const server = await app.restServer;
   client = supertest(server.url);
