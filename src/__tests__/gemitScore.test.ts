@@ -3,7 +3,7 @@
 // Golden tests for the gemit scoring core: pure inputs → exact card payload.
 import { describe, expect, it } from "vitest";
 import {
-  computeGemitData, tierLevelFor, MIN_SESSIONS,
+  computeGemitData, tierLevelFor, COMPOSITE_WEIGHTS, MIN_SESSIONS, SETUP_WEIGHTS,
   type GemitScoredInput, type GemitSessionInput,
 } from "../gemit/score.js";
 
@@ -42,6 +42,38 @@ describe("tierLevelFor", () => {
     expect(tierLevelFor(65)).toBe(3);
     expect(tierLevelFor(79)).toBe(3);
     expect(tierLevelFor(80)).toBe(4);
+  });
+});
+
+describe("session-share payload fields", () => {
+  it("exposes skill/subagent session shares as rounded percents", () => {
+    const qualifying = [
+      session({ skillNames: ["a"], endMs: NOW - DAY }),
+      session({ skillNames: ["b"], endMs: NOW - 2 * DAY }),
+      session({ skillNames: ["a"], subagentNames: ["x"], endMs: NOW - 3 * DAY }),
+      session({ endMs: NOW - 4 * DAY }),
+      session({ endMs: NOW - 5 * DAY }),
+      session({ endMs: NOW - 6 * DAY }),
+    ];
+    const d = computeGemitData(qualifying, [], NOW);
+    expect(d.skillSessionsPct).toBe(50);    // 3 of 6
+    expect(d.subagentSessionsPct).toBe(17); // 1 of 6, rounded
+  });
+
+  it("zeroes the shares on insufficient data", () => {
+    const d = computeGemitData([session()], [], NOW);
+    expect(d.insufficient).toBe(true);
+    expect(d.skillSessionsPct).toBe(0);
+    expect(d.subagentSessionsPct).toBe(0);
+  });
+
+  it("exports the weights the composite actually uses", () => {
+    expect(COMPOSITE_WEIGHTS.ctx + COMPOSITE_WEIGHTS.proc + COMPOSITE_WEIGHTS.setup).toBeCloseTo(1);
+    expect(SETUP_WEIGHTS.sessions + SETUP_WEIGHTS.subSessions + SETUP_WEIGHTS.variety + SETUP_WEIGHTS.subVariety).toBeCloseTo(1);
+    const qualifying = Array.from({ length: 6 }, (_, i) => session({ skillNames: ["a"], endMs: NOW - (i + 1) * DAY }));
+    const d = computeGemitData(qualifying, qualifying.map((s) => scoredOf(s)), NOW);
+    expect(d.composite).toBe(Math.round(
+      COMPOSITE_WEIGHTS.ctx * d.ctx + COMPOSITE_WEIGHTS.proc * d.proc + COMPOSITE_WEIGHTS.setup * d.setup));
   });
 });
 
