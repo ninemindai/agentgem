@@ -7,6 +7,7 @@ import { TARGET_REGISTRY, MCP_ERROR_CODES } from "@agentgem/model";
 import { deployTargetIds } from "@agentgem/deploy";
 import { flavorIds } from "@agentgem/testbed";
 import { CREDENTIAL_KEYS } from "@agentgem/capture";
+import type { UploadFile as PlayUploadFile } from "@agentgem/play";
 
 export const TriggerContractSchema = z.object({
   intent: z.string(),
@@ -1136,6 +1137,12 @@ export const UploadFileSchema = z.object({
   type: z.string().optional(),
   role: z.enum(["ship", "reference"]),
 });
+// Drift guard (compile-time, zero runtime): the wire schema above must stay structurally identical to the
+// play-package `UploadFile` it mirrors — writeUploads consumes exactly this shape. A field or type change
+// on either side breaks this line at build, so the two can't silently diverge.
+type _AssertEq<A, B> = [A] extends [B] ? ([B] extends [A] ? true : never) : never;
+const _uploadFileDriftGuard: _AssertEq<z.infer<typeof UploadFileSchema>, PlayUploadFile> = true;
+void _uploadFileDriftGuard;
 // Import a miniapp from an existing self-contained HTML file. The HTML becomes the miniapp as-is (a
 // draft opened in the studio); the seal gate is enforced on Save, not import, so imperfect HTML can be
 // brought in and fixed by chatting with the agent.
