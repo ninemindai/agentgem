@@ -14,6 +14,8 @@ import { collectGemitInputs } from "./gemit/collect.js";
 import { computeGemitData, type GemitData } from "./gemit/score.js";
 import { renderRpgTheme, TIER_NAMES } from "./gemit/themeRpg.js";
 import { openInBrowser } from "./gemit/openBrowser.js";
+import { buildGemitShare, gemitShareUrls } from "./gemit/share.js";
+import { postGemPublish } from "./gem/gemPublishClient.js";
 
 export const GEMIT_HELP = `agentgem gemit — score your agent steering into a local report
 
@@ -25,11 +27,15 @@ Options:
   --out <file>     Report path (default: <agentgem-home>/reports/gemit-<date>.html)
   --theme <name>   Report theme (rpg)
   --no-open        Don't open the report in the browser
+  --share          Publish the report as an unlisted card on app.agentgem.ai
+  --yes, -y        Skip the pre-publish confirmation
   -h, --help       Show this help
 
 Scores the last 30 days (context discipline · process quality · setup maturity)
 with the same deterministic detectors the console uses. Local only — nothing
-leaves this machine.`;
+leaves this machine unless you pass --share, which uploads ONLY the rendered
+report (scores, counts, window dates — no skill/subagent names, no project
+names, no transcripts) after showing you exactly what ships.`;
 
 export interface GemitArgs {
   dir?: string;
@@ -37,16 +43,20 @@ export interface GemitArgs {
   theme: string;
   open: boolean;
   help: boolean;
+  share: boolean;
+  yes: boolean;
 }
 
 const THEMES = ["rpg"];
 
 export function parseGemitArgs(argv: string[]): GemitArgs | { error: string } {
-  const args: GemitArgs = { theme: "rpg", open: true, help: false };
+  const args: GemitArgs = { theme: "rpg", open: true, help: false, share: false, yes: false };
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i];
     if (a === "-h" || a === "--help") args.help = true;
     else if (a === "--no-open") args.open = false;
+    else if (a === "--share") args.share = true;
+    else if (a === "-y" || a === "--yes") args.yes = true;
     else if (a === "--dir" || a === "--out" || a === "--theme") {
       const v = argv[i + 1];
       if (!v || v.startsWith("--")) return { error: `${a} requires a value` };
@@ -72,6 +82,31 @@ export interface GemitCliDeps {
   err?: (line: string) => void;
   isTTY?: boolean;
   nowMs?: number;
+  /** Resolve the bound GitHub login, running the device flow inline if needed. null = failed. */
+  ensureBound?: (out: (line: string) => void) => Promise<string | null>;
+  publish?: typeof postGemPublish;
+  /** Interactive y/N prompt; only called on a TTY when --yes is absent. */
+  confirm?: (question: string) => Promise<boolean>;
+}
+
+async function defaultEnsureBound(out: (l: string) => void): Promise<string | null> {
+  const { readBindingStatus, bindConfig, startDeviceBind, completeDeviceBind } = await import("./bind/bindCore.js");
+  const st = readBindingStatus();
+  if (st.bound && st.login) return st.login;
+  const cfg = bindConfig();
+  const dc = await startDeviceBind(cfg);
+  out("Publishing needs a one-time GitHub bind:");
+  out(`  1. open ${dc.verificationUri}`);
+  out(`  2. enter code: ${dc.userCode}`);
+  const res = await completeDeviceBind(cfg, { deviceCode: dc.deviceCode, interval: dc.interval });
+  return res.bound ? res.login : null;
+}
+
+async function defaultConfirm(question: string): Promise<boolean> {
+  const { createInterface } = await import("node:readline/promises");
+  const rl = createInterface({ input: process.stdin, output: process.stdout });
+  try { return /^y(es)?$/i.test((await rl.question(question)).trim()); }
+  finally { rl.close(); }
 }
 
 export async function runGemitCommand(argv: string[], deps: GemitCliDeps = {}): Promise<number> {
@@ -115,6 +150,49 @@ export async function runGemitCommand(argv: string[], deps: GemitCliDeps = {}): 
   out(`Report: ${outPath}`);
 
   const isTTY = deps.isTTY ?? Boolean(process.stdout.isTTY);
+
+  if (parsed.share) {
+    if (data.insufficient) {
+      out("Nothing to share yet — a score appears once 5 substantial sessions exist in the window.");
+      return 0;
+    }
+    if (!parsed.yes && !isTTY) {
+      err("gemit: --share needs a terminal to confirm (or pass --yes).");
+      return 2;
+    }
+    const login = await (deps.ensureBound ?? defaultEnsureBound)(out);
+    if (!login) {
+      err("gemit: publishing requires a GitHub bind (agentgem bind).");
+      return 1;
+    }
+    const built = buildGemitShare({ data, login });
+    const sharePath = outPath.replace(/\.html$/, "") + ".share.html";
+    write(sharePath, built.html);
+    out("");
+    out("Ready to publish an UNLISTED card (visible only via its link):");
+    out(`  ${built.manifest.description}`);
+    out(`  Card: ${built.gemKey} v${built.version} — exact file that ships: ${sharePath}`);
+    out("  Ships: scores, counts, window dates. Never: skill/subagent names, projects, transcripts.");
+    if (!parsed.yes) {
+      const okay = await (deps.confirm ?? defaultConfirm)("Publish? [y/N] ");
+      if (!okay) {
+        out("Not published.");
+        return 0;
+      }
+    }
+    const { loadOrCreateIdentity } = await import("@agentgem/model");
+    const r = await (deps.publish ?? postGemPublish)({
+      manifest: built.manifest, archiveBase64: built.archiveBase64, identity: loadOrCreateIdentity(),
+    });
+    if (!r.shared) {
+      err(`gemit: share rejected (${r.rejected})${r.rejected === "conflict" ? " — that key belongs to another account" : ""}`);
+      return 1;
+    }
+    const urls = gemitShareUrls(built.gemKey, data);
+    out(`Published: ${urls.shareUrl}`);
+    out(`Share on X: ${urls.xIntentUrl}`);
+  }
+
   if (parsed.open && isTTY) (deps.open ?? openInBrowser)(outPath);
   return 0;
 }

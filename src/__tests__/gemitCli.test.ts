@@ -50,10 +50,12 @@ function deps(over: Record<string, unknown> = {}) {
 
 describe("parseGemitArgs", () => {
   it("parses defaults and flags", () => {
-    expect(parseGemitArgs([])).toEqual({ theme: "rpg", open: true, help: false });
+    expect(parseGemitArgs([])).toEqual({ theme: "rpg", open: true, help: false, share: false, yes: false });
     expect(parseGemitArgs(["--dir", "/x", "--out", "r.html", "--no-open"])).toEqual({
-      theme: "rpg", open: false, help: false, dir: "/x", out: "r.html",
+      theme: "rpg", open: false, help: false, share: false, yes: false, dir: "/x", out: "r.html",
     });
+    expect(parseGemitArgs(["--share", "--yes"])).toMatchObject({ share: true, yes: true });
+    expect(parseGemitArgs(["-y"])).toMatchObject({ yes: true });
     expect(parseGemitArgs(["-h"])).toMatchObject({ help: true });
   });
   it("rejects unknown themes, options, and missing values", () => {
@@ -96,6 +98,88 @@ describe("runGemitCommand", () => {
     expect(await runGemitCommand([], h.deps)).toBe(0);
     expect(h.out.join("\n")).toContain("Not enough steering yet");
     expect(h.writes).toHaveLength(1);
+  });
+
+  describe("--share", () => {
+    // fakeData with names that must never reach the shared copy.
+    const namedData = () => fakeData({ topSkills: ["secret-skill"], topSubagents: ["secret-agent"] });
+
+    function shareDeps(over: Record<string, unknown> = {}) {
+      const published: unknown[] = [];
+      const h = deps({
+        compute: namedData,
+        render: undefined, // share path renders with the real theme; local report may too
+        ensureBound: async () => "tester",
+        confirm: async () => true,
+        publish: async (args: unknown) => { published.push(args); return { shared: true as const, publishedBy: "tester" }; },
+        open: () => {},
+        ...over,
+      });
+      return { ...h, published };
+    }
+
+    it("publishes after confirm and prints share + X URLs", async () => {
+      const h = shareDeps();
+      const code = await runGemitCommand(["--share", "--no-open"], h.deps);
+      expect(code).toBe(0);
+      expect(h.published).toHaveLength(1);
+      const arg = h.published[0] as { manifest: { gemKey: string; visibility: string } };
+      expect(arg.manifest.gemKey).toBe("tester/gemit-2026-07-18");
+      expect(arg.manifest.visibility).toBe("unlisted");
+      const all = h.out.join("\n");
+      expect(all).toContain("https://app.agentgem.ai/games/tester/gemit-2026-07-18");
+      expect(all).toContain("x.com/intent/post");
+    });
+
+    it("does not publish when the confirm prompt is declined", async () => {
+      const h = shareDeps({ confirm: async () => false });
+      expect(await runGemitCommand(["--share", "--no-open"], h.deps)).toBe(0);
+      expect(h.published).toHaveLength(0);
+      expect(h.out.join("\n")).toContain("Not published");
+    });
+
+    it("refuses non-TTY share without --yes", async () => {
+      const h = shareDeps({ isTTY: false });
+      expect(await runGemitCommand(["--share"], h.deps)).toBe(2);
+      expect(h.published).toHaveLength(0);
+    });
+
+    it("--yes skips the prompt (works non-TTY)", async () => {
+      let confirmCalled = false;
+      const h = shareDeps({ isTTY: false, confirm: async () => { confirmCalled = true; return true; } });
+      expect(await runGemitCommand(["--share", "--yes"], h.deps)).toBe(0);
+      expect(h.published).toHaveLength(1);
+      expect(confirmCalled).toBe(false);
+    });
+
+    it("errors when binding fails", async () => {
+      const h = shareDeps({ ensureBound: async () => null });
+      expect(await runGemitCommand(["--share", "--yes"], h.deps)).toBe(1);
+      expect(h.published).toHaveLength(0);
+      expect(h.err.join("\n")).toContain("bind");
+    });
+
+    it("skips share on insufficient data", async () => {
+      const h = shareDeps({ compute: () => fakeData({ insufficient: true, qualifyingSessions: 2 }) });
+      expect(await runGemitCommand(["--share", "--yes"], h.deps)).toBe(0);
+      expect(h.published).toHaveLength(0);
+    });
+
+    it("surfaces a publish rejection", async () => {
+      const h = shareDeps({ publish: async () => ({ shared: false as const, rejected: "conflict" }) });
+      expect(await runGemitCommand(["--share", "--yes"], h.deps)).toBe(1);
+      expect(h.err.join("\n")).toContain("conflict");
+    });
+
+    it("writes the share html beside the report and never ships names", async () => {
+      const h = shareDeps();
+      expect(await runGemitCommand(["--share", "--yes", "--no-open"], h.deps)).toBe(0);
+      const shareWrite = h.writes.find((w) => w.path.endsWith(".share.html"));
+      expect(shareWrite).toBeDefined();
+      expect(shareWrite!.content).not.toContain("secret-skill");
+      expect(shareWrite!.content).not.toContain("secret-agent");
+      expect(h.out.join("\n")).toContain(shareWrite!.path);
+    });
   });
 
   it("writes a real file under --out (temp dir)", async () => {
