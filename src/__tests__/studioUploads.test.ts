@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: MIT
 // src/__tests__/studioUploads.test.ts   (ROOT — imports the built package)
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
+import { execFileSync } from "node:child_process";
 import { mkdtempSync, rmSync, readFileSync, existsSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -34,5 +35,22 @@ describe("blankStudio with uploads", () => {
     const meta = JSON.parse(readFileSync(join(miniappDir(name), "meta.json"), "utf8"));
     expect(meta.uploads).toBeUndefined();
     expect(studioBrief(name)).not.toMatch(/uploads\//);
+  });
+});
+
+describe("ref/ never enters git", () => {
+  it("git does not track reference files", async () => {
+    const { name } = await blankStudio("Secret", undefined, undefined, [
+      { name: "private.md", bytesBase64: b64("top secret"), type: "text/markdown", role: "reference" },
+      { name: "icon.png", bytesBase64: b64("PNG"), type: "image/png", role: "ship" },
+    ]);
+    const root = miniappsRoot();
+    const tracked = execFileSync("git", ["-C", root, "ls-files"], { encoding: "utf8" });
+    expect(tracked).toMatch(new RegExp(`${name}/uploads/icon\\.png`));       // ship IS tracked
+    expect(tracked).toMatch(new RegExp(`${name}/uploads/assets\\.json`));    // manifest IS tracked
+    expect(tracked).not.toMatch(new RegExp(`${name}/ref/`));                 // reference is NOT
+    // and git status shows nothing ignored-but-untracked leaking in as a candidate
+    const status = execFileSync("git", ["-C", root, "status", "--porcelain", "--ignored"], { encoding: "utf8" });
+    expect(status).toMatch(new RegExp(`!!\\s+${name}/ref/`));                // explicitly ignored
   });
 });
