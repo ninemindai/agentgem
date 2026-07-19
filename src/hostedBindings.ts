@@ -22,3 +22,13 @@ export type PublishedByResolver = (
   db: unknown,
 ) => Promise<string | undefined>;
 export const PUBLISHED_BY_RESOLVER = BindingKey.create<PublishedByResolver | undefined>("agentgem.registry.publishedByResolver");
+
+// Runs the cloud branches of POST /api/run (vercel / cloudflare). Bound when the deploy
+// controller is registered; unbound → /run serves local only and rejects cloud modes.
+import type { RunState } from "@agentgem/run";
+export type RunCloudDispatch = (
+  mode: "vercel" | "cloudflare",
+  name: string,
+  opts: { eveAuth?: "placeholder" | "public" },
+) => Promise<RunState>;
+export const RUN_CLOUD_DISPATCH = BindingKey.create<RunCloudDispatch | undefined>("agentgem.run.cloudDispatch");
