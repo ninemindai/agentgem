@@ -5,7 +5,7 @@
 // string escaped, and an honest doorway (never a score) on insufficient data.
 import { describe, expect, it } from "vitest";
 import type { GemitData } from "../gemit/score.js";
-import { TIER_NAMES, perksFor, renderRpgTheme } from "../gemit/themeRpg.js";
+import { TIER_NAMES, perksFor, questsFor, renderRpgTheme } from "../gemit/themeRpg.js";
 
 function data(over: Partial<GemitData> = {}): GemitData {
   return {
@@ -64,6 +64,63 @@ describe("renderRpgTheme", () => {
     const html = renderRpgTheme(data({ composite: 88, tierLevel: 4 }));
     expect(html).toContain("top tier");
     expect(html).toContain("Master Lapidary");
+  });
+});
+
+describe("questsFor", () => {
+  it("turns locked perks into quests with meters, exact deltas for setup perks", () => {
+    const d = data({ subagentVariety: 3, skillVariety: 12, verifyRatePct: 24 });
+    const quests = questsFor(d);
+    const clones = quests.find((q) => q.id === "perk-shadow-clones")!;
+    expect(clones.axis).toBe("setup");
+    expect(clones.exact).toBe(true);
+    expect(clones.delta).toBeGreaterThanOrEqual(1);
+    expect(clones.meter).toEqual({ now: 3, target: 5, label: "3/5 subagent types" });
+    const look = quests.find((q) => q.id === "perk-second-look")!;
+    expect(look.axis).toBe("proc");
+    expect(look.exact).toBe(false);
+  });
+
+  it("maps finding quests to axes with a proc fallback and caps at 3", () => {
+    const quests = questsFor(data());
+    const findingQs = quests.filter((q) => q.id.startsWith("finding-"));
+    expect(findingQs).toHaveLength(3);
+    expect(findingQs.find((q) => q.id === "finding-no-verify-finish")!.axis).toBe("proc");
+    expect(findingQs.every((q) => !q.exact)).toBe(true);
+  });
+
+  it("falls back to assumed setup deltas when the share fields are absent (old cards)", () => {
+    const legacy = { ...data({ subagentVariety: 3 }) } as Record<string, unknown>;
+    delete legacy.skillSessionsPct; delete legacy.subagentSessionsPct;
+    const clones = questsFor(legacy as never).find((q) => q.id === "perk-shadow-clones")!;
+    expect(clones.exact).toBe(false);
+  });
+});
+
+describe("interactive layer", () => {
+  it("renders training grounds sliders, quest log, and the sim script", () => {
+    const html = renderRpgTheme(data());
+    expect((html.match(/role="slider"/g) ?? []).length).toBe(3);
+    expect(html).toContain('id="training"');
+    expect(html).toContain("Quest Log");
+    expect(html).toContain("data-delta=");
+    expect(html).toContain('id="confetti"');
+    expect(html).toContain("function autoSolvePath");
+    expect(html).toContain("GEMIT_CONST");
+    expect(html).toContain("prefers-reduced-motion");
+  });
+
+  it("keeps the doorway static: no script, no training grounds", () => {
+    const html = renderRpgTheme(data({ insufficient: true, qualifyingSessions: 2, composite: 0, tierLevel: 1 }));
+    expect(html).not.toContain("GEMIT_CONST");
+    expect(html).not.toContain('id="training"');
+    expect(html).not.toContain("Quest Log");
+  });
+
+  it("counts the rank up from a span that still carries the near-miss line", () => {
+    const html = renderRpgTheme(data());
+    expect(html).toContain('data-n="79"');
+    expect(html).toContain("1 pt from Master Lapidary");
   });
 });
 
