@@ -134,8 +134,17 @@ const FRESHNESS_CHECKS: Array<{ blocker: string; q: (id: string) => ReturnType<t
   { blocker: "handoff",       q: (id) => sql`select 1 from handoff_codes where account_id = ${id} limit 1` },
 ];
 
-export async function accountFreshness(db: AppDb, accountId: string): Promise<{ fresh: boolean; blocker: string | null }> {
+export async function accountFreshness(
+  db: AppDb,
+  accountId: string,
+  opts?: { ignoreHandle?: boolean },
+): Promise<{ fresh: boolean; blocker: string | null }> {
   for (const c of FRESHNESS_CHECKS) {
+    // Tier-1 merge asks "is this account empty APART FROM a handle?" — a handle is the one blocker we
+    // can resolve losslessly (freeing the name), so absorb skips it here. The handle check is FIRST in
+    // FRESHNESS_CHECKS and short-circuits, so a plain `blocker === "handle"` can't prove handle-ONLY;
+    // this is the only correct way to tell "handle-only" from "handle AND gems".
+    if (opts?.ignoreHandle && c.blocker === "handle") continue;
     const hit = (await db.execute(c.q(accountId))).rows?.length ?? 0;
     if (hit > 0) return { fresh: false, blocker: c.blocker };
   }
@@ -168,19 +177,30 @@ export async function absorbAccount(
   { current, other }: { current: string; other: string },
 ): Promise<{ ok: true; keep: string } | { ok: false; reason: "merge-not-supported" | "same-account" }> {
   if (current === other) return { ok: false, reason: "same-account" };
-  const [fc, fo] = [await accountFreshness(db, current), await accountFreshness(db, other)];
-  if (!fc.fresh && !fo.fresh) return { ok: false, reason: "merge-not-supported" };
-  // keep = data-bearing side; if both fresh, current survives (spec).
-  const keep = fc.fresh && !fo.fresh ? other : current;
+  // Tier-1 merge: a side is a safe DROP candidate when it is empty APART FROM a handle. The handle is
+  // the only freshness blocker we can resolve losslessly — deleting the drop user row (step 3) releases
+  // the name for anyone (incl. the survivor) to reclaim. Any other blocker (gems, stars, scopes, usage)
+  // means a shallow re-parent would orphan or collide, so those still bar the merge.
+  const [dropCur, dropOth] = [
+    (await accountFreshness(db, current, { ignoreHandle: true })).fresh,
+    (await accountFreshness(db, other, { ignoreHandle: true })).fresh,
+  ];
+  if (!dropCur && !dropOth) return { ok: false, reason: "merge-not-supported" };
+  // Keep the DATA-BEARING side so gems/stars/etc. are never dropped; if BOTH sides are drop-eligible
+  // (each at most a handle), the caller's own account survives — matching the original "both fresh →
+  // current survives" spec. A handle no longer forces survival: it is freeable, so the account you are
+  // signed in with wins the tie, and the other's handle is released.
+  const keep = dropCur && !dropOth ? other : current;
   const drop = keep === current ? other : current;
 
   await db.transaction(async (tx) => {
-    // 1. Move the fresh account's per-provider rows onto the survivor. (drop is FK-empty per the
-    //    freshness gate, so ONLY its better-auth `account` rows carry the providers we keep.)
+    // 1. Move the drop account's per-provider rows onto the survivor. (drop is FK-empty apart from its
+    //    handle per the gate above, so ONLY its better-auth `account` rows carry the providers we keep.)
     await tx.execute(sql`update account set user_id = ${keep} where user_id = ${drop}`);
-    // 2. Delete the fresh account's legacy anchor. Safe: freshness proved no child rows FK it.
+    // 2. Delete the drop account's legacy anchor. Safe: the gate proved no child rows FK it.
     await tx.execute(sql`delete from accounts where id = ${drop}`);
-    // 3. Delete the fresh better-auth user. session (and any residual account rows) cascade on user.
+    // 3. Delete the drop better-auth user — this also RELEASES its handle (the unique index no longer
+    //    holds the name). The survivor keeps its OWN handle; session + residual account rows cascade.
     await tx.execute(sql`delete from "user" where id = ${drop}`);
   });
   return { ok: true, keep };

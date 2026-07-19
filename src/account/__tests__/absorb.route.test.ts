@@ -92,7 +92,9 @@ describe("POST /api/account/absorb", () => {
     const other = await ctx.internalAdapter.createUser({ email: "other2@x.com", name: "Other2", emailVerified: false } as never);
     await upsertAccount(db, { provider: "google", accountId: "g-other2", login: null, avatarUrl: null, id: other.id });
     await linkProvider(db, other.id, "google", "g-other2");
-    await claimHandle(db, other.id, "otherhandle"); // data-bearing survivor
+    // Data-bearing via a GEM (a non-handle blocker) so `other` is the mandatory survivor under Tier 1 —
+    // a handle alone is now freeable and wouldn't force survival, which would flip who gets kept.
+    await db.execute(sql`insert into catalog_gems (gem_key, version, published_by, created_at_ms, owner_account_id) values ('og','1','x',0,${other.id})`);
 
     await stashPendingLink(db, who.accountId, { providerId: "google", providerAccountId: "g-other2" });
 
@@ -105,19 +107,24 @@ describe("POST /api/account/absorb", () => {
     expect((await db.execute(sql`select 1 from "user" where id = ${who.accountId}`)).rows).toHaveLength(0); // caller dropped
   });
 
-  it("409 merge-not-supported when neither account is fresh", async () => {
+  it("409 merge-not-supported when BOTH accounts have real data (gems), not just handles", async () => {
     const db = await makeTestDb();
     const auth = makeAuth({ db, ...authOpts });
     const cookie = await mintBetterAuthCookieForTest(db, authOpts);
     const who = await resolveSession(auth, { cookie });
     if (!who) throw new Error("test setup: cookie did not resolve to a session");
-    await claimHandle(db, who.accountId, "bothcur"); // current is data-bearing
+    await claimHandle(db, who.accountId, "bothcur");
+    // The credential caller has no legacy `accounts` anchor by default; add one so the gem's
+    // owner_account_id FK resolves. A gem then makes `who` data-bearing beyond a (freeable) handle.
+    await upsertAccount(db, { provider: "github", accountId: "gh-bothcur", login: "bothcur", avatarUrl: null, id: who.accountId });
+    await db.execute(sql`insert into catalog_gems (gem_key, version, published_by, created_at_ms, owner_account_id) values ('cg','1','x',0,${who.accountId})`);
 
     const ctx = await auth.$context;
     const other = await ctx.internalAdapter.createUser({ email: "other3@x.com", name: "Other3", emailVerified: false } as never);
     await upsertAccount(db, { provider: "google", accountId: "g-other3", login: null, avatarUrl: null, id: other.id });
     await linkProvider(db, other.id, "google", "g-other3");
-    await claimHandle(db, other.id, "bothother"); // other is ALSO data-bearing
+    await claimHandle(db, other.id, "bothother");
+    await db.execute(sql`insert into catalog_gems (gem_key, version, published_by, created_at_ms, owner_account_id) values ('og3','1','x',0,${other.id})`); // other ALSO data-bearing
 
     await stashPendingLink(db, who.accountId, { providerId: "google", providerAccountId: "g-other3" });
 

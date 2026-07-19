@@ -36,7 +36,7 @@ export function absorbHandler(deps: AccountDeps) {
     if (!other) { res.status(409).json({ error: "no provider awaiting connection" }); return; }
     const r = await absorbAccount(deps.db, { current: who.accountId, other });
     if (!r.ok) {
-      res.status(409).json({ error: "Both accounts have activity on AgentGem. Merging accounts with existing gems or a claimed handle isn't supported yet." });
+      res.status(409).json({ error: "Both accounts have gems or activity on AgentGem. Merging two accounts that each have gems, stars, or other activity isn't supported yet — a handle alone is fine." });
       return;
     }
     if (r.keep !== who.accountId) {
