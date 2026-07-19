@@ -54,3 +54,15 @@ describe("ref/ never enters git", () => {
     expect(status).toMatch(new RegExp(`!!\\s+${name}/ref/`));                // explicitly ignored
   });
 });
+
+describe("writeUploads failure releases the claimed dir", () => {
+  it("an oversize ship file throws and leaves no claimed miniapp dir (name reusable)", async () => {
+    const bigB64 = Buffer.alloc(600_000, 0x41).toString("base64");  // 600KB > 500KB ship cap
+    await expect(blankStudio("Oops", undefined, "reuse-me", [
+      { name: "big.png", bytesBase64: bigB64, type: "image/png", role: "ship" },
+    ])).rejects.toThrow();
+    expect(existsSync(miniappDir("reuse-me"))).toBe(false);         // released on throw, not orphaned
+    const { name } = await blankStudio("Retry", undefined, "reuse-me", []);   // the exact name is free again
+    expect(name).toBe("reuse-me");
+  });
+});

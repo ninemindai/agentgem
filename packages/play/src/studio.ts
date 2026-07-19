@@ -4,7 +4,7 @@
 // studio brief from its meta, and guard which cwd a chat session may adopt. studioCwd is the security
 // gate: only a path under the miniapps registry (or the neutral fallback) is ever honored.
 import { join, sep, resolve, basename } from "node:path";
-import { readFileSync, writeFileSync } from "node:fs";
+import { readFileSync, writeFileSync, rmSync } from "node:fs";
 import { type GameSource, type GameGenre, AUTO_CAPS } from "@agentgem/model";
 import { deriveNeeds } from "./capabilityScan.js";
 import { extractSource, type SourceReaders } from "./sourceContext.js";
@@ -82,6 +82,13 @@ function uploadsBrief(uploads: { ship: number; ref: number } | undefined): strin
   return `\n\nThis project has author-supplied files: ${parts.join("; ")}.`;
 }
 
+// Write uploads into an already-claimed dir; if it throws (oversize/bad-base64 that slipped past the
+// client mirror), remove the claimed-but-empty dir so the name is reusable instead of a 409 on retry.
+function writeUploadsOrRelease(dir: string, files: UploadFile[] | undefined): { ship: number; ref: number } {
+  try { return writeUploads(dir, files ?? []); }
+  catch (e) { rmSync(dir, { recursive: true, force: true }); throw e; }
+}
+
 export async function seedStudio(source: GameSource, readers: SourceReaders, name?: string, genre?: GameGenre): Promise<{ name: string; brief: string }> {
   const input = await extractSource(source, readers, genre);
   const g = genreFor(input.genre);
@@ -105,7 +112,7 @@ export async function importStudio(title: string, html: string, name?: string, f
   const source: GameSource = { kind: "html", title };
   await ensureRepo(miniappsRoot());
   const { name: id, dir } = claimFor(source, name);
-  const uploads = writeUploads(dir, files ?? []);
+  const uploads = writeUploadsOrRelease(dir, files);
   writeFileSync(join(dir, MINIAPP_HTML), html);
   // Declare the capabilities the imported html already uses so it actually works before the first Save —
   // otherwise the Runner never wires the host and every capability call silently fails (an <a>-CTA that
@@ -117,7 +124,7 @@ export async function importStudio(title: string, html: string, name?: string, f
   const meta: MiniappMeta = { title, genre: "project-fun", createdFrom: source, engineVersion: "1", ...(needs.length ? { needs } : {}), ...((uploads.ship || uploads.ref) ? { uploads } : {}) };
   writeFileSync(join(dir, "meta.json"), JSON.stringify(meta, null, 2));
   await commitWithLock(miniappsRoot(), `import miniapp ${id}`);
-  return { name: id, brief: `You are refining "${title}", a self-contained HTML mini-game the user imported.${uploadsBrief(uploads.ship || uploads.ref ? uploads : undefined)}\n\n${studioInstructions(MINIAPP_HTML)}` };
+  return { name: id, brief: `You are refining "${title}", a self-contained HTML mini-game the user imported.${uploadsBrief(uploads)}\n\n${studioInstructions(MINIAPP_HTML)}` };
 }
 
 // Create a miniapp from scratch — no source context. Seeds a fresh blank sealed canvas titled with the
@@ -127,7 +134,7 @@ export async function blankStudio(title: string, prompt?: string, name?: string,
   const source: GameSource = { kind: "blank", title };
   await ensureRepo(miniappsRoot());
   const { name: id, dir } = claimFor(source, name);
-  const uploads = writeUploads(dir, files ?? []);
+  const uploads = writeUploadsOrRelease(dir, files);
   writeFileSync(join(dir, MINIAPP_HTML), minimalTemplate(title, "✦ new"));
   const meta: MiniappMeta = { title, genre: "project-fun", createdFrom: source, engineVersion: "1", ...((uploads.ship || uploads.ref) ? { uploads } : {}) };
   writeFileSync(join(dir, "meta.json"), JSON.stringify(meta, null, 2));
@@ -135,7 +142,7 @@ export async function blankStudio(title: string, prompt?: string, name?: string,
   const want = prompt?.trim()
     ? `The user wants to build: ${prompt.trim()}`
     : `Ask the user what kind of mini-game they want, then build it. If they don't say, make a small, delightful arcade game.`;
-  return { name: id, brief: `You are building "${title}" from scratch — a self-contained HTML mini-game with no source data. ${want}${uploadsBrief(uploads.ship || uploads.ref ? uploads : undefined)}\n\n${studioInstructions(MINIAPP_HTML)}` };
+  return { name: id, brief: `You are building "${title}" from scratch — a self-contained HTML mini-game with no source data. ${want}${uploadsBrief(uploads)}\n\n${studioInstructions(MINIAPP_HTML)}` };
 }
 
 export function studioBrief(name: string): string {
