@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: MIT
 import { describe, it, expect } from "vitest";
 import { sql } from "drizzle-orm";
-import { makeTestDb, makeAuth, mintSession, setAccountScopes, upsertAccount, connectedProviders } from "@agentgem/aggregator";
+import { makeTestDb, makeAuth, mintSession, setAccountScopes, upsertAccount, connectedProviders, handleForAccountId } from "@agentgem/aggregator";
 
 const opts = {
   secret: "test-secret",
@@ -154,9 +154,74 @@ describe("betterAuth factory", () => {
     const auth = makeAuth({ db, ...opts, googleClientId: "gid", googleClientSecret: "gsec" });
     expect(auth.options.account?.accountLinking).toEqual({
       enabled: true,
-      trustedProviders: ["github", "google"],
+      trustedProviders: ["github", "google", "twitter"],
       allowDifferentEmails: true,
     });
+  });
+
+  // X (better-auth keeps the internal key `twitter`) is additive and optional, exactly like Google:
+  // registered only when BOTH creds are present, so a partial config fails closed and never exposes a
+  // half-wired provider. GitHub — the gate for mounting auth at all — is unaffected either way.
+  it("registers Twitter (X) iff both twitter creds are supplied; GitHub is unaffected", async () => {
+    const db = await makeTestDb();
+    const withX = makeAuth({ db, ...opts, twitterClientId: "xid", twitterClientSecret: "xsec" });
+    expect(Object.keys((withX.options.socialProviders ?? {}) as Record<string, unknown>).sort())
+      .toEqual(["github", "twitter"]);
+
+    const noX = makeAuth({ db, ...opts });
+    expect(Object.keys((noX.options.socialProviders ?? {}) as Record<string, unknown>)).toEqual(["github"]);
+
+    // one cred without the other must NOT register twitter (fail closed on partial config)
+    const partial = makeAuth({ db, ...opts, twitterClientId: "xid" });
+    expect(Object.keys((partial.options.socialProviders ?? {}) as Record<string, unknown>)).toEqual(["github"]);
+  });
+
+  // X's OAuth returns a real email ONLY for email-approved apps; better-auth's own fallback would then
+  // store the username string AS the email. better-auth requires a non-null email STRING at user
+  // creation, so our mapProfileToUser supplies a synthetic noreply address (mirroring the GitHub
+  // `@users.noreply.github.com` fallback) and lifts the X username into `login` for the handle claim.
+  it("twitter mapProfileToUser sets login + a synthetic noreply email when X returns none", async () => {
+    const db = await makeTestDb();
+    const auth = makeAuth({ db, ...opts, twitterClientId: "xid", twitterClientSecret: "xsec" });
+    const twitter = (auth.options.socialProviders as Record<string, { mapProfileToUser?: (p: unknown) => unknown }>).twitter;
+    const mapped = twitter.mapProfileToUser?.({
+      data: { id: "42", username: "neo", name: "Neo", profile_image_url: "https://x/pic.jpg" },
+    }) as { login: string; name: string; image: string; email: string };
+    expect(mapped.login).toBe("neo");
+    expect(mapped.name).toBe("Neo");
+    expect(mapped.image).toBe("https://x/pic.jpg");
+    expect(mapped.email).toBe("neo@users.noreply.x.com");
+
+    // a real confirmed_email (set by better-auth onto profile.data.email) is preserved as-is
+    const withEmail = twitter.mapProfileToUser?.({
+      data: { id: "7", username: "trin", name: "Trinity", email: "trin@real.com" },
+    }) as { email: string };
+    expect(withEmail.email).toBe("trin@real.com");
+  });
+
+  // Auto-claim parity with GitHub (the decision for X): a first X sign-in claims the X username as the
+  // public @handle if free. The GitHub org-membership fetch is GitHub-specific and must NOT fire for X
+  // even when an access token is present — so passing a token here still claims the handle and writes
+  // no org scopes (proving the claim moved ABOVE the github-only guard, and the guard still returns).
+  it("auto-claims the X username as handle on first twitter sign-in, without fetching GitHub orgs", async () => {
+    const db = await makeTestDb();
+    const auth = makeAuth({ db, ...opts, twitterClientId: "xid", twitterClientSecret: "xsec" });
+    const ctx = await auth.$context;
+    const user = await ctx.internalAdapter.createUser(
+      { email: "neo@users.noreply.x.com", name: "Neo", emailVerified: false, login: "neoX" } as never,
+    );
+    const { anchorAndScopesForTest } = await import("@agentgem/aggregator");
+    await anchorAndScopesForTest(
+      db, { userId: user.id, providerId: "twitter", accountId: "tw-neo", accessToken: "would-be-github-token" }, true,
+    );
+    expect(await handleForAccountId(db, user.id)).toBe("neoX");
+    const anchor = await db.execute(sql`select provider, login from accounts where id = ${user.id}`);
+    expect(anchor.rows).toHaveLength(1);
+    expect((anchor.rows[0] as { provider: string; login: string }).provider).toBe("twitter");
+    expect((anchor.rows[0] as { provider: string; login: string }).login).toBe("neoX");
+    // No org scopes: the GitHub org API is never called for a twitter sign-in.
+    const scopes = await db.execute(sql`select 1 from account_scopes where account_id = ${user.id}`);
+    expect(scopes.rows).toHaveLength(0);
   });
 
   it("linking a second provider (native account linking) leaves one accounts anchor and connectedProviders lists both", async () => {

@@ -15,13 +15,13 @@ export function Publish({ api: _api, me, base }: { api: ReturnType<typeof makeAp
   const [busy, setBusy] = useState(false);
 
   if (!me) {
-    const signIn = (provider: "github" | "google") => {
+    const signIn = (provider: "github" | "google" | "twitter") => {
       setResult(null);
       makeAuth(base).signIn(provider, window.location.href).catch((err) => setResult({ ok: false, msg: err instanceof Error ? err.message : String(err) }));
     };
     return (
       <div className="ex-card">
-        <p>Sign in to publish your gems. <a href="#" className="ex-signin" onClick={(e) => { e.preventDefault(); signIn("github"); }}>Sign in with GitHub</a> <a href="#" className="ex-signin" onClick={(e) => { e.preventDefault(); signIn("google"); }}>Sign in with Google</a></p>
+        <p>Sign in to publish your gems. <a href="#" className="ex-signin" onClick={(e) => { e.preventDefault(); signIn("github"); }}>Sign in with GitHub</a> <a href="#" className="ex-signin" onClick={(e) => { e.preventDefault(); signIn("google"); }}>Sign in with Google</a> <a href="#" className="ex-signin" onClick={(e) => { e.preventDefault(); signIn("twitter"); }}>Sign in with X</a></p>
         {result && !result.ok && <p className="ex-error">{result.msg}</p>}
       </div>
     );

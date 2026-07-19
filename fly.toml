@@ -39,6 +39,9 @@ swap_size_mb = 512        # rare memory spike (large ingest, warm scan) degrades
   #   AGGREGATOR_ADMIN_TOKEN        — gates POST /api/aggregator/keys
   #   AGENTGEM_SESSION_SECRET       — web session signing
   #   AGENTGEM_GITHUB_CLIENT_ID / AGENTGEM_GITHUB_CLIENT_SECRET — GitHub OAuth app
+  #   AGENTGEM_TWITTER_CLIENT_ID / AGENTGEM_TWITTER_CLIENT_SECRET — X (Twitter) OAuth 2.0
+  #       app (confidential client); callback https://api.agentgem.ai/api/auth/callback/twitter.
+  #       "Sign in with X" activates only when BOTH are set (optional, like Google).
   #   ORIGIN_SHARED_SECRET          — origin guard shared secret
   #   GITHUB_TOKEN                  — registry publishing
 

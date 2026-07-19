@@ -45,10 +45,10 @@ export function MyAppDetail({ api, me, keyName }: { api: ReturnType<typeof makeA
 
   if (!me) {
     const auth = makeAuth(defaultApiBase());
-    const signIn = (provider: "github" | "google") => auth.signIn(provider, window.location.href);
+    const signIn = (provider: "github" | "google" | "twitter") => auth.signIn(provider, window.location.href);
     return (
       <div className="ex-card">
-        <p>Sign in to see this app. <a href="#" className="ex-signin" onClick={(e) => { e.preventDefault(); signIn("github"); }}>Sign in with GitHub</a> <a href="#" className="ex-signin" onClick={(e) => { e.preventDefault(); signIn("google"); }}>Sign in with Google</a></p>
+        <p>Sign in to see this app. <a href="#" className="ex-signin" onClick={(e) => { e.preventDefault(); signIn("github"); }}>Sign in with GitHub</a> <a href="#" className="ex-signin" onClick={(e) => { e.preventDefault(); signIn("google"); }}>Sign in with Google</a> <a href="#" className="ex-signin" onClick={(e) => { e.preventDefault(); signIn("twitter"); }}>Sign in with X</a></p>
       </div>
     );
   }

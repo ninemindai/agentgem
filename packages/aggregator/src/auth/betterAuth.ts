@@ -19,6 +19,7 @@ const SESSION_TTL_S = 30 * 24 * 60 * 60; // 30 days — matches web_sessions/bin
 export function makeAuth(opts: {
   db: AppDb; secret: string; baseURL: string; githubClientId: string; githubClientSecret: string;
   googleClientId?: string; googleClientSecret?: string;
+  twitterClientId?: string; twitterClientSecret?: string;
   webOrigins: string[]; cookieDomain?: string;
   passkeyRpId?: string;
 }): Auth<BetterAuthOptions> {
@@ -112,6 +113,24 @@ export function makeAuth(opts: {
           mapProfileToUser: (p: any) => ({ name: p.name ?? p.email, image: p.picture }),
         },
       } : {}),
+      // X — better-auth keeps the internal key `twitter` (X's rebrand). Additive and optional, same
+      // fail-closed shape as Google: registered only when BOTH creds are present. X is OAuth2 with a
+      // confidential client (client id + secret) + PKCE, which the built-in provider drives.
+      // mapProfileToUser receives the raw `/2/users/me` body — the fields nest under `p.data`. Unlike
+      // Google, X supplies a username, so we lift it into `login` (the handle auto-claim keys on it,
+      // mirroring GitHub). X only returns a real email (`confirmed_email`) for email-approved apps;
+      // the built-in provider then falls back to storing the USERNAME as the email, and better-auth
+      // requires a non-null email STRING at user creation — so we supply a synthetic noreply address
+      // when X returns none, exactly like the GitHub `@users.noreply.github.com` fallback above.
+      ...(opts.twitterClientId && opts.twitterClientSecret ? {
+        twitter: {
+          clientId: opts.twitterClientId, clientSecret: opts.twitterClientSecret,
+          mapProfileToUser: (p: any) => ({
+            login: p.data?.username, name: p.data?.name ?? p.data?.username, image: p.data?.profile_image_url,
+            email: p.data?.email ?? `${p.data?.username ?? p.data?.id}@users.noreply.x.com`,
+          }),
+        },
+      } : {}),
     },
     databaseHooks: {
       account: {
@@ -123,13 +142,14 @@ export function makeAuth(opts: {
       },
     },
     // Task 3 (Flow A) — enable better-auth's native `linkSocial` so a signed-in user can connect a
-    // provider they've never separately used. github/google are trusted (same first-party OAuth
-    // apps already used for primary sign-in, per socialProviders above) and allowDifferentEmails is
-    // required because the whole point of Flow A is linking a provider whose email may not match the
-    // caller's primary email. The anchor stays per-user/idempotent (Task 1) — a linked provider adds
-    // only an `account` row, never a second `accounts` anchor.
+    // provider they've never separately used. github/google/twitter are trusted (all first-party
+    // OAuth apps already used for primary sign-in, per socialProviders above) and allowDifferentEmails
+    // is required because the whole point of Flow A is linking a provider whose email may not match the
+    // caller's primary email (X in particular hands us a synthetic noreply email). The anchor stays
+    // per-user/idempotent (Task 1) — a linked provider adds only an `account` row, never a second
+    // `accounts` anchor.
     account: {
-      accountLinking: { enabled: true, trustedProviders: ["github", "google"], allowDifferentEmails: true },
+      accountLinking: { enabled: true, trustedProviders: ["github", "google", "twitter"], allowDifferentEmails: true },
     },
   };
   return betterAuth(config);
@@ -148,10 +168,12 @@ async function anchorAndScopes(
 ) {
   const row = (await db.execute(sql`select login, image from "user" where id = ${account.userId}`)).rows?.[0] as
     { login?: string; image?: string } | undefined;
-  // GitHub supplies a login; every other provider does not. The anchor row is written either way,
-  // because ten tables carry a foreign key to accounts.id and the user's first star/review/group
-  // insert would otherwise violate it. A login-less anchor is legal since Task 1 (login is nullable).
-  const login = account.providerId === "github" ? (row?.login ?? null) : null;
+  // GitHub and X (twitter) each supply a username (mapProfileToUser lifts it into `login`); Google et
+  // al. do not. The anchor row is written either way, because ten tables carry a foreign key to
+  // accounts.id and the user's first star/review/group insert would otherwise violate it. A login-less
+  // anchor is legal since Task 1 (login is nullable).
+  const hasLogin = account.providerId === "github" || account.providerId === "twitter";
+  const login = hasLogin ? (row?.login ?? null) : null;
 
   // The anchor is PER-USER: one row per user.id, stamped by the FIRST provider that created it.
   // A second linked provider needs NO new anchor — the existing one already authorizes the user,
@@ -170,21 +192,21 @@ async function anchorAndScopes(
     else try { await write(); } catch { /* re-login refresh is best-effort */ }
   }
 
-  // Org scopes are a GitHub concept: they are captured from the GitHub App / API and keyed on a
-  // login. A login-less provider simply has none, matches no org, and is denied — correct, not a gap.
-  // The provider check is REDUNDANT today (`login` is null for every non-github provider, computed
-  // above) and so cannot be falsified by a test. Keep it: the day a non-github provider starts
-  // supplying a `login`, it is the only thing stopping us from calling GitHub's org API with that
-  // provider's access token. Do not "simplify" it away to `if (!login) return`.
-  if (account.providerId !== "github" || !login) return;
+  // Identity re-key (Task 5b): any provider that supplies a username (github, twitter) claims a handle
+  // for free on first sign-in, so an existing user (backfilled by backfillUserHandles) or a brand-new
+  // signup both end up claimed without ever seeing the claim flow. Guarded by claimHandleIfUnset itself
+  // — reserved/taken names simply don't claim — and gated on `handle IS NULL`, which is what makes a
+  // RENAME SURVIVE RE-LOGIN: once a user has claimed a different handle, this is a no-op. Google et al.
+  // have no username (`login` is null) and skip. This claim is deliberately ABOVE the github-only guard
+  // below so X claims too — a handle is provider-agnostic, but the org fetch that follows is not.
+  if (login) try { await claimHandleIfUnset(db, account.userId, login); } catch { /* best-effort */ }
 
-  // Identity re-key (Task 5b): a GitHub sign-in with no handle yet claims one for free, so an
-  // existing user (backfilled by backfillUserHandles) or a brand-new signup both end up claimed
-  // without ever seeing the claim flow. Guarded by claimHandleIfUnset itself — reserved/taken names
-  // simply don't claim — and gated on `handle IS NULL`, which is what makes a RENAME SURVIVE
-  // RE-LOGIN: once a user has claimed a different handle, this is a no-op, and the self-scope
-  // below is written from that handle, not unconditionally from `login`.
-  try { await claimHandleIfUnset(db, account.userId, login); } catch { /* best-effort */ }
+  // Org scopes are a GitHub concept: they are captured from the GitHub App / API and keyed on a
+  // login. A non-github provider — even X, which now supplies a `login` — has none, matches no org,
+  // and returns here BEFORE the GitHub org API is ever called with that provider's access token.
+  // Keep the explicit provider check (not just `if (!login)`): it is the thing that stops us handing
+  // an X access token to GitHub's org endpoint. Do not "simplify" it away.
+  if (account.providerId !== "github" || !login) return;
 
   try {
     if (account.accessToken) {
