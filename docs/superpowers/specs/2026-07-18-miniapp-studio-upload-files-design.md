@@ -53,19 +53,31 @@ Authors want to seed a miniapp with:
 - The JSON body limit is already raised to `25mb` (`src/appCommon.ts`) for base64
   payloads.
 
-## Decisions (from brainstorming)
+## Decisions
+
+Rows marked **(rev. by eng review)** were changed during `/plan-eng-review`
+(2026-07-18); see [Review outcome](#review-outcome-plan-eng-review-2026-07-18)
+for the reasoning. They supersede the original brainstorming choice.
 
 | Decision | Choice |
 | --- | --- |
-| File role | Both/mixed — files land in the workspace, agent decides per-file |
+| File role | Both/mixed — ship-assets and reference material |
 | UI placement | Optional multi-file dropzone added to the **Blank** and **HTML** tabs (no new tab, no new `GameSource` kind) |
 | Server prep | **Raw files + `assets.json` manifest** (data: URIs for binaries; text read directly) |
 | Scope | **File upload now, design for artifacts** — ship the slice, structure the seam for future skills/artifacts, don't build them |
-| Ship-vs-reference tagging | **Agent infers, user hints in the prompt** — no per-file UI toggle |
-| Uploads location | `uploads/` subdir (not workspace root; not an `assets/`-named dir that implies "ship") |
-| Limits | ≤ 20 files, ≤ 5 MB/file, ≤ 15 MB total decoded |
+| Ship-vs-reference tagging | **(rev. by eng review)** Per-file **Ship / Reference** toggle in the dropzone (default Ship). The server can't classify at write time, so the role comes from the UI. |
+| Uploads location | **(rev. by eng review)** Ship files → `uploads/` (**git-tracked**); Reference files → `ref/` (**gitignored** in the registry, never committed or pushed) |
+| Upload signal durability | **(rev. by eng review)** Durable `meta.uploads: { ship, ref }` counter → `studioBrief` names the dirs every session start; seedPrompt kept for the rich first-turn hint |
+| Framing | **(rev. by eng review)** **Reference-first.** Reference is the primary, low-risk half (no gate, no inlining, no size ceiling). Ship-asset inlining is a small gate-safe extra. |
+| Limits | **(rev. by eng review)** **Reference:** ≤ 20 files, ≤ 5 MB/file, ≤ 15 MB total. **Ship:** ≤ 500 KB/file, ≤ 1 MB total — because the save gate rejects any bundle > 1.5 MB (`gameGate.ts:22`) and ship-assets inline into `index.html`. Import must also fit `html` + `files` under the 25 MB body cap. |
+| Ship inlining | **(rev. by eng review)** Server/tool step, **not agent copy-paste** — an LLM can't reliably retype MB-scale data URIs. Ship data URIs live in a **committed** `uploads/assets.json` (small, ≤ 1 MB) the agent inlines from; durable brief points at it. |
 
 ## Data flow
+
+> **Superseded in part by [Review outcome](#review-outcome-plan-eng-review-2026-07-18):**
+> files carry a per-file `role`; reference → gitignored `ref/`, ship → tracked
+> `uploads/`; the manifest is committed and ship-only; ship is inlined via a
+> server/tool step, not agent copy-paste. The flow shape below still holds.
 
 ```
 Composer (Blank/HTML tab)
@@ -91,6 +103,11 @@ Composer (Blank/HTML tab)
 ```
 
 ## Manifest: `uploads/assets.json`
+
+> **Superseded in part by [Review outcome](#review-outcome-plan-eng-review-2026-07-18):**
+> the manifest is **committed** (not gitignored) and covers **ship** files only
+> (≤ 1 MB total, so `data:` URIs stay small and durable across resume); reference
+> files live in gitignored `ref/` and are read raw, not manifested.
 
 An array of entries, one per uploaded file:
 
@@ -201,7 +218,179 @@ No code for this is written in slice 1.
 
 - No new `GameSource` variant / `createdFrom` change — uploads are an optional
   add-on to the existing `html`/`blank` seeds.
-- No per-file ship/reference UI toggle.
 - No installing skills/subagents/rubrics into the workspace.
+- No save-time inference of ship-vs-reference (rejected in review — clever/fragile;
+  the per-file toggle is the explicit signal instead).
 - No `multipart`/`FormData` upload path — uploads use the existing
   base64-in-JSON convention.
+
+## Review outcome (plan-eng-review, 2026-07-18)
+
+Two architecture findings changed the design; the [Decisions](#decisions) table
+is updated to match. Reasoning captured here so the change history is legible.
+
+### Issue 1 — "reference" uploads leaked to the registry; ship-vs-reference needs a signal
+
+`commitWithLock(root)` commits the whole miniapp dir and `push(root)` runs
+`git push -u origin HEAD` on the **entire registry repo** (`packages/play/src/git.ts`).
+So the original "write every upload into a committed `uploads/`" plan meant a file
+the user dropped as *reference* would be committed and pushed to the registry
+remote on publish — contradicting "not shipped" — and would bloat git history
+(raw bytes + data-URI copies, on top of the copy inlined into `index.html`).
+
+The marketplace path is unaffected: `writeGameGem` builds the gem from `html` +
+`meta` only (`miniapps.ts:83-96`) and `readMiniapp` serves only `index.html` +
+`meta.json`. Because a shipped miniapp is a single self-contained HTML with no
+asset server (`assertPortable`; app.agentgem.ai serves only the HTML), a
+ship-asset **must be inlined as a `data:` URI into `index.html`** — it can never
+ship as a separate file.
+
+Resolution: a **per-file Ship / Reference toggle** (default Ship) supplies the
+role the server can't infer at write time.
+
+- **Ship** → raw file written to **git-tracked** `uploads/` (versioned; survives
+  cross-machine durable resume) + listed in the manifest with an inline-ready
+  `data:` URI for binaries. Ship bytes also persist inside the committed
+  `index.html` once the agent inlines them.
+- **Reference** → raw file written to **gitignored** `ref/`; the jailed agent
+  reads it during the build, but it is never committed or pushed.
+- Registry `.gitignore` gains `ref/`. A **regression test** must assert `ref/` is
+  ignored and `uploads/` is tracked — a broken ignore rule is a silent private-file
+  leak on publish (no error path exists).
+
+**Manifest placement (implementation detail, settle in code):** to avoid
+triple-storing ship binary bytes (raw `uploads/` + `data:` in a committed manifest
++ inlined in `index.html`), keep the data-URI manifest as a **gitignored build
+aid** regenerable from `uploads/` + `ref/`, OR commit a pointer-only manifest
+(`file`/`type`/`bytes`/`role`, no `dataUri`) and have the agent encode from the
+committed raw file. Default to the gitignored-manifest option; the raw ship file
+is the durable committed copy.
+
+### Issue 2 — upload signal was a one-shot in-memory seedPrompt
+
+The only cue telling the agent uploads exist was the one-shot `seedPrompt`
+(`Studio.tsx:207`, `seededRef`), which is in-memory component state — lost on a
+reload before the first turn or a cross-machine durable resume, leaving the agent
+blind to files sitting in its cwd.
+
+Resolution: persist a lightweight `meta.uploads: { ship: n, ref: m }` counter;
+`studioBrief` (which reads `meta.json` every session start) appends one line naming
+`./uploads/` and `./ref/` when present. Durable across reload and resume. The
+seedPrompt stays for the richer first-turn hint. `meta.uploads` is added to
+`MiniappMeta` with a paired `alter`-style default (absent ⇒ no uploads), and the
+`/play/miniapp` read model passes it through only when present.
+
+## NOT in scope (deferred, with rationale)
+
+- **Save-time cleanup of consumed uploads** — after the agent inlines ship-assets,
+  the raw `uploads/` copies remain. Deferred: they're the versioned originals
+  (issue 1); a GC pass is a separate lifecycle concern. → TODO candidate.
+- **Cross-machine resume of `ref/` files** — reference files are gitignored, so a
+  durable resume on another machine won't have them. Accepted: reference material
+  is build-time context, consumed in the authoring session.
+- **Installing skills / subagents / rubrics** — the "equip with artifacts" vision;
+  same write-into-workspace seam, separate slice (see Forward path).
+- **`multipart`/`FormData`** — base64-in-JSON is the existing convention.
+
+### Cross-model tension resolution (outside voice)
+
+An independent review pass surfaced findings the section review missed; all
+code-verified. Resolved by the user toward **reference-first, gate-safe ship**:
+
+- **Finding A (CONFIRMED) — the 1.5 MB save gate.** `saveMiniapp` calls
+  `gameGate(html)` with no override (`miniapps.ts:115`); the gate rejects any
+  bundle > 1,500,000 bytes measured on the *full* HTML incl. inlined `data:` URIs
+  (`gameGate.ts:22,62`). The original 5 MB/15 MB limits are unshippable for ship
+  assets. → Ship capped to ≤ 500 KB/file, ≤ 1 MB total; reference keeps the larger
+  limits (it never inlines).
+- **Finding B (CONFIRMED) — no `.gitignore` exists.** `ensureRepo` writes none
+  (`git.ts`); existing registries have none. → T2 must **create + backfill** the
+  ignore rule on every registry (existing installs too), not just "add a line."
+- **Finding C (PLAUSIBLE) — agents can't retype MB data URIs.** Reading a 1 MB
+  URI is ~350k tokens and unreliable. → Ship inlining is a **server/tool step**,
+  and ship total is small (≤ 1 MB) so the committed manifest stays readable.
+- **Wholesale-regen caveat (implementation).** The studio agent "regenerates the
+  document wholesale and drops whatever `<head>` held" (`saveMiniapp` comment). So
+  server-pre-inlining ship assets into `index.html` at *seed* time does not
+  survive the agent's first rebuild. Durable path: keep ship data URIs in the
+  **committed** `uploads/assets.json`, and have the durable brief instruct the
+  agent to re-inline from it on every build. Settle the exact re-inline mechanism
+  (brief instruction vs a host-provided inline tool) in code.
+- **Strategic reframe accepted:** reference files carry most of the author value
+  at near-zero risk; ship is a small gate-safe extra. The manifest is now small
+  enough to commit, which also resolves the earlier durability/manifest conflict.
+
+## Implementation Tasks
+
+Synthesized from this review. Each derives from a specific finding. P1 blocks
+ship; P2 same-branch; P3 follow-up. Reference-first ordering.
+
+- [ ] **T1 (P1, human: ~3h / CC: ~25min)** — `packages/play/src/studio.ts` — add
+  `writeUploads(dir, files)`: sanitize names (reject `..`/`/`/leading-dot/empty,
+  single safe segment, in-batch collision suffix), split by role → reference to
+  gitignored `ref/`, ship to git-tracked `uploads/`, classify binary/text, emit a
+  committed `uploads/assets.json` (data URIs for ship binaries only), enforce
+  **role-specific** limits (ship ≤ 500 KB/≤ 1 MB gate-safe; reference ≤ 5 MB/≤ 15 MB)
+  → throw on breach, reject bad base64.
+  - Verify: `packages/play` unit tests, ★★★ (sanitize + classify + role-limits).
+- [ ] **T2 (P1, human: ~1.5h / CC: ~12min)** — registry `.gitignore` — **create it in
+  `ensureRepo` and backfill existing registries** (ignore `ref/`, track `uploads/`).
+  **Regression test** asserting `ref/` never enters a commit/push on a fresh AND a
+  pre-existing repo (critical: silent private-file leak otherwise).
+- [ ] **T3 (P2, human: ~1.5h / CC: ~12min)** — `studio.ts` + `miniapps.ts` — thread
+  `files` + roles into `blankStudio`/`importStudio`; write `meta.uploads` counter;
+  `studioBrief` names `./uploads/` + `./ref/` and points at `uploads/assets.json`
+  when present, with the re-inline instruction; add `uploads` to `MiniappMeta`
+  (absent ⇒ none, paired default).
+- [ ] **T4 (P2, human: ~1h / CC: ~10min)** — `src/schemas.ts` + `play.controller.ts` —
+  `UploadFileSchema` (`name`, `bytesBase64`, `type?`, `role`), optional `files` on
+  blank/import request schemas, server-side role-specific limit + combined-body
+  validation (import `html` + `files` under 25 MB), pass through. Over-limit → 400.
+- [ ] **T5 (P2, human: ~2h / CC: ~20min)** — `Composer.tsx` — multi-file dropzone on
+  Blank + HTML, per-file Ship/Reference toggle (default Ship), chip list + remove,
+  client-side role-specific limit pre-check with friendly error, async file read
+  with progress/disabled-submit (avoid UI-thread stall on ~15 MB), post `files`
+  with roles, build the durable-aware seedPrompt.
+- [ ] **T6 (P2, human: ~20min / CC: ~5min)** — `shell/theme.css` — `.play-uploads`
+  chip-list + toggle rule using existing tokens (every class CSS-enforced).
+- [ ] **T7 (P3, human: ~30min / CC: ~5min)** — follow-up TODO — GC pass to drop
+  consumed `uploads/` ship originals once inlined (deferred; see NOT in scope).
+- [ ] **T8 (P3)** — follow-up TODO — decide whether to raise `gameGate` `maxBytes`
+  for large ship-assets (own review; PWA/offline/serve blast radius).
+
+## Worktree parallelization
+
+| Step | Modules | Depends on |
+|------|---------|------------|
+| T1/T2/T3 | `packages/play` | — |
+| T4 | `src/` (schemas, controller) | files/role shape from T1 |
+| T5/T6 | `packages/console` | T4 wire shape |
+
+`Lane A: T1 → T2 → T3 (sequential, shared packages/play)` ·
+`Lane B: T4 (src/, independent once the files+role shape is fixed)` ·
+`Lane C: T5 → T6 (sequential, shared packages/console, waits on T4's wire shape)`.
+Launch A + B in parallel; C after B. No two lanes share a module dir — clean split.
+
+## GSTACK REVIEW REPORT
+
+| Review | Trigger | Why | Runs | Status | Findings |
+|--------|---------|-----|------|--------|----------|
+| CEO Review | `/plan-ceo-review` | Scope & strategy | 0 | — | — |
+| Codex Review | `/codex review` | Independent 2nd opinion | 0 | — | — |
+| Eng Review | `/plan-eng-review` | Architecture & tests (required) | 1 | issues_resolved | 5 issues (3 arch + 2 code-verified from outside voice), 1 critical gap flagged |
+| Design Review | `/plan-design-review` | UI/UX gaps | 0 | — | — |
+| DX Review | `/plan-devex-review` | Developer experience gaps | 0 | — | — |
+
+**Outside voice (Claude subagent):** ran. Surfaced 3 code-verified misses — the
+1.5 MB `gameGate` cap (Finding A, 9/10), missing `.gitignore` + backfill (Finding
+B, 9/10), and MB-scale agent-inline infeasibility (Finding C, 7/10). All folded.
+
+**CROSS-MODEL:** section review validated the plumbing (sanitization, schema,
+limits, jailed-dir mechanism); the outside voice caught that the shippable bundle
+can't hold what the plumbing carries. Resolved toward reference-first, gate-safe
+ship. No remaining disagreement.
+
+**VERDICT:** ENG CLEARED — ready to implement. Critical gap (private `ref/` leak on
+publish) is covered by a mandatory regression test in T2.
+
+NO UNRESOLVED DECISIONS
