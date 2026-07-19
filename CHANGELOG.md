@@ -7,6 +7,89 @@ All notable changes to AgentGem are documented here. The format follows
 The npm core (`@ninemind/agentgem`) and the desktop app share a version number but
 are tagged separately: core releases are tagged `v*`, desktop releases `desktop-v*`.
 
+## [0.8.0] — `@ninemind/agentgem` (npm core) — 2026-07-19
+
+A release about knowing — and showing — how well you steer. **gemit** ships end to
+end: one command scores your last 30 days of agent sessions into an interactive
+character-sheet report, `--share` publishes it as an unlisted card, and the
+marketplace page around a shared card invites the next person to score themselves.
+Around it: a redesigned first-run and Mine experience, needs-your-input alerts in
+Watch, live-updating miniapp MCP tools, file-seeded miniapps, and "Sign in with X".
+169 commits since 0.7.0.
+
+### Added
+
+- **`agentgem gemit`** — score your last 30 days of local coding-agent sessions
+  (context discipline · process quality · setup maturity, deterministic detectors,
+  no LLM) into a self-contained HTML report: tier + rank with a count-up reveal,
+  perk unlocks with honest progress meters, and a **Training Grounds** what-if
+  simulator — drag the projected bars or take on **Quest Log** actions (concrete
+  remedies derived from your own fired findings) and watch the projected tier
+  recompute live, confetti included. The measured score never moves; exact effect
+  chips only where the payload fully determines them.
+- **`agentgem gemit --share`** — publish the report as an **unlisted** card on
+  app.agentgem.ai (visible only via its link). The shared copy strips skill and
+  subagent names; a pre-publish summary shows exactly what ships (`--yes` to skip
+  the prompt), and the CLI prints the card URL plus a prefilled X share link.
+  Same-day re-shares update the card in place; a new day mints a new card.
+- **Marketplace invite chrome for steering cards** — a shared gemit card's page
+  renders the report inline with "What's your steering level?" and a copyable
+  one-liner, so a card is also an invitation.
+- **`/gemit` skill** (`skills/gemit/SKILL.md`) — a deliberately thin skill: run
+  the CLI, relay the tier, offer the share. All scoring stays in the CLI.
+- **First-run reveal + progressive disclosure.** The console opens on a
+  consent-gated streaming reveal of your top workflow, builds it into a gem on
+  accept, and unlocks the full navigation rail in disclosure groups as you go;
+  returning users get a migration ceremony instead of a cold wall of pages.
+- **Mine, redesigned.** Real gem cards with per-card actions and reserved score
+  slots, a Value/Type/Maturity group-by switcher, a live rubric layer that fills
+  scores in as they compute, and inline viewers for Distill results and rubric
+  reports.
+- **Watch: needs-your-input alerts.** Sessions blocked on a permission prompt or
+  question raise toasts and per-session bell badges, with cached session discovery
+  so the attention poll stays cheap.
+- **Live miniapp MCP tools.** `agentgemApp.mcp.watchTool` gives miniapps
+  polling-based live tool results with coalesced polls, single-flight epochs, and
+  an `mcp/invalidate` signal that re-polls live watches without resurrecting
+  stopped ones.
+- **File-seeded miniapps.** The Studio composer takes file uploads for Blank/HTML
+  creation with a Ship→`uploads/` vs Reference→gitignored `ref/` toggle.
+- **Sign in with X** (optional social provider) and **Tier-1 handle-only account
+  merge**.
+- **`@agentgem/contract`** — a new pure package carrying catalog types and signing
+  payloads, part of a wider seam pass (console page seams, CLI subcommand seam,
+  server mount hooks) that keeps the OSS core cleanly separable.
+
+### Changed
+
+- The console rail is journey-arc grouped (Observe/Build/Evaluate/Share) with Mine
+  promoted to the foreground.
+- `agentgem` with no subcommand now starts the pure-client entry.
+- Rubric hygiene scores stream into Mine cards stale-while-revalidate instead of
+  blocking the first paint.
+
+### Fixed
+
+- Studio resume shows live progress and can no longer lock the chat (busy-guarded
+  submit, tolerant `/state` errors, reconcile-before-unlock).
+- Miniapp MCP reconnect defers closing the old transport until in-flight calls
+  drain.
+- Home state self-heals a corrupt `home-state.json`; first-run detection can't be
+  tainted by the warm boot pass.
+- Upload MIME types are sanitized before entering `data:` URIs; reference uploads
+  are never git-tracked.
+
+## [desktop-v0.8.0] — desktop app — 2026-07-19
+
+### Added
+
+- **About dialog checks for updates** on demand; offline check failures stay
+  silent instead of alarming.
+
+Embeds everything in core 0.8.0 above — including gemit, the first-run reveal, the
+redesigned Mine, and the Studio resume + Distill PATH fixes that predated this
+build.
+
 ## [0.7.0] — `@ninemind/agentgem` (npm core) — 2026-07-15
 
 A release about closing loops: session inspection grows analytical lenses whose
