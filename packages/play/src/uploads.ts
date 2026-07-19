@@ -70,8 +70,10 @@ export function writeUploads(dir: string, files: UploadFile[]): UploadCounts {
   if (shipTotal > SHIP_MAX_TOTAL) throw new Error(`ship total ${shipTotal} > ${SHIP_MAX_TOTAL}`);
   if (refTotal > REF_MAX_TOTAL) throw new Error(`reference total ${refTotal} > ${REF_MAX_TOTAL}`);
 
-  const used = new Set<string>();
-  const uniq = (name: string): string => {
+  // Collisions are per-DIRECTORY: a ship file and a reference file may share a name (they land in
+  // uploads/ vs ref/), so each dir keeps its own Set — only same-dir same-name files get suffixed.
+  const usedShip = new Set<string>(), usedRef = new Set<string>();
+  const uniq = (name: string, used: Set<string>): string => {
     if (!used.has(name)) { used.add(name); return name; }
     const dot = name.lastIndexOf(".");
     const stem = dot > 0 ? name.slice(0, dot) : name;
@@ -82,8 +84,8 @@ export function writeUploads(dir: string, files: UploadFile[]): UploadCounts {
   const manifest: AssetEntry[] = [];
   let ship = 0, ref = 0;
   for (const { f, buf } of decoded) {
-    const name = uniq(sanitizeUploadName(f.name));
     if (f.role === "ship") {
+      const name = uniq(sanitizeUploadName(f.name), usedShip);
       mkdirSync(join(dir, "uploads"), { recursive: true });
       writeFileSync(join(dir, "uploads", name), buf);
       const type = safeMime(f.type);
@@ -92,6 +94,7 @@ export function writeUploads(dir: string, files: UploadFile[]): UploadCounts {
       manifest.push(entry);
       ship++;
     } else {
+      const name = uniq(sanitizeUploadName(f.name), usedRef);
       mkdirSync(join(dir, "ref"), { recursive: true });
       writeFileSync(join(dir, "ref", name), buf);
       ref++;

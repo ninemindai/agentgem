@@ -101,4 +101,16 @@ describe("writeUploads", () => {
     expect(logo.dataUri).toMatch(/^data:application\/octet-stream;base64,/);
     expect(logo.dataUri).not.toMatch(/<script>/);
   });
+
+  it("does not cross-suffix a ship and a reference file that share a name", () => {
+    const counts = writeUploads(dir, [
+      { name: "a.png", bytesBase64: png1x1, type: "image/png", role: "ship" },
+      { name: "a.png", bytesBase64: b64("# notes"), type: "text/markdown", role: "reference" },
+    ]);
+    expect(counts).toEqual({ ship: 1, ref: 1 });
+    expect(existsSync(join(dir, "uploads", "a.png"))).toBe(true);   // ship keeps its name
+    expect(existsSync(join(dir, "ref", "a.png"))).toBe(true);       // reference keeps its name (different dir)
+    expect(existsSync(join(dir, "uploads", "a-2.png"))).toBe(false);
+    expect(existsSync(join(dir, "ref", "a-2.png"))).toBe(false);
+  });
 });
