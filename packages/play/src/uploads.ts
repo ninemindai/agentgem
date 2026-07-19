@@ -21,6 +21,11 @@ function isBinary(type: string | undefined): boolean {
   return !type || !TEXT_TYPES.test(type);
 }
 
+// A well-formed MIME token — anything else can't be trusted inside a data: URI, fall back to octet-stream.
+function safeMime(type: string | undefined): string {
+  return type && /^[A-Za-z0-9][\w.+-]*\/[A-Za-z0-9][\w.+-]*$/.test(type) ? type : "application/octet-stream";
+}
+
 // Fold to a single safe path segment, preserving one extension. Reject path separators outright (no
 // silent basename-folding of traversal attempts like "../../etc/passwd") and reject dotfiles (".git").
 // Mirrors studio.ts slugify but keeps the extension.
@@ -81,7 +86,7 @@ export function writeUploads(dir: string, files: UploadFile[]): UploadCounts {
     if (f.role === "ship") {
       mkdirSync(join(dir, "uploads"), { recursive: true });
       writeFileSync(join(dir, "uploads", name), buf);
-      const type = f.type || "application/octet-stream";
+      const type = safeMime(f.type);
       const entry: AssetEntry = { file: `uploads/${name}`, type, bytes: buf.length };
       if (isBinary(f.type)) entry.dataUri = `data:${type};base64,${buf.toString("base64")}`;
       manifest.push(entry);
