@@ -20,6 +20,7 @@ import { reconcileNeeds, deriveNeeds, hasDynamicToolCall, deriveMcpNeeds, mergeM
 export interface MiniappMeta {
   title: string; genre: GameGenre; createdFrom: GameSource; engineVersion: string; needs?: GameCapability[];
   mcpNeeds?: McpNeed[];   // declared-authoritative (D10) — merged with derived literals at save, never pruned
+  uploads?: { ship: number; ref: number };   // author-supplied seed files: ship→uploads/, reference→gitignored ref/
 }
 export interface SaveMiniappInput { name: string; html: string; meta: MiniappMeta }
 export interface SaveMiniappResult { name: string; commit: string | null; prunedNeeds: GameCapability[]; mcpWarnings: string[] }
