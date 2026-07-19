@@ -20,7 +20,8 @@ function fakeData(over: Partial<GemitData> = {}): GemitData {
     verdicts: { bounded: 9, mixed: 1, bloated: 0 },
     labels: { disciplined: 5, loose: 1, chaotic: 0 },
     verifyRatePct: 50, boundedStreak: 9, firedFindings: [],
-    skillVariety: 3, subagentVariety: 2, topSkills: [], topSubagents: [],
+    skillVariety: 3, subagentVariety: 2, skillSessionsPct: 50, subagentSessionsPct: 33,
+    topSkills: [], topSubagents: [],
     insufficient: false,
     ...over,
   };

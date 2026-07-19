@@ -13,6 +13,10 @@ export const MIN_SESSIONS = 5;
 export const MIN_MSGS = 10;
 export const SAMPLE_CAP = 150;
 export const TIER_THRESHOLDS = [50, 65, 80] as const;
+// Exported so the theme's Training Grounds can recompute projections with the SAME
+// numbers the score uses — presentation can't drift from scoring.
+export const COMPOSITE_WEIGHTS = { ctx: 0.4, proc: 0.4, setup: 0.2 } as const;
+export const SETUP_WEIGHTS = { sessions: 0.45, subSessions: 0.25, variety: 0.15, subVariety: 0.15 } as const;
 
 export interface GemitSessionInput {
   sessionId: string;
@@ -60,6 +64,10 @@ export interface GemitData {
   firedFindings: Array<{ id: string; title: string; sessions: number }>;
   skillVariety: number;
   subagentVariety: number;
+  /** Share of qualifying sessions that invoked ≥1 skill / ≥1 subagent (0–100 ints).
+   *  Ships in both variants (counts only) so the theme can recompute SETUP exactly. */
+  skillSessionsPct: number;
+  subagentSessionsPct: number;
   topSkills: string[];
   topSubagents: string[];
   insufficient: boolean;
@@ -113,7 +121,8 @@ export function computeGemitData(
       verdicts: { bounded: 0, mixed: 0, bloated: 0 },
       labels: { disciplined: 0, loose: 0, chaotic: 0 },
       verifyRatePct: null, boundedStreak: 0, firedFindings: [],
-      skillVariety: 0, subagentVariety: 0, topSkills: [], topSubagents: [],
+      skillVariety: 0, subagentVariety: 0, skillSessionsPct: 0, subagentSessionsPct: 0,
+      topSkills: [], topSubagents: [],
       insufficient: true,
     };
   }
@@ -175,23 +184,25 @@ export function computeGemitData(
   }
   const skillVariety = skillTotals.size;
   const subagentVariety = subagentTotals.size;
+  const skillSessionsPct = Math.round((100 * skillSessions) / n);
+  const subagentSessionsPct = Math.round((100 * subagentSessions) / n);
   const setup = Math.round(100 * Math.min(1,
-    0.45 * (skillSessions / n) + 0.25 * (subagentSessions / n) +
-    0.15 * Math.min(1, skillVariety / 10) + 0.15 * Math.min(1, subagentVariety / 5)));
+    SETUP_WEIGHTS.sessions * (skillSessions / n) + SETUP_WEIGHTS.subSessions * (subagentSessions / n) +
+    SETUP_WEIGHTS.variety * Math.min(1, skillVariety / 10) + SETUP_WEIGHTS.subVariety * Math.min(1, subagentVariety / 5)));
 
   const top = (m: Map<string, number>, cap: number): string[] =>
     [...m.entries()].sort((a, b) => b[1] - a[1]).slice(0, cap).map(([name]) => name);
 
   const ctxR = Math.round(ctx);
   const procR = Math.round(proc);
-  const composite = Math.round(0.4 * ctxR + 0.4 * procR + 0.2 * setup);
+  const composite = Math.round(COMPOSITE_WEIGHTS.ctx * ctxR + COMPOSITE_WEIGHTS.proc * procR + COMPOSITE_WEIGHTS.setup * setup);
 
   return {
     ...base,
     ctx: ctxR, proc: procR, setup, composite,
     tierLevel: tierLevelFor(composite),
     verdicts, labels, verifyRatePct, boundedStreak, firedFindings,
-    skillVariety, subagentVariety,
+    skillVariety, subagentVariety, skillSessionsPct, subagentSessionsPct,
     topSkills: top(skillTotals, 12), topSubagents: top(subagentTotals, 8),
     insufficient: false,
   };

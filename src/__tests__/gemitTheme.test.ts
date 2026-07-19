@@ -22,7 +22,7 @@ function data(over: Partial<GemitData> = {}): GemitData {
       { id: "retry-storm", title: "Retry storm", sessions: 9 },
       { id: "reread-churn", title: "Re-read churn", sessions: 3 },
     ],
-    skillVariety: 12, subagentVariety: 8,
+    skillVariety: 12, subagentVariety: 8, skillSessionsPct: 62, subagentSessionsPct: 41,
     topSkills: ["brainstorming"], topSubagents: ["Explore"],
     insufficient: false,
     ...over,
