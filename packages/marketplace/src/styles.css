@@ -1196,3 +1196,13 @@ a.ex-benchmark-name:hover, a.ex-benchmark-gem-link:hover { color: var(--brand-st
 .ex-offline-meta .ex-offline-size { margin-inline-start: auto; opacity: .7; font-size: 13px; }
 
 .ex-offline-banner { margin: 0; padding: 8px 24px; text-align: center; background: var(--surface-2); color: var(--ink); border-block-end: 1px solid var(--line); font-size: 14px; }
+
+/* ---- gemit landing (invite chrome around a shared steering card) ---- */
+.gemit-landing { max-width: 860px; margin: 0 auto; }
+.gemit-cta { margin: 22px 0 8px; padding: 18px 20px; border: 1px solid var(--line); border-radius: 12px; background: var(--surface); }
+.gemit-cta-q { font-family: var(--display); font-size: 19px; margin: 0 0 4px; color: var(--ink); }
+.gemit-cta-sub { color: var(--muted); margin: 0 0 12px; font-size: 14px; }
+.gemit-cmd { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+.gemit-cmd code { font-family: ui-monospace, Menlo, monospace; font-size: 13.5px; padding: 8px 12px; border: 1px solid var(--line); border-radius: 8px; background: var(--surface-2); color: var(--ink); user-select: all; }
+.gemit-cmd button { font: inherit; font-size: 13.5px; padding: 8px 14px; border-radius: 8px; border: 1px solid var(--line-2); background: var(--ink); color: var(--bg); cursor: pointer; }
+.gemit-cmd button:hover { background: var(--brand-strong); border-color: var(--brand-strong); color: #fff; }
