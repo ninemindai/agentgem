@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { warmEnabled } from "../index.js";
+import { warmEnabled } from "../appCommon.js";
 
 describe("warmEnabled", () => {
   it("warms by default", () => {
