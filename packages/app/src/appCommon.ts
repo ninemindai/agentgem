@@ -49,12 +49,17 @@ const serverLog = createLogger("server");
 
 const here = dirname(fileURLToPath(import.meta.url));
 
-// Read a built console asset (index.html, manifest.webmanifest). dist path first,
-// then the dev fallback to the console package's own dist. Returns null if absent.
+// Read a built console asset (index.html, manifest.webmanifest). `here` is this module's dir —
+// packages/app/dist when run loose (tsc output), or the bundle's dir (dist/, enterprise/dist/)
+// when this module is inlined into a server bundle. Probe, in order: the co-located
+// public/console (where a bundler stages the SPA next to itself), the repo-root dist/public/console
+// that scripts/build-console.mjs writes to (reached from packages/app/dist via ../../../dist), and
+// the console package's own dist as a dev fallback. Returns null if none is present.
 function consoleFile(name: string): string | null {
   for (const p of [
     join(here, "public", "console", name),
-    join(here, "..", "packages", "console", "dist", name),
+    join(here, "..", "..", "..", "dist", "public", "console", name),
+    join(here, "..", "..", "console", "dist", name),
   ]) {
     try { return readFileSync(p, "utf8"); } catch { /* try next */ }
   }
