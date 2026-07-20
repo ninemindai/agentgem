@@ -21,7 +21,7 @@ import { AgentSourcesComponent } from "./gem/sourceRegistry.js";
 import { installMcpHttp } from "@agentback/mcp-http";
 import { GemController } from "./gem.controller.js";
 import { registerDeploy } from "./deploy.controller.js";
-import { registerRegistry } from "./registry.controller.js";
+import { registerRegistry, RegistryTools } from "./registry.controller.js";
 import { HomeController } from "./home.controller.js";
 import { ReviewController } from "./review.controller.js";
 import { DreamController } from "./dream.controller.js";
@@ -169,6 +169,7 @@ export async function buildCommonApp(port: number): Promise<{ app: RestApplicati
   app.restController(GemStreamController);
   app.restController(ScorecardController);
   app.service(GemTools);
+  app.service(RegistryTools);
   // The persistent transcript index (capture) is a separate, lazily-opened on-disk
   // PGlite — not the aggregator DB. Close it on graceful shutdown too, so SIGTERM
   // flushes its WASM instance cleanly instead of leaving it resident until exit
