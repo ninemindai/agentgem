@@ -830,15 +830,9 @@ describe("workspace ops", () => {
 });
 
 describe("registry endpoints", () => {
-  it("registryGems returns an empty list when the registry is unconfigured (graceful, no throw)", async () => {
-    const prev = process.env.AGENTGEM_REGISTRY_REPO;
-    delete process.env.AGENTGEM_REGISTRY_REPO;
-    try {
-      const res = await new GemController().registryGems({ query: {} });
-      expect(res).toEqual({ gems: [] });
-    } finally {
-      if (prev !== undefined) process.env.AGENTGEM_REGISTRY_REPO = prev;
-    }
+  it("registryGems returns an empty list with no catalog source bound (graceful, no throw)", async () => {
+    const res = await new GemController().registryGems({ query: {} });
+    expect(res).toEqual({ gems: [] });
   });
 });
 

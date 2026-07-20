@@ -4,7 +4,7 @@
 //
 // Inbound *adapter source* for github.com/msitarzewski/agency-agents. That repo is NOT an
 // AgentGem registry (no registry.json; its items are single persona `.md` files, not Gem
-// archives), so it can't be consumed by githubRegistrySource. This module translates the
+// archives), so it can't be read as a gem registry. This module translates the
 // repo's native division/`.md` layout into AgentGem skill artifacts on the fly.
 //
 // Casting decision (see docs): these files carry no `tools`/`model`/trigger machinery — only
