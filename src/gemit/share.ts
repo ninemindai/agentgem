@@ -8,7 +8,7 @@
 // CLI owns confirmation and the actual POST (postGemPublish).
 import type { GameArtifact, Gem } from "@agentgem/model";
 import { exportGem, importGem } from "@agentgem/distribute";
-import type { CatalogManifest } from "@agentgem/aggregator/catalog";
+import type { CatalogManifest } from "@agentgem/contract";
 import type { GemitData } from "./score.js";
 import { renderRpgTheme, TIER_NAMES } from "./themeRpg.js";
 

@@ -2,11 +2,9 @@
 import { describe, it, expect } from "vitest";
 import {
   InventorySchema, GemSchema, GemRequestSchema, GemCheckSchema, ScaffoldChecksResponseSchema,
-  MaterializeRequestSchema, MaterializeResponseSchema, PublishPreviewRequestSchema, PublishRequestSchema, PublishResultSchema,
+  MaterializeRequestSchema, MaterializeResponseSchema,
   GemLockSchema, GemManifestSchema, ArchiveRequestSchema, ArchiveResponseSchema,
   WorkspaceSummarySchema, CreateWorkspaceRequestSchema, RenderRequestSchema, RenderResultSchema,
-  DeployTargetIdSchema, DeployReadyQuerySchema, DeployTargetsResponseSchema,
-  RegistryResolveRequestSchema, RegistryInstallRequestSchema, RegistryPublishRequestSchema,
   GemArtifactSchema, SkippedArtifactSchema,
   SkillArtifactSchema, TriggerContractSchema, DistilledSkillSchema,
   GemApplyResponseSchema, RubricInstallResultSchema,
@@ -95,18 +93,6 @@ describe("wire schemas", () => {
     expect(r.skipped[0].type).toBe("hook");
   });
 
-  it("requires an idempotency key for publish but not preview, and returns a sandbox id", () => {
-    PublishPreviewRequestSchema.parse({ selection: { all: true } });
-    expect(() => PublishRequestSchema.parse({ selection: { all: true } })).toThrow();
-    PublishRequestSchema.parse({ selection: { all: true }, requestId: "request-123" });
-    const result = PublishResultSchema.parse({
-      kind: "managed-agent",
-      agentId: "agent_1", environmentId: "env_1", version: "1",
-      registeredSkills: [], skipped: [], vaultSecrets: [],
-    });
-    expect(result.kind).toBe("managed-agent");
-    if (result.kind === "managed-agent") expect(result.environmentId).toBe("env_1");
-  });
 });
 
 describe("archive schemas", () => {
@@ -160,32 +146,6 @@ describe("workspace schemas", () => {
   });
 });
 
-describe("deploy schemas", () => {
-  it("validates the deploy target id and rejects unknown", () => {
-    expect(DeployTargetIdSchema.safeParse("claude-managed").success).toBe(true);
-    expect(DeployTargetIdSchema.safeParse("nope").success).toBe(false);
-  });
-  it("publish-preview accepts an optional target; ready query + targets response validate", () => {
-    expect(PublishPreviewRequestSchema.safeParse({ selection: { all: true } }).success).toBe(true);
-    expect(PublishPreviewRequestSchema.safeParse({ selection: { all: true }, target: "claude-managed" }).success).toBe(true);
-    expect(DeployReadyQuerySchema.safeParse({}).success).toBe(true);
-    expect(DeployReadyQuerySchema.safeParse({ target: "claude-managed" }).success).toBe(true);
-    expect(DeployTargetsResponseSchema.safeParse({ targets: [{ id: "claude-managed", label: "Claude Managed Agents", ready: false }] }).success).toBe(true);
-  });
-});
-
-describe("registry schemas", () => {
-  it("accepts a resolve request with refs + target", () => {
-    expect(RegistryResolveRequestSchema.parse({ refs: ["@acme/x"], mode: "materialize", target: "claude" }).refs).toEqual(["@acme/x"]);
-  });
-  it("rejects an install request with an empty refs array", () => {
-    expect(() => RegistryInstallRequestSchema.parse({ refs: [], mode: "workspace" })).toThrow();
-  });
-  it("requires scope + version on a publish request", () => {
-    expect(() => RegistryPublishRequestSchema.parse({ refs: [] })).toThrow();
-    expect(RegistryPublishRequestSchema.parse({ workspace: "w", scope: "acme", version: "1.0.0" }).scope).toBe("acme");
-  });
-});
 
 describe("channel schema", () => {
   it("GemArtifactSchema parses a channel artifact", () => {

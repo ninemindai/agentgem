@@ -374,10 +374,7 @@ import type { TestbedFlavorId } from "@agentgem/testbed";
 import { readRecents, upsertRecent } from "@agentgem/capture";
 import { createGemCache, safeDbGems, mergeGems } from "./gem/publicCatalog.js";
 import { inject } from "@agentback/core";
-import { DrizzleBindings } from "@agentback/drizzle";
-import type { AppDb } from "@agentgem/aggregator";
-import { listCatalogGems } from "@agentgem/aggregator/catalog";
-import { RUN_CLOUD_DISPATCH } from "./hostedBindings.js";
+import { CATALOG_GEMS_SOURCE, RUN_CLOUD_DISPATCH } from "./hostedBindings.js";
 import { introspectAll } from "./introspectAll.js";
 import { resolveDirs, resolveProject, agentgemHome, workspaceArtifactPath, parseWorkspaceArtifactPath } from "@agentgem/model";
 import { pickFolder } from "./pickFolder.js";
@@ -449,7 +446,7 @@ const PublishStatusResponseSchema = z.object({ exists: z.boolean(), ownedByMe: z
 @api({ basePath: "/api" })
 export class GemController {
   constructor(
-    @inject(DrizzleBindings.CLIENT, { optional: true }) private db?: AppDb,
+    @inject(CATALOG_GEMS_SOURCE, { optional: true }) private catalogGems?: import("./hostedBindings.js").CatalogGemsSource,
     @inject(RUN_CLOUD_DISPATCH, { optional: true }) private runCloudDispatch?: import("./hostedBindings.js").RunCloudDispatch,
   ) {}
 
@@ -1325,7 +1322,7 @@ export class GemController {
   @get("/registry/gems", { query: PickQuerySchema, response: RegistryGemsResponseSchema })
   async registryGems(_input: { query: z.infer<typeof PickQuerySchema> }): Promise<z.infer<typeof RegistryGemsResponseSchema>> {
     const indexGems = await publicGemCache.get(null, Date.now());
-    const dbGems = this.db ? await safeDbGems(() => listCatalogGems(this.db!)) : [];
+    const dbGems = this.catalogGems ? await safeDbGems(this.catalogGems) : [];
     return { gems: mergeGems(dbGems, indexGems) };
   }
 

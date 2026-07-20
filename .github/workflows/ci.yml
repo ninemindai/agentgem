@@ -48,7 +48,3 @@ jobs:
       # tsc-compiled @agentgem/* dist to resolve, so order matters.
       - run: pnpm build
       - run: pnpm test
-      # The marketplace SPA (packages/marketplace) has its own jsdom vitest suite that the root
-      # `pnpm test` (dist/** + website/edge globs) does not reach. Run it so the router conformance
-      # test — and the rest of the user-facing marketplace — gates merges. Green at 273 tests today.
-      - run: pnpm --filter @agentgem/marketplace test

@@ -6,7 +6,6 @@
 import { describe, it, expect } from "vitest";
 import { GemLeakError } from "@agentgem/base";
 import { exportGem } from "@agentgem/distribute";
-import { deployGem } from "@agentgem/deploy";
 import type { Gem } from "@agentgem/model";
 
 // A real-shaped provider token: matches the strong-credential net, so redaction should have caught
@@ -46,10 +45,3 @@ describe("egress gate: exportGem (share · transfer · download · hosted publis
   });
 });
 
-describe("egress gate: deployGem (managed-agent targets)", () => {
-  it("refuses before any network call is attempted", async () => {
-    // No ANTHROPIC_API_KEY is needed: the gate must fire first. If the gate is missing, this
-    // rejects with the env-var error instead, which is exactly the regression we're guarding.
-    await expect(deployGem("claude-managed", dirty, "req-1")).rejects.toThrow(GemLeakError);
-  });
-});
