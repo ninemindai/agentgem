@@ -14,7 +14,7 @@
 // use the token-optional Contents/Trees API, so public browsing needs no credentials.
 import type { SkillArtifact } from "@agentgem/model";
 import { InvalidInputError } from "@agentgem/model";
-import type { Http, GithubCfg } from "./registryGithub.js";
+import type { Http, GithubCfg } from "./registryTypes.js";
 import { ghTree, ghContents, decodeFile, defaultHttp, splitFrontmatter, fmField } from "./githubContents.js";
 import type { AgencyDivision, AgencyAgentEntry } from "./agencyAgents.js";
 

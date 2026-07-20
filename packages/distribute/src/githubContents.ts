@@ -4,10 +4,10 @@
 //
 // Shared, thin GitHub Contents-API reader plus flat-scalar frontmatter helpers, used by the
 // curated-source adapters (agencyAgents, skillsLayout). All network goes through an injected
-// `Http` (the shape from registryGithub.ts) so directory walks and transforms stay unit-testable
+// `Http` (the shape from registryTypes.ts) so directory walks and transforms stay unit-testable
 // with a fake. Reads use the token-optional Contents API, so browsing public repos needs no
 // credentials — a token only lifts the 60/hr unauthenticated rate limit.
-import type { Http, GithubCfg } from "./registryGithub.js";
+import type { Http, GithubCfg } from "./registryTypes.js";
 
 const API = "https://api.github.com";
 

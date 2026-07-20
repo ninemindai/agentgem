@@ -4,7 +4,7 @@
 // Discovery over the registry index. Index-only and in-memory: getIndex() already
 // fetches the whole index in one call, so search is a pure weighted scan — no extra
 // network, no DB. Right at tens-to-thousands of gems; revisit only past fetch-whole scale.
-import type { RegistryIndex } from "./registry.js";
+import type { RegistryIndex } from "./registryTypes.js";
 
 export interface SearchHit {
   key: string;
