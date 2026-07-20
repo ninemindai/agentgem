@@ -3,17 +3,16 @@ import {
   runReadyRoute, runRoute, runStatusRoute, runStopRoute, makeClient, type RunState,
 } from "../../api/routes.js";
 
-/** Targets that produce a runnable/deployable web app. */
+/** Targets that produce a runnable web app. */
 const RUNNABLE = ["eve", "flue"];
-type Mode = "local" | "vercel" | "cloudflare";
-type Ready = { local: boolean; vercel: boolean; cloudflare: boolean };
-
-const MODE_LABEL: Record<Mode, string> = { local: "Run locally", vercel: "Deploy to Vercel", cloudflare: "Deploy to Cloudflare" };
 const ACTIVE = new Set(["installing", "building", "deploying"]);
 
-export function WorkspaceDeploy({ apiBase, name }: { apiBase: string; name: string }) {
+// Run the built gem's rendered web-app target locally: re-render into the workspace's
+// .run dir, npm-install, build, start, and tail the process output. The sibling of
+// <Run> (which runs the gem with a local coding agent) — this one serves the app itself.
+export function LocalRun({ apiBase, name }: { apiBase: string; name: string }) {
   const [target, setTarget] = useState<string>("eve");
-  const [ready, setReady] = useState<Ready | null>(null);
+  const [ready, setReady] = useState<{ local: boolean } | null>(null);
   const [run, setRun] = useState<RunState | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -44,12 +43,12 @@ export function WorkspaceDeploy({ apiBase, name }: { apiBase: string; name: stri
     }, 1500);
   };
 
-  const start = async (mode: Mode) => {
+  const start = async () => {
     setBusy(true);
     setError(null);
     setRun(null);
     try {
-      const r = await runRoute.call(makeClient(apiBase), { body: { name, target, mode } });
+      const r = await runRoute.call(makeClient(apiBase), { body: { name, target, mode: "local" } });
       setRun(r);
       if (r.state === "running" || r.state === "failed") setBusy(false);
       else poll();
@@ -66,25 +65,20 @@ export function WorkspaceDeploy({ apiBase, name }: { apiBase: string; name: stri
     setBusy(false);
   };
 
-  const can = (m: Mode) => ready?.[m] === true;
-
   return (
     <div className="ws-deploy">
       <div className="ws-actions">
-        <span className="targets-label">Deploy</span>
-        <select className="targets-select" aria-label={`deploy target for ${name}`} value={target} onChange={(e) => setTarget(e.target.value)}>
+        <span className="targets-label">Run app</span>
+        <select className="targets-select" aria-label={`run target for ${name}`} value={target} onChange={(e) => setTarget(e.target.value)}>
           {RUNNABLE.map((t) => <option key={t} value={t}>{t}</option>)}
         </select>
-        {(["local", "vercel", "cloudflare"] as Mode[]).map((m) => (
-          <button
-            key={m}
-            type="button"
-            className={m === "local" ? "ledger-sort" : "ledger-build"}
-            disabled={busy || !can(m)}
-            title={can(m) ? "" : "backend not configured"}
-            onClick={() => start(m)}
-          >{MODE_LABEL[m]}</button>
-        ))}
+        <button
+          type="button"
+          className="ledger-sort"
+          disabled={busy || ready?.local !== true}
+          title={ready?.local === true ? "" : "local runtime not ready"}
+          onClick={() => start()}
+        >Run locally</button>
         {busy && <button type="button" className="ws-delete" onClick={stop}>Stop</button>}
       </div>
       {error && <p className="ledger-error">{error}</p>}

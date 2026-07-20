@@ -25,7 +25,7 @@ describe("pages registry", () => {
     expect(g.map((x) => x.category)).toEqual(["setup", "projects"]);
     expect(flat("build")).toEqual([
       "curate", "sources", "gems", "play", "rubric-library",
-      "deploy", "publish", "reviews", "materialize",
+      "reviews", "materialize",
     ]);
   });
 
@@ -58,7 +58,7 @@ describe("railModel over the real registry", () => {
       ["watch", "sessions", "recall", "dreaming"],
       ["curate", "setup", "play", "materialize", "chat", "rubric-library"],
       ["rubrics", "benchmark", "reviews", "optimize"],
-      ["deploy", "sources", "arcade"],
+      ["sources", "arcade"],
     ]);
   });
 
