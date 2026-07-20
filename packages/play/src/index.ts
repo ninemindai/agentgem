@@ -10,7 +10,7 @@ export { MCP_APP_MIME, uiUri, mcpResourceFor, mcpToolFor, mcpAppFor, type McpUiC
 export { mcpAppClient, MCP_CLIENT_MARKER } from "./mcpAppClient.js";
 export { hostStyleScript, MCP_UI_STYLE_KEYS } from "./hostStyles.js";
 export { migrateMiniappHtml, ensureClientShim, type MigrateOutcome } from "./migrate.js";
-export { studioCwd, studioBrief, seedStudio, importStudio, blankStudio, slugify } from "./studio.js";
+export { studioCwd, studioBrief, seedStudio, importStudio, blankStudio, slugify, addUploadsToMiniapp } from "./studio.js";
 export { writeUploads, sanitizeUploadName, type UploadFile, type UploadRole, type UploadCounts, type StoredUpload, type UploadResult } from "./uploads.js";
 export { readMiniappShare, writeMiniappShare, clearMiniappShare, type MiniappShare } from "./miniappShare.js";
 export { MINIAPP_BUILDER_BRIEF } from "./builderBrief.js";
