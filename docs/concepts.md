@@ -18,7 +18,7 @@ turns that lived-in project into something portable:
    the setup until it does what you want.
 4. **Crystallize.** When it's right, you capture it as a **Gem**: a secret-safe, reusable
    archive (secrets redacted at capture).
-5. **Publish / deploy.** Push the Gem to the registry, or compile it to a deploy target.
+5. **Publish / materialize.** Publish the Gem to the marketplace, or compile it to a target.
 
 The rest of this page covers what that Gem actually is.
 
@@ -26,12 +26,12 @@ The rest of this page covers what that Gem actually is.
 
 A **Gem** is a portable, secret-safe snapshot of a slice of your coding-agent config —
 the skills, MCP servers, hooks, and instructions you chose to bundle. It's the unit
-AgentGem produces and the neutral source that every deploy target and the registry
+AgentGem produces and the neutral source that every target and the marketplace
 consume. You build it once; everything downstream reads from it.
 
 A Gem is intentionally *not* tied to any one runtime. The same Gem can be installed back
-into a local testbed, merged with other Gems, published to the registry, or compiled to a
-deploy target — without rebuilding from your raw config each time.
+into a local testbed, merged with other Gems, published to the marketplace, or compiled
+to a target — without rebuilding from your raw config each time.
 
 ## The archive format (manifest + lock)
 
@@ -84,4 +84,4 @@ visible in the **Watch** tab and **Inspect** drill-down as agent `atif`.
 with `schema_version: "ATIF-v1.7"`. Exports are secret-safe by default (redacted at capture), so you can share
 them freely without exposing API keys or credentials. See the **[ATIF specification](https://github.com/harbor-framework/harbor/blob/main/rfcs/0001-trajectory-format.md)**.
 
-Continue to **[Targets & deploy](targets.md)** to see where a Gem can go.
+Continue to **[Targets](targets.md)** to see where a Gem can go.

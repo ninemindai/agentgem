@@ -160,4 +160,4 @@ Analyze is an optional on-ramp to the [testbed flow](testbed-and-run.md): a fast
 to answer "what did I actually build here, and what's worth turning into a Gem?" You
 can analyze a project without adopting it, or apply a recommendation and jump
 straight into building. Everything after the recommendation — building, publishing,
-merging, deploying — is the normal Gem flow.
+merging — is the normal Gem flow.

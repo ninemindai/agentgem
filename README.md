@@ -28,8 +28,8 @@
 
 AgentGem reads your coding-agent config — skills, MCP servers, and `CLAUDE.md` —
 **redacts secrets the moment they're read**, and produces a **Gem**: a manifest + lock
-archive you can publish to a GitHub-backed registry, merge with other Gems, and deploy to
-several targets. A browser can't read `~/.claude` (it's sandboxed), so AgentGem runs a
+archive you can install locally, merge with other Gems, materialize for many agent
+targets, and publish to the AgentGem marketplace. A browser can't read `~/.claude` (it's sandboxed), so AgentGem runs a
 small server on your machine; secrets never leave your device — what crosses any boundary
 is a config *shape* with `<redacted>` in place of every sensitive value.
 
@@ -70,15 +70,16 @@ call exactly the same thing.
   AI-generated mini-games, sealed to run anywhere and versioned as first-class `game`
   Gems — publish them to the arcade, where they're **installable, offline-playable PWAs**
   searchable by genre and tag.
-- **Deploy targets** — Eve and OpenAI Sandbox (code-gen), Flue (materialize, deployable to
-  Cloudflare), and Bedrock AgentCore (managed backend); code-gen targets share a common
-  `compose` step.
+- **Materialize targets** — render a Gem to Eve, Flue, OpenAI Sandbox, and Bedrock
+  AgentCore projects (code-gen targets share a common `compose` step), or to editor
+  formats like Claude, Codex, and Hermes — and run a rendered Eve/Flue app locally
+  from the Materialize panel.
 - **Agent-to-agent (A2A)** — export a Gem as an [A2A](docs/a2a.md) Agent Card or a
   runnable A2A server so other agents can discover and call it.
 - **A native desktop app** — a [macOS/Windows/Linux build](docs/desktop.md) alongside the
   `npx` CLI, hosting the same local server in its own window.
-- **A GitHub-backed registry + public marketplace** — publish, resolve, merge, and
-  install composable Gems over the same archive format, and browse them at
+- **A public marketplace** — publish and install composable Gems over the same
+  archive format, and browse them at
   [app.agentgem.ai](https://app.agentgem.ai). Publish a Gem **Public, Unlisted, or
   Private**, cut a **new version** or overwrite the current one, and gate a release
   behind **group review** (request review → a member installs it to test → an approval
@@ -93,7 +94,7 @@ call exactly the same thing.
   **`/@handle` profile hub** (apps, reviews, orgs, groups). Create or join a **group** to
   share a private Gem with teammates or run peer review, and an org gets a scorecard,
   team-usage dashboard, and **benchmark governance**.
-- **Registry-free sharing & signing** — [`agentgem get`](docs/sharing.md) installs a
+- **Direct sharing & signing** — [`agentgem get`](docs/sharing.md) installs a
   published Gem with one command; `agentgem send` / `receive` pass one directly over an
   encrypted, one-time hand-off; `agentgem verify` checks a Gem runs across your local
   agents.
@@ -151,7 +152,7 @@ Open **<http://127.0.0.1:4317/>**, then:
 2. **Pick artifacts** — the project's skills / MCP servers / `CLAUDE.md` show on the
    left; *Import from machine…* pulls in global ones. Tick what you want, name the Gem.
 3. **Watch it seal** — the live `gem.json` renders with every secret as `<redacted>`.
-   Download it — that archive is what every target and the registry consume.
+   Download it — that archive is what every target and the marketplace consume.
 
 <p align="center">
   <img src="docs/screenshot.png" alt="The AgentGem Gem Builder: selected skills and MCP servers on the left, the live gem.json on the right with every secret shown as <redacted>" width="100%">
@@ -214,10 +215,8 @@ For deeper reference, see [`docs/`](docs/index.md):
 [desktop app](docs/desktop.md) ·
 [analyze](docs/analyze.md) ·
 [concepts](docs/concepts.md) ·
-[targets & deploy](docs/targets.md) ·
-[GitHub App](docs/deploy/github-app.md) ·
-[A2A](docs/a2a.md) ·
-[registry](docs/registry.md).
+[targets](docs/targets.md) ·
+[A2A](docs/a2a.md).
 
 ## License
 
