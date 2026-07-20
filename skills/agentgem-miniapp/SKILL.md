@@ -1,9 +1,20 @@
 ---
 name: agentgem-miniapp
-description: Use when building or editing an AgentGem miniapp / mini-game — the sealed, single-file HTML app under ~/.agentgem/miniapps/. Covers the seal, the host capability protocol, consent, privacy, and the sizing traps.
+description: Use when building or editing an AgentGem miniapp / mini-game — the sealed, single-file HTML app under ~/.agentgem/miniapps/. Covers the seal, the host capability protocol, consent, privacy, and the sizing traps. Also read before changing the miniapp platform itself (packages/play, the host, the Play console surfaces) — the normative spec is docs/miniapps/spec.md.
 ---
 
 # agentgem-miniapp
+
+> **Changing the miniapp platform, not authoring a miniapp?** The normative spec
+> is [`docs/miniapps/spec.md`](../../docs/miniapps/spec.md) — implement against
+> its conformance checklist, and read
+> [`docs/miniapps/evolution.md`](../../docs/miniapps/evolution.md) before
+> re-deciding anything it records. If your change touches the authoring
+> contract, edit `MINIAPP_BUILDER_BRIEF` in `packages/play/src/builderBrief.ts`
+> — the body below is a byte-for-byte view of that constant (this file must end
+> with it; `src/play/__tests__/builderBrief.test.ts` guards the mirror), and the
+> Studio agent only ever sees the constant, so a SKILL.md-only edit changes
+> nothing at runtime.
 
 ## The file
 

@@ -10,7 +10,10 @@ Companions: [`evolution.md`](evolution.md) records why these rules exist;
 [`../../skills/agentgem-miniapp/SKILL.md`](../../skills/agentgem-miniapp/SKILL.md)
 is the authoring contract injected into the Studio agent — where this spec and
 the skill describe the same rule, the skill's wording is the one the agent sees,
-and the two MUST NOT drift.
+and the two MUST NOT drift. The skill body is itself a byte-for-byte view of
+`MINIAPP_BUILDER_BRIEF` (`packages/play/src/builderBrief.ts`): contract changes
+are made to the constant, never to the markdown, and
+`src/play/__tests__/builderBrief.test.ts` guards the mirror.
 
 ## 1. Overview
 
@@ -331,6 +334,8 @@ For verifying an implementation change (or reviewing a PR) against this spec:
 - [ ] Clipboard egress re-prompts every time (§6.3).
 - [ ] No artifact leaves the machine without an explicit user act with a chosen
       scope (I3, §7.3).
-- [ ] Any contract change is mirrored in `skills/agentgem-miniapp/SKILL.md`.
+- [ ] Any contract change is made in `MINIAPP_BUILDER_BRIEF`
+      (`packages/play/src/builderBrief.ts`) and mirrored into
+      `skills/agentgem-miniapp/SKILL.md` (drift-guarded).
 - [ ] New capability widenings ship with a matching save-time or consent-time
       tightening (see [`evolution.md`](evolution.md), D10).
