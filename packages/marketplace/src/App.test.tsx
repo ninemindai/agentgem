@@ -9,7 +9,16 @@ import * as pk from "./passkeyAuth";
 vi.mock("./passkeyAuth", () => {
   const signInPasskey = vi.fn();
   return {
-    makePasskeyAuth: () => ({ signIn: { passkey: signInPasskey } }),
+    // `passkey.*` methods are needed once a test renders the account tab (AccountPanel mounts
+    // PasskeysSection, which calls listUserPasskeys on mount) — return empty so it renders cleanly.
+    makePasskeyAuth: () => ({
+      signIn: { passkey: signInPasskey },
+      passkey: {
+        listUserPasskeys: async () => ({ data: [], error: null }),
+        addPasskey: async () => ({ data: null, error: null }),
+        deletePasskey: async () => ({ data: null, error: null }),
+      },
+    }),
     passkeySupported: () => true,
     passkeyErrorMessage: (e: unknown, fallback = "Something went wrong") => {
       if (typeof e === "string") return e;
@@ -220,6 +229,20 @@ describe("App link interceptor", () => {
     expect(screen.getByRole("button", { name: /sign out/i })).toBeTruthy();
     // The identity links to the user's own profile page.
     expect(screen.getByRole("link", { name: "octocat" }).getAttribute("href")).toBe("/@octocat");
+  });
+
+  it("sign-out clears the current page by navigating home", async () => {
+    vi.stubGlobal("fetch", vi.fn(async (u: string) => {
+      if (u.includes("/api/auth/get-session")) return res({ session: { token: "t" }, user: { id: "u0", login: "octocat", handle: "octocat", image: null } });
+      if (u.includes("/popular-skills")) return res({ skills: [], groups: [] });
+      return res([]);
+    }));
+    // Start on an owner-only route so a stale, deauthed view would linger without the redirect.
+    window.history.pushState({}, "", "/@octocat?tab=account");
+    render(<App />);
+    fireEvent.click(await screen.findByRole("button", { name: /sign out/i }));
+    await waitFor(() => expect(window.location.pathname).toBe("/"));
+    expect(window.location.search).toBe("");
   });
 
   it("chip: a handle-less (Google) user shows their name and NO profile link", async () => {

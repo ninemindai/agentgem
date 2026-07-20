@@ -52,7 +52,10 @@ export function App() {
   const onMyApps = path === "/my-apps";
   const accountHref = me?.handle ? `/@${encodeURIComponent(me.handle)}?tab=account` : "/account";
   const groupsHref = me?.handle ? `/@${encodeURIComponent(me.handle)}?tab=groups` : "/groups";
-  const signOut = async () => { await auth.logout(); setMe(null); };
+  // Clear the page on sign-out: `setMe(null)` alone leaves the user on whatever (possibly owner-only)
+  // route they were on — e.g. /@handle?tab=account — showing a now-stale, deauthed view. Send them
+  // home so nothing account-scoped lingers in the view or the URL.
+  const signOut = async () => { await auth.logout(); setMe(null); navigate("/"); };
   // Surface a failed sign-in (misconfigured provider, rate-limit, 5xx, network error) instead of
   // the click having zero visible effect — this is the primary login path, shared by the header
   // link and every loginUrl-triggered prompt (StarButton, review prompts, Team Pulse sign-in).

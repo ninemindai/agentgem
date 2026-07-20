@@ -14,6 +14,10 @@ const KNOWN_PROVIDERS: { id: "github" | "google" | "twitter"; label: string }[] 
   { id: "twitter", label: "X" },
 ];
 
+/** Human label for a provider id (GitHub / Google / X), for user-facing copy like the collision
+ *  banner. Falls back to the raw id for any provider not in the known list. */
+const providerLabel = (id: string): string => KNOWN_PROVIDERS.find((p) => p.id === id)?.label ?? id;
+
 // Flow B needs to know WHICH provider a collision was for, to target the right one at the bespoke
 // `/api/account/connect/:provider` start route. better-auth's OAuth round trip is a real full-page
 // redirect (see the `linkSocial` doc comment in auth.ts) that remounts this page from scratch, so
@@ -153,9 +157,11 @@ export function AccountPanel({ api, me, base }: { api: ReturnType<typeof makeApi
       )}
       {collision && (
         <p className="ex-error" role="alert">
-          That provider is already linked to another AgentGem account.
+          {attemptedProvider
+            ? `Your ${providerLabel(attemptedProvider)} account is already linked to a different AgentGem account.`
+            : "That provider is already linked to a different AgentGem account."}
           {attemptedProvider && (
-            <> <button type="button" className="ex-signin" onClick={() => mergeAccount(attemptedProvider)}>Merge this account</button></>
+            <> <button type="button" className="ex-signin" onClick={() => mergeAccount(attemptedProvider)}>Merge the {providerLabel(attemptedProvider)} account</button></>
           )}
         </p>
       )}
