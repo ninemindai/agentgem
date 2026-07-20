@@ -256,6 +256,9 @@ importers:
 
   packages/contract:
     dependencies:
+      '@agentback/core':
+        specifier: ~0.7.1
+        version: 0.7.1
       '@agentgem/insight':
         specifier: workspace:*
         version: link:../insight
