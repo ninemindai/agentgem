@@ -8,6 +8,7 @@ import supertest from "supertest";
 import { RestApplication } from "@agentback/rest";
 import { GemController } from "../gem.controller.js";
 import { registerDeploy } from "../deploy.controller.js";
+import { RegistryController, registerRegistry } from "../registry.controller.js";
 import { createServer } from "node:http";
 import { packTar, unpackTar, readGemArchive } from "@agentgem/archive";
 import { writeGemArchive } from "@agentgem/archive";
@@ -48,6 +49,7 @@ beforeAll(async () => {
   app.configure("servers.RestServer").to({ port: 0, host: "127.0.0.1", bodyParser: { json: { limit: "25mb" } } });
   app.restController(GemController);
   registerDeploy(app);
+  registerRegistry(app);
   await app.start();
   const server = await app.restServer;
   client = supertest(server.url);
@@ -982,7 +984,7 @@ describe("registry endpoints", () => {
     const prev = process.env.AGENTGEM_REGISTRY_REPO;
     delete process.env.AGENTGEM_REGISTRY_REPO;
     try {
-      const res = await new GemController().registryReady({ query: {} });
+      const res = await new RegistryController().registryReady({ query: {} });
       expect(res).toEqual({ ready: false });
     } finally {
       if (prev !== undefined) process.env.AGENTGEM_REGISTRY_REPO = prev;
@@ -993,7 +995,7 @@ describe("registry endpoints", () => {
     const prev = process.env.AGENTGEM_REGISTRY_REPO;
     delete process.env.AGENTGEM_REGISTRY_REPO;
     try {
-      await expect(new GemController().registryInstall({ body: { refs: ["@a/x"], mode: "workspace" } }))
+      await expect(new RegistryController().registryInstall({ body: { refs: ["@a/x"], mode: "workspace" } }))
         .rejects.toThrow(/registry is not configured/i);
     } finally {
       if (prev !== undefined) process.env.AGENTGEM_REGISTRY_REPO = prev;
@@ -1004,7 +1006,7 @@ describe("registry endpoints", () => {
     const prev = process.env.AGENTGEM_REGISTRY_REPO;
     delete process.env.AGENTGEM_REGISTRY_REPO;
     try {
-      await expect(new GemController().registrySearch({ query: { q: "github" } }))
+      await expect(new RegistryController().registrySearch({ query: { q: "github" } }))
         .rejects.toThrow(/registry is not configured/i);
     } finally {
       if (prev !== undefined) process.env.AGENTGEM_REGISTRY_REPO = prev;

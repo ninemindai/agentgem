@@ -318,11 +318,7 @@ import {
   TestbedScaffoldRequestSchema, TestbedScaffoldResponseSchema,
   TestbedImportRequestSchema, TestbedImportResponseSchema,
   GemApplyRequestSchema, GemApplyResponseSchema, RubricInstallResultSchema,
-  RegistryReadyResponseSchema, RegistryIndexResponseSchema,
-  RegistrySearchQuerySchema, RegistrySearchResponseSchema, RegistryGemsResponseSchema,
-  RegistryResolveRequestSchema, RegistryResolveResponseSchema,
-  RegistryInstallRequestSchema, RegistryInstallResponseSchema,
-  RegistryPublishRequestSchema, RegistryPublishResponseSchema,
+  RegistryGemsResponseSchema,
   WorkflowAnalyzeRequestSchema, WorkflowAnalyzeResponseSchema,
   DistilledSkillSchema, DistilledLessonSchema, WorkflowDraftWriteResponseSchema,
   GemRunRequestSchema, GemRunResponseSchema,
@@ -376,22 +372,16 @@ import { detectFlavor, suggestTestbed, discoverProjects } from "@agentgem/testbe
 import { discoverTargetProjects, scanRootsForTargets } from "@agentgem/testbed";
 import type { TestbedFlavorId } from "@agentgem/testbed";
 import { readRecents, upsertRecent } from "@agentgem/capture";
-import { resolveInstall, publishGem } from "@agentgem/distribute";
-import { searchIndex } from "@agentgem/distribute";
-import { githubRegistrySource, githubRegistryPublisher, registryConfigFromEnv, registryReady } from "@agentgem/distribute";
 import { createGemCache, safeDbGems, mergeGems } from "./gem/publicCatalog.js";
-import { service, inject } from "@agentback/core";
-import { RestBindings } from "@agentback/rest";
+import { inject } from "@agentback/core";
 import { DrizzleBindings } from "@agentback/drizzle";
-import type { AppDb, makeAuth } from "@agentgem/aggregator";
+import type { AppDb } from "@agentgem/aggregator";
 import { listCatalogGems } from "@agentgem/aggregator/catalog";
-import { AUTH_BINDING, PUBLISHED_BY_RESOLVER, RUN_CLOUD_DISPATCH } from "./hostedBindings.js";
+import { RUN_CLOUD_DISPATCH } from "./hostedBindings.js";
 import { introspectAll } from "./introspectAll.js";
-import { GemTypeRegistry, defaultGemTypeRegistry, resolvePublishType } from "./gem/gemTypeRegistry.js";
 import { resolveDirs, resolveProject, agentgemHome, workspaceArtifactPath, parseWorkspaceArtifactPath } from "@agentgem/model";
 import { pickFolder } from "./pickFolder.js";
 import { readShareAdoption, setShareAdoption } from "./agentgemConfig.js";
-import { emitAdoption } from "./registry/emitAdoption.js";
 import { bindConfig, startDeviceBind, completeDeviceBind, readBindingStatus, clearBinding, readSession, clearSession, type StartDeps, type CompleteDeps } from "./bind/bindCore.js";
 
 const BindStartSchema = z.object({
@@ -459,11 +449,7 @@ const PublishStatusResponseSchema = z.object({ exists: z.boolean(), ownedByMe: z
 @api({ basePath: "/api" })
 export class GemController {
   constructor(
-    @service(GemTypeRegistry, { optional: true }) private gemTypes: GemTypeRegistry = defaultGemTypeRegistry,
-    @inject(RestBindings.HTTP_REQUEST, { optional: true }) private req?: { headers: Record<string, string | undefined> },
     @inject(DrizzleBindings.CLIENT, { optional: true }) private db?: AppDb,
-    @inject(AUTH_BINDING, { optional: true }) private auth?: ReturnType<typeof makeAuth>,
-    @inject(PUBLISHED_BY_RESOLVER, { optional: true }) private resolvePublishedBy?: import("./hostedBindings.js").PublishedByResolver,
     @inject(RUN_CLOUD_DISPATCH, { optional: true }) private runCloudDispatch?: import("./hostedBindings.js").RunCloudDispatch,
   ) {}
 
@@ -1333,68 +1319,14 @@ export class GemController {
     return { verifyId, gemName: gem.name, gemDigest, agents: roster };
   }
 
-  // Resolve the configured registry source, or throw a clear error the UI can surface.
-  private registrySource() {
-    const cfg = registryConfigFromEnv();
-    if (!cfg) throw new Error("the registry is not configured — set AGENTGEM_REGISTRY_REPO");
-    return { cfg, source: githubRegistrySource(cfg) };
-  }
-
-  @get("/registry/ready", { query: PickQuerySchema, response: RegistryReadyResponseSchema })
-  async registryReady(_input: { query: z.infer<typeof PickQuerySchema> }): Promise<z.infer<typeof RegistryReadyResponseSchema>> {
-    return { ready: registryReady() };
-  }
-
-  @get("/registry/index", { query: PickQuerySchema, response: RegistryIndexResponseSchema })
-  async registryIndex(_input: { query: z.infer<typeof PickQuerySchema> }): Promise<z.infer<typeof RegistryIndexResponseSchema>> {
-    return this.registrySource().source.getIndex();
-  }
-
-  @get("/registry/search", { query: RegistrySearchQuerySchema, response: RegistrySearchResponseSchema })
-  async registrySearch(input: { query: z.infer<typeof RegistrySearchQuerySchema> }): Promise<z.infer<typeof RegistrySearchResponseSchema>> {
-    const index = await this.registrySource().source.getIndex();
-    return { results: searchIndex(index, input.query.q ?? "", { kind: input.query.kind, tag: input.query.tag, limit: input.query.limit }) };
-  }
-
-  // Public, CORS-open (see originGuard), browse-only gem list. Graceful: unconfigured or a fetch
-  // error yields { gems: [] }. Uses the shared TTL cache to bound GitHub traffic.
+  // Public, CORS-open (see originGuard), browse-only gem list. Graceful: a DB read error yields
+  // { gems: [] } (via safeDbGems). Runs through the shared TTL cache for parity with its previous
+  // shape; a null source always resolves to an empty list.
   @get("/registry/gems", { query: PickQuerySchema, response: RegistryGemsResponseSchema })
   async registryGems(_input: { query: z.infer<typeof PickQuerySchema> }): Promise<z.infer<typeof RegistryGemsResponseSchema>> {
-    const cfg = registryConfigFromEnv();
-    const getIndex = cfg ? () => githubRegistrySource(cfg).getIndex() : null;
-    const indexGems = await publicGemCache.get(getIndex, Date.now());
+    const indexGems = await publicGemCache.get(null, Date.now());
     const dbGems = this.db ? await safeDbGems(() => listCatalogGems(this.db!)) : [];
     return { gems: mergeGems(dbGems, indexGems) };
-  }
-
-  @post("/registry/resolve", { body: RegistryResolveRequestSchema, response: RegistryResolveResponseSchema })
-  async registryResolve(input: { body: z.infer<typeof RegistryResolveRequestSchema> }): Promise<z.infer<typeof RegistryResolveResponseSchema>> {
-    const { source } = this.registrySource();
-    const { plan } = await resolveInstall({ refs: input.body.refs, mode: input.body.mode, target: input.body.target as TargetId | undefined, source, a2aServer: input.body.a2aServer });
-    return { plan };
-  }
-
-  // Apply: materialize into `dest`, or land the merged Gem in the workspace store.
-  @post("/registry/install", { body: RegistryInstallRequestSchema, response: RegistryInstallResponseSchema })
-  async registryInstall(input: { body: z.infer<typeof RegistryInstallRequestSchema> }): Promise<z.infer<typeof RegistryInstallResponseSchema>> {
-    const { source } = this.registrySource();
-    const { plan, gem } = await resolveInstall({ refs: input.body.refs, mode: input.body.mode, target: input.body.target as TargetId | undefined, source, a2aServer: input.body.a2aServer });
-    // Validate mode-specific inputs BEFORE any install side-effect (a rejected install writes nothing).
-    if (input.body.mode === "materialize" && !input.body.dest) throw new Error("materialize mode requires `dest`");
-    // Adoption fires only AFTER the install actually lands (below), never on a resolve-then-fail.
-    const installed = plan.items.map((it) => ({ gemKey: it.key, version: it.version, gemDigest: "" }));
-    if (input.body.mode === "materialize") {
-      const dest = input.body.dest!;   // guarded above
-      writeArchiveDir(dest, plan.materialize!.files);
-      const rubrics = installRubricGem(gem);   // after the materialize write lands — like installHosted/applyGem, so a failed install writes no rubric
-      void emitAdoption(installed);   // opt-in + fire-and-forget; never awaited, never throws
-      return { plan, applied: { mode: "materialize", dest, written: Object.keys(plan.materialize!.files) }, rubrics };
-    }
-    const name = input.body.workspaceName ?? gem.name;
-    createWorkspace(name, gem);
-    const rubrics = installRubricGem(gem);   // after the workspace lands — a name-collision throw leaves no orphaned rubric
-    void emitAdoption(installed);   // opt-in + fire-and-forget; never awaited, never throws
-    return { plan, applied: { mode: "workspace", workspace: name }, rubrics };
   }
 
   @get("/settings/adoption", { query: PickQuerySchema, response: z.object({ enabled: z.boolean() }) })
@@ -1406,23 +1338,6 @@ export class GemController {
   async setAdoptionSetting(input: { body: { enabled: boolean } }): Promise<{ enabled: boolean }> {
     setShareAdoption(input.body.enabled);
     return { enabled: input.body.enabled };
-  }
-
-  // OUTWARD-FACING: gated network publish. Reads a Gem from the workspace, writes its archive +
-  // updated index in one commit. Requires GITHUB_TOKEN (enforced by the publisher).
-  @post("/registry/publish", { body: RegistryPublishRequestSchema, response: RegistryPublishResponseSchema })
-  async registryPublish(input: { body: z.infer<typeof RegistryPublishRequestSchema> }): Promise<z.infer<typeof RegistryPublishResponseSchema>> {
-    const { cfg, source } = this.registrySource();
-    const gem = readGemArchive(readWorkspace(input.body.workspace).files); // WorkspaceDetail exposes .files, not .gem
-    const type = resolvePublishType(this.gemTypes, input.body.type, gem);
-    const index = await source.getIndex();
-    const publishedBy = this.resolvePublishedBy ? await this.resolvePublishedBy(this.req, this.auth, this.db) : undefined;
-    return publishGem({
-      gem, scope: input.body.scope, name: input.body.name, version: input.body.version,
-      dependencies: input.body.dependencies, index, publisher: githubRegistryPublisher(cfg),
-      description: input.body.description, tags: input.body.tags, type, publishedBy,
-      grade: gem.grade,
-    });
   }
 
   // Bind: start the GitHub device flow for sybil-hardening. Returns { configured: false } when the
