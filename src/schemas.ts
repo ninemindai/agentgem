@@ -1143,6 +1143,25 @@ export const UploadFileSchema = z.object({
 type _AssertEq<A, B> = [A] extends [B] ? ([B] extends [A] ? true : never) : never;
 const _uploadFileDriftGuard: _AssertEq<z.infer<typeof UploadFileSchema>, PlayUploadFile> = true;
 void _uploadFileDriftGuard;
+// Add files to an EXISTING miniapp's workspace (POST /api/play/uploads) — distinct from
+// PlayImportRequestSchema/PlayBlankRequestSchema, which seed files when a miniapp is created.
+export const PlayUploadsRequestSchema = z.object({
+  name: z.string(),
+  files: z.array(UploadFileSchema),
+});
+const StoredUploadSchema = z.object({
+  requested: z.string(),
+  stored: z.string(),
+  role: z.enum(["ship", "reference"]),
+});
+export const PlayUploadsResponseSchema = z.object({
+  files: z.array(StoredUploadSchema),
+  ship: z.number(),
+  ref: z.number(),
+});
+// Compile-time drift guard: the response file shape must match @agentgem/play's StoredUpload.
+const _storedGuard: _AssertEq<z.infer<typeof StoredUploadSchema>, import("@agentgem/play").StoredUpload> = true;
+void _storedGuard;
 // Import a miniapp from an existing self-contained HTML file. The HTML becomes the miniapp as-is (a
 // draft opened in the studio); the seal gate is enforced on Save, not import, so imperfect HTML can be
 // brought in and fixed by chatting with the agent.

@@ -6,7 +6,7 @@ import { z } from "zod";
 import {
   saveMiniapp, deleteMiniapp, listMiniapps, readMiniapp, miniappsRoot, setRemote, push, seedStudio, importStudio, blankStudio,
   compactTurns, resolveSessionRef, mcpAppFor, migrateAllMiniapps, INSPECTOR_HTML, INSPECTOR_META, type MiniappMeta,
-  EMBER_HTML, EMBER_META, readMiniappShare,
+  EMBER_HTML, EMBER_META, readMiniappShare, addUploadsToMiniapp,
   callConnectorTool, listConnectorTools, resolveConnectorGem, resolveConnectorDigest, ConnectorError,
 } from "@agentgem/play";
 import { derivePayload } from "@agentgem/model";
@@ -19,6 +19,7 @@ import {
   PlayMiniappQuerySchema, PlayMiniappSchema, PlaySessionDataSchema, PlaySessionDataQuerySchema, PlayMcpAppSchema,
   PlayMigrateResponseSchema, PlayInspectorSchema,
   PlayMcpCallRequestSchema, PlayMcpCallResponseSchema, PlayMcpServersQuerySchema, PlayMcpServersResponseSchema,
+  PlayUploadsRequestSchema, PlayUploadsResponseSchema,
 } from "./schemas.js";
 
 @api({ basePath: "/api" })
@@ -75,6 +76,19 @@ export class PlayController {
       const { name } = await blankStudio(input.body.title, input.body.prompt, input.body.name, input.body.files);
       return { name };
     } catch (e) { throw this.createError(e); }
+  }
+
+  // Add files to an EXISTING miniapp's workspace (e.g. mid-Studio-session uploads), as opposed to
+  // import/blank which seed files at creation time. 404 for an unknown miniapp, matching delete's
+  // "miniapp not found" prefix convention; everything else (bad name, oversize, bad base64) is 400.
+  @post("/play/uploads", { body: PlayUploadsRequestSchema, response: PlayUploadsResponseSchema })
+  async uploads(input: { body: z.infer<typeof PlayUploadsRequestSchema> }): Promise<z.infer<typeof PlayUploadsResponseSchema>> {
+    try {
+      return await addUploadsToMiniapp(input.body.name, input.body.files);
+    } catch (e) {
+      const msg = (e as Error).message;
+      throw new AgentError(msg, { status: msg.startsWith("miniapp not found") ? 404 : 400 });
+    }
   }
 
   // Host-brokered feed: a replay's source-session transcript, compacted. Defaults to the miniapp's OWN
