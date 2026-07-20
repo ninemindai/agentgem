@@ -1,6 +1,6 @@
 ---
 name: gemit
-description: Use when the user wants to score their agent steering — "how well am I steering my agents", "what's my steering level", "run gemit". Runs the AgentGem gemit self-assessment: one npx command, a local HTML report, optional share.
+description: Use when the user wants to score their agent steering — "how well am I steering my agents", "what's my steering level", "run gemit". Runs the AgentGem gemit self-assessment — one npx command, a local HTML report, optional share.
 ---
 
 # gemit

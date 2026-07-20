@@ -5,12 +5,21 @@
 import { describe, expect, it } from "vitest";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
+import { parse as parseYaml } from "yaml";
 
 const md = (): string => readFileSync(join(process.cwd(), "skills/gemit/SKILL.md"), "utf8");
 
 describe("gemit skill", () => {
   it("is a skills.sh-discoverable skill file", () => {
     expect(md()).toMatch(/^---\nname: gemit\ndescription: \S/);
+  });
+
+  it("has VALID YAML frontmatter (an unquoted ': ' in the description silently hides the skill from skills.sh)", () => {
+    const fm = md().split("---")[1];
+    const parsed = parseYaml(fm) as { name: string; description: string };
+    expect(parsed.name).toBe("gemit");
+    expect(typeof parsed.description).toBe("string");
+    expect(parsed.description).toContain("gemit");
   });
 
   it("carries the exact one-liner and the share offer", () => {
