@@ -27,3 +27,10 @@ export type RunCloudDispatch = (
   opts: { eveAuth?: "placeholder" | "public" },
 ) => Promise<RunState>;
 export const RUN_CLOUD_DISPATCH = BindingKey.create<RunCloudDispatch | undefined>("agentgem.run.cloudDispatch");
+
+// Reads the served gem catalog out of a database for GET /registry/gems. Bound where a catalog
+// DB exists (the binder closes over its own db handle); unbound → the route serves the index
+// cache alone (the local default).
+import type { CatalogRow } from "@agentgem/contract";
+export type CatalogGemsSource = () => Promise<CatalogRow[]>;
+export const CATALOG_GEMS_SOURCE = BindingKey.create<CatalogGemsSource | undefined>("agentgem.catalog.gemsSource");
