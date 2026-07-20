@@ -36,6 +36,18 @@ const callTool = (win: Window, name: string, args?: Record<string, unknown>): nu
   fromIframe(win, { jsonrpc: "2.0", id, method: "tools/call", params: { name, arguments: args ?? {} } });
   return id;
 };
+// The consent card ignores Allow for its first ~500ms (anti-bait arming) — wait it out, then click.
+// A plain real-timer poll, NOT testing-library waitFor: several tests fake Date (waitFor's deadline
+// bookkeeping) while leaving setTimeout real. Under FULL fake timers this helper would hang — those
+// tests advance the arming window explicitly with vi.advanceTimersByTimeAsync(500) instead.
+const clickAllow = async () => {
+  for (let waited = 0; ; waited += 25) {
+    const b = screen.queryByText("Allow") as HTMLButtonElement | null;
+    if (b && !b.disabled) { fireEvent.click(b); return; }
+    if (waited >= 3000) throw new Error(`Allow never armed (present: ${b != null})`);
+    await new Promise((r) => setTimeout(r, 25));
+  }
+};
 
 describe("Runner", () => {
   it("renders a sealed iframe (allow-scripts, no allow-same-origin) with the html in srcDoc", () => {
@@ -161,10 +173,39 @@ describe("Runner", () => {
     const id = callTool(win, "agentgem_get_inventory");
     await waitFor(() => expect(screen.getByText("Allow")).toBeTruthy()); // consent prompt shown
     expect(inv).not.toHaveBeenCalled();                                   // NOT fetched before consent
-    fireEvent.click(screen.getByText("Allow"));
+    await clickAllow();
     await waitFor(() => expect(inv).toHaveBeenCalled());                  // now brokered
     await waitFor(() => expect(post).toHaveBeenCalledWith(expect.objectContaining({ id, result: expect.objectContaining({ skills: [{ name: "brainstorming" }] }) }), "*")); // fed back over the wire
     expect(getConsent("g2", "local-project-access")).toBe("granted");     // remembered
+  });
+
+  it("the consent card is a focused dialog (keystrokes leave the sealed iframe)", async () => {
+    const { container } = render(<Runner html="<p>x</p>" name="g2f" apiBase="" needs={["local-project-access"]} />);
+    const win = (container.querySelector("iframe") as HTMLIFrameElement).contentWindow as Window;
+    vi.spyOn(win, "postMessage").mockImplementation(() => {});
+    callTool(win, "agentgem_get_inventory");
+    await waitFor(() => expect(screen.getByText("Allow")).toBeTruthy());
+    const dialog = screen.getByRole("dialog");
+    expect(dialog.getAttribute("aria-modal")).toBe("true");
+    expect(document.activeElement).toBe(dialog);                          // focus moved off the game
+  });
+
+  it("Allow is inert while the card arms; Deny is live immediately", async () => {
+    const inv = vi.spyOn(inventoryRoute, "call").mockResolvedValue({ skills: [], mcpServers: [], instructions: [], hooks: [], subagents: [] } as never);
+    const { container } = render(<Runner html="<p>x</p>" name="g2a" apiBase="" needs={["local-project-access"]} />);
+    const win = (container.querySelector("iframe") as HTMLIFrameElement).contentWindow as Window;
+    vi.spyOn(win, "postMessage").mockImplementation(() => {});
+    callTool(win, "agentgem_get_inventory");
+    await waitFor(() => expect(screen.getByText("Allow")).toBeTruthy());
+    // A game can bait a rapid click/keystroke at the exact spot the card appears — the first ~500ms of
+    // activations must be ignored (the same input protection Chrome gives its own permission prompts).
+    expect((screen.getByText("Allow") as HTMLButtonElement).disabled).toBe(true);
+    fireEvent.click(screen.getByText("Allow"));                           // baited click — must do nothing
+    await new Promise((r) => setTimeout(r, 20));
+    expect(inv).not.toHaveBeenCalled();
+    expect((screen.getByText("Deny") as HTMLButtonElement).disabled).toBe(false); // refusing early is always safe
+    await clickAllow();                                                   // armed click goes through
+    await waitFor(() => expect(inv).toHaveBeenCalled());
   });
 
   it("Deny records the choice and never feeds", async () => {
@@ -190,7 +231,7 @@ describe("Runner", () => {
     const post = vi.spyOn(win, "postMessage").mockImplementation(() => {});
     callTool(win, "agentgem_subscribe_sessions");
     await waitFor(() => expect(screen.getByText("Allow")).toBeTruthy());
-    fireEvent.click(screen.getByText("Allow"));
+    await clickAllow();
     await waitFor(() => expect(watchStream.openWatchStream).toHaveBeenCalledWith("", "/f.jsonl", expect.any(Function)));
     emit({ type: "event", index: 0 }); // a live session event arrives
     expect(post).toHaveBeenCalledWith(expect.objectContaining({
@@ -207,7 +248,7 @@ describe("Runner", () => {
     const post = vi.spyOn(win, "postMessage").mockImplementation(() => {});
     const id = callTool(win, "agentgem_subscribe_sessions");
     await waitFor(() => expect(screen.getByText("Allow")).toBeTruthy());
-    fireEvent.click(screen.getByText("Allow"));
+    await clickAllow();
     await waitFor(() => expect(post).toHaveBeenCalledWith(expect.objectContaining({ id, result: { status: "idle" } }), "*"));
     // a session now exists; the game re-requests (consent remembered) → the guard must have been released
     fs.mockResolvedValue([{ id: "s", file: "/late.jsonl", agent: "claude", project: null, model: null, msgs: 1, startMs: 0, endMs: 0, ageMs: 0 }]);
@@ -226,7 +267,7 @@ describe("Runner", () => {
     const post = vi.spyOn(win, "postMessage").mockImplementation(() => {});
     callTool(win, "agentgem_invoke_agent", { message: "hello agent" });
     await waitFor(() => expect(screen.getByText("Allow")).toBeTruthy());
-    fireEvent.click(screen.getByText("Allow"));
+    await clickAllow();
     await waitFor(() => expect(studioStream.openStudioStream).toHaveBeenCalledWith("", "c1", "hello agent", expect.anything()));
     onDelta!("hi there");
     expect(post).toHaveBeenCalledWith(expect.objectContaining({
@@ -249,7 +290,7 @@ describe("Runner", () => {
     expect(screen.getByText(/Tools: list_pull_requests, list_commits/)).toBeTruthy(); // names every declared tool, not just the one called
     expect(call).not.toHaveBeenCalled(); // not brokered before consent
 
-    fireEvent.click(screen.getByText("Allow"));
+    await clickAllow();
     await waitFor(() => expect(call).toHaveBeenCalled());
     await waitFor(() => expect(post).toHaveBeenCalledWith(expect.objectContaining({ id, result: expect.objectContaining({ ok: true, payload: { count: 2 } }) }), "*"));
     // the ROUTER's digest-pinned mcp-consent cache records the grant...
@@ -302,6 +343,9 @@ describe("Runner", () => {
       // vi.waitFor auto-advances fake timers while polling the assertion, unlike testing-library's own
       // waitFor (which relies on a REAL setInterval — dead under vi.useFakeTimers()).
       await vi.waitFor(() => expect(screen.getByText(/wants to use the gh connector/)).toBeTruthy());
+      // vi.waitFor auto-advances the mocked clock — it walks time through the 500ms Allow arming
+      // window (anti-bait) and then through React's re-render of the now-enabled button.
+      await vi.waitFor(() => expect((screen.getByText("Allow") as HTMLButtonElement).disabled).toBe(false));
       fireEvent.click(screen.getByText("Allow"));
 
       await vi.waitFor(() => expect(call).toHaveBeenCalledTimes(1)); // the FIRST poll (no floor wait for a fresh register)
@@ -337,7 +381,7 @@ describe("Runner", () => {
       vi.spyOn(win, "postMessage").mockImplementation(() => {});
       fromIframe(win, { jsonrpc: "2.0", id: rpcId++, method: "mcp/watch", params: { server: "gh", tool: "list_prs", input: {} } });
       await waitFor(() => expect(screen.getByText(/wants to use the gh connector/)).toBeTruthy());
-      fireEvent.click(screen.getByText("Allow"));
+      await clickAllow();
       await waitFor(() => expect(call).toHaveBeenCalledTimes(1)); // the initial register-time poll always runs, even while hidden
 
       // Becoming visible fires the Runner's visibilitychange listener -> host.wakeWatches() -> a fresh poll,
@@ -376,7 +420,7 @@ describe("Runner", () => {
     expect(screen.queryAllByText("Allow").length).toBe(1);
 
     // Allow should resolve the second (current) request; the first was superseded and resolved as false
-    fireEvent.click(screen.getByText("Allow"));
+    await clickAllow();
     await waitFor(() => expect(inv).toHaveBeenCalled());
 
     // The response to the second request should be posted

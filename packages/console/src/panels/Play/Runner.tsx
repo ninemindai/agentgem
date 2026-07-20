@@ -47,6 +47,8 @@ export const Runner = forwardRef<RunnerHandle,
   const pendingResolve = useRef<((allow: boolean) => void) | null>(null); // resolves the open requestConsent()
   const rebindBtnRef = useRef<HTMLButtonElement>(null);        // the "Replay yours" trigger — focus returns here on close
   const pickerRef = useRef<HTMLDivElement>(null);             // the picker dialog — focused on open, hosts Escape
+  const consentRef = useRef<HTMLDivElement>(null);            // the consent dialog — focused on open so keys leave the game
+  const [consentArmed, setConsentArmed] = useState(false);    // Allow ignores activations until the card has been visible ~500ms
   const watchTimersRef = useRef<Set<ReturnType<typeof setTimeout>>>(new Set()); // every outstanding watch-poll timer
 
   // Consent gate handed to the router: the router calls this for GATED caps only (AUTO caps bypass it).
@@ -194,6 +196,19 @@ export const Runner = forwardRef<RunnerHandle,
   // Move focus into the dialog when it opens so Escape works and assistive tech announces it.
   useEffect(() => { if (pickerOpen) pickerRef.current?.focus(); }, [pickerOpen]);
 
+  // Focus the consent card when it opens — keystrokes stop reaching the sealed iframe underneath — and
+  // arm Allow only after the card has been visibly on screen. The game controls what renders under the
+  // spot where the card appears, so it can bait a rapid click/keystroke there and have it land on Allow;
+  // ignoring the first 500ms of activations closes that (the same input protection Chrome applies to its
+  // own permission prompts). Deny is never delayed: refusing early is always safe.
+  useEffect(() => {
+    if (!pending) return;
+    setConsentArmed(false);
+    consentRef.current?.focus();
+    const t = setTimeout(() => setConsentArmed(true), 500);
+    return () => clearTimeout(t);
+  }, [pending]);
+
   // Reset the consent modal + release its parked resolver when the game changes (the host-creation effect
   // above recreates the router for the new game; open streams close via its dispose()).
   useEffect(() => {
@@ -334,7 +349,8 @@ export const Runner = forwardRef<RunnerHandle,
         </div>
       )}
       {pending && (
-        <div className="play-consent">
+        <div ref={consentRef} tabIndex={-1} className="play-consent" role="dialog" aria-modal="true"
+          aria-label={`Permission request from ${name ?? "this miniapp"}`}>
           <div className="play-consent__box">
             <div className="play-consent__ico">🔒</div>
             {pending.startsWith("mcp:") ? (
@@ -369,7 +385,7 @@ export const Runner = forwardRef<RunnerHandle,
               </>
             )}
             <div className="play-consent__btns">
-              <button className="play-btn play-btn--primary" onClick={() => decide(true)}>Allow</button>
+              <button className="play-btn play-btn--primary" disabled={!consentArmed} onClick={() => decide(true)}>Allow</button>
               <button className="play-btn" onClick={() => decide(false)}>Deny</button>
             </div>
           </div>
