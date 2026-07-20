@@ -165,10 +165,19 @@ export async function saveMiniapp(input: SaveMiniappInput): Promise<SaveMiniappR
   await ensureRepo(root);                          // the registry is a git repo
   mkdirSync(dir, { recursive: true });
   writeFileSync(miniappHtmlPath(safe), html);      // legacy miniapps keep <name>.html; new ones index.html
-  writeFileSync(join(dir, "meta.json"), JSON.stringify(meta, null, 2));
+
+  // `uploads` is a server-owned authoring counter; the client never sends it, so carry it forward
+  // from disk instead of letting a Save wipe it (which silences studioBrief's upload announcement).
+  const metaPath = join(dir, "meta.json");
+  if (meta.uploads === undefined && existsSync(metaPath)) {
+    try { const prev = JSON.parse(readFileSync(metaPath, "utf8")) as MiniappMeta; if (prev.uploads) meta.uploads = prev.uploads; }
+    catch { /* no readable prior meta — nothing to preserve */ }
+  }
+  writeFileSync(metaPath, JSON.stringify(meta, null, 2));
   const note = rec.pruned.length ? ` (pruned unused capability: ${rec.pruned.join(", ")})` : "";
   const commit = await commitWithLock(root, `save miniapp ${safe}${note}`);
-  writeGameGem(safe, html, meta);                  // the PRUNED meta — a phantom cap must not reach the gem
+  const gemMeta = { ...meta }; delete gemMeta.uploads; // uploads is private authoring state — keep it out of the gem
+  writeGameGem(safe, html, gemMeta);                  // the PRUNED meta — a phantom cap must not reach the gem
   return { name: safe, commit, prunedNeeds: rec.pruned, mcpWarnings };
 }
 
