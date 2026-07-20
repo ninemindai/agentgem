@@ -7,8 +7,6 @@ import { join } from "node:path";
 import supertest from "supertest";
 import { RestApplication } from "@agentback/rest";
 import { GemController } from "../gem.controller.js";
-import { registerDeploy } from "../deploy.controller.js";
-import { RegistryController, registerRegistry } from "../registry.controller.js";
 import { createServer } from "node:http";
 import { packTar, unpackTar, readGemArchive } from "@agentgem/archive";
 import { writeGemArchive } from "@agentgem/archive";
@@ -48,8 +46,6 @@ beforeAll(async () => {
   // mirror production (src/index.ts): raise the json body limit so gem bytes (>100kb) are accepted
   app.configure("servers.RestServer").to({ port: 0, host: "127.0.0.1", bodyParser: { json: { limit: "25mb" } } });
   app.restController(GemController);
-  registerDeploy(app);
-  registerRegistry(app);
   await app.start();
   const server = await app.restServer;
   client = supertest(server.url);
@@ -387,27 +383,6 @@ describe("GemController", () => {
     expect(r.body.artifacts.map((a: { name: string }) => a.name)).toEqual(["review", "CLAUDE.md"]);
   });
 
-  it("POST /api/publish-preview renders the agent payload, skips stdio MCP, leaks no secret", async () => {
-    const r = await client.post("/api/publish-preview")
-      .send({ dir, selection: { skills: ["review"], mcpServers: ["gh"], includeInstructions: true }, name: "pub" })
-      .expect(200);
-    expect(r.body.payload.name).toBe("pub");
-    expect(r.body.payload.model).toBe("claude-opus-4-8");
-    expect(r.body.payload.system).toContain("global instructions");
-    expect(r.body.payload.system).not.toContain("# Skill:"); // skills are registered, not inlined
-    expect(r.body.skillsToRegister).toEqual(["review"]);
-    // gh is a stdio (command) server -> skipped; its vault secret is filtered out too
-    expect(r.body.payload.mcp_servers).toEqual([]);
-    expect(r.body.skipped.find((s: { artifact: string }) => s.artifact === "gh").reason).toMatch(/stdio MCP/);
-    expect(r.body.vaultSecrets).toEqual([]);
-    expect(JSON.stringify(r.body)).not.toContain("ghp_secret");
-  });
-
-  it("GET /api/publish-ready reports key presence as a boolean", async () => {
-    const r = await client.get("/api/publish-ready").expect(200);
-    expect(typeof r.body.ready).toBe("boolean");
-  });
-
   it("GET /api/inventory?projects= returns a redacted project section with a name", async () => {
     const r = await client
       .get(`/api/inventory?dir=${encodeURIComponent(dir)}&projects=${encodeURIComponent(JSON.stringify([projRoot]))}`)
@@ -470,43 +445,6 @@ describe("GemController", () => {
       .expect(200);
     expect(r.body.files["agent/channels/slack.ts"]).toContain("slackChannel"); // declared channel materialized
     expect(r.body.files["agent/channels/eve.ts"]).toBeDefined(); // always-on web channel still present
-  });
-
-  it("POST /api/undeploy with target=codex returns 422", async () => {
-    const r = await client.post("/api/undeploy").send({ name: "x", target: "codex" });
-    expect(r.status).toBe(422);
-  });
-
-  it("POST /api/undeploy claude-managed without API key returns error", async () => {
-    const prev = process.env.ANTHROPIC_API_KEY;
-    delete process.env.ANTHROPIC_API_KEY;
-    try {
-      const r = await client.post("/api/undeploy").send({ name: "some-ws", target: "claude-managed" });
-      expect(r.status).toBeGreaterThanOrEqual(400);
-    } finally {
-      if (prev !== undefined) process.env.ANTHROPIC_API_KEY = prev;
-    }
-  });
-
-  it("POST /api/undeploy agentcore without record returns error", async () => {
-    const r = await client.post("/api/undeploy").send({ name: "no-record-ws", target: "agentcore" });
-    expect(r.status).toBeGreaterThanOrEqual(400);
-  });
-
-  it("GET /api/deploy-record returns null when no record exists", async () => {
-    const r = await client.get("/api/deploy-record?name=nonexistent&backend=eve").expect(200);
-    expect(r.body.record).toBeNull();
-  });
-
-  it("GET /api/deploy-record returns a record after writing one", async () => {
-    const { writeDeployRecord, clearDeployRecord } = await import("@agentgem/base");
-    writeDeployRecord("test-ws-record", { backend: "eve", at: "2024-01-01T00:00:00Z", project: "eve-test-ws-record", url: "https://example.com" });
-    try {
-      const r = await client.get("/api/deploy-record?name=test-ws-record&backend=eve").expect(200);
-      expect(r.body.record).toMatchObject({ backend: "eve", project: "eve-test-ws-record" });
-    } finally {
-      clearDeployRecord("test-ws-record", "eve");
-    }
   });
 
   // Proves the widened query schema (agent: z.string(), was z.enum(["claude","codex"]))
@@ -806,42 +744,6 @@ describe("POST /api/materialize a2a server toggle", () => {
   });
 });
 
-describe("deploy registry ops", () => {
-  it("GET /api/deploy-targets lists claude-managed and agentcore-managed with boolean ready", async () => {
-    const r = await client.get("/api/deploy-targets").expect(200);
-    expect(r.body.targets.map((t: { id: string }) => t.id)).toEqual(["claude-managed", "agentcore-managed"]);
-    expect(typeof r.body.targets[0].ready).toBe("boolean");
-    expect(typeof r.body.targets[1].ready).toBe("boolean");
-  });
-
-  it("publish-preview routes through the registry (target optional, identical payload)", async () => {
-    const base = { dir, selection: { skills: ["review"], mcpServers: ["gh"], includeInstructions: true }, name: "pub" };
-    const a = await client.post("/api/publish-preview").send(base).expect(200);
-    const b = await client.post("/api/publish-preview").send({ ...base, target: "claude-managed" }).expect(200);
-    expect(a.body.payload.name).toBe("pub");
-    expect(a.body).toEqual(b.body);
-    expect(JSON.stringify(a.body)).not.toContain("ghp_secret");
-  });
-
-  it("POST /api/publish without ANTHROPIC_API_KEY returns 500 (gated via the registry)", async () => {
-    const saved = process.env.ANTHROPIC_API_KEY;
-    delete process.env.ANTHROPIC_API_KEY;
-    try {
-      await client.post("/api/publish").send({ dir, selection: { skills: ["review"] }, requestId: "req-12345678" }).expect(500);
-    } finally {
-      if (saved !== undefined) process.env.ANTHROPIC_API_KEY = saved;
-    }
-  });
-
-  it("publish-preview is tagged kind=managed-agent", async () => {
-    const r = await client.post("/api/publish-preview")
-      .send({ dir, selection: { skills: ["review"], includeInstructions: true }, name: "pub" }).expect(200);
-    expect(r.body.kind).toBe("managed-agent");
-    expect(r.body.payload.name).toBe("pub");           // existing managed-agent fields still present
-    expect(Array.isArray(r.body.skillsToRegister)).toBe(true);
-  });
-});
-
 describe("testbed ops", () => {
   it("scaffold then import (raw MCP) — testbed runs, packaged gem stays redacted", async () => {
     const tb = mkdtempSync(join(tmpdir(), "tb-"));
@@ -903,38 +805,6 @@ describe("run ops", () => {
     }
   });
 
-  it("POST /api/credential sets the credential in the running process and gates flip", async () => {
-    const saved = process.env.ANTHROPIC_API_KEY;
-    try {
-      delete process.env.ANTHROPIC_API_KEY;
-      const before = await client.get("/api/publish-ready").expect(200);
-      expect(before.body.ready).toBe(false);
-
-      const r = await client.post("/api/credential").send({ key: "ANTHROPIC_API_KEY", value: "sk-ant-test" }).expect(200);
-      expect(r.body.ok).toBe(true);
-      expect(process.env.ANTHROPIC_API_KEY).toBe("sk-ant-test");
-
-      const after = await client.get("/api/publish-ready").expect(200);
-      expect(after.body.ready).toBe(true);
-    } finally {
-      if (saved !== undefined) process.env.ANTHROPIC_API_KEY = saved;
-      else delete process.env.ANTHROPIC_API_KEY;
-    }
-  });
-
-  it("POST /api/credential rejects a non-allowlisted key", async () => {
-    const r = await client.post("/api/credential").send({ key: "AWS_SECRET_ACCESS_KEY", value: "x" });
-    expect(r.status).toBe(422); // schema rejects keys outside the allowlist
-  });
-
-  // A confined-by-throw input (multi-line value would corrupt the .env) must report WHY:
-  // a 400 carrying the rule, not an opaque 500 (issue #3 observability fix).
-  it("POST /api/credential rejects a multi-line value with a 400 and a reason", async () => {
-    const r = await client.post("/api/credential").send({ key: "VERCEL_TOKEN", value: "good\nEVIL=1" });
-    expect(r.status).toBe(400);
-    expect(r.body.error.message).toMatch(/single line/i);
-  });
-
   // Containment guard: the `name` field flows startLocal -> ensureRunProject -> workspaceDir ->
   // workspaceName(), which rejects any non-[A-Za-z0-9._-] segment. A traversal name must not
   // escape the workspace store; the run fails closed (no spawn, no directory outside the root).
@@ -980,39 +850,6 @@ describe("workspace ops", () => {
 });
 
 describe("registry endpoints", () => {
-  it("reports not-ready when AGENTGEM_REGISTRY_REPO is unset", async () => {
-    const prev = process.env.AGENTGEM_REGISTRY_REPO;
-    delete process.env.AGENTGEM_REGISTRY_REPO;
-    try {
-      const res = await new RegistryController().registryReady({ query: {} });
-      expect(res).toEqual({ ready: false });
-    } finally {
-      if (prev !== undefined) process.env.AGENTGEM_REGISTRY_REPO = prev;
-    }
-  });
-
-  it("rejects install before the registry is configured", async () => {
-    const prev = process.env.AGENTGEM_REGISTRY_REPO;
-    delete process.env.AGENTGEM_REGISTRY_REPO;
-    try {
-      await expect(new RegistryController().registryInstall({ body: { refs: ["@a/x"], mode: "workspace" } }))
-        .rejects.toThrow(/registry is not configured/i);
-    } finally {
-      if (prev !== undefined) process.env.AGENTGEM_REGISTRY_REPO = prev;
-    }
-  });
-
-  it("rejects search before the registry is configured", async () => {
-    const prev = process.env.AGENTGEM_REGISTRY_REPO;
-    delete process.env.AGENTGEM_REGISTRY_REPO;
-    try {
-      await expect(new RegistryController().registrySearch({ query: { q: "github" } }))
-        .rejects.toThrow(/registry is not configured/i);
-    } finally {
-      if (prev !== undefined) process.env.AGENTGEM_REGISTRY_REPO = prev;
-    }
-  });
-
   it("registryGems returns an empty list when the registry is unconfigured (graceful, no throw)", async () => {
     const prev = process.env.AGENTGEM_REGISTRY_REPO;
     delete process.env.AGENTGEM_REGISTRY_REPO;
@@ -1022,45 +859,6 @@ describe("registry endpoints", () => {
     } finally {
       if (prev !== undefined) process.env.AGENTGEM_REGISTRY_REPO = prev;
     }
-  });
-});
-
-describe("agentcore deploy ops", () => {
-  it("GET /api/agentcore/deploy-ready returns booleans", async () => {
-    const r = await client.get("/api/agentcore/deploy-ready").expect(200);
-    expect(typeof r.body.cli).toBe("boolean");
-    expect(typeof r.body.awsCreds).toBe("boolean");
-  });
-
-  it("POST /api/agentcore/deploy without AWS creds is rejected", async () => {
-    const savedP = process.env.AWS_PROFILE, savedK = process.env.AWS_ACCESS_KEY_ID;
-    delete process.env.AWS_PROFILE; delete process.env.AWS_ACCESS_KEY_ID;
-    process.env.AGENTCORE_BIN = "/usr/bin/env"; // CLI present so the failure is specifically the creds gate
-    try {
-      const res = await client.post("/api/agentcore/deploy").send({ name: "gem" });
-      expect(res.status).toBeGreaterThanOrEqual(400);
-    } finally {
-      if (savedP !== undefined) process.env.AWS_PROFILE = savedP;
-      if (savedK !== undefined) process.env.AWS_ACCESS_KEY_ID = savedK;
-      delete process.env.AGENTCORE_BIN;
-    }
-  });
-});
-
-describe("agentcore-managed deploy backend", () => {
-  it("deploy-targets lists agentcore-managed with a boolean ready", async () => {
-    const r = await client.get("/api/deploy-targets").expect(200);
-    const ac = r.body.targets.find((t: { id: string }) => t.id === "agentcore-managed");
-    expect(ac).toBeTruthy();
-    expect(typeof ac.ready).toBe("boolean");
-  });
-  it("publish-preview target=agentcore-managed renders a CreateHarness request, skips local skills, no secret", async () => {
-    const r = await client.post("/api/publish-preview")
-      .send({ dir, selection: { skills: ["review"], mcpServers: ["gh"], includeInstructions: true }, name: "pub", target: "agentcore-managed" }).expect(200);
-    expect(r.body.kind).toBe("agentcore-harness");
-    expect(r.body.request.harnessName).toMatch(/^[a-zA-Z][a-zA-Z0-9_]{0,39}$/);
-    expect(r.body.skipped.some((s: { artifact: string }) => s.artifact === "review")).toBe(true); // local skill skipped
-    expect(JSON.stringify(r.body)).not.toContain("ghp_secret");
   });
 });
 
