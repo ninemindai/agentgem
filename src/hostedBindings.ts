@@ -6,19 +6,14 @@
 // hosted set — the hosted implementation binds the key at mount time; unbound = the feature is
 // simply absent (the pure-client default).
 import { BindingKey } from "@agentback/core";
-import type { makeAuth } from "@agentgem/aggregator";
-
-// The single app-wide better-auth instance. Bound by the hosted auth mount; injected optionally by
-// controllers. (Moved here from auth/mount.ts so kept-OSS controllers don't import the hosted module.)
-export const AUTH_BINDING = BindingKey.create<ReturnType<typeof makeAuth> | undefined>("agentgem.auth");
 
 // Resolves the server-derived `published_by` for a registry publish from the request's session +
 // account handle. Hosted-only (needs a live DB + auth); bound by the aggregator mount. Unbound in
 // the pure client → publishedBy is undefined, exactly as resolvePublishedBy already returns without
-// a db/auth today.
+// a db/auth today. The auth service is opaque here (the binder narrows it).
 export type PublishedByResolver = (
   req: { headers: Record<string, string | undefined> } | undefined,
-  auth: ReturnType<typeof makeAuth> | undefined,
+  auth: unknown,
   db: unknown,
 ) => Promise<string | undefined>;
 export const PUBLISHED_BY_RESOLVER = BindingKey.create<PublishedByResolver | undefined>("agentgem.registry.publishedByResolver");
