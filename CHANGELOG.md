@@ -7,6 +7,44 @@ All notable changes to AgentGem are documented here. The format follows
 The npm core (`@ninemind/agentgem`) and the desktop app share a version number but
 are tagged separately: core releases are tagged `v*`, desktop releases `desktop-v*`.
 
+## [0.9.0] — `@ninemind/agentgem` (npm core) — Unreleased
+
+The focus release: AgentGem is a **local-first developer tool**. `npx agentgem`
+mines your coding-agent usage, distills reusable gems, materializes them to any
+target, runs them locally, and shares them — peer-to-peer or through the
+AgentGem marketplace (app.agentgem.ai). The hosted-service surface (accounts,
+orgs/groups, hosted reviews, GitHub App), cloud deploy (Vercel / Cloudflare /
+managed backends), and the GitHub-repo gem registry are no longer part of this
+package — the marketplace client, `agentgem get`, publish-to-Explore,
+share-cards, and send/receive are unchanged.
+
+### Changed
+
+- `npx agentgem` boots the client app only; `start`/`dev` run `dist/client.js`.
+- `POST /api/run` runs locally; non-local modes are rejected unless a dispatcher
+  is provided by the embedding application. `GET /api/run-ready` returns
+  `{ local }`.
+- `GET /api/registry/gems` serves the marketplace index cache (plus an optional
+  catalog source when one is bound by the embedding application).
+- The console's Materialize panel gains **Run app** (render → install → build →
+  start with live log tail); Get-more focuses on marketplace installs and `.gem`
+  import.
+
+### Removed
+
+- Cloud deploy: the Deploy console panel, `/api/publish*`, `/api/undeploy`,
+  `/api/deploy-*`, `/api/credential`, `/api/agentcore/*`, and the
+  Vercel/Cloudflare deploy engines in `@agentgem/run`.
+- The GitHub-repo gem registry: `/api/registry/{ready,index,search,resolve,install,publish}`,
+  the registry MCP tools, the console Publish panel, `AGENTGEM_REGISTRY_REPO`/`_REF`,
+  and the registry engine in `@agentgem/distribute` (`registryTypes` remains).
+- The hosted service: aggregator/auth/accounts/orgs/groups/stars/hosted-reviews/
+  GitHub App/OG-card modules, the server entry, and the scheduled source-indexer
+  workflow.
+- Unused dependencies: `@aws-sdk/client-bedrock-agentcore-control`, `vercel`,
+  `@electric-sql/pglite`, `pg`, `drizzle-orm`, `drizzle-zod`, `@agentback/drizzle`,
+  `@anthropic-ai/sdk`.
+
 ## [0.8.0] — `@ninemind/agentgem` (npm core) — 2026-07-19
 
 A release about knowing — and showing — how well you steer. **gemit** ships end to

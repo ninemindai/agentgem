@@ -5,8 +5,8 @@ agent — your **agent setup** (skills, MCP servers, `CLAUDE.md`) and your **ses
 transcripts** — redacts secrets at capture, and distills it into a **secret-safe,
 composable Gem**. [Analyze](analyze.md) turns the procedures you repeat across
 sessions into draft skills; the builder packages it all into a portable archive
-(manifest + lock) you can publish to a GitHub-backed registry, merge with others,
-and deploy to several targets.
+(manifest + lock) you can install locally, merge with others, materialize for many
+agent targets, and publish to the AgentGem marketplace.
 
 It's built on **[AgentBack](https://agentback.dev)**, the ninemind AI-native API/MCP framework: every operation
 is defined once as a Zod contract and exposed as a REST endpoint, an MCP tool, and an
@@ -52,28 +52,27 @@ history, and turns it into things you can play and share.
   serialization.
 - **[Redaction](redaction.md)** — the trust boundary and its rules.
 - **[Input containment](input-containment.md)** — how outward-facing POST routes confine
-  filesystem/network inputs (workspace-name, run-dir, SSRF, and credential guards).
+  filesystem/network inputs (workspace-name, run-dir, and SSRF guards).
 - **[API reference](api-reference.md)** — every REST endpoint and MCP tool.
 
 ## Distribution
 
-- **[Targets & deploy](targets.md)** — the deploy targets (Eve, Flue, OpenAI Sandbox,
-  Bedrock AgentCore) and the publish / undeploy lifecycle.
+- **[Targets](targets.md)** — the materialize targets (Eve, Flue, OpenAI Sandbox,
+  Bedrock AgentCore, and the editor formats) and how a Gem renders to each.
 - **[A2A](a2a.md)** — export a Gem as an A2A Agent Card or a runnable agent-to-agent
   server so other agents can discover and call it.
-- **[Registry](registry.md)** — the GitHub-backed Gem registry: publish (Public /
-  Unlisted / Private, versioned, optionally group-reviewed), resolve, merge, and install
-  composable Gems. Its hosted face is the **public marketplace at
-  [app.agentgem.ai](https://app.agentgem.ai)** — browse, star, review, install, and play
-  installable/offline mini-apps (early testbed: hosted data may be reset).
+- **The public marketplace at [app.agentgem.ai](https://app.agentgem.ai)** — publish
+  composable Gems (Public / Unlisted / Private, versioned, optionally group-reviewed),
+  then browse, star, review, install, and play installable/offline mini-apps (early
+  testbed: hosted data may be reset).
 - **[Sharing & identity](sharing.md)** — install a published Gem with one command
   (`agentgem get`), pass one directly over an encrypted one-time hand-off
   (`agentgem send` / `receive`), and verify a Gem runs across agents (`agentgem verify`).
   Web accounts use **better-auth** (sign in with GitHub, Google, or a passkey) with a
   **`/@handle`** profile hub; the CLI `agentgem bind` ties this machine's signing key to a
   GitHub account for anti-sybil producer identity.
-- **[Testbed & run](testbed-and-run.md)** — install a Gem into a local testbed; run or
-  deploy a materialized target locally, to Vercel, or to Cloudflare.
+- **[Testbed & run](testbed-and-run.md)** — install a Gem into a local testbed, and run
+  a materialized target locally.
 
 ## Contributing
 

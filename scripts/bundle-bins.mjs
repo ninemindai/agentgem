@@ -45,23 +45,22 @@ const banner = {
     "const __dirname = __d(__filename);",
 };
 
-// The published entrypoints: the three bins + the server bootstrap (`start` script)
+// The published entrypoints: the three bins + the app bootstrap (`start` script)
 // + the scorecard warm worker. Every `bin` in package.json must be listed here, or it
 // ships with unresolvable bare `@agentgem/*` imports and dies at startup on a
 // consumer's install. `warm/scorecardWorker.js` is spawned by `new Worker(path)`, so
 // it is an entrypoint the bundler cannot see from any import graph — it needs the same
 // treatment or the worker thread dies on a consumer's install (the parent then logs and
 // falls back to warming inline, i.e. silently slow).
-const entries = ["cli.js", "index.js", "client.js", "distill/mcpServer.js", "goldmine/mcpServer.js", "warm/scorecardWorker.js", "transcriptParseWorker.js"];
+const entries = ["cli.js", "client.js", "distill/mcpServer.js", "goldmine/mcpServer.js", "warm/scorecardWorker.js", "transcriptParseWorker.js"];
 
-// `dist/index.js` and `dist/client.js` each self-run behind `isMain(import.meta)` so that
-// `node dist/<entry>.js` boots them directly. That guard compares `import.meta.url` to
-// `process.argv[1]`. Inlining either into cli.js rewrites its `import.meta.url` to cli.js's own
-// URL — which IS argv[1] — so the guard flips true and every `agentgem` invocation double-boots.
-// Keep BOTH external from the cli bundle: they stay sibling files on disk, the URLs differ again,
-// and cli.js imports `run`/`runClient` from them at runtime. (cli.js's default path uses
-// `./client.js`; `./index.js` stays a sibling for the `start` script + enterprise builds.)
-const externalFor = (rel) => (rel === "cli.js" ? [...external, "./index.js", "./client.js"] : external);
+// `dist/client.js` self-runs behind `isMain(import.meta)` so that `node dist/client.js`
+// boots it directly. That guard compares `import.meta.url` to `process.argv[1]`.
+// Inlining it into cli.js rewrites its `import.meta.url` to cli.js's own URL — which IS
+// argv[1] — so the guard flips true and every `agentgem` invocation double-boots.
+// Keep it external from the cli bundle: it stays a sibling file on disk, the URLs differ
+// again, and cli.js imports `runClient` from it at runtime.
+const externalFor = (rel) => (rel === "cli.js" ? [...external, "./client.js"] : external);
 
 for (const rel of entries) {
   const infile = join(dist, rel);

@@ -107,7 +107,7 @@ serialized two ways:
 
 - `writeArchiveDir` / `readArchiveDir` — a directory on disk;
 - `packTar` / `unpackTar` — a deterministic gzipped tar (sorted paths, fixed mtime) for
-  transport and registry storage.
+  transport and download.
 
 Full details — field shapes, digest computation, and verification — are in
 [Archive format](archive-format.md).

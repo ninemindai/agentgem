@@ -37,12 +37,12 @@ interface GemManifest {
   artifacts: ManifestArtifactEntry[];   // { type, name, path, description?, source? }
   requiredSecrets: SecretRequirement[]; // { name, artifact, location } — names only
   checks: ManifestCheckEntry[];         // { name, path }
-  dependencies?: string[];              // registry refs this Gem builds on
+  dependencies?: string[];              // refs of Gems this Gem builds on
 }
 ```
 
 The manifest is an **index**: it lists what's in the archive and where, the declared secret
-surface (by name), and any registry dependencies. It never contains secret values.
+surface (by name), and any Gem dependencies. It never contains secret values.
 
 ## The lock — `gem.lock`
 
@@ -67,9 +67,8 @@ interface GemLock {
 2. Derives `gemDigest` deterministically from the sorted file paths and their hashes.
 
 Because hashing is order-independent and tar packing uses sorted paths with a fixed mtime,
-the same Gem always produces the same archive bytes and the same digest — important for the
-registry's immutability check (a re-publish of an existing version with a different digest is
-rejected).
+the same Gem always produces the same archive bytes and the same digest — so an archive
+can be verified and deduplicated by digest wherever it travels.
 
 ## Reading and verifying
 
@@ -78,7 +77,7 @@ rejected).
 - `verifyLock(files, lock)` returns `{ ok, mismatches, missing, extra }` — hash mismatches,
   files present in the lock but missing on disk, and files on disk not in the lock.
 - `readGemMeta(files)` reads just `{ name, version, dependencies, gemDigest }` without
-  reconstructing artifacts — used by the registry when indexing.
+  reconstructing artifacts — used when only metadata is needed.
 
 ## Serialization
 
@@ -87,10 +86,9 @@ The file tree is format-neutral; two serializers turn it into bytes:
 | Serializer | Functions | Use |
 | --- | --- | --- |
 | Directory | `writeArchiveDir` / `readArchiveDir` | Local workspaces and testbeds. `readArchiveDir` skips dot-prefixed entries (e.g. `.targets/`) and normalizes paths to POSIX. |
-| Tar.gz | `packTar` / `unpackTar` | Transport, download, and registry storage. Deterministic: sorted paths, fixed mtime `0`, POSIX ustar. |
+| Tar.gz | `packTar` / `unpackTar` | Transport and download. Deterministic: sorted paths, fixed mtime `0`, POSIX ustar. |
 
 ## Related
 
 - [The build pipeline](pipeline.md) — how the Gem that gets archived is built
-- [Registry](registry.md) — how archives are published, resolved, and merged
 - [Redaction](redaction.md) — why `secretRefs` / `requiredSecrets` carry names, never values

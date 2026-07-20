@@ -1,7 +1,7 @@
 # Sharing & identity
 
-Beyond the GitHub-backed [registry](registry.md), AgentGem gives you two lighter ways
-to move a Gem to someone else — a one-command **install** from the marketplace, and a
+AgentGem gives you two lightweight ways to move a Gem to someone else — a one-command
+**install** from the marketplace, and a
 direct, **encrypted hand-off** — plus the GitHub **identity** that signs your work and
 gates publishing, and a **verify** command to check a Gem runs across agents.
 
@@ -13,7 +13,7 @@ npx @ninemind/agentgem get <key>@<v>  # the one-liner shown on every marketplace
 ```
 
 Downloads a published Gem from the marketplace and imports it as a local workspace,
-with **zero config** — no registry setup, no browser, no running server. If you don't
+with **zero config** — no setup, no browser, no running server. If you don't
 pin a version it resolves the latest. The archive's `gem.lock` is verified on import,
 so a tampered download is rejected.
 
@@ -99,21 +99,13 @@ exist. A missing or private entity falls back to a generic branded placeholder, 
 
 For a **mini-game**, the card can carry a **real screenshot**. When you publish from
 [Play → Studio](play.md#publish), a capture step grabs a frame of the running game from the
-sealed preview; the aggregator stores it (a `gem_covers` row) and `/og/card.png` composites
+sealed preview; the marketplace stores it and `/og/card.png` composites
 it into a screenshot-hero variant of the card. Games without a stored cover fall back to the
 plain branded frame.
 
-The whole path is **deployment-agnostic** and **fails open**. The logic is a
-runtime-neutral core wired onto the aggregator, so any Node host serves correct cards with
-no Cloudflare primitive required — the marketplace's Cloudflare Worker is now only an
-optional proxy + edge cache in front of it (remove it and cards still work, just uncached).
-If metadata lookup or rasterization ever throws, the request falls through to the plain SPA
-(for a page) or the placeholder (for an image): a card bug can never take the site down.
-
-`AGENTGEM_ASSET_ORIGIN` (where the built SPA `index.html` lives) and
-`AGENTGEM_OG_IMAGE_ORIGIN` (the public host crawlers fetch `/og/card.png` from) both
-default to `https://app.agentgem.ai` and are overridable, so a different deployment works
-with no code change.
+The whole path **fails open**: if metadata lookup or rasterization ever throws, the
+request falls through to the plain SPA (for a page) or the placeholder (for an image) —
+a card bug can never take the site down.
 
 ## Identity
 
@@ -133,7 +125,7 @@ agentgem bind
 ```
 
 It runs the GitHub **device flow** — open the printed URL, enter the code — then
-signs a payload and registers your public key with the aggregator. Your raw GitHub
+signs a payload and registers your public key with the marketplace. Your raw GitHub
 token is never written to disk; what's stored locally is a binding record and a
 first-party session (`~/.agentgem/binding.json`, `~/.agentgem/session.json`, both
 `0600`). On success: `✓ bound to github:@you`.

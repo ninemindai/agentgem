@@ -50,8 +50,8 @@ there into a Gem.
 3. **Select, and watch it seal.** Tick the artifacts to bundle and name the Gem. The
    **Gem (live)** panel re-renders the pretty-printed `gem.json` on every change — with every
    secret already shown as `<redacted>`.
-4. **Take it further.** Download `gem.json` (the neutral source every target and the registry
-   consume), **test-drive** the agent locally in the testbed, or publish and deploy it.
+4. **Take it further.** Download `gem.json` (the neutral source every target and the
+   marketplace consume), **test-drive** the agent locally in the testbed, or publish it.
 
 ![The Gem Builder: selected skills and MCP servers on the left, the live gem.json on the right with every secret shown as &lt;redacted&gt;.](screenshot.png)
 
@@ -81,6 +81,6 @@ pnpm test        # or: npm test      — tsc -b && vitest run
 ```
 
 Next: read **[Concepts](concepts.md)** to understand what's inside a Gem, jump to
-**[Targets & deploy](targets.md)**, or browse what others have published on the
+**[Targets](targets.md)**, or browse what others have published on the
 **[public marketplace](https://app.agentgem.ai)** (an early testbed — hosted data may
 be reset).

@@ -15,10 +15,10 @@ The agent-facing surface: read and plan. The same helper functions back the REST
 | --- | --- | --- |
 | `inventory` | `{ dir?, projects? }` | `ConfigInventory` (secrets redacted) |
 | `build_gem` | `{ selection, name?, dir?, projects? }` | a redacted `Gem` |
-| `registry_index` | `{}` | the registry index (names, versions, dependencies) |
-| `registry_resolve` | `{ refs, mode, target? }` | an install plan (no writes) |
-| `registry_install` | `{ refs, mode, target? }` | `{ plan, gem }` (resolve + merge) |
-| `registry_publish` | `{ workspace, scope, name?, version, deps? }` | publish result (needs `GITHUB_TOKEN`) |
+| `gem_export` | `{ selection, name?, version?, dir?, projects? }` | a portable `.gem` archive, base64-encoded |
+| `gem_install` | `{ gemUrl? \| gemPath? \| bytesBase64? }` | the lock-verified Gem + manifest meta |
+| `transfer_send` | `{ selection, name?, version?, dir?, projects? }` | a one-time `agentgem://` ticket (needs `NATS_URL`) |
+| `transfer_receive` | `{ ticket }` | the verified Gem + manifest meta (needs `NATS_URL`) |
 
 ## REST endpoints — `/api`
 
@@ -42,29 +42,14 @@ The agent-facing surface: read and plan. The same helper functions back the REST
 | POST | `/workspace/render` | Render a workspace's Gem to a target |
 | POST | `/workspace/delete` | Delete a workspace |
 
-### Run & local/edge deploy
+### Run
 
 | Method | Path | Purpose |
 | --- | --- | --- |
-| GET | `/run-ready` | Check local / Vercel / Cloudflare readiness |
-| POST | `/credential` | Set a server-side credential (`ANTHROPIC_API_KEY`, `VERCEL_TOKEN`, …) |
-| POST | `/run` | Start a local run or deploy to Vercel / Cloudflare |
-| GET | `/run-status` | Poll run / deploy status |
+| GET | `/run-ready` | Check local run readiness — returns `{ local: boolean }` |
+| POST | `/run` | Start a local run of a rendered target (`mode: "local"`) |
+| GET | `/run-status` | Poll run status |
 | POST | `/run/stop` | Stop a local run |
-
-### Managed publish & deploy
-
-| Method | Path | Purpose |
-| --- | --- | --- |
-| GET | `/deploy-targets` | List available publish backends |
-| POST | `/publish-preview` | Offline render of the Managed Agents / AgentCore payload (no network) |
-| GET | `/publish-ready` | Whether a backend is ready (credentials present) |
-| POST | `/publish` | Publish a Gem to Managed Agents or AgentCore |
-| POST | `/undeploy` | Tear down a cloud resource (eve / flue / claude-managed / agentcore) |
-| GET | `/deploy-record` | Read deploy metadata for a workspace |
-| GET | `/agentcore/deploy-ready` | Check AgentCore CLI + AWS credentials |
-| POST | `/agentcore/deploy` | Deploy a workspace to AWS via the AgentCore CLI |
-| GET | `/agentcore/deploy-status` | Poll AgentCore deploy status |
 
 ### Testbed
 
@@ -91,30 +76,20 @@ See [Analyze](analyze.md).
 the inventory (by `evidence.root`) before resolution, so a selection can include an accepted draft
 by name.
 
-### Registry
+### Marketplace, benchmark, memory & cards
 
-| Method | Path | Purpose |
-| --- | --- | --- |
-| GET | `/registry/ready` | Whether the registry is configured |
-| GET | `/registry/index` | List available Gems (names, versions, dependencies) |
-| POST | `/registry/resolve` | Resolve refs into a dependency plan (no writes) |
-| POST | `/registry/install` | Resolve + merge + apply (materialize or workspace) |
-| POST | `/registry/publish` | Publish a workspace Gem to the registry (needs `GITHUB_TOKEN`) |
-
-### Hosted marketplace, benchmark, memory & cards
-
-Beyond the local Gem-building surface above, the server (and the hosted aggregator it
+Beyond the local Gem-building surface above, the server (and the hosted marketplace it
 proxies) exposes several endpoint families. These are documented in full by the generated
 OpenAPI document at `/explorer`; the groups are:
 
 | Group | Where | What it covers |
 | --- | --- | --- |
-| **Publish & catalog** | aggregator | Publish with a **visibility scope** (Public/Unlisted/Private) + **versioning** pre-flight (`/api/publish-status`), Explore/browse, resolve, install, stars, reviews |
-| **Review-gated publishing & groups** | aggregator | Review requests inbox (list/detail/approve/request-changes/comment/withdraw), groups (create/join/members/invites), group-shared private gems |
-| **Identity** | aggregator | better-auth sign-in (GitHub/Google/passkeys), account linking, `/@handle` profiles, orgs + org **benchmark governance** |
-| **Benchmark contribution** | aggregator + `/api/benchmark` proxy | Consent-gated ingest of ingredients-only attestations, signed `POST /my-gems`, k-anon benchmark read-back |
+| **Publish & catalog** | hosted marketplace | Publish with a **visibility scope** (Public/Unlisted/Private) + **versioning** pre-flight (`/api/publish-status`), Explore/browse (`GET /api/registry/gems`), zero-config install (`POST /api/install-hosted`), stars, reviews |
+| **Review-gated publishing & groups** | hosted marketplace | Review requests inbox (list/detail/approve/request-changes/comment/withdraw), groups (create/join/members/invites), group-shared private gems |
+| **Identity** | hosted marketplace | better-auth sign-in (GitHub/Google/passkeys), account linking, `/@handle` profiles, orgs + org **benchmark governance** |
+| **Benchmark contribution** | hosted marketplace + `/api/benchmark` proxy | Consent-gated ingest of ingredients-only attestations, signed `POST /my-gems`, k-anon benchmark read-back |
 | **Memory sync** | local core | Provider config, pull provider memories into recall, consent-gated push outbox (`/api/memory/*`, local-only — gated on `SERVE_CONSOLE`) |
-| **OG cards** | any host | `GET /og/card.png?type=&key=` — branded/screenshot link-preview cards (see [Sharing](sharing.md#branded-link-previews)) |
+| **OG cards** | hosted marketplace | `GET /og/card.png?type=&key=` — branded/screenshot link-preview cards (see [Sharing](sharing.md#branded-link-previews)) |
 
 ### Misc
 

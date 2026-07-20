@@ -38,13 +38,13 @@ build is incremental (`.tsbuildinfo`).
   don't shadow the new layout.
 
 The suite covers the core thoroughly: the pipeline (`introspect`, `redact`, `buildGem`,
-`archive`, `archiveFs`, `archiveTar`), targets, the registry (publish/resolve/merge/install),
-deploy and deploy records, testbed flavors, run, credentials, the MCP proxy, and TOML.
+`archive`, `archiveFs`, `archiveTar`), targets, testbed flavors, run, credentials, the
+MCP proxy, and TOML.
 
 ## Code organization conventions
 
 - **The `@agentgem/*` packages are framework-agnostic.** The kernel lives in `packages/*`
-  (12 acyclic workspace packages) — no HTTP, no decorators, just functions over plain data.
+  (14 acyclic workspace packages) — no HTTP, no decorators, just functions over plain data.
   The REST controller and MCP service in `src/` are thin adapters that call into them. Keep
   new core logic in the right package so it stays testable and reusable across both surfaces;
   see the [package map](architecture.md#the-gem-core-agentgem-packages).
@@ -57,7 +57,7 @@ deploy and deploy records, testbed flavors, run, credentials, the MCP proxy, and
   new artifact type that can hold secrets must carry `secretRefs`. See [Redaction](redaction.md).
 - **Adding a target** mostly means describing how a Gem *materializes* — implement the
   per-type renderers and/or the `compose` hook on a `TargetSpec` and register it. See
-  [Targets & deploy](targets.md).
+  [Targets](targets.md).
 
 ## Concurrent sessions
 

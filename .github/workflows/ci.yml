@@ -41,6 +41,12 @@ jobs:
           node-version: ${{ matrix.node-version }}
           cache: pnpm
       - run: pnpm install --frozen-lockfile
+      # Layout guard: this package builds and publishes from a fixed top-level
+      # layout; a directory appearing at the root that isn't on this list is a
+      # wiring mistake (or a stray tree that must not ship) — fail fast.
+      - run: |
+          unexpected=$(ls -d */ | grep -vE '^(desktop|dist|docs|mockups|node_modules|packages|scripts|skills|src|website)/$' || true)
+          if [ -n "$unexpected" ]; then echo "unexpected top-level directories: $unexpected" >&2; exit 1; fi
       # Full build first (tsc -b && build-console) so consoleMount's server test
       # serves the real boot-splash HTML, not the "console not built"
       # placeholder. `pnpm test` alone only runs `tsc -b && vitest run` and never

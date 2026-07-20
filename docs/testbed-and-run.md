@@ -1,7 +1,7 @@
 # Testbed & run
 
 Beyond building and distributing Gems, AgentGem can install a Gem into a local **testbed**
-to try it, and **run** a materialized target locally or deploy it to an edge platform. Both
+to try it, and **run** a materialized target locally. Both
 subsystems live in the `@agentgem/*` packages and store state under `~/.agentgem` (override with
 `AGENTGEM_HOME`).
 
@@ -39,21 +39,17 @@ canonical archive at the root, with rendered target outputs under `.targets/<tar
 `createWorkspace` writes the archive; `readWorkspace` verifies the lock and computes target
 compatibility; `renderTarget` materializes the Gem to a target and writes the output.
 
-## Run & deploy
+## Run
 
 `run.ts` renders a workspace to a runnable project under `.run/` and drives a process:
 
 | Mode | Command | Target | URL parsed from logs |
 | --- | --- | --- | --- |
 | `local` | `eve build` → `eve start` | eve | `http://localhost:…` |
-| `vercel` | `vercel deploy --yes --token … --scope …` | eve | `https://<id>.vercel.app` |
-| `cloudflare` | `wrangler deploy` | flue | `https://<name>.<acct>.workers.dev` |
 
-`runReadiness()` reports which modes are configured (by checking env tokens). A `RunState`
+`runReadiness()` reports whether a local run is available (`{ local: boolean }`). A `RunState`
 (`{ mode, state, url?, logTail }`) is tracked in-memory per `name:target`, and a circular
-log buffer keeps the last ~200 lines. Vercel/Cloudflare deploys persist a
-[deploy record](targets.md) so they can be undeployed later; `undeployVercel` /
-`undeployCloudflare` reverse them.
+log buffer keeps the last ~200 lines.
 
 ### Sandboxed Gem runs
 
@@ -75,13 +71,6 @@ binary), tool calls require approval as usual, unless the environment variable
 > **v1 scope:** only write access is confined. Reads and outbound network
 > connections are unrestricted in this release.
 
-### Managed & AWS backends
-
-Distinct from local/edge runs are the managed publish backends — Anthropic Managed Agents
-and AWS Bedrock AgentCore — documented in [Targets & deploy](targets.md). AgentCore also has
-a CLI-driven path (`agentcoreRun.ts`) that renders the harness project and shells out to the
-`agentcore` CLI.
-
 ## stdio MCP proxying
 
 URL-only runtimes (like Eve) can't speak to a local **stdio** MCP server. `mcpProxy.ts`
@@ -91,7 +80,7 @@ runs; secrets are never embedded — the proxy inherits the operator's environme
 
 ## Server credentials
 
-`credentials.ts` stores server-side tokens (`ANTHROPIC_API_KEY`, `VERCEL_TOKEN`,
-`CLOUDFLARE_API_TOKEN`) in `~/.agentgem/.env` (mode `0600`), loaded at startup and set in
-`process.env` for deploys. These are server config — never part of a Gem (see
-[Redaction](redaction.md)).
+`credentials.ts` stores server-side tokens (the allowlisted `CREDENTIAL_KEYS`:
+`ANTHROPIC_API_KEY`, `VERCEL_TOKEN`, `CLOUDFLARE_API_TOKEN`) in `~/.agentgem/.env`
+(mode `0600`), loaded at startup into `process.env`. These are server config — never
+part of a Gem (see [Redaction](redaction.md)).

@@ -62,18 +62,18 @@ interface SecretRequirement {
 }
 ```
 
-So a Gem says *which* secrets it needs and *where* they plug in — never their values. Deploy
-backends use this to wire up secret references (e.g. AgentCore maps each one to a token-vault
-placeholder; managed publish collects them as `vaultSecrets`) without AgentGem ever handling
-the real secret.
+So a Gem says *which* secrets it needs and *where* they plug in — never their values.
+Targets use this at materialize time to wire up secret references (e.g. a rendered
+project references each secret by name, to be supplied from the environment where it
+runs) without AgentGem ever handling the real secret.
 
 ## Server credentials are different
 
 The secrets above are **artifact** secrets and are always redacted. Separately, the AgentGem
-*server* needs its own credentials to talk to deploy backends (e.g. `ANTHROPIC_API_KEY`,
-`VERCEL_TOKEN`, `CLOUDFLARE_API_TOKEN`). Those are stored on the machine in
-`~/.agentgem/.env` (mode `0600`) via `credentials.ts` and loaded at startup — they are
-server config, never part of a Gem. See [Testbed & run](testbed-and-run.md).
+*server* can hold its own credentials (the allowlisted `CREDENTIAL_KEYS`:
+`ANTHROPIC_API_KEY`, `VERCEL_TOKEN`, `CLOUDFLARE_API_TOKEN`). Those are stored on the
+machine in `~/.agentgem/.env` (mode `0600`) via `credentials.ts` and loaded at startup —
+they are server config, never part of a Gem. See [Testbed & run](testbed-and-run.md).
 
 ## Transcript scrubbing — a second, stricter scrubber
 
