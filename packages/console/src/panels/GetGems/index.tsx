@@ -1,19 +1,11 @@
 import { useEffect, useState } from "react";
 import {
-  registryReadyRoute,
-  registrySearchRoute,
   installHostedRoute,
   gemApplyRoute,
   makeClient,
-  type RegistryResult,
 } from "../../api/routes.js";
-import { Loading } from "../../shell/Loading.js";
 
 export function GetGems({ apiBase }: { apiBase: string }) {
-  const [ready, setReady] = useState<boolean | null>(null);
-  const [q, setQ] = useState("");
-  const [results, setResults] = useState<RegistryResult[] | null>(null);
-  const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [installed, setInstalled] = useState<Record<string, string>>({});
   const [consentFor, setConsentFor] = useState<string | null>(null); // gem key awaiting executable-artifact consent
@@ -21,30 +13,6 @@ export function GetGems({ apiBase }: { apiBase: string }) {
   const [directVersion, setDirectVersion] = useState("");
   const [importDir, setImportDir] = useState(""); // target dir for "Import a .gem file"
   const [importStatus, setImportStatus] = useState<string | null>(null);
-
-  useEffect(() => {
-    let alive = true;
-    const client = makeClient(apiBase);
-    registryReadyRoute.call(client)
-      .then((r) => { if (alive) setReady(r.ready); })
-      .catch(() => { if (alive) setReady(false); });
-    return () => { alive = false; };
-  }, [apiBase]);
-
-  const search = async (term?: string) => {
-    setBusy(true);
-    setError(null);
-    try {
-      const client = makeClient(apiBase);
-      const query = (term ?? q).trim();
-      const { results: r } = await registrySearchRoute.call(client, { query: { q: query || undefined } });
-      setResults(r);
-    } catch (e) {
-      setError(e instanceof Error ? e.message : String(e));
-    } finally {
-      setBusy(false);
-    }
-  };
 
   // Zero-config hosted install. Executable artifacts (MCP servers / hooks) require a consent step:
   // the first attempt (consent=false) is refused with a 409 that flips the card to a confirm; the
@@ -65,18 +33,14 @@ export function GetGems({ apiBase }: { apiBase: string }) {
 
   // Deep-link entry (the marketplace "Open in AgentGem" link) on mount:
   //  - "?install=<key>&v=<version>" → directly install that shared gem (zero-config hosted install,
-  //    consent-gated). Works even when the local registry search isn't configured.
-  //  - "?q=<term>" → pre-fill + run the registry search once.
-  // Absent both, this is a no-op, so the default "does not auto-search on mount" behaviour holds.
-  // Hash-reactive, not mount-only: when this tab is already open and the hash gains a
-  // `?install=` (a mid-session "Open in AgentGem"), the deep-link must still fire.
+  //    consent-gated).
+  // Absent that, this is a no-op. Hash-reactive, not mount-only: when this tab is already open and
+  // the hash gains a `?install=` (a mid-session "Open in AgentGem"), the deep-link must still fire.
   useEffect(() => {
     const applyDeepLink = () => {
       const params = new URLSearchParams(window.location.hash.split("?")[1] ?? "");
       const installKey = params.get("install");
-      if (installKey) { setDirectKey(installKey); setDirectVersion(params.get("v") ?? ""); void install(installKey, params.get("v") ?? ""); return; }
-      const q0 = params.get("q");
-      if (q0) { setQ(q0); void search(q0); }
+      if (installKey) { setDirectKey(installKey); setDirectVersion(params.get("v") ?? ""); void install(installKey, params.get("v") ?? ""); }
     };
     applyDeepLink();
     window.addEventListener("hashchange", applyDeepLink);
@@ -101,8 +65,8 @@ export function GetGems({ apiBase }: { apiBase: string }) {
     }
   }
 
-  // "Import a .gem file" — independent of registry config (a downloaded file needs no registry), so
-  // it renders in both the configured and not-configured branches, like the deep-link banner.
+  // "Import a .gem file" — a downloaded file needs no marketplace round-trip, so it always renders,
+  // like the deep-link banner.
   const importCard = (
     <div className="getgems-import ws-card">
       <div className="ws-name">Import a .gem file</div>
@@ -115,8 +79,7 @@ export function GetGems({ apiBase }: { apiBase: string }) {
     </div>
   );
 
-  // The deep-link install banner is independent of registry-search readiness (hosted install is
-  // zero-config), so it renders before the not-configured gate.
+  // The deep-link install banner (hosted install is zero-config).
   const directBanner = directKey ? (
     <div className="getgems-direct ws-card">
       <span className="ws-name">{directKey}</span>
@@ -135,82 +98,17 @@ export function GetGems({ apiBase }: { apiBase: string }) {
     </div>
   ) : null;
 
-  if (ready === null && !directKey) return <Loading />;
-  if (!ready) {
-    return (
-      <div className="getgems">
-        {directBanner}
-        {importCard}
-        {!directKey && (
-          <div className="getgems-empty">
-            <h3 className="getgems-empty-title">Registry not configured</h3>
-            <p className="getgems-empty-text">
-              Point the console at a registry (a GitHub repo + token) to search and install shared
-              gems. Until then this tab stays empty.
-            </p>
-            <button type="button" className="ledger-sort" onClick={() => { window.location.hash = "#/settings"; }}>
-              Configure registry →
-            </button>
-          </div>
-        )}
-      </div>
-    );
-  }
-
   return (
     <div className="getgems">
       {directBanner}
       {importCard}
-      <div className="ledger-bar">
-        <input
-          className="ledger-search"
-          type="text"
-          aria-label="search registry"
-          placeholder="search names, tags, descriptions…"
-          value={q}
-          onChange={(e) => setQ(e.target.value)}
-          onKeyDown={(e) => { if (e.key === "Enter") void search(); }}
-        />
-        <button type="button" className="ledger-sort" disabled={busy} onClick={() => void search()}>
-          {busy ? "Searching…" : "Search"}
-        </button>
-      </div>
-
-      {error && <p className="ledger-error">{error}</p>}
-
-      {results && results.length === 0 && <p className="ledger-empty">No gems matched.</p>}
-
-      {results && results.length > 0 && (
-        <div className="ws-list">
-          {results.map((r) => (
-            <article className="ws-card" key={r.key}>
-              <header className="ws-head">
-                <span className="ws-name">{r.key}</span>
-                <span className="ws-gem">{r.latest}</span>
-              </header>
-              {r.description && <p className="getgems-desc">{r.description}</p>}
-              <div className="ws-meta">
-                {r.publishedBy
-                  ? <a className="ws-chip" href={"https://app.agentgem.ai/@" + encodeURIComponent(r.publishedBy)} target="_blank" rel="noreferrer">@{r.publishedBy}</a>
-                  : (r.author && <span className="ws-chip">{r.author}</span>)}
-                {(r.tags ?? []).map((t) => <span className="ws-chip" key={t}>{t}</span>)}
-                {[...new Set(r.artifactKinds ?? [])].map((k) => <span className="ws-chip" key={"k-" + k}>{k}</span>)}
-              </div>
-              <div className="ws-targets">
-                {installed[r.key] ? (
-                  <span className="getgems-done">✓ installed → {installed[r.key]}</span>
-                ) : consentFor === r.key ? (
-                  <span className="getgems-consent">
-                    ⚠ This setup runs executable artifacts (MCP servers / hooks).
-                    <button type="button" className="ledger-sort" onClick={() => install(r.key, r.latest, true)}>Install anyway</button>
-                    <button type="button" className="ledger-sort" onClick={() => setConsentFor(null)}>Cancel</button>
-                  </span>
-                ) : (
-                  <button type="button" className="ledger-sort" onClick={() => install(r.key, r.latest)}>Install to workspace</button>
-                )}
-              </div>
-            </article>
-          ))}
+      {!directKey && (
+        <div className="getgems-empty">
+          <h3 className="getgems-empty-title">Browse the marketplace</h3>
+          <p className="getgems-empty-text">
+            Find shared gems on <a href="https://app.agentgem.ai" target="_blank" rel="noreferrer">app.agentgem.ai</a> —
+            “Open in AgentGem” installs them into a workspace here, or download a <code>.gem</code> and import it above.
+          </p>
         </div>
       )}
     </div>

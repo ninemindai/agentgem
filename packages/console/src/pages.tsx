@@ -13,11 +13,9 @@ import { minePage } from "./panels/Mine/index.js";
 import { curatePage } from "./panels/Curate/index.js";
 import { materializePage } from "./panels/Materialize/index.js";
 import { gemsPage } from "./panels/Gems/index.js";
-import { publishPage } from "./panels/Publish/index.js";
 import { sourcesPage } from "./panels/Sources/index.js";
 import { settingsPage } from "./panels/Settings/index.js";
 import { memoryPage } from "./panels/Memory/index.js";
-import { deployPage } from "./panels/Deploy/index.js";
 import { chatPage } from "./panels/Chat/index.js";
 import { watchPage } from "./panels/Watch/index.js";
 import { playPage } from "./panels/Play/index.js";
@@ -27,7 +25,7 @@ import { extraPages } from "./extraPages.js";
 
 // Yours / Received / Get-more are folded into the single tabbed `gemsPage` (Variant B);
 // their component bodies are reused inside packages/console/src/panels/Gems/Gems.tsx.
-export const corePages: ConsolePage[] = [observePage, sessionsPage, recallPage, setupPage, watchPage, rubricsPage, dreamingPage, benchmarkPage, optimizePage, minePage, curatePage, materializePage, gemsPage, publishPage, reviewsPage, sourcesPage, rubricLibraryPage, settingsPage, memoryPage, deployPage, chatPage, playPage, arcadePage];
+export const corePages: ConsolePage[] = [observePage, sessionsPage, recallPage, setupPage, watchPage, rubricsPage, dreamingPage, benchmarkPage, optimizePage, minePage, curatePage, materializePage, gemsPage, reviewsPage, sourcesPage, rubricLibraryPage, settingsPage, memoryPage, chatPage, playPage, arcadePage];
 
 // The composed list the shell renders. corePages is the built-in set; extraPages
 // is empty here and swapped by a downstream build's esbuild onResolve plugin (see extraPages.ts).

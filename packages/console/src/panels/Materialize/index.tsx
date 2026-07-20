@@ -7,6 +7,7 @@ import { base64ToBytes, downloadBlob, copyText } from "./exporters.js";
 import { Preview } from "./Preview.js";
 import { Targets } from "./Targets.js";
 import { Run } from "./Run.js";
+import { LocalRun } from "./LocalRun.js";
 export function Materialize({ apiBase }: { apiBase: string }) {
   const { keys, name } = useActiveGem();
   const [gem, setGem] = useState<Gem | null>(null);
@@ -73,6 +74,7 @@ export function Materialize({ apiBase }: { apiBase: string }) {
       {gem && <Preview gem={gem} onDownloadGem={downloadGem} onDownloadJson={downloadJson} onCopyJson={copyJson} />}
       <Targets apiBase={apiBase} selection={sel} name={name.trim() || "gem"} />
       <Run apiBase={apiBase} selection={sel} name={name.trim() || "gem"} />
+      <LocalRun apiBase={apiBase} name={name.trim() || "gem"} />
       <section className="transfer-section">
         <h3 className="transfer-heading">Share via transfer</h3>
         <div className="ledger-bar">

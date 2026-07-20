@@ -18,12 +18,6 @@ function mockFetch(overrides: Record<string, unknown> = {}) {
   let bound = false;
   return vi.fn(async (url: string | URL) => {
     const u = String(url);
-    if (u.includes("/api/deploy-targets"))
-      return res({ targets: [
-        { id: "claude-managed", label: "Claude Managed Agents", ready: true },
-        { id: "agentcore-managed", label: "AgentCore Harness", ready: false },
-      ] });
-    if (u.includes("/api/credential")) return res({ ok: true });
     if (u.includes("/api/bind/status"))
       return res(overrides["/api/bind/status"] ?? (bound ? { bound: true, login: "alice", sessionActive: true } : { bound: false }));
     if (u.includes("/api/bind/start"))
@@ -44,23 +38,6 @@ function mockFetch(overrides: Record<string, unknown> = {}) {
 }
 
 describe("Settings", () => {
-  it("lists deploy backends with readiness", async () => {
-    vi.stubGlobal("fetch", mockFetch());
-    renderSettings();
-    expect(await screen.findByText("Claude Managed Agents")).toBeTruthy();
-    expect(screen.getByText("ready")).toBeTruthy();
-    expect(screen.getByText("needs credentials")).toBeTruthy();
-  });
-
-  it("saves a credential", async () => {
-    vi.stubGlobal("fetch", mockFetch());
-    renderSettings();
-    await screen.findByText("Claude Managed Agents");
-    fireEvent.change(screen.getByLabelText("credential value"), { target: { value: "sk-test" } });
-    fireEvent.click(screen.getByText("Save"));
-    await waitFor(() => expect(screen.getByText(/saved ANTHROPIC_API_KEY/)).toBeTruthy());
-  });
-
   it("shows Not verified when unbound", async () => {
     vi.stubGlobal("fetch", mockFetch());
     renderSettings();
@@ -75,7 +52,6 @@ describe("Settings", () => {
     let bound = false;
     vi.stubGlobal("fetch", vi.fn(async (url: string | URL) => {
       const u = String(url);
-      if (u.includes("/api/deploy-targets")) return res({ targets: [] });
       if (u.includes("/api/bind/status")) return res(bound ? { bound: true, login: "alice", sessionActive: true } : { bound: false });
       if (u.includes("/api/bind/start"))
         return res({ configured: true, userCode: "WXYZ-1234", verificationUri: "https://github.com/login/device", deviceCode: "dc", interval: 5 });
@@ -99,7 +75,6 @@ describe("Settings", () => {
     let bound = false;
     vi.stubGlobal("fetch", vi.fn(async (url: string | URL) => {
       const u = String(url);
-      if (u.includes("/api/deploy-targets")) return res({ targets: [] });
       if (u.includes("/api/bind/status"))
         return res(bound
           ? { bound: true, login: "alice", avatarUrl: "https://a/alice.png", sessionActive: true }
@@ -128,7 +103,6 @@ describe("Settings", () => {
   });
 
   it("renders the GitHub avatar when the binding has one", async () => {
-    vi.spyOn(routes.deployTargetsRoute, "call").mockResolvedValue({ targets: [] });
     vi.spyOn(routes.bindStatusRoute, "call").mockResolvedValue({ bound: true, login: "bob", avatarUrl: "https://a/bob.png" } as any);
     renderSettings();
     const img = await screen.findByRole("img", { name: /bob/i });
@@ -137,7 +111,6 @@ describe("Settings", () => {
   });
 
   it("shows a friendly guidance message for the unknown-producer rejection (not the raw slug)", async () => {
-    vi.spyOn(routes.deployTargetsRoute, "call").mockResolvedValue({ targets: [] });
     vi.spyOn(routes.bindStatusRoute, "call").mockResolvedValue({ bound: false } as any);
     vi.spyOn(routes.bindStartRoute, "call").mockResolvedValue({ configured: true, userCode: "AB-12", verificationUri: "https://github.com/login/device", deviceCode: "dc", interval: 5 } as any);
     vi.spyOn(routes.bindCompleteRoute, "call").mockResolvedValue({ bound: false, rejected: "unknown-producer" } as any);
@@ -152,7 +125,6 @@ describe("Settings", () => {
   });
 
   it("disconnects a bound identity and returns to the Connect state", async () => {
-    vi.spyOn(routes.deployTargetsRoute, "call").mockResolvedValue({ targets: [] });
     vi.spyOn(routes.bindStatusRoute, "call").mockResolvedValue({ bound: true, login: "bob" } as any);
     const disconnect = vi.spyOn(routes.bindDisconnectRoute, "call").mockResolvedValue({ bound: false } as any);
     renderSettings();
@@ -164,7 +136,6 @@ describe("Settings", () => {
   });
 
   it("falls back to text-only when the binding has no avatar", async () => {
-    vi.spyOn(routes.deployTargetsRoute, "call").mockResolvedValue({ targets: [] });
     vi.spyOn(routes.bindStatusRoute, "call").mockResolvedValue({ bound: true, login: "bob" } as any);
     renderSettings();
     await screen.findByText(/Verified as @bob/);

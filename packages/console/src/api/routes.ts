@@ -148,10 +148,10 @@ export const renderWorkspaceRoute = defineRoute("POST", "/api/workspace/render",
   response: z.object({ target: z.string(), path: z.string() }),
 });
 
-// Run / deploy a rendered workspace target (local / vercel / cloudflare).
+// Run a rendered workspace target locally.
 export const runReadyRoute = defineRoute("GET", "/api/run-ready", {
   query: z.object({ name: z.string(), target: z.string() }),
-  response: z.object({ local: z.boolean(), vercel: z.boolean(), cloudflare: z.boolean() }),
+  response: z.object({ local: z.boolean() }),
 });
 const RunStateSchema = z.object({
   mode: z.enum(["local", "vercel", "cloudflare"]),
@@ -292,50 +292,6 @@ export const scaffoldChecksRoute = defineRoute("POST", "/api/scaffold-checks", {
   response: z.object({ checks: z.array(GemCheckSchema) }),
 });
 
-// Registry (GitHub-backed). ready → search → install-to-workspace.
-export const registryReadyRoute = defineRoute("GET", "/api/registry/ready", {
-  response: z.object({ ready: z.boolean() }),
-});
-const RegistryResultSchema = z.object({
-  key: z.string(),
-  latest: z.string(),
-  score: z.number(),
-  description: z.string().optional(),
-  tags: z.array(z.string()).optional(),
-  author: z.string().optional(),
-  publishedBy: z.string().optional(),
-  artifactKinds: z.array(z.string()).optional(),
-});
-export type RegistryResult = z.infer<typeof RegistryResultSchema>;
-export const registrySearchRoute = defineRoute("GET", "/api/registry/search", {
-  query: z.object({ q: z.string().optional() }),
-  response: z.object({ results: z.array(RegistryResultSchema) }),
-});
-export const registryInstallRoute = defineRoute("POST", "/api/registry/install", {
-  body: z.object({
-    refs: z.array(z.string()).min(1),
-    mode: z.enum(["materialize", "workspace"]),
-    workspaceName: z.string().optional(),
-  }),
-  response: z.object({
-    applied: z.object({ mode: z.string(), workspace: z.string().optional(), dest: z.string().optional() }),
-    rubrics: RubricInstallResult.optional(),
-  }),
-});
-export const registryPublishRoute = defineRoute("POST", "/api/registry/publish", {
-  body: z.object({
-    workspace: z.string(),
-    scope: z.string(),
-    name: z.string().optional(),
-    version: z.string(),
-    dependencies: z.array(z.string()).optional(),
-    description: z.string().optional(),
-    tags: z.array(z.string()).optional(),
-    type: z.string().optional(),
-  }),
-  response: z.object({ ref: z.string(), version: z.string(), gemDigest: z.string(), commit: z.string(), path: z.string() }),
-});
-
 // Testbed: discovery (recents + project candidates) + scaffold a new one.
 const RecentEntrySchema = z.object({
   path: z.string(),
@@ -372,46 +328,6 @@ const TestbedImportSelectionSchema = z.object({
 export const testbedImportRoute = defineRoute("POST", "/api/testbed/import", {
   body: z.object({ root: z.string(), selection: TestbedImportSelectionSchema }),
   response: z.object({ written: z.array(z.unknown()), skipped: z.array(z.unknown()) }),
-});
-
-// Publish a selection to a managed backend (claude-managed / agentcore-managed),
-// then undeploy by the workspace-record name.
-export const PUBLISH_TARGETS = ["claude-managed", "agentcore-managed"] as const;
-export const publishReadyRoute = defineRoute("GET", "/api/publish-ready", {
-  query: z.object({ target: z.string() }),
-  response: z.object({ ready: z.boolean() }),
-});
-export const publishRoute = defineRoute("POST", "/api/publish", {
-  body: z.object({
-    selection: GemSelectionSchema,
-    name: z.string().optional(),
-    target: z.enum(PUBLISH_TARGETS),
-    requestId: z.string().min(8).max(128),
-    wsName: z.string().optional(),
-  }),
-  response: z.looseObject({
-    kind: z.string(),
-    agentId: z.string().optional(),
-    environmentId: z.string().optional(),
-    version: z.string().optional(),
-    harnessId: z.string().optional(),
-  }),
-});
-export const undeployRoute = defineRoute("POST", "/api/undeploy", {
-  body: z.object({ name: z.string(), target: z.enum(["eve", "flue", "claude-managed", "agentcore"]) }),
-  response: z.object({ removed: z.boolean() }),
-});
-
-// Deploy: backend readiness + credential management.
-export const CREDENTIAL_KEYS = ["ANTHROPIC_API_KEY", "VERCEL_TOKEN", "CLOUDFLARE_API_TOKEN"] as const;
-export const deployTargetsRoute = defineRoute("GET", "/api/deploy-targets", {
-  response: z.object({
-    targets: z.array(z.object({ id: z.string(), label: z.string(), ready: z.boolean() })),
-  }),
-});
-export const setCredentialRoute = defineRoute("POST", "/api/credential", {
-  body: z.object({ key: z.enum(CREDENTIAL_KEYS), value: z.string().min(1) }),
-  response: z.object({ ok: z.boolean() }),
 });
 
 // Transfer: send a selection (returns an opaque ticket), receive a gem by ticket,
