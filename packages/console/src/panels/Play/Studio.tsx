@@ -1,7 +1,7 @@
 // packages/console/src/panels/Play/Studio.tsx
 import { useEffect, useRef, useState } from "react";
 import type { McpNeed } from "@agentgem/model";
-import { makeClient, playMiniappRoute, playSaveRoute, publishSetupRoute, publishStatusRoute, reviewGroupsRoute, reviewRequestRoute } from "../../api/routes.js";
+import { makeClient, playMiniappRoute, playSaveRoute, playUploadsRoute, uploadsPreambleFromStored, publishSetupRoute, publishStatusRoute, reviewGroupsRoute, reviewRequestRoute } from "../../api/routes.js";
 import { AgentSelector, type PlayAgent } from "./AgentSelector.js";
 import { CapabilityStrip } from "./CapabilityStrip.js";
 import { RequestReviewModal } from "./RequestReviewModal.js";
@@ -12,6 +12,8 @@ import { useIdentity } from "../../identity/IdentityProvider.js";
 import { useGitHubBind } from "../../identity/useGitHubBind.js";
 import { ConnectGitHub } from "../../identity/ConnectGitHub.js";
 import { useSplit } from "../../shell/useSplit.js";
+import { useUploads } from "./uploads.js";
+import { UploadsField } from "./UploadsField.js";
 import { setStudioChat, clearChatId, clearStudioChat } from "./studioChatStore.js";
 import { loadStudioSession, loadStudioTranscript } from "./studioResume.js";
 import { resolvePublishAction, type PublishAction } from "./publishAction.js";
@@ -101,6 +103,7 @@ export function Studio({
   const [plateMax, setPlateMax] = useState<number | undefined>(undefined);
   const seededRef = useRef(false);   // guards the one-shot seed-prompt auto-send
   const split = useSplit("studio", { initial: 560, min: 360, max: 900, side: "start" });
+  const up = useUploads();
 
   // Resume the publish the user already asked for. `login` comes straight from
   // bindComplete — reading it off the refreshed identity context would race the
@@ -325,7 +328,36 @@ export function Studio({
   // Guard on busy: the textarea's Enter handler calls submit() unconditionally, and send()
   // early-returns while busy — without this guard, pressing Enter mid-turn would still wipe
   // the composer (including a message an "already running" restore just put back).
-  function submit() { if (busy || !input.trim()) return; const text = input; setInput(""); send(text); }
+  async function submit() {
+    const staged = up.uploads;
+    if (busy || !agentId || (!input.trim() && !staged.length)) return;
+    if (staged.length) {
+      const ue = up.limitError();
+      if (ue) { setStatus(`upload failed: ${ue}`); return; }
+      // Claim `busy` for the whole upload+send round trip: without this, the Send button (and
+      // the Enter guard above) stays enabled for the entire await below, so a second click while
+      // the POST is in flight fires a duplicate upload of the same staged files — the server
+      // suffixes the collision (my-logo.png + my-logo-2.png) and the agent hears about both.
+      setBusy(true);
+      let res;
+      try {
+        res = await playUploadsRoute.call(makeClient(apiBase), { body: { name, files: up.payload().files ?? [] } });
+      } catch (e) {
+        setBusy(false); // let the user retry after a failed upload
+        setStatus(`upload failed: ${(e as Error).message}`); // keep the chips; nothing was sent
+        return;
+      }
+      up.reset(); // uploaded — files are durably in the workspace; a later send failure must not re-upload
+      const text = [uploadsPreambleFromStored(res.files), input.trim()].filter(Boolean).join("\n\n");
+      setInput("");
+      setBusy(false); // hand busy back to send() — it re-claims it itself and owns the turn from here
+      send(text);
+      return;
+    }
+    const text = input;
+    setInput("");
+    send(text);
+  }
 
   // Save gates the seal; a gate failure becomes an actionable banner (offer to have the agent fix it).
   async function save(): Promise<boolean> {
@@ -720,13 +752,14 @@ export function Studio({
       </div>
 
       <div className="play-composer-in" ref={composerRef}>
+        <UploadsField u={up} compact />
         <textarea ref={inputRef} className="play-input play-input--chat" rows={3}
           placeholder="ask the agent to build/edit the miniapp…" value={input}
           onChange={(e) => setInput(e.target.value)}
           onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); submit(); } }} />
         <div className="play-composer-foot">
           <span className="play-composer-hint"><kbd>Enter</kbd> to send · <kbd>Shift</kbd>+<kbd>Enter</kbd> for a new line</span>
-          <button className="play-btn play-btn--primary" disabled={busy || !input.trim() || !agentId} onClick={submit}>{busy ? "…" : "Send"}</button>
+          <button className="play-btn play-btn--primary" disabled={busy || !agentId || (!input.trim() && up.uploads.length === 0)} onClick={submit}>{busy ? "…" : "Send"}</button>
         </div>
       </div>
     </section>
