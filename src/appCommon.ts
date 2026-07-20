@@ -14,6 +14,7 @@ import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
 import { RestApplication } from "@agentback/rest";
+import { BindingKey } from "@agentback/core";
 import { installExplorer } from "@agentback/rest-explorer";
 import { MCPComponent } from "@agentback/mcp";
 import { GemCoreComponent } from "./gemCore.component.js";
@@ -164,6 +165,14 @@ export async function buildCommonApp(port: number): Promise<{ app: RestApplicati
   return { app, server };
 }
 
+// Seam for serving a custom UI at `/` when the desktop console is off (SERVE_CONSOLE=false).
+// Unbound (the pure-client / hosted-API default) → finalizeCommonApp redirects `/` to the site.
+// A downstream deployment binds this to mount its own SPA (e.g. the enterprise marketplace),
+// keeping that serving code out of this shared file. Receives the resolved RestServer so it can
+// register raw routes on `server.expressApp`, exactly as the console branch does.
+export type RootUiMount = (server: Awaited<RestApplication["restServer"]>) => void;
+export const ROOT_UI_MOUNT = BindingKey.create<RootUiMount | undefined>("agentgem.ui.rootMount");
+
 // The part of app-building that must run AFTER each entry's aggregator/benchmark step: the global
 // originGuard middleware, /healthz, console-serving, and the raw SSE routes (each keeping its
 // per-route originGuard arg — these are registered directly on expressApp, outside the controller
@@ -186,8 +195,15 @@ export function finalizeCommonApp(app: RestApplication, server: Awaited<RestAppl
   server.expressApp.get("/healthz", (_req, res) => res.json({ status: "ok" }));
   // The desktop console UI is served at `/` (and `/console`) for LOCAL runs only. The hosted
   // public deployment (api.agentgem.ai) is API-only — the console is a local desktop app, not a
-  // public surface — so SERVE_CONSOLE=false disables it there and redirects `/` to the site.
+  // public surface — so SERVE_CONSOLE=false disables it there and redirects `/` to the site
+  // (unless a downstream deployment bound ROOT_UI_MOUNT to serve its own SPA at `/` instead).
+  const rootUiMount = app.getSync(ROOT_UI_MOUNT, { optional: true });
   if (process.env.SERVE_CONSOLE !== "false") {
+    // The console and a custom root UI both claim `/` — a deployment that binds ROOT_UI_MOUNT
+    // must run API-only (SERVE_CONSOLE=false), or the two would fight over the same route.
+    if (rootUiMount) {
+      throw new Error("ROOT_UI_MOUNT is bound but SERVE_CONSOLE is not false — both claim `/`");
+    }
     const consolePage = consoleHtml();
     server.expressApp.get("/", (_req, res) => res.type("html").send(consolePage));
     server.expressApp.get("/console", (_req, res) => res.type("html").send(consolePage));
@@ -198,6 +214,8 @@ export function finalizeCommonApp(app: RestApplication, server: Awaited<RestAppl
       server.expressApp.get("/manifest.webmanifest", (_req, res) =>
         res.type("application/manifest+json").send(manifest));
     }
+  } else if (rootUiMount) {
+    rootUiMount(server);
   } else {
     server.expressApp.get("/", (_req, res) => res.redirect(302, "https://agentgem.ai"));
   }
