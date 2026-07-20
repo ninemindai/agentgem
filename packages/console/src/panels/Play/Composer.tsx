@@ -4,6 +4,8 @@ import { makeClient, playStudioRoute, playImportRoute, playBlankRoute, testbedPr
 import { fetchSessions, type WatchSession } from "../Watch/watchStream.js";
 import { AgentSelector, type PlayAgent } from "./AgentSelector.js";
 import { CAP_TOOL, CAP_LABEL, CONSENT_CAPS } from "./consent.js";
+import { useUploads } from "./uploads.js";
+import { UploadsField } from "./UploadsField.js";
 
 type Kind = "project" | "session" | "skill" | "html" | "blank";
 type Proj = { path: string; flavor: string; exists: boolean };
@@ -82,10 +84,8 @@ export function Composer({
   const toggleCap = (c: Cap) => setCaps((cs) => (cs.includes(c) ? cs.filter((x) => x !== c) : [...cs, c]));
 
   // Optional seed files, shared by the Blank and HTML tabs — `role` decides where the server lands each
-  // one (ship → inlined into the miniapp, reference → build context only). See uploadsPayload/uploadsBlock.
-  type Upload = { name: string; bytesBase64: string; type: string; size: number; role: "ship" | "reference" };
-  const [uploads, setUploads] = useState<Upload[]>([]);
-  const SHIP_MAX_FILE = 500_000, SHIP_MAX_TOTAL = 1_000_000, REF_MAX_FILE = 5_000_000, REF_MAX_TOTAL = 15_000_000, MAX_FILES = 20;
+  // one (ship → inlined into the miniapp, reference → build context only). See uploads.ts/UploadsField.
+  const up = useUploads();
 
   // Lazy-load each list the first time its tab is shown.
   useEffect(() => {
@@ -119,106 +119,29 @@ export function Composer({
   const onFile = (e: React.ChangeEvent<HTMLInputElement>) => loadFile(e.target.files?.[0]);
   const onDrop = (e: React.DragEvent) => { e.preventDefault(); setDragOver(false); loadFile(e.dataTransfer.files?.[0]); };
 
-  function fileToBase64(f: File): Promise<string> {
-    return new Promise((res, rej) => {
-      const r = new FileReader();
-      r.onerror = () => rej(new Error(`could not read ${f.name}`));
-      r.onload = () => res(String(r.result).replace(/^data:[^;]*;base64,/, ""));
-      r.readAsDataURL(f);
-    });
-  }
-  async function addUploads(list: FileList | null | undefined) {
-    if (!list?.length) return;
-    // Dedup by filename (current list + earlier in this batch) so chips stay uniquely keyed by name —
-    // a same-named collision would otherwise make setRole/removeUpload act on both React-key-collided rows.
-    const seen = new Set(uploads.map((u) => u.name));
-    const additions: Upload[] = [];
-    for (const f of Array.from(list)) {
-      if (seen.has(f.name)) { setError(`duplicate filename skipped: ${f.name}`); continue; }
-      if (uploads.length + additions.length >= MAX_FILES) { setError(`at most ${MAX_FILES} files`); break; }
-      seen.add(f.name);
-      additions.push({ name: f.name, bytesBase64: await fileToBase64(f), type: f.type, size: f.size, role: "ship" });
-    }
-    if (!additions.length) return;
-    // Functional update + re-check against prev so a concurrent addUploads call can't clobber this one.
-    setUploads((prev) => {
-      const prevNames = new Set(prev.map((u) => u.name));
-      const merged = [...prev];
-      for (const a of additions) if (!prevNames.has(a.name)) { prevNames.add(a.name); merged.push(a); }
-      return merged;
-    });
-  }
-  function setUploadRole(name: string, role: "ship" | "reference") {
-    setUploads((u) => u.map((x) => (x.name === name ? { ...x, role } : x)));
-  }
-  function removeUpload(name: string) { setUploads((u) => u.filter((x) => x.name !== name)); }
-  // Client-side mirror of the server caps → friendly error before a doomed round-trip.
-  function uploadsError(u: Upload[]): string {
-    const ship = u.filter((x) => x.role === "ship"), ref = u.filter((x) => x.role === "reference");
-    if (ship.some((x) => x.size > SHIP_MAX_FILE)) return "a ship file exceeds 500 KB (it must inline into the miniapp)";
-    if (ship.reduce((n, x) => n + x.size, 0) > SHIP_MAX_TOTAL) return "ship files exceed 1 MB total";
-    if (ref.some((x) => x.size > REF_MAX_FILE)) return "a reference file exceeds 5 MB";
-    if (ref.reduce((n, x) => n + x.size, 0) > REF_MAX_TOTAL) return "reference files exceed 15 MB total";
-    return "";
-  }
-  function uploadsPreamble(u: Upload[]): string {
-    if (!u.length) return "";
-    const ship = u.filter((x) => x.role === "ship").map((x) => x.name);
-    const ref = u.filter((x) => x.role === "reference").map((x) => x.name);
-    const lines: string[] = [];
-    if (ship.length) lines.push(`Ship files (inline into index.html): ${ship.join(", ")} — data: URIs are in ./uploads/assets.json.`);
-    if (ref.length) lines.push(`Reference files (context only, do not ship): ${ref.join(", ")} in ./ref/.`);
-    return `I've added files to this project's workspace.\n${lines.join("\n")}`;
-  }
-  const uploadsPayload = () => (uploads.length ? { files: uploads.map(({ name, bytesBase64, type, role }) => ({ name, bytesBase64, type, role })) } : {});
-
   async function doImport() {
     if (busy || !importHtml.trim()) return;
-    const ue = uploadsError(uploads); if (ue) { setError(ue); return; }
-    setBusy(true); setError("");
+    const ue = up.limitError(); if (ue) { setError(ue); return; }
+    setBusy(true); setError(""); up.setError("");
     try {
-      const res = await playImportRoute.call(makeClient(apiBase), { body: { title: importTitle.trim() || "imported-game", html: importHtml, ...named(), ...uploadsPayload() } });
+      const res = await playImportRoute.call(makeClient(apiBase), { body: { title: importTitle.trim() || "imported-game", html: importHtml, ...named(), ...up.payload() } });
       // Only pass a second argument when there's an uploads preamble to carry — preserves the old
       // single-arg call shape when nothing was uploaded.
-      const preamble = uploadsPreamble(uploads);
+      const preamble = up.preamble();
       if (preamble) onCreated(res.name, preamble); else onCreated(res.name);
     } catch (e) { setError((e as Error).message); setBusy(false); }
   }
 
   async function doBlank() {
     if (busy || !blankTitle.trim()) return;
-    const ue = uploadsError(uploads); if (ue) { setError(ue); return; }
-    setBusy(true); setError("");
+    const ue = up.limitError(); if (ue) { setError(ue); return; }
+    setBusy(true); setError(""); up.setError("");
     try {
-      const res = await playBlankRoute.call(makeClient(apiBase), { body: { title: blankTitle.trim(), ...named(), ...uploadsPayload() } });
+      const res = await playBlankRoute.call(makeClient(apiBase), { body: { title: blankTitle.trim(), ...named(), ...up.payload() } });
       // The description isn't baked server-side; it's auto-sent as the studio's first build prompt.
-      onCreated(res.name, [capPreamble(caps), uploadsPreamble(uploads), blankPrompt.trim()].filter(Boolean).join("\n\n") || undefined);
+      onCreated(res.name, [capPreamble(caps), up.preamble(), blankPrompt.trim()].filter(Boolean).join("\n\n") || undefined);
     } catch (e) { setError((e as Error).message); setBusy(false); }
   }
-
-  const uploadsBlock = (
-    <div className="play-uploads">
-      <label className="play-drop" onDragOver={(e) => { e.preventDefault(); }} onDrop={(e) => { e.preventDefault(); addUploads(e.dataTransfer.files); }}>
-        <b>Drop files</b> to seed this miniapp (optional) — or click to choose
-        <input data-testid="uploads-input" type="file" multiple onChange={(e) => addUploads(e.target.files)} style={{ display: "none" }} />
-      </label>
-      {uploads.length > 0 && (
-        <ul className="play-uploads__list">
-          {uploads.map((u) => (
-            <li key={u.name} className="play-uploads__row">
-              <span className="play-uploads__name">{u.name}</span>
-              <span className="play-uploads__size">{(u.size / 1024).toFixed(0)} KB</span>
-              <select data-testid={`role-${u.name}`} className="play-uploads__role" value={u.role} onChange={(e) => setUploadRole(u.name, e.target.value as "ship" | "reference")}>
-                <option value="ship">Ship</option>
-                <option value="reference">Reference</option>
-              </select>
-              <button type="button" className="play-uploads__x" aria-label={`remove ${u.name}`} onClick={() => removeUpload(u.name)}>×</button>
-            </li>
-          ))}
-        </ul>
-      )}
-    </div>
-  );
 
   return (
     <section className="analyze">
@@ -251,7 +174,7 @@ export function Composer({
         placeholder="name (optional — defaults to the title; must be unique)"
         value={name} onChange={(e) => setName(e.target.value)}
       />
-      {error && <div className="play-banner"><span className="play-banner__ico">⚠</span><div className="play-banner__body"><div className="play-banner__detail">{error}</div></div></div>}
+      {(error || up.error) && <div className="play-banner"><span className="play-banner__ico">⚠</span><div className="play-banner__body"><div className="play-banner__detail">{error || up.error}</div></div></div>}
 
       {kind === "project" && (!projects ? <p className="play-intro">Loading projects…</p> :
         <ul className="play-src">
@@ -301,7 +224,7 @@ export function Composer({
           </label>
           <textarea className="play-input" style={{ minHeight: 200, fontFamily: "var(--font-mono)", fontSize: 12 }}
             placeholder="…or paste HTML here" value={importHtml} onChange={(e) => setImportHtml(e.target.value)} />
-          {uploadsBlock}
+          <UploadsField u={up} />
           <button className="play-btn play-btn--primary" style={{ alignSelf: "flex-start" }} disabled={busy || !importHtml.trim()} onClick={doImport}>
             {busy ? "Importing…" : "Create miniapp"}
           </button>
@@ -314,7 +237,7 @@ export function Composer({
           <input className="play-input" placeholder="title" value={blankTitle} onChange={(e) => setBlankTitle(e.target.value)} />
           <textarea className="play-input" style={{ minHeight: 120 }}
             placeholder="describe the mini-game you want — sent as the first build prompt…" value={blankPrompt} onChange={(e) => setBlankPrompt(e.target.value)} />
-          {uploadsBlock}
+          <UploadsField u={up} />
           <button className="play-btn play-btn--primary" style={{ alignSelf: "flex-start" }} disabled={busy || !blankTitle.trim()} onClick={doBlank}>
             {busy ? "Creating…" : "Create miniapp"}
           </button>
