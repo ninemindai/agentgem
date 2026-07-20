@@ -9,6 +9,10 @@
     ".": {
       "types": "./dist/index.d.ts",
       "default": "./dist/index.js"
+    },
+    "./bindings": {
+      "types": "./dist/hostedBindings.d.ts",
+      "default": "./dist/hostedBindings.js"
     }
   },
   "files": ["dist"],
@@ -16,6 +20,7 @@
     "build": "tsc -b"
   },
   "dependencies": {
+    "@agentback/core": "~0.7.1",
     "@agentgem/insight": "workspace:*"
   }
 }
