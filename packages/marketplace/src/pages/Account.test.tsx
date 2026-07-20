@@ -89,11 +89,27 @@ describe("Account page", () => {
 
     render(<AccountPanel api={makeApi("https://api.x")} me={me} base="https://api.x" />);
 
-    expect(await screen.findByText(/already linked to another AgentGem account/i)).toBeTruthy();
+    expect(await screen.findByText(/already linked to a different AgentGem account/i)).toBeTruthy();
     // The banner itself is expected to still be showing (read once at mount) — it's the URL that
     // must be cleaned so a refresh, or a later Connect's returnTo, doesn't pick the param back up.
     expect(window.location.pathname).toBe("/account");
     expect(window.location.search).toBe("");
+  });
+
+  it("names the provider in the collision banner + merge button when the attempted provider is known", async () => {
+    stubAccountFetch(async (u) => {
+      if (u.includes("/api/account/providers")) return res({ connected: ["github"] });
+      throw new Error("unexpected fetch: " + u);
+    });
+    // The connect attempt stashes which provider collided (see CONNECT_ATTEMPT_KEY) — that's what
+    // lets the banner name it instead of the vague "That provider…".
+    sessionStorage.setItem("agentgem-connect-attempt", "twitter");
+    window.history.pushState({}, "", "/account?error=account_already_linked_to_different_user");
+
+    render(<AccountPanel api={makeApi("https://api.x")} me={me} base="https://api.x" />);
+
+    expect(await screen.findByText(/your X account is already linked to a different AgentGem account/i)).toBeTruthy();
+    expect(screen.getByRole("button", { name: /merge the X account/i })).toBeTruthy();
   });
 
   it("sends a clean callbackURL/errorCallbackURL (no stale ?error=) when Connect is triggered from a URL that still carries a collision error", async () => {
@@ -153,7 +169,7 @@ describe("Account page", () => {
     window.history.pushState({}, "", "/account?error=account_already_linked_to_different_user");
 
     render(<AccountPanel api={makeApi("https://api.x")} me={me} base="https://api.x" />);
-    const mergeBtn = await screen.findByRole("button", { name: /merge this account/i });
+    const mergeBtn = await screen.findByRole("button", { name: /merge the Google account/i });
     fireEvent.click(mergeBtn);
     expect(assignOnMerge).toHaveBeenCalledWith("https://api.x/api/account/connect/google");
   });
@@ -165,8 +181,8 @@ describe("Account page", () => {
     });
     window.history.pushState({}, "", "/account?error=account_already_linked_to_different_user");
     render(<AccountPanel api={makeApi("https://api.x")} me={me} base="https://api.x" />);
-    expect(await screen.findByText(/already linked to another AgentGem account/i)).toBeTruthy();
-    expect(screen.queryByRole("button", { name: /merge this account/i })).toBeNull();
+    expect(await screen.findByText(/already linked to a different AgentGem account/i)).toBeTruthy();
+    expect(screen.queryByRole("button", { name: /merge the/i })).toBeNull();
   });
 
   it("on ?connect=ready, confirming calls POST /api/account/absorb, shows the refreshed provider list, and reloads", async () => {

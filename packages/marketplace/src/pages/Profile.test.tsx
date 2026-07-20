@@ -95,7 +95,7 @@ describe("Profile page", () => {
     const accountTab = await screen.findByRole("tab", { name: "Account" });
     expect(accountTab.getAttribute("aria-selected")).toBe("true");
     // AccountPanel's collision banner is rendered (the recovery entry point), not the Apps list.
-    expect(await screen.findByText(/already linked to another AgentGem account/i)).toBeTruthy();
+    expect(await screen.findByText(/already linked to a different AgentGem account/i)).toBeTruthy();
   });
 });
 
