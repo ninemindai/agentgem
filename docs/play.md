@@ -108,11 +108,19 @@ Studio's three actions are distinct:
   then **resumes the publish you started** — no second click. On success it links your
   marketplace gem page.
 
-Once published, a game lives in the marketplace **arcade** (`app.agentgem.ai/`), where
-it's searchable by genre and tag, counts plays, and is an **installable, offline-playable
-PWA** — visitors can pin it and play with no network.
+Once published, a game lives in the marketplace **arcade** (`app.agentgem.ai/`) — an
+**early testbed**, so treat it as a preview — where it's searchable by genre and tag,
+counts plays, and plays offline: a sealed game carries everything it needs, so there is
+no network to lose.
 
 ## On the desktop app
 
 The embedded [desktop console](desktop.md) has the full Play experience — browse,
 play, and remix mini-games — the same as `npx`.
+
+---
+
+*Changing the miniapp platform itself, rather than playing or authoring? The
+normative spec is [`miniapps/spec.md`](miniapps/spec.md), and the design
+decisions and lessons behind it are in
+[`miniapps/evolution.md`](miniapps/evolution.md).*

@@ -106,3 +106,20 @@ bitten the passkey + sign-in surfaces.
   buttons use `var(--grad-gem)` like `.ex-signin`).
 - **Verify styled UI in a real browser, not just tests** — jsdom asserts behavior,
   never appearance.
+
+## Miniapp platform changes: spec first, one source of truth
+
+Changing the miniapp platform (`packages/play`, the Play console surfaces, the
+`/api/play/*` routes)? Two rules that bite:
+
+- **Check the conformance checklist in `docs/miniapps/spec.md` (§10) before
+  finishing.** It encodes the invariants (sealed runtime; declarations cannot
+  lie; nothing ships without opt-in) and the rule that every capability
+  *widening* ships with a matching save-time or consent-time *tightening* —
+  history and rationale in `docs/miniapps/evolution.md`.
+- **The authoring contract's single source of truth is `MINIAPP_BUILDER_BRIEF`**
+  (`packages/play/src/builderBrief.ts`). `skills/agentgem-miniapp/SKILL.md` is a
+  byte-for-byte view of the constant and `src/play/__tests__/builderBrief.test.ts`
+  fails if they drift. Edit the constant, never just the markdown — the Studio
+  agent only ever sees the constant, so a SKILL.md-only edit changes nothing at
+  runtime.
