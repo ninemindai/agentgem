@@ -6,7 +6,7 @@ import type { RunCloudDispatch } from "../hostedBindings.js";
 
 // GemController constructor params are all optional; runCloudDispatch is the last positional.
 function makeController(dispatch?: RunCloudDispatch): GemController {
-  return new GemController(undefined, undefined, undefined, undefined, undefined, dispatch);
+  return new GemController(undefined, dispatch);
 }
 
 describe("POST /api/run dispatch", () => {

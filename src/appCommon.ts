@@ -21,6 +21,7 @@ import { AgentSourcesComponent } from "./gem/sourceRegistry.js";
 import { installMcpHttp } from "@agentback/mcp-http";
 import { GemController } from "./gem.controller.js";
 import { registerDeploy } from "./deploy.controller.js";
+import { registerRegistry } from "./registry.controller.js";
 import { HomeController } from "./home.controller.js";
 import { ReviewController } from "./review.controller.js";
 import { DreamController } from "./dream.controller.js";
@@ -155,6 +156,7 @@ export async function buildCommonApp(port: number): Promise<{ app: RestApplicati
   app.configure("servers.MCPServer").to({ name: "agentgem", version: "0.1.0", transports: { stdio: false } });
   app.restController(GemController);
   registerDeploy(app);
+  registerRegistry(app);
   app.restController(HomeController);
   app.restController(RubricController);
   app.restController(ReviewController);

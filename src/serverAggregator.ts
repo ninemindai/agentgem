@@ -99,7 +99,7 @@ export async function mountAggregator(
   const webOrigins = (env.AGENTGEM_WEB_ORIGINS ?? "").split(",").map((s) => s.trim()).filter(Boolean);
   // Hoisted so the route installers below (stars/reviews/catalog/groups/usage/orgsApi/registry) can
   // reuse the SAME instance resolveSession(auth, headers) resolves sessions through (Plan 1b) —
-  // also bound into the DI container so GemController can inject it (see AUTH_BINDING).
+  // also bound into the DI container so RegistryController can inject it (see AUTH_BINDING).
   let auth: ReturnType<typeof makeAuth> | undefined;
   if (ghClientId && ghSecret && webOrigins.length > 0 && aggDb) {
     // better-auth is now authoritative (Plan 1b-Task 5: the hand-rolled OAuth it coexisted with
@@ -119,7 +119,7 @@ export async function mountAggregator(
       passkeyRpId: deriveRpId(env.AGENTGEM_PASSKEY_RP_ID, env.AGENTGEM_SESSION_COOKIE_DOMAIN),
     });
     app.bind(AUTH_BINDING).to(auth);
-    // Lets GemController resolve the verified publishedBy handle without importing the hosted
+    // Lets RegistryController resolve the verified publishedBy handle without importing the hosted
     // registry/publishedBy module directly (see hostedBindings.ts) — unbound in the pure client,
     // where registryPublish's publishedBy stays undefined exactly as resolvePublishedBy already
     // returns without a live db/auth. Cast: the neutral PublishedByResolver type's `db` param is
