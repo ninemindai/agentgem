@@ -45,41 +45,80 @@ running agent told about them.
 - **Files-only** (files staged, empty prompt) sends **just the preamble as its own
   agent turn**, so the agent acknowledges/uses the files immediately.
 - Send is enabled when `input.trim()` **OR** at least one file is staged.
-- Staged files are cleared on a successful upload+send.
+- Staged chips are cleared on a successful **upload** (the files are then durably in the
+  workspace); the agent-announce `send` that follows is best-effort and never re-uploads
+  (see §4 and Error handling).
 
 ## Architecture
 
 ### 1. Server — add files to an *existing* miniapp
 
-New exported function in `packages/play/src/studio.ts`:
+New exported function in `packages/play/src/studio.ts` (review Issue 3 — returns the
+actual stored records, not just counts):
 
 ```ts
 export async function addUploadsToMiniapp(
   name: string,
   files: UploadFile[],
-): Promise<{ ship: number; ref: number }>;
+): Promise<{ files: { requested: string; stored: string; role: UploadRole }[]; ship: number; ref: number }>;
 ```
 
 Steps:
 
-1. `const { meta } = readMiniapp(name);` — confirms the miniapp exists (throws
-   `miniapp not found ...` → 404) and gives the current durable meta. `readMiniapp`
-   validates + jails the name.
-2. `const counts = writeUploads(miniappDir(name), files);` — writes into the existing
-   workspace (merge-aware, see §2). `miniappDir` re-validates the name (defense in
-   depth) and throws on a bad name → 400.
-3. Update the durable counter cumulatively:
-   `meta.uploads = { ship: (meta.uploads?.ship ?? 0) + counts.ship, ref: (meta.uploads?.ref ?? 0) + counts.ref }`.
-   Only write `uploads` when the total is non-zero (matches create-time's conditional
-   spread).
+1. **Explicit existence check** (review Codex #1). `readMiniapp` does NOT throw
+   `miniapp not found` — `readMiniappRaw` (`miniapps.ts:225`) `readFileSync`s the html
+   and would throw a raw `ENOENT` for a missing miniapp, which the controller mapping
+   would turn into a 400. So mirror `deleteMiniapp` (`miniapps.ts:192`):
+   `const dir = miniappDir(name); if (!existsSync(dir)) throw new Error(\`miniapp not found: '${name}'\`);`
+   `miniappDir` validates + jails the name (bad name → 400).
+2. `const written = writeUploads(dir, files);` — writes into the existing workspace
+   (merge-aware, see §2) and **returns the stored records** `{ requested, stored, role }`
+   (§2). `stored` is the sanitized/suffixed on-disk name.
+3. **Recompute the durable counter from post-write disk state** (review Codex #9 —
+   `meta.uploads += counts` is untrustworthy because a prior Save may have wiped it,
+   and the merge state is derived from the filesystem anyway). Count the actual entries:
+   `meta.uploads = { ship: <# files in uploads/ excluding assets.json>, ref: <# files in ref/> }`
+   (`writeUploads` can return these cumulative totals directly since it already reads
+   both dirs for the merge). Write `uploads` only when non-zero.
 4. `writeFileSync(join(dir, "meta.json"), JSON.stringify(meta, null, 2));`
-5. `await commitWithLock(miniappsRoot(), "add uploads to <name>");` — one commit
-   covers the new `uploads/`/`ref/` files, `assets.json`, `.gitignore`, and `meta.json`.
-6. `return counts;` (this-batch counts — the client uses them only to confirm; the
-   preamble it sends is built from the staged files it already has).
+5. **Do NOT commit** (review Issue 2). The Studio agent reads files from its working
+   directory, not from git, so uploads are visible the instant they're written; and
+   `studioBrief` reads `meta.json` from **disk**, so the recomputed counter survives a
+   resume without a commit. Committing here would run `commitAll`'s `git add -A` at
+   the registry root (`git.ts:46`) and sweep the agent's uncommitted in-progress
+   `index.html` into an "add uploads" commit. Durability is already handled two ways:
+   the **per-turn checkpoint** (`chatRoutes.ts:232` → `checkpointMiniapp` after every
+   successful studio turn) commits the workspace after the Send turn, and an explicit
+   **Save** commits it too. The uncommitted per-dir `.gitignore` still takes effect
+   (git honors a working-tree `.gitignore`), so `ref/` stays out of both.
+6. `return { files: written, ship, ref };` — the client builds the agent preamble and
+   clears its chips from `written` (the real stored names), never from raw staged names.
 
 Error mapping in the controller mirrors `/play/delete`: a message starting with
 `miniapp not found` → 404, everything else → 400.
+
+### 1a. Server — `saveMiniapp` preserves the server-owned `uploads` counter (review Issue 1)
+
+`saveMiniapp` writes `meta.json` from the **client** request body (`miniapps.ts:168`),
+and Studio's `save()` (`Studio.tsx:335-341`) builds that body from
+`title/genre/createdFrom/engineVersion/needs/mcpNeeds` — it does **not** carry
+`uploads`. So the first Save after any upload wipes `meta.uploads`, and
+`studioBrief`'s "this project has author-supplied files…" line stops firing on
+resume. This is a **pre-existing bug in the shipped create-time feature**
+(#484/#485) that mid-session upload would trigger on every batch.
+
+Fix, server-side, in one place: before writing `meta.json`, if the incoming meta
+omits `uploads`, carry it forward from the existing on-disk meta:
+
+```ts
+// uploads is server-owned (only writeUploads/addUploadsToMiniapp set it); the client
+// never edits it, so preserving it from disk can't clobber a legitimate client change.
+const prev = existsSync(metaPath) ? JSON.parse(readFileSync(metaPath, "utf8")) as MiniappMeta : undefined;
+if (meta.uploads === undefined && prev?.uploads) meta.uploads = prev.uploads;
+```
+
+This fixes both the latent create-time wipe and the mid-session case with no client
+change. Reads `meta.json` once before the existing write — negligible cost.
 
 ### 2. Server — make `writeUploads` merge-aware (correctness fix)
 
@@ -96,18 +135,38 @@ Change: **preload existing workspace state before appending.** Before the write 
 - Seed the `manifest` array from an existing `<dir>/uploads/assets.json` if present.
   → merged manifest keeps old ship entries (and their already-computed data URIs;
   old file bytes are **not** re-read).
-- Seed `shipTotal` from the summed `bytes` of the preloaded manifest entries, and
-  `refTotal` from the summed sizes of existing `<dir>/ref/` files. → the ship ≤1MB
-  and ref ≤15MB **totals are cumulative across batches**, which is what actually
-  protects the 1.5MB save gate.
+- Seed `shipTotal` from the summed `bytes` of the preloaded manifest entries. This
+  makes the ship ≤1MB **total cumulative across batches** — and *that* (ship, inlined
+  as data: URIs into the single HTML) is what protects the 1.5MB save gate. Seed
+  `refTotal` from existing `<dir>/ref/` sizes so the ref ≤15MB total is cumulative
+  too, but note (review Codex #10) the ref cap is a **storage/context limit only** —
+  reference files are never inlined, so they don't touch the save gate.
+
+Two more changes to `writeUploads` from the review:
+
+- **Atomicity fix (review Codex #5).** Today `sanitizeUploadName` runs *inside* the
+  write loop (`uploads.ts:88/97`), so a batch of `[good.png, "../bad"]` writes
+  `good.png` and *then* throws — leaving a partial write. The create path masked this
+  with an `rmSync` orphan-release; the mid-session path writes into an existing dir and
+  must **not** `rmSync`. Fix: sanitize + plan every stored name (run `sanitizeUploadName`
+  and the `uniq` suffixing) in the **pre-validation pass**, alongside the size/base64
+  checks, so any bad name throws before the first byte is written. Then the write loop
+  only does I/O. Now "a rejected batch writes nothing" is actually true for both paths.
+- **Return stored records (review Issue 3).** `writeUploads` returns
+  `{ files: { requested, stored, role }[]; ship: number; ref: number }` where `ship`/`ref`
+  are the **cumulative on-disk totals** (it already enumerates both dirs for the merge),
+  and each `stored` is the final sanitized/suffixed name. Callers (`addUploadsToMiniapp`,
+  and the create paths) use `stored` for accurate briefs and the totals for `meta.uploads`.
 
 `MAX_FILES` (20) stays a **per-batch** guard (the byte totals are the real cumulative
 constraint). Write the merged manifest at the end as today.
 
 **Backward compatibility:** a freshly-claimed create dir has an empty `uploads/`,
-no `ref/`, and no `assets.json`, so every preload is empty and behavior is
-byte-identical to the shipped create path. This is one code path — create gets the
-fix for free.
+no `ref/`, and no `assets.json`, so every preload is empty and the returned records +
+totals match this batch exactly — behavior is byte-identical to the shipped create
+path (the create-path callers ignore the new `files` field). This is one code path —
+create gets the atomicity fix for free. Existing `uploads.test.ts` assertions on the
+manifest/counts still hold; the return-shape widening is additive.
 
 ### 3. Client — extract the shared uploads UI
 
@@ -126,39 +185,57 @@ both surfaces share one implementation:
 - `packages/console/src/panels/Play/UploadsField.tsx` — the presentational dropzone +
   chip list (the current `uploadsBlock` JSX), driven by the hook. Reuses the existing
   `.play-uploads`, `.play-uploads__*`, and `.play-drop` CSS — no new class names.
+  Takes a **`compact` prop** (review Codex #11): compact renders just an **attach
+  button + inline chip row** (no big dropzone) for the dense Studio composer; the
+  default full mode keeps the Composer's dropzone. Both share the chip/role list so
+  the extraction stays DRY without forcing the heavy dropzone onto the busy Studio bar.
 
-`Composer.tsx` is refactored to consume `useUploads()` + `<UploadsField>`; its
-observable behavior is unchanged (regression-tested).
+`Composer.tsx` is refactored to consume `useUploads()` + `<UploadsField>` (full mode);
+its observable behavior is unchanged (regression-tested).
 
 ### 4. Client — wire it into the Studio composer bar
 
 In `Studio.tsx`, inside `play-composer-in` (the textarea + Send row at ~line 722):
 
 - Instantiate `useUploads()`.
-- Render `<UploadsField>` (chip strip) above the textarea, and an **attach button**
-  (a file input trigger) in the composer foot next to Send. Reuse `.play-btn`; if a
-  dedicated `.play-attach` class is added, add a matching rule in `theme.css` in the
-  same change (per the repo UI rule — every className must be CSS-enforced).
-- Rework `submit()`:
+- Render `<UploadsField compact>` (attach button + inline chip strip) in the composer
+  foot next to Send. Reuse `.play-btn`; if a dedicated `.play-attach` class is added,
+  add a matching rule in `theme.css` in the same change (per the repo UI rule — every
+  className must be CSS-enforced).
+- Rework `submit()` (review Issue 3 + Codex #6 for the clear-timing):
   1. Compute `staged = uploads.uploads`. Guard: if `!input.trim() && !staged.length`
      or `busy` or `!agentId`, return.
   2. Client-side limit check via `uploads.limitError()`; surface it and abort if set.
-  3. If `staged.length`: `await playUploadsRoute.call(client, { body: { name, files: uploads.payload().files } })`.
-  4. `const text = [uploads.preamble(), input.trim()].filter(Boolean).join("\n\n");`
-     then `send(text)` (files-only → `text` is just the preamble).
-  5. `uploads.reset(); setInput("");`
+  3. If `staged.length`:
+     `const res = await playUploadsRoute.call(client, { body: { name, files: uploads.payload().files } });`
+     On success **clear the chips now** (`uploads.reset()`) — the files are durably in
+     the workspace; the send that follows is best-effort and must not be able to cause
+     a re-upload. On upload **failure**, keep the chips and surface the error, then
+     return (no send). This is the atomicity boundary (Codex #6/#7): "uploaded" and
+     "announced" are separate; a failed announce never re-uploads.
+  4. Build the preamble from the **server response** `res.files` (real stored names),
+     not staged names: `const pre = uploadsPreambleFromStored(res.files);`
+     `const text = [pre, input.trim()].filter(Boolean).join("\n\n");` then `send(text)`
+     (files-only → `text` is just the preamble). `setInput("")`.
+  5. If there were no staged files, `send(input.trim())` as today.
 - Send button `disabled = busy || !agentId || (!input.trim() && !staged.length)`.
-- On upload failure, surface the message in the existing chat/error path and keep the
-  staged files (do not reset), so the user can retry.
+- Because chips are cleared on upload success (step 3), a failed agent turn leaves the
+  files uploaded + durably briefed on resume; retry is just re-sending a prompt, which
+  never duplicates files.
 
 ### 5. Route + schema wiring
 
+- `packages/play/src/index.ts`: **export `addUploadsToMiniapp`** (review Codex #8 —
+  the controller and the root tests import it from the built `@agentgem/play`, so it
+  must be re-exported next to the existing `writeUploads`/`seedStudio` exports, else the
+  build/tests fail).
 - `src/schemas.ts`: `PlayUploadsRequestSchema = { name: string, files: UploadFileSchema[] }`,
-  `PlayUploadsResponseSchema = { ship: number, ref: number }`. Reuse the existing
-  `UploadFileSchema` (already drift-guarded against `@agentgem/play`'s `UploadFile`).
+  `PlayUploadsResponseSchema = { files: { requested: string, stored: string, role: enum("ship","reference") }[], ship: number, ref: number }`.
+  Reuse the existing `UploadFileSchema` (already drift-guarded against `@agentgem/play`'s
+  `UploadFile`).
 - `src/play.controller.ts`: `@post("/play/uploads")` → `addUploadsToMiniapp`, with the
   404/400 error mapping above.
-- `packages/console/src/api/routes.ts`: `export const playUploadsRoute = defineRoute("POST", "/api/play/uploads", { body: ..., response: ... })`, reusing `playUploadFileSchema`.
+- `packages/console/src/api/routes.ts`: `export const playUploadsRoute = defineRoute("POST", "/api/play/uploads", { body: ..., response: ... })`, reusing `playUploadFileSchema`; the response carries the stored records.
 
 ## Data flow
 
@@ -170,21 +247,32 @@ POST /api/play/uploads { name, files[] }
   │  addUploadsToMiniapp(name, files)
   │    readMiniapp(name)            → exists? (404) + meta
   │    writeUploads(dir, files)     → merge into uploads//ref/, merge assets.json
-  │    meta.uploads += counts       → durable
-  │    commitWithLock(root)
+  │    meta.uploads += counts       → written to DISK (durable via disk read; NO commit)
   ▼  → { ship, ref }
 send(uploadsPreamble + "\n\n" + prompt)   → running ACP agent turn
+       (agent reads uploads/ + ref/ from its cwd immediately)
+
+later … user hits Save
+  │  saveMiniapp({ name, html, meta })   meta from client omits `uploads`
+  │    meta.uploads ??= diskMeta.uploads  → preserve server-owned counter (Issue 1)
+  │    commitWithLock(root)               → git add -A commits uploaded files + meta
+  ▼                                          (.gitignore keeps ref/ out)
 ```
 
 ## Error handling
 
-- Missing miniapp → 404 (`readMiniapp` throw). Bad/traversing name → 400 (`miniappDir`).
-- Oversize / bad base64 that slips past the client mirror → `writeUploads` throws →
-  400. Because the miniapp already exists (not a freshly-claimed dir), we do **not**
-  `rmSync` the dir on throw — that's only correct for the create path's orphan
-  cleanup. Partial-write risk is bounded: `writeUploads` validates all sizes/base64
-  **before** writing any file, so a rejected batch writes nothing.
-- Client keeps staged files on failure so Send can be retried after fixing the issue.
+- Missing miniapp → 404 via the **explicit `existsSync` check** in `addUploadsToMiniapp`
+  (review Codex #1 — `readMiniapp` alone throws a raw `ENOENT`, which would mis-map to
+  400). Bad/traversing name → 400 (`miniappDir`).
+- Oversize / bad base64 / unsafe filename that slips past the client mirror →
+  `writeUploads` throws → 400. Because the miniapp already exists (not a freshly-claimed
+  dir), we do **not** `rmSync` the dir on throw. Partial-write risk is closed by the
+  §2 atomicity fix (review Codex #5): **all** validation — sizes, base64, *and*
+  filename sanitization/collision-planning — happens before the first byte is written,
+  so a rejected batch writes nothing even into an existing dir.
+- Upload OK but the agent turn (`send`) fails → files are already durable in the
+  workspace; chips were cleared on upload success, so retry re-sends a prompt and never
+  re-uploads (review Codex #6/#7). Upload failure → chips kept, error surfaced, no send.
 
 ## Testing
 
@@ -196,18 +284,36 @@ separately via `pnpm -C packages/console test` (jsdom, not CI-gated).
 Server (`src/__tests__/`, import built `@agentgem/play`; `AGENTGEM_HOME=mktemp` per
 test):
 
-- `uploads.test.ts` merge cases: a second `writeUploads` on the same dir accumulates
-  the manifest (old + new ship entries), suffixes a re-used ship/ref name against the
-  on-disk file, and enforces the **cumulative** ship-total cap (batch that fits alone
-  but blows the running total is rejected).
-- New `addUploadsToMiniapp` test: adds to an existing miniapp, `meta.uploads` reflects
-  old + new counts, `assets.json` merged, `ref/` gitignored; unknown name → throws
-  `miniapp not found`.
+- **CRITICAL regression (Issue 1)** — `saveMiniapp` preserves `uploads`: create a
+  miniapp carrying `meta.uploads`, call `saveMiniapp` with a client meta that omits
+  `uploads`, assert the on-disk `meta.json` still has the counter. Locks the
+  pre-existing create-time wipe shut. Mutation-verify by removing the preserve line →
+  test must fail.
+- **Regression** — `uploads.test.ts` merge cases: a second `writeUploads` on the same
+  dir accumulates the manifest (old + new ship entries), suffixes a re-used ship/ref
+  name against the on-disk file, and enforces the **cumulative** ship-total cap (batch
+  that fits alone but blows the running total is rejected). Plus a backward-compat
+  case: a first call on a fresh dir is byte-identical to today (empty preload).
+- **Atomicity (Codex #5)** — `writeUploads` with `[good.png, "../bad"]` throws AND
+  leaves the dir unchanged (no `good.png` written). Mutation-verify by moving the
+  sanitize back into the write loop → test must fail (partial write appears).
+- **Stored records (Issue 3)** — `writeUploads`/`addUploadsToMiniapp` return
+  `{ requested:"My Logo.png", stored:"my-logo.png" }` for a sanitized name and
+  `stored:"logo-2.png"` for a name colliding with an on-disk file; returned `ship`/`ref`
+  are cumulative on-disk totals. `meta.uploads` matches those totals (recomputed, not
+  `+=`) even when the prior `meta.uploads` was absent.
+- New `addUploadsToMiniapp` test: adds to an existing miniapp, `assets.json` merged,
+  `ref/` gitignored, **no new commit** (`git rev-list --count HEAD` unchanged);
+  **unknown name → throws `miniapp not found`** (via the explicit `existsSync`, Codex #1);
+  oversize batch → throws (→400).
 
 Client (`pnpm -C packages/console test`):
 
-- Studio: staging files enables Send with empty text; Send posts `/api/play/uploads`
-  then sends a message containing the preamble; success clears chips.
+- Studio: staging files enables Send with empty text; Send posts `/api/play/uploads`,
+  then sends a message whose preamble uses the **server-returned stored names**
+  (mock the route to rename `My Logo.png`→`my-logo.png` and assert the sent text says
+  `my-logo.png`); chips clear on **upload** success; on upload failure chips are kept
+  and no send fires.
 - Composer refactor regression: existing `Composer.uploads.test.tsx` still passes
   against the extracted hook/component (may be re-pointed at `UploadsField`).
 
@@ -222,14 +328,74 @@ Inner loop for play changes: `pnpm -w exec tsc -b && pnpm -w exec vitest run dis
 - `src/__tests__/` additions (merge + addUploadsToMiniapp)
 
 **Modified**
-- `packages/play/src/uploads.ts` — `writeUploads` merge-awareness
-- `packages/play/src/studio.ts` — `addUploadsToMiniapp`
+- `packages/play/src/uploads.ts` — `writeUploads` merge-awareness + pre-write atomicity + return stored records
+- `packages/play/src/studio.ts` — `addUploadsToMiniapp` (existsSync check, recompute counts, no commit)
+- `packages/play/src/index.ts` — export `addUploadsToMiniapp` (Codex #8)
+- `packages/play/src/miniapps.ts` — `saveMiniapp` preserves `uploads` from disk (Issue 1)
 - `src/schemas.ts` — `PlayUploads{Request,Response}Schema`
 - `src/play.controller.ts` — `POST /play/uploads`
 - `packages/console/src/api/routes.ts` — `playUploadsRoute`
 - `packages/console/src/panels/Play/Composer.tsx` — consume shared hook/component
 - `packages/console/src/panels/Play/Studio.tsx` — attach control + submit wiring
 - `packages/console/src/shell/theme.css` — only if a new `.play-attach` class is added
+
+## NOT in scope (considered, deferred)
+
+- **Scoped-path commit helper** (Issue 2 option C) — a `commitPaths(dir, [...])` that
+  stages only the upload paths. We chose no-commit mid-session instead; revisit only if
+  uncommitted mid-session state proves fragile.
+- **Cumulative file-count cap** — `MAX_FILES` (20) stays per-batch; the cumulative
+  ship/ref **byte** totals are the real bound. A cumulative count cap is unneeded.
+- **Raising the 1.5MB save gate** — unchanged; still deferred from the create-time work.
+- **Delete/rename staged uploads server-side** — the chip strip removes *staged* files
+  pre-send; removing already-written workspace files is a separate concern (the agent
+  can, or a future manage-files surface).
+- **Re-inline on every build** — already handled by the durable `uploadsBrief`; no new
+  mechanism here.
+
+## What already exists (reused, not rebuilt)
+
+- `writeUploads(dir, files)` — the entire ship/ref write + `assets.json` + `.gitignore`
+  machinery. Extended (merge-aware), not duplicated.
+- `miniappDir(name)` / `readMiniapp(name)` — name validation + jail + existence. Reused
+  for the new endpoint's 404/400 mapping.
+- `studioBrief` / `uploadsBrief` — durable per-session announcement. Reused unchanged;
+  Issue 1 just stops Save from erasing its input.
+- Composer upload UI (encode, role toggle, chips, limit checks) — extracted into the
+  shared `useUploads`/`UploadsField`, consumed by both surfaces.
+- `.play-uploads*` / `.play-drop` CSS — reused; no new class unless an attach button
+  needs one (then paired in `theme.css`).
+
+## Failure modes (per new codepath)
+
+| Codepath | Realistic failure | Test? | Error handling? | User sees |
+|---|---|---|---|---|
+| `POST /play/uploads` unknown/deleted name | 404 | yes | yes (404) | error surfaced in composer; chips retained |
+| `writeUploads` oversize / bad base64 slips client mirror | throw → 400 | yes | yes; validates all sizes before any write (atomic) | error surfaced; nothing written; chips retained |
+| upload OK but `send()` (agent turn) fails | agent/network error | client test | files already on disk + meta bumped; retry send | agent turn error; files persist, safe to retry |
+| Save after upload with client meta omitting `uploads` | counter wiped | **CRITICAL regression test** | Issue 1 fix (disk-preserve) | brief keeps announcing files on resume |
+| concurrent Save + upload meta read-modify-write (two tabs) | last-writer-wins on `meta.uploads` | not covered | none | low-prob; single-UI busy-guard mitigates — see appendix |
+
+No new failure mode is both silent **and** untested **and** unhandled → no critical
+gap. The two-tab meta race is the one residual (low probability, non-silent-ish): noted
+in the review appendix, not blocking.
+
+## Worktree parallelization
+
+| Step | Modules touched | Depends on |
+|---|---|---|
+| S1 merge-aware `writeUploads` + `addUploadsToMiniapp` + save-preserve | `packages/play/src` | — |
+| S2 route + schemas | `src/`, `packages/console/src/api` | S1 (types) |
+| S3 extract `useUploads`/`UploadsField` + Composer refactor | `packages/console/src/panels/Play` | — |
+| S4 Studio wiring | `packages/console/src/panels/Play` | S2, S3 |
+
+- **Lane A:** S1 → S2 (sequential; S2 imports S1's types).
+- **Lane B:** S3 (independent — pure client refactor, no server dep).
+- **Merge, then S4** (needs both the route from A and the shared component from B).
+
+Lane A (`packages/play` + `src`) and Lane B (`packages/console/src/panels/Play`) touch
+disjoint modules → safe to run in parallel worktrees. **Conflict flag:** S3 and S4 both
+touch `panels/Play` — keep them in one lane (S4 after S3), do not parallelize.
 
 ## Traps to carry forward (from create-time work, still apply)
 
@@ -240,3 +406,29 @@ Inner loop for play changes: `pnpm -w exec tsc -b && pnpm -w exec vitest run dis
   per-dir `.gitignore` — the merge change must not drop that line on a second batch.
 - Agents can't retype MB data URIs — inlining is a server step, not agent copy-paste;
   keep the cumulative ship total ≤1MB.
+
+## GSTACK REVIEW REPORT
+
+Engineering plan review of this spec (branch `test-open-core`, no implementation yet).
+Four sections (Architecture, Code Quality, Tests, Performance) + Codex outside voice.
+
+| Run | Status | Findings |
+|---|---|---|
+| Architecture | issues_found | Issue 1 (P1 durability), Issue 2 (P2 commit blast-radius), Issue 3 (P1 stored-name contract) |
+| Code Quality | clean* | *one residual: two-tab concurrent-write lost-update (low prob, appendix) |
+| Tests | issues_found | +2 mandatory regressions (save-preserve, merge) + atomicity/stored-record/no-commit/404 cases |
+| Performance | clean | no DB/N+1; base64 body already tolerated by create routes; O(files) merge preload |
+| Codex (outside voice) | issues_found | 11 items — all verified against code; 3 plan-changing, rest folded as corrections |
+
+**Decisions locked (via AskUserQuestion):**
+- **Issue 1 → A** — `saveMiniapp` preserves server-owned `uploads` from disk (also fixes the pre-existing create-time wipe #484/#485).
+- **Issue 2 → B** — `addUploadsToMiniapp` does NOT commit; per-turn checkpoint + Save persist. Avoids `git add -A` sweeping in-progress drafts.
+- **Issue 3 → A** — endpoint returns actual stored file records `{requested, stored, role}` + cumulative counts; client builds preamble + clears chips from that (closes Codex #3/#7/#9).
+
+**Codex absorbed:** #2 = consensus with Issue 1. #4 refines Issue 2 (per-turn checkpoint is the real commit) + a residual concurrency note (appendix). Folded as non-negotiable corrections: #1 explicit `existsSync`→404, #5 pre-write atomicity (sanitize before any write), #6/#7 clear-chips-on-upload (uploaded vs announced), #8 `index.ts` export, #9 recompute counts from disk, #10 ref-cap wording (storage limit, not gate protection), #11 `UploadsField compact` mode.
+
+**CROSS-MODEL TENSION:** none material. Both models independently flagged the Save-wipes-`uploads` bug (Issue 1 / Codex #2) — strong consensus. Codex #4 refined Issue 2's rationale rather than contradicting it.
+
+**VERDICT:** Plan is sound and materially hardened. Spec updated in place; ready for the implementation plan (`writing-plans`). Suggested lanes: Lane A `packages/play`+`src` (S1→S2), Lane B console refactor (S3) in parallel, then S4 Studio wiring.
+
+NO UNRESOLVED DECISIONS
