@@ -34,3 +34,4 @@ export {
 } from "./mcpConnectors.js";
 export { INSPECTOR_HTML, INSPECTOR_META } from "./inspector.js";
 export { EMBER_HTML, EMBER_META } from "./ember.js";
+export { REPO_PULSE_HTML, REPO_PULSE_META } from "./repoPulse.js";
