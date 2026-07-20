@@ -286,8 +286,9 @@ and advertises that via the `offline` flag in its MCP Apps metadata.
 
 ## 9. Implementation map
 
-The engine is `packages/play` (`@agentgem/play`); the server routes live in root
-`src/`; the console owns the surfaces.
+The engine is `packages/play` (`@agentgem/play`); the server routes live in
+`packages/app` (`@agentgem/app`); the console owns the surfaces. (CI-gated tests
+still live in the root `src/__tests__/` and `src/play/__tests__/` trees.)
 
 | area | where |
 | --- | --- |
@@ -301,11 +302,11 @@ The engine is `packages/play` (`@agentgem/play`); the server routes live in root
 | Studio create seams, cwd jail, seed baking | `packages/play/src/studio.ts`, `sourceContext.ts`, `redact.ts`, `scaffolds.ts` |
 | uploads (Ship → `uploads/`, Reference → `ref/`) | `packages/play/src/uploads.ts` |
 | share sidecar · genres enum · brief · migration | `packages/play/src/miniappShare.ts`, `genres.ts`, `builderBrief.ts`, `migrate.ts` |
-| built-ins: Ember · Protocol Inspector | `packages/play/src/ember.ts`, `inspector.ts` |
+| built-ins: Ember · Protocol Inspector · Repo Pulse | `packages/play/src/ember.ts`, `inspector.ts`, `repoPulse.ts` |
 | `GameArtifact`, `McpNeed`, capability unions | `packages/model/src/types.ts` |
 | capability ↔ tool/method bijection, `AUTO_CAPS` | `packages/model/src/capabilities.ts` |
-| REST routes (`/api/play/*`) + wire schemas | `src/play.controller.ts`, `src/schemas.ts` |
-| play-beacon origin-guard exemption | `src/originGuard.ts` |
+| REST routes (`/api/play/*`) + wire schemas | `packages/app/src/play.controller.ts`, `packages/app/src/schemas.ts` |
+| play-beacon origin-guard exemption | `packages/app/src/originGuard.ts` |
 | trusted host router (dispatch, consent, streams, watches) | `packages/console/src/panels/Play/mcpUiHost.ts` |
 | host tool executors | `packages/console/src/panels/Play/mcpHostTools.ts` |
 | sealed-iframe player + consent modal + capture | `packages/console/src/panels/Play/Runner.tsx` |
