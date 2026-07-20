@@ -156,4 +156,42 @@ describe("writeUploads merge + atomicity + records", () => {
     expect(() => writeUploads(dir, [{ name: "c.bin", bytesBase64: b64("x"), type: "application/octet-stream", role: "ship" }]))
       .toThrow(/ship total/i); // 1_000_000 + 1 > 1_000_000
   });
+
+  it("cumulative reference-total cap rejects a later batch that alone would fit", () => {
+    // REF_MAX_FILE (5_000_000) * 3 === REF_MAX_TOTAL (15_000_000): three individually-legal ref files,
+    // written one batch at a time so the cap is re-derived from statSync(ref/) each call, land right on
+    // the cumulative boundary; a trivial 4th batch then pushes the preloaded refTotal over.
+    const atCap = Buffer.alloc(5_000_000, 1).toString("base64");
+    writeUploads(dir, [{ name: "ref1.bin", bytesBase64: atCap, type: "application/octet-stream", role: "reference" }]);
+    writeUploads(dir, [{ name: "ref2.bin", bytesBase64: atCap, type: "application/octet-stream", role: "reference" }]);
+    writeUploads(dir, [{ name: "ref3.bin", bytesBase64: atCap, type: "application/octet-stream", role: "reference" }]);
+    // cumulative = 15_000_000, at the boundary, allowed
+    expect(() => writeUploads(dir, [{ name: "ref4.bin", bytesBase64: b64("x"), type: "application/octet-stream", role: "reference" }]))
+      .toThrow(/reference total/i); // 15_000_000 + 1 > 15_000_000
+  });
+
+  it("a rejected batch leaves an already-populated dir byte-identical (mid-session atomicity)", () => {
+    writeUploads(dir, [{ name: "good.png", bytesBase64: png1x1, type: "image/png", role: "ship" }]);
+    const listingBefore = readdirSync(join(dir, "uploads")).sort();
+    const manifestBefore = readFileSync(join(dir, "uploads", "assets.json"), "utf8");
+
+    expect(() => writeUploads(dir, [
+      { name: "good.png", bytesBase64: png1x1, type: "image/png", role: "ship" },
+      { name: "../evil", bytesBase64: b64("x"), type: "text/plain", role: "ship" },
+    ])).toThrow(/unsafe upload filename/i);
+
+    // the already-populated dir is untouched: no suffixed "good-2.png" from the rejected batch's first file
+    expect(readdirSync(join(dir, "uploads")).sort()).toEqual(listingBefore);
+    expect(readFileSync(join(dir, "uploads", "assets.json"), "utf8")).toBe(manifestBefore);
+  });
+
+  it("preserves a single ref/ .gitignore line across a second reference batch", () => {
+    writeUploads(dir, [{ name: "spec1.md", bytesBase64: b64("# one"), type: "text/markdown", role: "reference" }]);
+    writeUploads(dir, [{ name: "spec2.md", bytesBase64: b64("# two"), type: "text/markdown", role: "reference" }]);
+
+    const gi = readFileSync(join(dir, ".gitignore"), "utf8");
+    expect(gi.split("\n").filter((l) => l === "ref/")).toHaveLength(1); // not dropped, not duplicated
+    expect(existsSync(join(dir, "ref", "spec1.md"))).toBe(true);
+    expect(existsSync(join(dir, "ref", "spec2.md"))).toBe(true);
+  });
 });
