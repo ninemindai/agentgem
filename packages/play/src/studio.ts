@@ -4,7 +4,7 @@
 // studio brief from its meta, and guard which cwd a chat session may adopt. studioCwd is the security
 // gate: only a path under the miniapps registry (or the neutral fallback) is ever honored.
 import { join, sep, resolve, basename } from "node:path";
-import { readFileSync, writeFileSync, rmSync } from "node:fs";
+import { readFileSync, writeFileSync, rmSync, existsSync } from "node:fs";
 import { type GameSource, type GameGenre, AUTO_CAPS } from "@agentgem/model";
 import { deriveNeeds } from "./capabilityScan.js";
 import { extractSource, type SourceReaders } from "./sourceContext.js";
@@ -14,7 +14,7 @@ import { miniappDir, miniappsRoot, claimMiniappDir, miniappHtmlPath, MINIAPP_HTM
 import { ensureRepo, commitWithLock } from "./git.js";
 import { redactForBake } from "./redact.js";
 import { MINIAPP_BUILDER_BRIEF } from "./builderBrief.js";
-import { writeUploads, type UploadFile } from "./uploads.js";
+import { writeUploads, type UploadFile, type UploadResult } from "./uploads.js";
 
 // Only allow a chat session to adopt a cwd that is inside the miniapps registry; otherwise the neutral
 // fallback. The route resolves `miniapp` names via miniappDir (which rejects bad names) BEFORE this, so
@@ -143,6 +143,23 @@ export async function blankStudio(title: string, prompt?: string, name?: string,
     ? `The user wants to build: ${prompt.trim()}`
     : `Ask the user what kind of mini-game they want, then build it. If they don't say, make a small, delightful arcade game.`;
   return { name: id, brief: `You are building "${title}" from scratch — a self-contained HTML mini-game with no source data. ${want}${uploadsBrief(uploads)}\n\n${studioInstructions(MINIAPP_HTML)}` };
+}
+
+// Add author files to an ALREADY-created miniapp, mid-session. Writes into the workspace the studio agent
+// is cwd-jailed to and recomputes the durable meta.uploads from disk. Does NOT commit: the agent reads
+// from the working tree, studioBrief reads meta.json from disk, and the next per-turn checkpoint / Save
+// commits the files — committing here would `git add -A` the agent's in-progress edits into an upload commit.
+export async function addUploadsToMiniapp(name: string, files: UploadFile[]): Promise<UploadResult> {
+  const dir = miniappDir(name);                    // validates + jails the name (bad name → throws)
+  if (!existsSync(dir)) throw new Error(`miniapp not found: '${name}'`); // readMiniapp would throw a bare ENOENT
+  const result = writeUploads(dir, files);         // merge-aware, atomic; result.ship/ref are cumulative
+  if (result.files.length) {
+    const metaPath = join(dir, "meta.json");
+    const meta = JSON.parse(readFileSync(metaPath, "utf8")) as MiniappMeta;
+    meta.uploads = (result.ship || result.ref) ? { ship: result.ship, ref: result.ref } : undefined;
+    writeFileSync(metaPath, JSON.stringify(meta, null, 2));
+  }
+  return result;
 }
 
 export function studioBrief(name: string): string {
