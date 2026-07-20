@@ -21,6 +21,6 @@ export interface RegistryItemDiscovery {
 export interface RegistryItem { latest: string; versions: Record<string, RegistryItemVersion>; discovery?: RegistryItemDiscovery }
 export interface RegistryIndex { formatVersion: number; items: Record<string, RegistryItem> }
 
-// ── GitHub client shapes (produced/consumed by registryGithub.ts) ──────────
+// ── GitHub client shapes (for GitHub-backed sources) ───────────────────────
 export interface GithubCfg { repo: string; ref: string; token?: string }
 export type Http = (url: string, init?: { method?: string; headers?: Record<string, string>; body?: string }) => Promise<{ status: number; text: () => Promise<string> }>;
