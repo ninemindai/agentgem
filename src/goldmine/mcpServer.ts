@@ -9,9 +9,9 @@ import { scanSessionsCached, summarizeSession, askSession } from "@agentgem/insi
 import { introspectConfig, introspectProject } from "@agentgem/capture";
 import { RecallIndex } from "@agentgem/recall";
 import { searchSessions, getArtifactDetail } from "./tools.js";
-import { collectBehaviorFindings } from "./behaviorFindings.js";
-import { defaultRecallDbPath } from "./recall.js";
-import { resolveAllowedProjectRoot } from "./projectRoots.js";
+import { collectBehaviorFindings } from "@agentgem/app/goldmine/behaviorFindings";
+import { defaultRecallDbPath } from "@agentgem/app/goldmine/recall";
+import { resolveAllowedProjectRoot } from "@agentgem/app/goldmine/projectRoots";
 
 const SearchInput = z.object({
   query: z.string().default(""),

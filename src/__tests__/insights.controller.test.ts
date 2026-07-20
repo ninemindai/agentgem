@@ -4,12 +4,12 @@ import { describe, it, expect, afterEach } from "vitest";
 import {
   InsightsController,
   setInsightsComputeForTests,
-} from "../insights.controller.js";
+} from "@agentgem/app/insights.controller";
 import { RestApplication } from "@agentback/rest";
-import { isForegroundBusy } from "../warm/orchestrator.js";
-import { InsightsEvent } from "../insights.stream.schema.js";
-import { ReportRegistry, REPORT_REGISTRY } from "../report/registry.js";
-import type { InsightsResult } from "../insightsCore.js";
+import { isForegroundBusy } from "@agentgem/app/warm/orchestrator";
+import { InsightsEvent } from "@agentgem/app/insights.stream.schema";
+import { ReportRegistry, REPORT_REGISTRY } from "@agentgem/app/report/registry";
+import type { InsightsResult } from "@agentgem/app/insightsCore";
 
 afterEach(() => setInsightsComputeForTests(null));
 

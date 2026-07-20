@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from "vitest";
-import { mapIndexToGems, createGemCache } from "../gem/publicCatalog.js";
+import { mapIndexToGems, createGemCache } from "@agentgem/app/gem/publicCatalog";
 
 const index = {
   formatVersion: 1,

@@ -7,8 +7,8 @@ import type { ProcedureStep, SessionSequence, TurnUsage } from "@agentgem/insigh
 import { mkdtempSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
-import { buildHygieneReport } from "../../sessionHygieneCore.js";
-import { HygieneReportSchema } from "../../gem.controller.js";
+import { buildHygieneReport } from "@agentgem/app/sessionHygieneCore";
+import { HygieneReportSchema } from "@agentgem/app/gem.controller";
 
 // Build a session where turn i has one Read step of `clusters[i]` (a path), and a
 // contextSeries with ctxTokens = ctx[i]. msgIndex = i for both step and turn, so

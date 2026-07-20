@@ -21,7 +21,7 @@ vi.mock("@agentgem/distribute", async (importOriginal) => {
   };
 });
 
-import { installAgencySkill } from "../sourcesCore.js";
+import { installAgencySkill } from "@agentgem/app/sourcesCore";
 
 let home: string;
 beforeEach(() => { home = mkdtempSync(join(tmpdir(), "agsrc-")); skillName.current = "ai-engineer"; });

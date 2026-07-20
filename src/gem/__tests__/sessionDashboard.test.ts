@@ -6,7 +6,7 @@ import { mkdtempSync, rmSync, writeFileSync, utimesSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { dashboardToken, readDashboardCacheEntry, readDashboardCacheLatest, writeDashboardCache } from "@agentgem/insight";
-import { capDashboardEvents, blastFacts, downsampleCurve, recommendedActions } from "../../sessionDashboardCore.js";
+import { capDashboardEvents, blastFacts, downsampleCurve, recommendedActions } from "@agentgem/app/sessionDashboardCore";
 import type { SessionEvent, BlastReport } from "@agentgem/insight";
 
 let home: string;

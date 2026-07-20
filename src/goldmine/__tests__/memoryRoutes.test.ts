@@ -4,7 +4,7 @@ import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { registerMemoryRoutes } from "../memoryRoutes.js";
+import { registerMemoryRoutes } from "@agentgem/app/goldmine/memoryRoutes";
 
 // Minimal app that records handlers by "METHOD path" so tests can invoke them.
 function makeApp() {

@@ -1,7 +1,7 @@
 // Copyright (c) 2026 NineMind, Inc.
 // SPDX-License-Identifier: MIT
 import { describe, it, expect } from "vitest";
-import { mapDbToGems, mergeGems, mapIndexToGems, safeDbGems } from "../gem/publicCatalog.js";
+import { mapDbToGems, mergeGems, mapIndexToGems, safeDbGems } from "@agentgem/app/gem/publicCatalog";
 import type { RegistryIndex } from "@agentgem/distribute";
 
 describe("publicCatalog merge", () => {

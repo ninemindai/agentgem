@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeAll, afterAll } from "vitest";
-import { GemController } from "../gem.controller.js";
+import { GemController } from "@agentgem/app/gem.controller";
 import { useHermeticHome } from "./support/hermeticHome.js";
 
 let restoreHome: () => void;

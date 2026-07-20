@@ -2,7 +2,7 @@ import { describe, it, expect, beforeAll, afterAll } from "vitest";
 import { mkdtempSync, mkdirSync, writeFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { resolveTranscriptFile, sourceForFile } from "../watchSessions.js";
+import { resolveTranscriptFile, sourceForFile } from "@agentgem/app/watchSessions";
 
 // Cline roots are per-task dirs discovered under baseDir; the watched file is
 // <taskDir>/ui_messages.json — json storage, so the .json suffix must be accepted.

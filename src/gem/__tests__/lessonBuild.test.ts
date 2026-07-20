@@ -1,6 +1,6 @@
 // src/gem/__tests__/lessonBuild.test.ts
 import { describe, it, expect } from "vitest";
-import { DistilledLessonSchema, GemRequestSchema } from "../../schemas.js";
+import { DistilledLessonSchema, GemRequestSchema } from "@agentgem/app/schemas";
 
 describe("DistilledLessonSchema", () => {
   it("accepts a valid lesson and rejects a bad importance", () => {

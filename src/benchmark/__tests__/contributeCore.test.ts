@@ -1,7 +1,7 @@
 // Copyright (c) 2026 NineMind, Inc.
 // SPDX-License-Identifier: MIT
 import { describe, it, expect, vi } from "vitest";
-import { contribute } from "../contributeCore.js";
+import { contribute } from "@agentgem/app/benchmark/contributeCore";
 
 // Fully-injected deps: no fs, no net, no scan. Exercises the enumerate → match →
 // attest → post loop and the ingredients-only contract (build must never see facets).

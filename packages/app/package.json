@@ -1,0 +1,43 @@
+{
+  "name": "@agentgem/app",
+  "version": "0.7.0",
+  "description": "The composable app layer — REST controllers, the app-building spine (appCommon), MCP tools, and the shared server library the CLI/desktop entries and downstream deployments compose from.",
+  "license": "MIT",
+  "private": true,
+  "type": "module",
+  "exports": {
+    "./*": {
+      "types": "./dist/*.d.ts",
+      "default": "./dist/*.js"
+    }
+  },
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsc -b"
+  },
+  "dependencies": {
+    "@agentback/core": "^0.7.1",
+    "@agentback/mcp": "^0.7.1",
+    "@agentback/mcp-http": "^0.7.1",
+    "@agentback/openapi": "^0.7.1",
+    "@agentback/rest": "^0.7.1",
+    "@agentback/rest-explorer": "^0.7.1",
+    "@agentgem/archive": "workspace:*",
+    "@agentgem/base": "workspace:*",
+    "@agentgem/build": "workspace:*",
+    "@agentgem/capture": "workspace:*",
+    "@agentgem/contract": "workspace:*",
+    "@agentgem/distribute": "workspace:*",
+    "@agentgem/insight": "workspace:*",
+    "@agentgem/memory": "workspace:*",
+    "@agentgem/model": "workspace:*",
+    "@agentgem/play": "workspace:*",
+    "@agentgem/recall": "workspace:*",
+    "@agentgem/run": "workspace:*",
+    "@agentgem/testbed": "workspace:*",
+    "@agentgem/transfer": "workspace:*",
+    "zod": "^4.4.3"
+  }
+}

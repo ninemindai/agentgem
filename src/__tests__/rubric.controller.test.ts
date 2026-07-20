@@ -7,11 +7,11 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import supertest from "supertest";
 import { RestApplication } from "@agentback/rest";
-import { RubricController, setRubricComputeForTests, setReportRenderForTests } from "../rubric.controller.js";
-import { RubricEvent, RubricReportEvent } from "../rubric.stream.schema.js";
-import { ReportRegistry, REPORT_REGISTRY } from "../report/registry.js";
-import { isForegroundBusy } from "../warm/orchestrator.js";
-import type { RubricResult } from "../rubricCore.js";
+import { RubricController, setRubricComputeForTests, setReportRenderForTests } from "@agentgem/app/rubric.controller";
+import { RubricEvent, RubricReportEvent } from "@agentgem/app/rubric.stream.schema";
+import { ReportRegistry, REPORT_REGISTRY } from "@agentgem/app/report/registry";
+import { isForegroundBusy } from "@agentgem/app/warm/orchestrator";
+import type { RubricResult } from "@agentgem/app/rubricCore";
 
 let app: RestApplication;
 let client: ReturnType<typeof supertest>;

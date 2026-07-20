@@ -4,7 +4,7 @@ import { describe, it, expect, afterEach } from "vitest";
 import { mkdtempSync, mkdirSync, writeFileSync, existsSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { WARMABLES } from "../registry.js";
+import { WARMABLES } from "@agentgem/app/warm/registry";
 import { distillToken, writeDistillCache, claudeTranscriptsForCwd } from "@agentgem/insight";
 import { closeSharedIndex } from "@agentgem/capture";
 

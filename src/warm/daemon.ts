@@ -7,14 +7,14 @@
 // interaction injected). Best-effort; never throws out of the happy path.
 import { join } from "node:path";
 import { agentgemHome } from "@agentgem/model";
-import { runWarmPass } from "./orchestrator.js";
+import { runWarmPass } from "@agentgem/app/warm/orchestrator";
 import { startWarmWatch, warmRootsIndividually } from "./watch.js";
-import { acquirePidfile, releasePidfile } from "./pidfile.js";
-import { withWarmLock } from "./lock.js";
+import { acquirePidfile, releasePidfile } from "@agentgem/app/warm/pidfile";
+import { withWarmLock } from "@agentgem/app/warm/lock";
 import { startUsageReporter, type UsageReporter } from "../usage/reporter.js";
 import { createHygieneNudger } from "./hygieneNudger.js";
 import { nodeNotify } from "./nodeNotify.js";
-import { hygieneReportForFile } from "../sessionHygieneCore.js";
+import { hygieneReportForFile } from "@agentgem/app/sessionHygieneCore";
 import { createLogger } from "@agentgem/base";
 
 const warmLog = createLogger("warm");

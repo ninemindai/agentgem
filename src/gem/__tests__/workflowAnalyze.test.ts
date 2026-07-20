@@ -3,7 +3,7 @@ import { describe, it, expect, beforeAll, afterAll } from "vitest";
 import { mkdtempSync, mkdirSync, writeFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { GemController } from "../../gem.controller.js";
+import { GemController } from "@agentgem/app/gem.controller";
 import { setConnectFnForTests, claudeTranscriptsForCwd, transcriptToken, readAnalysisCache } from "@agentgem/insight";
 
 let home: string, projectRoot: string;

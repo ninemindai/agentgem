@@ -6,7 +6,7 @@ import { readFileSync, mkdirSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
 import { useHermeticHome } from "../../__tests__/support/hermeticHome.js";
-import { bindConfig, startDeviceBind, completeDeviceBind, readBindingStatus, clearBinding } from "../bindCore.js";
+import { bindConfig, startDeviceBind, completeDeviceBind, readBindingStatus, clearBinding } from "@agentgem/app/bind/bindCore";
 
 let restore: () => void;
 beforeAll(() => { restore = useHermeticHome(); });

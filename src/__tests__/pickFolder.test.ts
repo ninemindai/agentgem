@@ -1,6 +1,6 @@
 // src/__tests__/pickFolder.test.ts
 import { describe, it, expect } from "vitest";
-import { pickFolderCommand } from "../pickFolder.js";
+import { pickFolderCommand } from "@agentgem/app/pickFolder";
 
 describe("pickFolderCommand", () => {
   it("uses osascript 'choose folder' on macOS", () => {

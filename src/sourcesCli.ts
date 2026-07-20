@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: MIT
 // `agentgem sources install <sourceId> <path>` — install a curated persona as a
 // local skill (the command the marketplace /sources page tells visitors to copy).
-import { installAgencySkill } from "./sourcesCore.js";
+import { installAgencySkill } from "@agentgem/app/sourcesCore";
 
 const USAGE = "usage: agentgem sources install <sourceId> <path>\n  e.g. agentgem sources install agency-agents engineering/ai-engineer.md\n  flags: --dry-run  (print the SKILL.md without writing)";
 

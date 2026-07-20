@@ -1,7 +1,7 @@
 // Copyright (c) 2026 NineMind, Inc.
 // SPDX-License-Identifier: MIT
 import { describe, it, expect } from "vitest";
-import { PlayBlankRequestSchema, PlayImportRequestSchema, PlayUploadsRequestSchema, PlayUploadsResponseSchema } from "../schemas.js";
+import { PlayBlankRequestSchema, PlayImportRequestSchema, PlayUploadsRequestSchema, PlayUploadsResponseSchema } from "@agentgem/app/schemas";
 
 describe("play request schemas accept optional files", () => {
   it("blank accepts files with role", () => {

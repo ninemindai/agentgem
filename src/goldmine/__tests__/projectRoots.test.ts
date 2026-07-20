@@ -4,7 +4,7 @@ import { describe, it, expect, beforeAll, afterAll } from "vitest";
 import { mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { useHermeticHome } from "../../__tests__/support/hermeticHome.js";
-import { resolveAllowedProjectRoot } from "../projectRoots.js";
+import { resolveAllowedProjectRoot } from "@agentgem/app/goldmine/projectRoots";
 
 // The allow-list is discovered ∪ recent projects, now normalized to git
 // checkouts. A caller may still hand in a raw worktree path (stale UI state,

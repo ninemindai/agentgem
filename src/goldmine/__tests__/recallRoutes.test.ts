@@ -10,7 +10,7 @@
 // no supertest/RestApplication needed.
 import { describe, it, expect } from "vitest";
 import type { FunnelEvent, MomentHit } from "@agentgem/recall";
-import { streamFunnel, registerRecallRoutes, type RecallRouteDeps } from "../recallRoutes.js";
+import { streamFunnel, registerRecallRoutes, type RecallRouteDeps } from "@agentgem/app/goldmine/recallRoutes";
 
 // ── Fakes ──────────────────────────────────────────────────────────────────
 function fakeRes() {

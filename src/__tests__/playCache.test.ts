@@ -1,7 +1,7 @@
 // src/__tests__/playCache.test.ts
 import { describe, it, expect, vi } from "vitest";
-import { playNoCache, NO_CACHE_METHODS } from "../playCache.js";
-import { PlayController } from "../play.controller.js";
+import { playNoCache, NO_CACHE_METHODS } from "@agentgem/app/playCache";
+import { PlayController } from "@agentgem/app/play.controller";
 import type { RestDispatchInfo } from "@agentback/rest";
 
 // Drive the hook with a minimal RestDispatchInfo. The hook only reads ctor/methodName and writes

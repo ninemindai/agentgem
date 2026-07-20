@@ -1,6 +1,6 @@
 // src/gem/__tests__/agentgemConfig.test.ts
 import { describe, it, expect, beforeAll, afterAll } from "vitest";
-import { readShareAdoption, setShareAdoption } from "../../agentgemConfig.js";
+import { readShareAdoption, setShareAdoption } from "@agentgem/app/agentgemConfig";
 import { useHermeticHome } from "../../__tests__/support/hermeticHome.js";
 
 let restore: () => void;

@@ -5,7 +5,7 @@ import { mkdtempSync, mkdirSync, writeFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { distillToken, writeDistillCache, claudeTranscriptsForCwd } from "@agentgem/insight";
-import { computeDistill } from "../distillCore.js";
+import { computeDistill } from "@agentgem/app/distillCore";
 
 let home: string | undefined;
 const orig = process.env.AGENTGEM_HOME;

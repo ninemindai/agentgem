@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { InstallSkillResultSchema } from "../../gem.controller.js";
+import { InstallSkillResultSchema } from "@agentgem/app/gem.controller";
 import { installSkill } from "@agentgem/insight";
 
 describe("InstallSkillResult contract", () => {

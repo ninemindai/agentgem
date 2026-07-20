@@ -8,7 +8,7 @@ import { setAskConnectFnForTests, clearScanCache } from "@agentgem/insight";
 import type { AcpConnectFn } from "@agentgem/insight";
 import { RecallIndex } from "@agentgem/recall";
 import { GoldmineTools } from "../mcpServer.js";
-import { defaultRecallDbPath } from "../recall.js";
+import { defaultRecallDbPath } from "@agentgem/app/goldmine/recall";
 
 // Both HOME and AGENTGEM_HOME must point at the fixture dir: the Claude scan path
 // (resolveDirs()) derives its default from os.homedir() (i.e. $HOME), while

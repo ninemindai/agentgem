@@ -7,7 +7,7 @@ import { join } from "node:path";
 import { performance } from "node:perf_hooks";
 import { openTranscriptIndex, type TranscriptIndex } from "@agentgem/capture";
 import { scanFileUsage } from "@agentgem/insight";
-import { buildOffThreadParse } from "../../coldBuildParser.js";
+import { buildOffThreadParse } from "@agentgem/app/coldBuildParser";
 
 const tu = (skill: string) => JSON.stringify({ type: "assistant", message: { role: "assistant", content: [{ type: "tool_use", name: "Skill", input: { skill } }] } });
 

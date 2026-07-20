@@ -1,8 +1,8 @@
 // Copyright (c) 2026 NineMind, Inc.
 // SPDX-License-Identifier: MIT
 import { describe, it, expect, vi } from "vitest";
-import { GemController } from "../gem.controller.js";
-import type { RunCloudDispatch } from "../hostedBindings.js";
+import { GemController } from "@agentgem/app/gem.controller";
+import type { RunCloudDispatch } from "@agentgem/app/hostedBindings";
 
 // GemController constructor params are all optional; runCloudDispatch is the last positional.
 function makeController(dispatch?: RunCloudDispatch): GemController {

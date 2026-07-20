@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
-import { ReportRegistry } from "../registry.js";
-import { makeTracker, trackerFor, insightsParamsKey, rubricParamsKey, queryParams } from "../track.js";
+import { ReportRegistry } from "@agentgem/app/report/registry";
+import { makeTracker, trackerFor, insightsParamsKey, rubricParamsKey, queryParams } from "@agentgem/app/report/track";
 
 describe("makeTracker", () => {
   it("registers begin on creation and forwards phase/done to the registry", () => {

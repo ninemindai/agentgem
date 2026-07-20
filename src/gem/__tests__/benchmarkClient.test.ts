@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { benchmarks, effectiveness, type BenchmarkHttp } from "../benchmarkClient.js";
+import { benchmarks, effectiveness, type BenchmarkHttp } from "@agentgem/app/gem/benchmarkClient";
 
 const ok = (rows: unknown[]): BenchmarkHttp => async () => ({ status: 200, json: async () => rows });
 

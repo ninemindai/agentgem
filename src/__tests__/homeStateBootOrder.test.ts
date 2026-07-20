@@ -20,8 +20,8 @@
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import { mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { readState } from "../home/state.js";
-import { startWarmSchedule } from "../warm/schedule.js";
+import { readState } from "@agentgem/app/home/state";
+import { startWarmSchedule } from "@agentgem/app/warm/schedule";
 import { useHermeticHome } from "./support/hermeticHome.js";
 
 let restoreHome: () => void;

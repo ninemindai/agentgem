@@ -1,6 +1,6 @@
 // src/play/__tests__/saveRoute.test.ts
 import { describe, it, expect } from "vitest";
-import { PlaySaveResponseSchema } from "../../schemas.js";
+import { PlaySaveResponseSchema } from "@agentgem/app/schemas";
 
 describe("PlaySaveResponseSchema", () => {
   it("carries prunedNeeds", () => {

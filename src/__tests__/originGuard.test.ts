@@ -1,6 +1,6 @@
 // src/__tests__/originGuard.test.ts
 import { describe, it, expect } from "vitest";
-import { originGuard } from "../originGuard.js";
+import { originGuard } from "@agentgem/app/originGuard";
 
 // Drive originGuard with a duck-typed req/res and report what it did: called next(), set a header,
 // or sent a status. `blocked` keeps its old meaning (a 403 was sent) for the existing cases.

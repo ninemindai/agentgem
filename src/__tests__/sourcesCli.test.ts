@@ -2,7 +2,7 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 
 const install = vi.hoisted(() => vi.fn(async (_s: string, _p: string, opts: { dryRun?: boolean } = {}) =>
   ({ ok: !opts.dryRun, skill: "ai-engineer", dir: "/home/u/.agents/skills/ai-engineer", content: "BODY" })));
-vi.mock("../sourcesCore.js", () => ({ installAgencySkill: install }));
+vi.mock("@agentgem/app/sourcesCore", () => ({ installAgencySkill: install }));
 
 import { runSourcesCommand } from "../sourcesCli.js";
 

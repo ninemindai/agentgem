@@ -66,6 +66,9 @@ importers:
         specifier: ^4.4.3
         version: 4.4.3
     devDependencies:
+      '@agentgem/app':
+        specifier: workspace:*
+        version: link:packages/app
       '@agentgem/archive':
         specifier: workspace:*
         version: link:packages/archive
@@ -153,6 +156,72 @@ importers:
       yaml:
         specifier: ^2
         version: 2.9.0
+
+  packages/app:
+    dependencies:
+      '@agentback/core':
+        specifier: ^0.7.1
+        version: 0.7.1
+      '@agentback/mcp':
+        specifier: ^0.7.1
+        version: 0.7.1
+      '@agentback/mcp-http':
+        specifier: ^0.7.1
+        version: 0.7.1(cors@2.8.6)(hono@4.12.25)(zod@4.4.3)
+      '@agentback/openapi':
+        specifier: ^0.7.1
+        version: 0.7.1
+      '@agentback/rest':
+        specifier: ^0.7.1
+        version: 0.7.1(cors@2.8.6)(express@5.2.1)(hono@4.12.25)
+      '@agentback/rest-explorer':
+        specifier: ^0.7.1
+        version: 0.7.1(cors@2.8.6)(hono@4.12.25)
+      '@agentgem/archive':
+        specifier: workspace:*
+        version: link:../archive
+      '@agentgem/base':
+        specifier: workspace:*
+        version: link:../base
+      '@agentgem/build':
+        specifier: workspace:*
+        version: link:../build
+      '@agentgem/capture':
+        specifier: workspace:*
+        version: link:../capture
+      '@agentgem/contract':
+        specifier: workspace:*
+        version: link:../contract
+      '@agentgem/distribute':
+        specifier: workspace:*
+        version: link:../distribute
+      '@agentgem/insight':
+        specifier: workspace:*
+        version: link:../insight
+      '@agentgem/memory':
+        specifier: workspace:*
+        version: link:../memory
+      '@agentgem/model':
+        specifier: workspace:*
+        version: link:../model
+      '@agentgem/play':
+        specifier: workspace:*
+        version: link:../play
+      '@agentgem/recall':
+        specifier: workspace:*
+        version: link:../recall
+      '@agentgem/run':
+        specifier: workspace:*
+        version: link:../run
+      '@agentgem/testbed':
+        specifier: workspace:*
+        version: link:../testbed
+      '@agentgem/transfer':
+        specifier: workspace:*
+        version: link:../transfer
+      zod:
+        specifier: ^4.4.3
+        version: 4.4.3
 
   packages/archive:
     dependencies:

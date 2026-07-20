@@ -13,11 +13,11 @@ loadEnv({ quiet: true });
 loadEnv({ path: credentialsEnvPath(), quiet: true });
 import { isMain } from "@agentback/core";
 import type { RestApplication } from "@agentback/rest";
-import { buildCommonApp, finalizeCommonApp, installGracefulShutdown, warmEnabled } from "./appCommon.js";
-import { BenchmarkProxyController } from "./benchmark.proxy.controller.js";
-import { AgentTasksController } from "./agentTasks.controller.js";
-import { startWarmSchedule } from "./warm/schedule.js";
-import { readState } from "./home/state.js";
+import { buildCommonApp, finalizeCommonApp, installGracefulShutdown, warmEnabled } from "@agentgem/app/appCommon";
+import { BenchmarkProxyController } from "@agentgem/app/benchmark.proxy.controller";
+import { AgentTasksController } from "@agentgem/app/agentTasks.controller";
+import { startWarmSchedule } from "@agentgem/app/warm/schedule";
+import { readState } from "@agentgem/app/home/state";
 
 export async function createClientApp(port: number): Promise<RestApplication> {
   const { app, server } = await buildCommonApp(port);

@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: MIT
 // src/goldmine/__tests__/draftGem.test.ts
 import { describe, it, expect } from "vitest";
-import { validateSelection, draftGemFromChat } from "../draftGem.js";
+import { validateSelection, draftGemFromChat } from "@agentgem/app/goldmine/draftGem";
 import type { ChatEvent } from "@agentgem/run";
 import type { ConfigInventory } from "@agentgem/model";
 

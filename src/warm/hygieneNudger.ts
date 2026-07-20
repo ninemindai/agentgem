@@ -7,8 +7,8 @@
 // last-verdict state and calls notify on a fire. A per-file try/catch keeps a
 // half-written transcript from killing the daemon or skipping the other files.
 import { basename } from "node:path";
-import { buildTickEvents, type Verdict } from "../watchHygieneNudge.js";
-import type { HygieneReport } from "../sessionHygieneCore.js";
+import { buildTickEvents, type Verdict } from "@agentgem/app/watchHygieneNudge";
+import type { HygieneReport } from "@agentgem/app/sessionHygieneCore";
 import { createLogger } from "@agentgem/base";
 
 const log = createLogger("warm");

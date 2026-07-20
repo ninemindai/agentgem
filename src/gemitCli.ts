@@ -15,7 +15,7 @@ import { computeGemitData, type GemitData } from "./gemit/score.js";
 import { renderRpgTheme, TIER_NAMES } from "./gemit/themeRpg.js";
 import { openInBrowser } from "./gemit/openBrowser.js";
 import { buildGemitShare, gemitShareUrls } from "./gemit/share.js";
-import { postGemPublish } from "./gem/gemPublishClient.js";
+import { postGemPublish } from "@agentgem/app/gem/gemPublishClient";
 
 export const GEMIT_HELP = `agentgem gemit — score your agent steering into a local report
 
@@ -90,7 +90,7 @@ export interface GemitCliDeps {
 }
 
 async function defaultEnsureBound(out: (l: string) => void): Promise<string | null> {
-  const { readBindingStatus, bindConfig, startDeviceBind, completeDeviceBind } = await import("./bind/bindCore.js");
+  const { readBindingStatus, bindConfig, startDeviceBind, completeDeviceBind } = await import("@agentgem/app/bind/bindCore");
   const st = readBindingStatus();
   if (st.bound && st.login) return st.login;
   const cfg = bindConfig();

@@ -5,8 +5,8 @@ import { describe, it, expect, beforeEach } from "vitest";
 import { mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { readQueue, enqueueNew, setStatus, readDiary, appendDiary, promotedCount } from "../store.js";
-import type { DreamQueueEntry, DreamDiaryEntry } from "../types.js";
+import { readQueue, enqueueNew, setStatus, readDiary, appendDiary, promotedCount } from "@agentgem/app/dream/store";
+import type { DreamQueueEntry, DreamDiaryEntry } from "@agentgem/app/dream/types";
 
 function entry(over: Partial<DreamQueueEntry> = {}): DreamQueueEntry {
   return {

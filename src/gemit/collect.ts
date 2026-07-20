@@ -12,7 +12,7 @@ import {
   resolveClaudeSession, scanSessionsCached, summarizeSession,
   type SessionStat, type SessionSummary,
 } from "@agentgem/insight";
-import { hygieneReportForFile } from "../sessionHygieneCore.js";
+import { hygieneReportForFile } from "@agentgem/app/sessionHygieneCore";
 import {
   MIN_MSGS, SAMPLE_CAP, WINDOW_DAYS,
   type GemitScoredInput, type GemitSessionInput,

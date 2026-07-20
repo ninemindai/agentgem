@@ -3,9 +3,9 @@ import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { buildJourney } from "../journeyCore.js";
-import { enqueueNew, setStatus, appendDiary } from "../dream/store.js";
-import type { DreamQueueEntry } from "../dream/types.js";
+import { buildJourney } from "@agentgem/app/journeyCore";
+import { enqueueNew, setStatus, appendDiary } from "@agentgem/app/dream/store";
+import type { DreamQueueEntry } from "@agentgem/app/dream/types";
 import type { VerificationRecord } from "@agentgem/run";
 
 let base: string;

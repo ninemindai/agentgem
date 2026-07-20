@@ -4,7 +4,7 @@ import { describe, it, expect, afterEach } from "vitest";
 import { mkdtempSync, rmSync, existsSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { validateRubricInput, saveRubric, deleteRubric, resolveFactorKinds, resolveRubric } from "../rubricCore.js";
+import { validateRubricInput, saveRubric, deleteRubric, resolveFactorKinds, resolveRubric } from "@agentgem/app/rubricCore";
 import { defaultRubricsDir, type Rubric } from "@agentgem/insight";
 
 const orig = process.env.AGENTGEM_HOME;

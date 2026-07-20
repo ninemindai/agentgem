@@ -1,6 +1,6 @@
 // src/bind/__tests__/deviceFlow.test.ts
 import { describe, it, expect } from "vitest";
-import { requestDeviceCode, pollForToken } from "../deviceFlow.js";
+import { requestDeviceCode, pollForToken } from "@agentgem/app/bind/deviceFlow";
 
 function jsonFetch(...responses: unknown[]): typeof fetch {
   let i = 0;

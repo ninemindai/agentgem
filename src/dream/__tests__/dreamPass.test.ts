@@ -5,8 +5,8 @@ import { describe, it, expect, beforeEach } from "vitest";
 import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { dreamRoot } from "../dreamPass.js";
-import { readQueue, readDiary } from "../store.js";
+import { dreamRoot } from "@agentgem/app/dream/dreamPass";
+import { readQueue, readDiary } from "@agentgem/app/dream/store";
 
 const prov = { occurrences: [{ sessionId: "s1", transcript: "t.jsonl", messageIndices: [1], atMs: 5 }] };
 const analyzePayload = {

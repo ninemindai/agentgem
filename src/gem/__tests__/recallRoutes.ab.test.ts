@@ -1,7 +1,7 @@
 // Copyright (c) 2026 NineMind, Inc.
 // SPDX-License-Identifier: MIT
 import { describe, it, expect } from "vitest";
-import { abSearch } from "../../goldmine/recallRoutes.js";
+import { abSearch } from "@agentgem/app/goldmine/recallRoutes";
 import type { MomentHit, RecallFilters, ProvenUseLookup } from "@agentgem/recall";
 
 const hit = (id: string, score: number): MomentHit =>

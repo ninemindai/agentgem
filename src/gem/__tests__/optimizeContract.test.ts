@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
 import { buildOptimizePayload } from "@agentgem/insight";
-import { OptimizePayloadSchema } from "../../gem.controller.js";
+import { OptimizePayloadSchema } from "@agentgem/app/gem.controller";
 import type { ConfigInventory } from "@agentgem/model";
 import type { ArtifactUsage } from "@agentgem/insight";
 

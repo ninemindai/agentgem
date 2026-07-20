@@ -1,8 +1,8 @@
 // Copyright (c) 2026 NineMind, Inc.
 // SPDX-License-Identifier: MIT
 import { describe, it, expect } from "vitest";
-import { mapIndexToGems } from "../publicCatalog.js";
-import { defaultGemTypeRegistry, resolvePublishType } from "../gemTypeRegistry.js";
+import { mapIndexToGems } from "@agentgem/app/gem/publicCatalog";
+import { defaultGemTypeRegistry, resolvePublishType } from "@agentgem/app/gem/gemTypeRegistry";
 import type { RegistryIndex } from "@agentgem/distribute";
 
 describe("mapIndexToGems — type", () => {

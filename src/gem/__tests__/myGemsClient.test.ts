@@ -3,7 +3,7 @@
 import { describe, it, expect } from "vitest";
 import { generateKeyPairSync, sign as edSign } from "node:crypto";
 import type { Identity } from "@agentgem/model";
-import { postMyGems, type MyGemsHttp } from "../myGemsClient.js";
+import { postMyGems, type MyGemsHttp } from "@agentgem/app/gem/myGemsClient";
 
 function signer(): Identity {
   const { publicKey, privateKey } = generateKeyPairSync("ed25519");

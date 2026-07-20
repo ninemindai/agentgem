@@ -5,7 +5,7 @@ import { mkdtempSync, mkdirSync, writeFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { insightsToken, writeInsightsCache, claudeTranscriptsForCwd, judgeSessions, narrateInsights } from "@agentgem/insight";
-import { computeInsights } from "../insightsCore.js";
+import { computeInsights } from "@agentgem/app/insightsCore";
 
 const orig = { home: process.env.AGENTGEM_HOME };
 let tmpHome: string | undefined;

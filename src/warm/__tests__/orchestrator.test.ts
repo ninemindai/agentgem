@@ -1,8 +1,8 @@
 // Copyright (c) 2026 NineMind, Inc.
 // SPDX-License-Identifier: MIT
 import { describe, it, expect, afterEach } from "vitest";
-import { runWarmPass, getWarmStatus, beginForeground, endForeground, PHASE_OF } from "../orchestrator.js";
-import type { Warmable } from "../registry.js";
+import { runWarmPass, getWarmStatus, beginForeground, endForeground, PHASE_OF } from "@agentgem/app/warm/orchestrator";
+import type { Warmable } from "@agentgem/app/warm/registry";
 
 function fakeRegistry(calls: string[]): Warmable[] {
   const mk = (id: Warmable["id"], cost: Warmable["cost"], scope: Warmable["scope"]): Warmable => ({

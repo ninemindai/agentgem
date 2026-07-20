@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { warmEnabled } from "../appCommon.js";
+import { warmEnabled } from "@agentgem/app/appCommon";
 
 describe("warmEnabled", () => {
   it("warms by default", () => {

@@ -2,7 +2,7 @@
 import { describe, it, expect } from "vitest";
 import { runLearnCommand } from "../learnCli.js";
 import { InvalidInputError } from "@agentgem/model";
-import type { LearnResult } from "../learnCore.js";
+import type { LearnResult } from "@agentgem/app/learnCore";
 
 const result = (over: Partial<LearnResult> = {}): LearnResult =>
   ({

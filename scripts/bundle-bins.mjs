@@ -12,7 +12,7 @@
 // loose dist and resolve `@agentgem/*` via pnpm workspace symlinks, so they are
 // unaffected by this step.
 import { build } from "esbuild";
-import { readFileSync, renameSync, existsSync } from "node:fs";
+import { readFileSync, renameSync, existsSync, mkdirSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -62,10 +62,19 @@ const entries = ["cli.js", "client.js", "distill/mcpServer.js", "goldmine/mcpSer
 // again, and cli.js imports `runClient` from it at runtime.
 const externalFor = (rel) => (rel === "cli.js" ? [...external, "./client.js"] : external);
 
+// The `new Worker(path)` entrypoints moved into the `@agentgem/app` package, so their
+// loose tsc output lands in `packages/app/dist`, not the root `dist`. Source them from
+// there but still publish into the root `dist/` at the same relative path — that is where
+// resolveWorkerPath() probes for them once the caller is inlined into a root-dist bin.
+const appDist = join(repo, "packages", "app", "dist");
+const inAppDist = new Set(["warm/scorecardWorker.js", "transcriptParseWorker.js"]);
+
 for (const rel of entries) {
-  const infile = join(dist, rel);
-  if (!existsSync(infile)) throw new Error(`missing entrypoint: dist/${rel}`);
-  const tmp = `${infile}.bundled`;
+  const infile = join(inAppDist.has(rel) ? appDist : dist, rel);
+  if (!existsSync(infile)) throw new Error(`missing entrypoint: ${infile}`);
+  const outfile = join(dist, rel); // always publish into the root dist/
+  mkdirSync(dirname(outfile), { recursive: true });
+  const tmp = `${outfile}.bundled`;
   await build({
     entryPoints: [infile],
     outfile: tmp,
@@ -79,7 +88,7 @@ for (const rel of entries) {
     logLevel: "warning",
   });
   // Read pristine loose dist for all entries first, then swap in the bundles.
-  renameSync(tmp, infile);
+  renameSync(tmp, outfile);
   console.log(`bundled dist/${rel}`);
 }
 console.log("bundle-bins: done");

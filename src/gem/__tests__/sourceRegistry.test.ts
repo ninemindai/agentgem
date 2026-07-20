@@ -2,7 +2,7 @@
 import { describe, it, expect } from "vitest";
 import { Application } from "@agentback/core";
 import { BUILTIN_SOURCES, type SourceSpec } from "@agentgem/insight";
-import { AGENT_SOURCES, SourceRegistry, AgentSourcesComponent, defaultSourceRegistry } from "../sourceRegistry.js";
+import { AGENT_SOURCES, SourceRegistry, AgentSourcesComponent, defaultSourceRegistry } from "@agentgem/app/gem/sourceRegistry";
 
 describe("SourceRegistry (direct)", () => {
   const r = new SourceRegistry(BUILTIN_SOURCES);

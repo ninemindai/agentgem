@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: MIT
 // src/dream/__tests__/harvest.test.ts
 import { describe, it, expect } from "vitest";
-import { provenanceHash, harvestEntries, opportunityEntries } from "../harvest.js";
+import { provenanceHash, harvestEntries, opportunityEntries } from "@agentgem/app/dream/harvest";
 import { lessonSlug } from "@agentgem/insight";
 import type { DistilledSkill, Reflection } from "@agentgem/insight";
 

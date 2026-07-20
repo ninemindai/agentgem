@@ -1,8 +1,8 @@
 // Copyright (c) 2026 NineMind, Inc.
 // SPDX-License-Identifier: MIT
 import { describe, it, expect } from "vitest";
-import type { ShareHttp } from "../catalogShareClient.js";
-import { postGemStatus } from "../gemStatusClient.js";
+import type { ShareHttp } from "@agentgem/app/gem/catalogShareClient";
+import { postGemStatus } from "@agentgem/app/gem/gemStatusClient";
 
 const fakeIdentity = { publicKey: "ed25519:AAAA", sign: (_d: string) => "sig" };
 

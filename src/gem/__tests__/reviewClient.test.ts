@@ -1,7 +1,7 @@
 // Copyright (c) 2026 NineMind, Inc.
 // SPDX-License-Identifier: MIT
 import { describe, it, expect, vi } from "vitest";
-import { postReviewRequest, postReviewAction, fetchReviewArchive, type ReviewHttp } from "../reviewClient.js";
+import { postReviewRequest, postReviewAction, fetchReviewArchive, type ReviewHttp } from "@agentgem/app/gem/reviewClient";
 import type { Identity } from "@agentgem/model";
 
 const identity: Identity = { publicKey: "ed25519:PUB", sign: (d) => "sig:" + d.length };

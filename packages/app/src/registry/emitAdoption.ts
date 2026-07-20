@@ -3,7 +3,7 @@
 // src/registry/emitAdoption.ts
 import { buildGemAdoption, signGemAdoption, postGemAdoption } from "@agentgem/insight";
 import { loadOrCreateIdentity } from "@agentgem/model";
-import { readShareAdoption } from "../agentgemConfig.js";
+import { readShareAdoption } from "@agentgem/app/agentgemConfig";
 import { createLogger } from "@agentgem/base";
 
 const log = createLogger("registry");

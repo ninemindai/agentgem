@@ -2,7 +2,7 @@ import { describe, it, expect, beforeAll, afterAll, afterEach, vi } from "vitest
 import { mkdtempSync, mkdirSync, writeFileSync, appendFileSync, statSync, utimesSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { streamWatchEvents } from "../watchEvents.js";
+import { streamWatchEvents } from "@agentgem/app/watchEvents";
 
 const POLL_MS = 1000;
 

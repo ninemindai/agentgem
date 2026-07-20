@@ -1,7 +1,7 @@
 // Copyright (c) 2026 NineMind, Inc.
 // SPDX-License-Identifier: MIT
 import { describe, it, expect } from "vitest";
-import { pump } from "../pump.js";
+import { pump } from "@agentgem/app/sse/pump";
 
 async function drain<T>(gen: AsyncGenerator<T>): Promise<T[]> {
   const out: T[] = [];

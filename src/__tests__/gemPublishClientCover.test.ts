@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { postGemPublish } from "../gem/gemPublishClient.js";
+import { postGemPublish } from "@agentgem/app/gem/gemPublishClient";
 import type { Identity } from "@agentgem/model";
 
 const identity = { publicKey: "pk", sign: () => "sig" } as unknown as Identity;

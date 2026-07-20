@@ -1,7 +1,7 @@
 // Copyright (c) 2026 NineMind, Inc.
 // SPDX-License-Identifier: MIT
 import { describe, it, expect } from "vitest";
-import { publishPlaybookCore } from "../playbookPublishCore.js";
+import { publishPlaybookCore } from "@agentgem/app/gem/playbookPublishCore";
 
 describe("publishPlaybookCore", () => {
   it("publishes to the registry AND mints a share card, returning both refs", async () => {

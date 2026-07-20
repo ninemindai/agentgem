@@ -5,7 +5,7 @@ import { mkdtempSync, mkdirSync, writeFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { transcriptToken, writeAnalysisCache, claudeTranscriptsForCwd, recommendWorkflow, distillWorkflow } from "@agentgem/insight";
-import { computeWorkflowAnalysis } from "../workflowCore.js";
+import { computeWorkflowAnalysis } from "@agentgem/app/workflowCore";
 
 const orig = process.env.AGENTGEM_HOME;
 let home: string | undefined;

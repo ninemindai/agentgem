@@ -2,7 +2,7 @@ import { describe, it, expect, beforeAll, afterAll, beforeEach, afterEach } from
 import { mkdtempSync, mkdirSync, writeFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { GemController } from "../../gem.controller.js";
+import { GemController } from "@agentgem/app/gem.controller";
 import { computeGlobalUsage, closeSharedIndex, getGlobalUsageIndexed, getGlobalUsageStale, hookDigest } from "@agentgem/capture";
 import { readGlobalUsageCacheStale, writeGlobalUsageCache } from "@agentgem/capture";
 import { allClaudeTranscripts } from "@agentgem/insight";

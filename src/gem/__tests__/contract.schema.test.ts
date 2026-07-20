@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { GemManifestSchema, GemSchema } from "../../schemas.js";
+import { GemManifestSchema, GemSchema } from "@agentgem/app/schemas";
 
 // The contract facet is archived (it rides the manifest), and a shared gem must carry it —
 // so, like the loop facet, it must survive the Zod schemas that gate the transfer ticket and

@@ -3,8 +3,8 @@ import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import { mkdtempSync, mkdirSync, writeFileSync, rmSync, utimesSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { learnFromSession } from "../learnCore.js";
-import { readQueue } from "../dream/store.js";
+import { learnFromSession } from "@agentgem/app/learnCore";
+import { readQueue } from "@agentgem/app/dream/store";
 import type { DistilledSkill } from "@agentgem/insight";
 
 const PROJ = "/Users/me/work/app";

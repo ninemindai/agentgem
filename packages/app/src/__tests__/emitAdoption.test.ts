@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: MIT
 // src/gem/__tests__/emitAdoption.test.ts
 import { describe, it, expect, vi } from "vitest";
-import { emitAdoption } from "../../registry/emitAdoption.js";
+import { emitAdoption } from "../registry/emitAdoption.js";
 import { loadOrCreateIdentity } from "@agentgem/model";
 import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";

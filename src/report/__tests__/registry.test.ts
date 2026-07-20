@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { ReportRegistry } from "../registry.js";
+import { ReportRegistry } from "@agentgem/app/report/registry";
 
 describe("ReportRegistry", () => {
   it("begin marks a run running and list() exposes it newest-first", () => {

@@ -7,7 +7,7 @@ import { join } from "node:path";
 import { builtinRubrics, loadRubrics, rubricToArtifact } from "@agentgem/insight";
 import { exportGem, importGem } from "@agentgem/distribute";
 import type { Gem } from "@agentgem/model";
-import { installRubricGem } from "../rubricCore.js";
+import { installRubricGem } from "@agentgem/app/rubricCore";
 
 const dirs: string[] = [];
 const tmp = () => { const d = mkdtempSync(join(tmpdir(), "rubric-install-")); dirs.push(d); return d; };

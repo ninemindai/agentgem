@@ -3,7 +3,7 @@ import { describe, it, expect, beforeAll, afterAll } from "vitest";
 import { mkdtempSync, rmSync, mkdirSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { GemTools } from "../gem.tools.js";
+import { GemTools } from "@agentgem/app/gem.tools";
 import { packTar, unpackTar } from "@agentgem/archive";
 
 let dir: string;

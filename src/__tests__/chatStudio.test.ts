@@ -3,7 +3,7 @@ import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { studioChatArgs } from "../goldmine/chatRoutes.js";
+import { studioChatArgs } from "@agentgem/app/goldmine/chatRoutes";
 import { seedStudio, miniappDir, studioBrief, miniappsRoot, type SourceReaders } from "@agentgem/play";
 
 let home: string;

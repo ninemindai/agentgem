@@ -4,12 +4,12 @@ import { describe, it, expect, afterEach } from "vitest";
 import {
   WorkflowController,
   setWorkflowComputeForTests,
-} from "../workflow.controller.js";
+} from "@agentgem/app/workflow.controller";
 import { RestApplication } from "@agentback/rest";
-import { isForegroundBusy } from "../warm/orchestrator.js";
-import { WorkflowEvent } from "../workflow.stream.schema.js";
-import { ReportRegistry, REPORT_REGISTRY } from "../report/registry.js";
-import type { WorkflowAnalysisResult } from "../workflowCore.js";
+import { isForegroundBusy } from "@agentgem/app/warm/orchestrator";
+import { WorkflowEvent } from "@agentgem/app/workflow.stream.schema";
+import { ReportRegistry, REPORT_REGISTRY } from "@agentgem/app/report/registry";
+import type { WorkflowAnalysisResult } from "@agentgem/app/workflowCore";
 
 afterEach(() => setWorkflowComputeForTests(null));
 

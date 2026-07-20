@@ -3,7 +3,7 @@ import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import { mkdtempSync, rmSync, existsSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { PlayController } from "../play.controller.js";
+import { PlayController } from "@agentgem/app/play.controller";
 import { miniappsRoot } from "@agentgem/play";
 
 let home: string;

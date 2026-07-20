@@ -2,7 +2,7 @@ import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import { mkdtempSync, writeFileSync, mkdirSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { benchmarkContribute, setBenchmarkContribute } from "../config.js";
+import { benchmarkContribute, setBenchmarkContribute } from "@agentgem/app/benchmark/config";
 
 describe("benchmark config", () => {
   let base: string;

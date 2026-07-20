@@ -1,7 +1,7 @@
 // Copyright (c) 2026 NineMind, Inc.
 // SPDX-License-Identifier: MIT
 import { describe, it, expect } from "vitest";
-import { preparePlaybook } from "../playbookPrepareCore.js"; // pure core extracted below
+import { preparePlaybook } from "@agentgem/app/gem/playbookPrepareCore"; // pure core extracted below
 import type { DistilledSkill, DistilledLesson } from "@agentgem/insight";
 
 describe("preparePlaybook (core)", () => {

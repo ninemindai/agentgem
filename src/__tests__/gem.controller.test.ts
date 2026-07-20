@@ -6,7 +6,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import supertest from "supertest";
 import { RestApplication } from "@agentback/rest";
-import { GemController } from "../gem.controller.js";
+import { GemController } from "@agentgem/app/gem.controller";
 import { createServer } from "node:http";
 import { packTar, unpackTar, readGemArchive } from "@agentgem/archive";
 import { writeGemArchive } from "@agentgem/archive";
@@ -371,7 +371,7 @@ describe("GemController", () => {
   // The gem ARCHIVE contract must stay strict. This is the guard that stops a future
   // refactor from loosening the shared schema to make the inventory variant simpler.
   it("GemArtifactSchema still requires content", async () => {
-    const { SkillArtifactSchema } = await import("../schemas.js");
+    const { SkillArtifactSchema } = await import("@agentgem/app/schemas");
     expect(SkillArtifactSchema.safeParse({ type: "skill", name: "x", source: "standalone" }).success).toBe(false);
   });
 

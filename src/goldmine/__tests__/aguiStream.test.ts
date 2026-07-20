@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: MIT
 // src/goldmine/__tests__/aguiStream.test.ts
 import { describe, it, expect } from "vitest";
-import { createAguiMapper, type AguiEvent } from "../aguiStream.js";
+import { createAguiMapper, type AguiEvent } from "@agentgem/app/goldmine/aguiStream";
 import type { ChatEvent } from "@agentgem/run";
 
 // The AG-UI protocol's allowed event `type` values (docs.ag-ui.com) — used for the
