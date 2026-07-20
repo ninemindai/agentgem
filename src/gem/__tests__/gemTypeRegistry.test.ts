@@ -36,23 +36,4 @@ describe("GEM_TYPES extension point (wired container)", () => {
     expect(registry.all().length).toBe(8);
   });
 
-  it("a container-resolved RegistryController receives the CONTAINER registry, not the default", async () => {
-    // Guards the extension point's payoff under CI: prove @service injection (not the
-    // `= defaultGemTypeRegistry` constructor default) wins when the controller is resolved
-    // through the container — so a plugin-contributed cut is honored at publish. If someone
-    // drops app.component(GemTypesComponent), this fails instead of silently falling back.
-    const ctx = new Application();
-    const comp = new GemTypesComponent();
-    for (const b of comp.bindings ?? []) ctx.add(b);
-    for (const s of comp.services ?? []) ctx.service(s as never);
-    const { Binding, extensionFor } = await import("@agentback/core");
-    const pluginCut: GemTypeSpec = { id: "starter", label: "Starter", gemstone: "Garnet", order: 25, matches: () => false };
-    ctx.add(Binding.bind("gemTypes.cut.starter").to(pluginCut).apply(extensionFor(GEM_TYPES)));
-    const { RegistryController } = await import("../../registry.controller.js");
-    ctx.add(Binding.bind("controllers.RegistryController").toClass(RegistryController));
-    const ctrl = await ctx.get<unknown>("controllers.RegistryController") as { gemTypes: GemTypeRegistry };
-    // The injected registry sees the plugin cut; defaultGemTypeRegistry never would.
-    expect(ctrl.gemTypes.byId("starter")?.label).toBe("Starter");
-    expect(ctrl.gemTypes).not.toBe(defaultGemTypeRegistry);
-  });
 });
