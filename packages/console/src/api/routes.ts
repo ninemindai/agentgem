@@ -1175,6 +1175,29 @@ export const playBlankRoute = defineRoute("POST", "/api/play/blank", {
   body: z.object({ title: z.string(), prompt: z.string().optional(), name: z.string().optional(), files: z.array(playUploadFileSchema).optional() }),
   response: z.object({ name: z.string() }),
 });
+// Add files to an EXISTING miniapp's workspace (mid-Studio-session uploads), distinct from
+// import/blank above which seed files at creation time.
+export const playUploadsRoute = defineRoute("POST", "/api/play/uploads", {
+  body: z.object({ name: z.string(), files: z.array(playUploadFileSchema) }),
+  response: z.object({
+    files: z.array(z.object({ requested: z.string(), stored: z.string(), role: z.enum(["ship", "reference"]) })),
+    ship: z.number(), ref: z.number(),
+  }),
+});
+
+// Build the agent preamble from the SERVER's actual stored filenames (the server sanitizes/suffixes,
+// so raw staged names would name files that don't exist on disk). Mirrors uploadsPreamble in uploads.ts.
+export function uploadsPreambleFromStored(
+  files: { requested: string; stored: string; role: "ship" | "reference" }[],
+): string {
+  if (!files.length) return "";
+  const ship = files.filter((f) => f.role === "ship").map((f) => f.stored);
+  const ref = files.filter((f) => f.role === "reference").map((f) => f.stored);
+  const lines: string[] = [];
+  if (ship.length) lines.push(`Ship files (inline into index.html): ${ship.join(", ")} — data: URIs are in ./uploads/assets.json.`);
+  if (ref.length) lines.push(`Reference files (context only, do not ship): ${ref.join(", ")} in ./ref/.`);
+  return `I've added files to this project's workspace.\n${lines.join("\n")}`;
+}
 export const playSaveRoute = defineRoute("POST", "/api/play/save", {
   body: z.object({ name: z.string(), html: z.string(), meta: PlayMetaSchema }),
   response: z.object({
