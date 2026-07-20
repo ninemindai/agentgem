@@ -801,6 +801,8 @@ body::before {
 .play-uploads__x { flex-shrink: 0; border: none; background: none; cursor: pointer; color: var(--muted);
   font-size: 16px; line-height: 1; padding: 0 2px; }
 .play-uploads__x:hover { color: var(--ink); }
+.play-uploads--compact { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.play-attach { cursor: pointer; white-space: nowrap; }
 
 /* ── Loading — the facet mark catching the light ── */
 /* Boot splash: full-viewport centering for the same loader, painted before React
