@@ -3,12 +3,14 @@
 // Author-supplied uploads for a seeded miniapp. Reference files inform the build only (gitignored ref/);
 // ship files are inlined into the single-file miniapp, so they are capped small (the save gate rejects
 // bundles > 1.5MB) and manifested with ready-to-use data: URIs. The studio agent is cwd-jailed to `dir`.
-import { writeFileSync, mkdirSync, existsSync, readFileSync } from "node:fs";
+import { writeFileSync, mkdirSync, existsSync, readFileSync, readdirSync, statSync } from "node:fs";
 import { join } from "node:path";
 
 export type UploadRole = "ship" | "reference";
 export interface UploadFile { name: string; bytesBase64: string; type?: string; role: UploadRole }
 export interface UploadCounts { ship: number; ref: number }
+export interface StoredUpload { requested: string; stored: string; role: UploadRole }
+export interface UploadResult { files: StoredUpload[]; ship: number; ref: number }
 
 const MAX_FILES = 20;
 const SHIP_MAX_FILE = 500_000, SHIP_MAX_TOTAL = 1_000_000;
@@ -51,28 +53,26 @@ function decode(f: UploadFile): Buffer {
 
 interface AssetEntry { file: string; type: string; bytes: number; dataUri?: string }
 
-export function writeUploads(dir: string, files: UploadFile[]): UploadCounts {
-  if (!files.length) return { ship: 0, ref: 0 };
-  if (files.length > MAX_FILES) throw new Error(`too many files: ${files.length} > ${MAX_FILES}`);
-
-  const decoded = files.map((f) => ({ f, buf: decode(f) }));
-
+export function writeUploads(dir: string, files: UploadFile[]): UploadResult {
+  // Preload existing workspace state so repeat batches accumulate instead of clobbering.
+  const usedShip = new Set<string>(), usedRef = new Set<string>();
+  const manifest: AssetEntry[] = [];
   let shipTotal = 0, refTotal = 0;
-  for (const { f, buf } of decoded) {
-    if (f.role === "ship") {
-      if (buf.length > SHIP_MAX_FILE) throw new Error(`ship file '${f.name}' is ${buf.length} bytes > ${SHIP_MAX_FILE}`);
-      shipTotal += buf.length;
-    } else {
-      if (buf.length > REF_MAX_FILE) throw new Error(`reference file '${f.name}' is ${buf.length} bytes > ${REF_MAX_FILE}`);
-      refTotal += buf.length;
-    }
+  const uploadsDir = join(dir, "uploads"), refDir = join(dir, "ref");
+  if (existsSync(uploadsDir)) for (const f of readdirSync(uploadsDir)) if (f !== "assets.json") usedShip.add(f);
+  if (existsSync(refDir)) for (const f of readdirSync(refDir)) { usedRef.add(f); refTotal += statSync(join(refDir, f)).size; }
+  const assetsPath = join(uploadsDir, "assets.json");
+  if (existsSync(assetsPath)) {
+    const prev = JSON.parse(readFileSync(assetsPath, "utf8")) as AssetEntry[];
+    for (const e of prev) { manifest.push(e); shipTotal += e.bytes; }
   }
-  if (shipTotal > SHIP_MAX_TOTAL) throw new Error(`ship total ${shipTotal} > ${SHIP_MAX_TOTAL}`);
-  if (refTotal > REF_MAX_TOTAL) throw new Error(`reference total ${refTotal} > ${REF_MAX_TOTAL}`);
+
+  const cumulativeCounts = (): { ship: number; ref: number } => ({ ship: usedShip.size, ref: usedRef.size });
+  if (!files.length) return { files: [], ...cumulativeCounts() };
+  if (files.length > MAX_FILES) throw new Error(`too many files: ${files.length} > ${MAX_FILES}`);
 
   // Collisions are per-DIRECTORY: a ship file and a reference file may share a name (they land in
   // uploads/ vs ref/), so each dir keeps its own Set — only same-dir same-name files get suffixed.
-  const usedShip = new Set<string>(), usedRef = new Set<string>();
   const uniq = (name: string, used: Set<string>): string => {
     if (!used.has(name)) { used.add(name); return name; }
     const dot = name.lastIndexOf(".");
@@ -81,37 +81,48 @@ export function writeUploads(dir: string, files: UploadFile[]): UploadCounts {
     for (let i = 2; ; i++) { const c = `${stem}-${i}${ext}`; if (!used.has(c)) { used.add(c); return c; } }
   };
 
-  const manifest: AssetEntry[] = [];
-  let ship = 0, ref = 0;
-  for (const { f, buf } of decoded) {
+  // Pass A — decode + validate + PLAN stored names. No writes: any throw here leaves the dir untouched.
+  const planned = files.map((f) => {
+    const buf = decode(f);
     if (f.role === "ship") {
-      const name = uniq(sanitizeUploadName(f.name), usedShip);
-      mkdirSync(join(dir, "uploads"), { recursive: true });
-      writeFileSync(join(dir, "uploads", name), buf);
+      if (buf.length > SHIP_MAX_FILE) throw new Error(`ship file '${f.name}' is ${buf.length} bytes > ${SHIP_MAX_FILE}`);
+      shipTotal += buf.length;
+    } else {
+      if (buf.length > REF_MAX_FILE) throw new Error(`reference file '${f.name}' is ${buf.length} bytes > ${REF_MAX_FILE}`);
+      refTotal += buf.length;
+    }
+    const stored = uniq(sanitizeUploadName(f.name), f.role === "ship" ? usedShip : usedRef); // sanitize can throw → still no writes
+    return { f, buf, stored };
+  });
+  if (shipTotal > SHIP_MAX_TOTAL) throw new Error(`ship total ${shipTotal} > ${SHIP_MAX_TOTAL}`);
+  if (refTotal > REF_MAX_TOTAL) throw new Error(`reference total ${refTotal} > ${REF_MAX_TOTAL}`);
+
+  // Pass B — write. All names are pre-planned, so this only does I/O.
+  const records: StoredUpload[] = [];
+  for (const { f, buf, stored } of planned) {
+    if (f.role === "ship") {
+      mkdirSync(uploadsDir, { recursive: true });
+      writeFileSync(join(uploadsDir, stored), buf);
       const type = safeMime(f.type);
-      const entry: AssetEntry = { file: `uploads/${name}`, type, bytes: buf.length };
+      const entry: AssetEntry = { file: `uploads/${stored}`, type, bytes: buf.length };
       if (isBinary(f.type)) entry.dataUri = `data:${type};base64,${buf.toString("base64")}`;
       manifest.push(entry);
-      ship++;
     } else {
-      const name = uniq(sanitizeUploadName(f.name), usedRef);
-      mkdirSync(join(dir, "ref"), { recursive: true });
-      writeFileSync(join(dir, "ref", name), buf);
-      ref++;
+      mkdirSync(refDir, { recursive: true });
+      writeFileSync(join(refDir, stored), buf);
     }
+    records.push({ requested: f.name, stored, role: f.role });
   }
 
-  if (manifest.length) {
-    writeFileSync(join(dir, "uploads", "assets.json"), JSON.stringify(manifest, null, 2));
-  }
+  if (manifest.length) writeFileSync(assetsPath, JSON.stringify(manifest, null, 2));
   // Per-miniapp .gitignore keeps reference material out of the registry repo (never committed/pushed).
   // Written in `dir` (freshly claimed), so it's atomic and needs no root backfill; `/*/ref/`-style root
   // rules were avoided because a miniapp legitimately named "ref" would otherwise be swallowed.
-  if (ref) {
+  if (records.some((r) => r.role === "reference")) {
     const gi = join(dir, ".gitignore");
     const line = "ref/\n";
     const cur = existsSync(gi) ? readFileSync(gi, "utf8") : "";
     if (!/(^|\n)ref\/(\n|$)/.test(cur)) writeFileSync(gi, cur && !cur.endsWith("\n") ? cur + "\n" + line : cur + line);
   }
-  return { ship, ref };
+  return { files: records, ...cumulativeCounts() };
 }

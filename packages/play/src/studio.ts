@@ -85,7 +85,7 @@ function uploadsBrief(uploads: { ship: number; ref: number } | undefined): strin
 // Write uploads into an already-claimed dir; if it throws (oversize/bad-base64 that slipped past the
 // client mirror), remove the claimed-but-empty dir so the name is reusable instead of a 409 on retry.
 function writeUploadsOrRelease(dir: string, files: UploadFile[] | undefined): { ship: number; ref: number } {
-  try { return writeUploads(dir, files ?? []); }
+  try { const r = writeUploads(dir, files ?? []); return { ship: r.ship, ref: r.ref }; }
   catch (e) { rmSync(dir, { recursive: true, force: true }); throw e; }
 }
 
