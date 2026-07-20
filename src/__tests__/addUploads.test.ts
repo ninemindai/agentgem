@@ -38,6 +38,6 @@ describe("addUploadsToMiniapp", () => {
   it("throws 'miniapp not found' for an unknown name", async () => {
     await expect(addUploadsToMiniapp("does-not-exist", [
       { name: "a.png", bytesBase64: b64("A"), type: "image/png", role: "ship" },
-    ])).rejects.toThrow(/miniapp not found/);
+    ])).rejects.toThrow(/^miniapp not found/);
   });
 });

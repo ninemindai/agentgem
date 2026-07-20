@@ -1,6 +1,6 @@
 // src/__tests__/saveUploads.test.ts   (ROOT — imports the built package)
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
-import { mkdtempSync, rmSync, readFileSync, existsSync } from "node:fs";
+import { mkdtempSync, rmSync, readFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { blankStudio, saveMiniapp, miniappDir } from "@agentgem/play";
