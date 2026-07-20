@@ -235,6 +235,10 @@ describe("App link interceptor", () => {
     vi.stubGlobal("fetch", vi.fn(async (u: string) => {
       if (u.includes("/api/auth/get-session")) return res({ session: { token: "t" }, user: { id: "u0", login: "octocat", handle: "octocat", image: null } });
       if (u.includes("/popular-skills")) return res({ skills: [], groups: [] });
+      // AccountPanel mounts on this route and reads `connected` off this response; the bare-array
+      // fallback made it throw in render, unmounting the tree before the redirect could run
+      // (a timing coin-flip — the source of this test's flake).
+      if (u.includes("/api/account/providers")) return res({ connected: ["github"] });
       return res([]);
     }));
     // Start on an owner-only route so a stale, deauthed view would linger without the redirect.
