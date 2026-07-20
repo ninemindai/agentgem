@@ -1,5 +1,5 @@
 import { describe, it, expect, afterEach } from "vitest";
-import { serverHost } from "../appCommon.js";
+import { serverHost } from "@agentgem/app/appCommon";
 
 const orig = process.env.HOST;
 afterEach(() => { if (orig === undefined) delete process.env.HOST; else process.env.HOST = orig; });

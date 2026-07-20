@@ -3,7 +3,7 @@
 // src/gem/__tests__/bindEndpoints.test.ts
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import { useHermeticHome } from "../../__tests__/support/hermeticHome.js";
-import { GemController } from "../../gem.controller.js";
+import { GemController } from "@agentgem/app/gem.controller";
 
 // Fresh hermetic home PER TEST so tests are order-independent (a prior /bind/complete
 // writing binding.json must not leak into another test's home).

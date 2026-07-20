@@ -3,7 +3,7 @@ import { describe, it, expect, afterEach, beforeAll, afterAll } from "vitest";
 import { mkdtempSync, rmSync, readFileSync, existsSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { GemStreamController } from "../gem.stream.controller.js";
+import { GemStreamController } from "@agentgem/app/gem.stream.controller";
 import { registerRun, ledgerPath } from "@agentgem/run";
 import { setRunConnectFnForTests, type RunConnectFn, type ToolInvocation } from "@agentgem/run";
 import type { GemContract } from "@agentgem/model";

@@ -1,7 +1,7 @@
 // Copyright (c) 2026 NineMind, Inc.
 // SPDX-License-Identifier: MIT
 import { describe, it, expect } from "vitest";
-import { withWarmLock } from "../lock.js";
+import { withWarmLock } from "@agentgem/app/warm/lock";
 
 describe("withWarmLock", () => {
   it("runs fn and releases when the lock is free", async () => {

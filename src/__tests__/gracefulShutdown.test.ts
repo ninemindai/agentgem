@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from "vitest";
-import { installGracefulShutdown } from "../appCommon.js";
+import { installGracefulShutdown } from "@agentgem/app/appCommon";
 
 describe("installGracefulShutdown", () => {
   it("on SIGTERM, drains the app (stop) then exits 0", async () => {

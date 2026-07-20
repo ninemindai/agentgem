@@ -6,7 +6,7 @@ import { mkdtempSync, mkdirSync, writeFileSync, existsSync, rmSync } from "node:
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { disableArtifacts, listDisabled } from "@agentgem/capture";
-import { GemController } from "../gem.controller.js";
+import { GemController } from "@agentgem/app/gem.controller";
 
 // Project-targeted disable relocates the skill under <root>/.agentgem/disabled and
 // listDisabled scoped to the project reads it back — the mechanism the /optimize

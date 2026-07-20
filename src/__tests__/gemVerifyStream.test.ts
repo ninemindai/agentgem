@@ -5,7 +5,7 @@ import { describe, it, expect, afterEach, beforeAll, afterAll } from "vitest";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { GemStreamController } from "../gem.stream.controller.js";
+import { GemStreamController } from "@agentgem/app/gem.stream.controller";
 import { registerVerify, setRunConnectFnForTests, type RunConnectFn, type ToolInvocation } from "@agentgem/run";
 import type { Gem } from "@agentgem/model";
 

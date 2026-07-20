@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: MIT
 // src/goldmine/__tests__/installRoute.test.ts
 import { describe, it, expect, vi } from "vitest";
-import { registerChatRoutes } from "../chatRoutes.js";
+import { registerChatRoutes } from "@agentgem/app/goldmine/chatRoutes";
 
 // Minimal fake Express app that records handlers and lets us invoke them.
 function fakeApp() {

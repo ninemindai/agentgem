@@ -11,7 +11,7 @@ import { existsSync } from "node:fs";
 import { join } from "node:path";
 import { homedir } from "node:os";
 import { ChatManager } from "@agentgem/run";
-import { chatConnectFn, goldmineMcpServers } from "../../goldmine/chatRoutes.js";
+import { chatConnectFn, goldmineMcpServers } from "@agentgem/app/goldmine/chatRoutes";
 import { loadSessionTranscript } from "@agentgem/insight";
 
 describe.skipIf(!process.env.AGENTGEM_LIVE)("ACP sessionId ↔ on-disk transcript (live)", () => {

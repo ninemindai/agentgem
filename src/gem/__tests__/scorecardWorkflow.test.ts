@@ -1,8 +1,8 @@
 // src/gem/__tests__/scorecardWorkflow.test.ts
 import { describe, it, expect, vi, afterEach, beforeAll, afterAll } from "vitest";
 import { resolve } from "node:path";
-import { GemController } from "../../gem.controller.js";
-import { defaultScorecardDeps } from "../scorecard.js";
+import { GemController } from "@agentgem/app/gem.controller";
+import { defaultScorecardDeps } from "@agentgem/app/gem/scorecard";
 import type { ProcedureCandidate } from "@agentgem/insight";
 import type { WorkflowSignal } from "@agentgem/insight";
 import { useHermeticHome } from "../../__tests__/support/hermeticHome.js";

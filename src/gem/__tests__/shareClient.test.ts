@@ -1,5 +1,5 @@
 import { describe, it, expect, afterEach } from "vitest";
-import { postShare, DEFAULT_AGGREGATOR_URL } from "../shareClient.js";
+import { postShare, DEFAULT_AGGREGATOR_URL } from "@agentgem/app/gem/shareClient";
 
 const counts = { breadth: 1, battleTested: 1, portable: 1 };
 afterEach(() => { delete process.env.AGENTGEM_AGGREGATOR_URL; });

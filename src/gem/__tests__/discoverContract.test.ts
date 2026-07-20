@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { DiscoverPayloadSchema } from "../../gem.controller.js";
+import { DiscoverPayloadSchema } from "@agentgem/app/gem.controller";
 import { buildDiscover, type RegistrySkill } from "@agentgem/insight";
 
 describe("DiscoverPayload contract", () => {

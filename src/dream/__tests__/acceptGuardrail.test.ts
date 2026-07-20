@@ -6,9 +6,9 @@ import { createHash } from "node:crypto";
 import { mkdtempSync, writeFileSync, readFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { enqueueNew } from "../store.js";
-import { DreamController } from "../../dream.controller.js";
-import type { DreamQueueEntry } from "../types.js";
+import { enqueueNew } from "@agentgem/app/dream/store";
+import { DreamController } from "@agentgem/app/dream.controller";
+import type { DreamQueueEntry } from "@agentgem/app/dream/types";
 
 const prov = { occurrences: [{ sessionId: "s1", transcript: "t.jsonl", messageIndices: [1], atMs: 5 }] };
 

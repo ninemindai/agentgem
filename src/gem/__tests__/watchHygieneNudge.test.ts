@@ -5,10 +5,10 @@ import { describe, it, expect, beforeAll, afterAll } from "vitest";
 import { mkdtempSync, mkdirSync, writeFileSync, rmSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
-import { nudgeTransition, buildTickEvents, CURVE_TAIL_MAX, type Verdict } from "../../watchHygieneNudge.js";
-import { hygieneReportForFile } from "../../sessionHygieneCore.js";
-import type { HygieneReport } from "../../sessionHygieneCore.js";
-import { streamWatchHygiene } from "../../watchHygiene.js";
+import { nudgeTransition, buildTickEvents, CURVE_TAIL_MAX, type Verdict } from "@agentgem/app/watchHygieneNudge";
+import { hygieneReportForFile } from "@agentgem/app/sessionHygieneCore";
+import type { HygieneReport } from "@agentgem/app/sessionHygieneCore";
+import { streamWatchHygiene } from "@agentgem/app/watchHygiene";
 
 describe("nudgeTransition", () => {
   const cases: Array<[Verdict | null, Verdict, "fire" | "silent"]> = [

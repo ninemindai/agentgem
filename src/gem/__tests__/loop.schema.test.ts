@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { GemManifestSchema } from "../../schemas.js";
+import { GemManifestSchema } from "@agentgem/app/schemas";
 
 const manifestBase = {
   formatVersion: 1,

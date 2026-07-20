@@ -3,7 +3,7 @@
 // src/gem/__tests__/workflowLesson.test.ts
 import { describe, it, expect, beforeAll, afterAll } from "vitest";
 import { existsSync, readFileSync } from "node:fs";
-import { GemController } from "../../gem.controller.js";
+import { GemController } from "@agentgem/app/gem.controller";
 import { useHermeticHome } from "../../__tests__/support/hermeticHome.js";
 
 let restoreHome: () => void;

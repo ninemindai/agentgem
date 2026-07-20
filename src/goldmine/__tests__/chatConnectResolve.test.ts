@@ -13,7 +13,7 @@ vi.mock("@agentgem/base", async (orig) => {
   }) };
 });
 
-import { makeChatConnectFn } from "../chatRoutes.js";
+import { makeChatConnectFn } from "@agentgem/app/goldmine/chatRoutes";
 
 describe("makeChatConnectFn", () => {
   it("rewrites the descriptor command via the injected resolver before connecting", async () => {

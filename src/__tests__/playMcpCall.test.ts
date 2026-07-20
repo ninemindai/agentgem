@@ -8,8 +8,8 @@ import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { MCP_ERROR_CODES } from "@agentgem/model";
 import { __setConnectorReaderForTest, __resetConnectorsForTest } from "@agentgem/play";
-import { PlayController } from "../play.controller.js";
-import { McpErrorCodeEnum } from "../schemas.js";
+import { PlayController } from "@agentgem/app/play.controller";
+import { McpErrorCodeEnum } from "@agentgem/app/schemas";
 
 // This test runs from dist/__tests__/playMcpCall.test.js (repo root `tsc -b && vitest run dist/...`);
 // climb from there back to the repo root (dist/__tests__ -> dist -> root) and back down into the

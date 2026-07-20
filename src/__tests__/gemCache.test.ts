@@ -1,8 +1,8 @@
 // Copyright (c) 2026 NineMind, Inc.
 // SPDX-License-Identifier: MIT
 import { describe, it, expect } from "vitest";
-import { gemNoCache, GEM_NO_CACHE_METHODS } from "../gemCache.js";
-import { GemController } from "../gem.controller.js";
+import { gemNoCache, GEM_NO_CACHE_METHODS } from "@agentgem/app/gemCache";
+import { GemController } from "@agentgem/app/gem.controller";
 
 // `responseHeaders` is a WHATWG `Headers` (see @agentback/rest keys.d.ts:113), not a Map.
 function run(ctor: unknown, methodName: string) {

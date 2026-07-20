@@ -2,7 +2,7 @@ import { describe, it, expect, beforeAll, afterAll } from "vitest";
 import { mkdtempSync, mkdirSync, writeFileSync, appendFileSync, rmSync, utimesSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { listActiveSessions, createSessionLister, resolveTranscriptFile, agentForFile, sourceForFile } from "../watchSessions.js";
+import { listActiveSessions, createSessionLister, resolveTranscriptFile, agentForFile, sourceForFile } from "@agentgem/app/watchSessions";
 import { resolveDirs } from "@agentgem/model";
 
 let home: string, claudeDir: string, proj: string, freshFile: string, staleFile: string;

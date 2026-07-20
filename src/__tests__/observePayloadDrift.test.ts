@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { ObservePayloadSchema, SessionStatSchema } from "../gem.controller.js";
+import { ObservePayloadSchema, SessionStatSchema } from "@agentgem/app/gem.controller";
 import { aggregateObserve, type SessionStat } from "@agentgem/insight";
 
 // Drift-guard: the server's schema copies are the OpenAPI contract. z.object() STRIPS

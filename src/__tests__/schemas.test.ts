@@ -8,7 +8,7 @@ import {
   GemArtifactSchema, SkippedArtifactSchema,
   SkillArtifactSchema, TriggerContractSchema, DistilledSkillSchema,
   GemApplyResponseSchema, RubricInstallResultSchema,
-} from "../schemas.js";
+} from "@agentgem/app/schemas";
 
 describe("wire schemas", () => {
   it("validates an inventory shape", () => {

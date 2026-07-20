@@ -6,7 +6,7 @@ import { createHash } from "node:crypto";
 import { z } from "zod";
 import { MCPApplication, mcpServer, tool } from "@agentback/mcp";
 import { isMain } from "@agentback/core";
-import { GemSelectionSchema } from "../schemas.js";
+import { GemSelectionSchema } from "@agentgem/app/schemas";
 import type { ConfigInventory, Gem, ProjectInventory } from "@agentgem/model";
 import type { WorkflowSignal } from "@agentgem/insight";
 import { buildGem, type GemSelection } from "@agentgem/build";
@@ -16,7 +16,7 @@ import { writeGemArchive, computeLock } from "@agentgem/archive";
 import { writeAttestedArchive } from "@agentgem/insight";
 import { loadOrCreateIdentity } from "@agentgem/model";
 import { postAttestation, hostedIngestEndpoint } from "@agentgem/insight";
-import { benchmarkContribute } from "../benchmark/config.js";
+import { benchmarkContribute } from "@agentgem/app/benchmark/config";
 
 // ---- pure handlers (unit-tested) ----
 export function inspectIngredientsTool(input: { inventory: ConfigInventory; signal: WorkflowSignal; salt: string }) {

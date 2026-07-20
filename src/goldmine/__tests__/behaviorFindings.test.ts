@@ -5,7 +5,7 @@ import { describe, it, expect, afterEach } from "vitest";
 import { mkdtempSync, mkdirSync, writeFileSync, rmSync, utimesSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { collectBehaviorFindings } from "../behaviorFindings.js";
+import { collectBehaviorFindings } from "@agentgem/app/goldmine/behaviorFindings";
 
 const NOW = 1_750_000_000_000; // fixed clock for window tests
 const DAY = 86_400_000;

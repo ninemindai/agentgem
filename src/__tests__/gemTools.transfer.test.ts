@@ -1,6 +1,6 @@
 // src/__tests__/gemTools.transfer.test.ts
 import { describe, it, expect, beforeEach, afterAll } from "vitest";
-import { GemTools } from "../gem.tools.js";
+import { GemTools } from "@agentgem/app/gem.tools";
 
 // Hermetic: with NATS unconfigured, the transfer tools must fail fast with a clear
 // "not configured" error and never attempt a connection. The send/receive happy

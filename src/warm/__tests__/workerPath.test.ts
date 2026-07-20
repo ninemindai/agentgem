@@ -5,7 +5,7 @@ import { mkdtempSync, mkdirSync, writeFileSync, rmSync, readFileSync } from "nod
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { pathToFileURL } from "node:url";
-import { resolveWorkerPath, WORKER_CANDIDATES } from "../workerPath.js";
+import { resolveWorkerPath, WORKER_CANDIDATES } from "@agentgem/app/warm/workerPath";
 
 // bundle-bins.mjs inlines warm/registry.js into dist/index.js, which rewrites
 // import.meta.url from dist/warm/ to dist/. A single relative candidate resolves in

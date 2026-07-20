@@ -3,7 +3,7 @@
 // src/warm/__tests__/hygieneNudger.test.ts
 import { describe, it, expect } from "vitest";
 import { createHygieneNudger } from "../hygieneNudger.js";
-import type { HygieneReport } from "../../sessionHygieneCore.js";
+import type { HygieneReport } from "@agentgem/app/sessionHygieneCore";
 
 // Minimal report with a chosen verdict + a fired factor (so buildTickEvents has advice).
 function report(sessionId: string, verdict: "bounded" | "mixed" | "bloated"): HygieneReport {

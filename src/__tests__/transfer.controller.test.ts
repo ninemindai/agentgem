@@ -2,7 +2,7 @@
 import { describe, it, expect, beforeAll, afterAll } from "vitest";
 import supertest from "supertest";
 import { RestApplication } from "@agentback/rest";
-import { GemController } from "../gem.controller.js";
+import { GemController } from "@agentgem/app/gem.controller";
 import { exportGem } from "@agentgem/distribute";
 import type { Gem } from "@agentgem/model";
 

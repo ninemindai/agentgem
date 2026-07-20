@@ -2,7 +2,7 @@
 import { describe, it, expect } from "vitest";
 import { Application } from "@agentback/core";
 import { BUILTIN_CUTS, type Gem, type GemArtifact, type GemTypeSpec } from "@agentgem/model";
-import { GEM_TYPES, GemTypeRegistry, GemTypesComponent, defaultGemTypeRegistry } from "../gemTypeRegistry.js";
+import { GEM_TYPES, GemTypeRegistry, GemTypesComponent, defaultGemTypeRegistry } from "@agentgem/app/gem/gemTypeRegistry";
 
 const gem = (artifacts: GemArtifact[]): Gem => ({ name: "g", createdFrom: "t", artifacts, checks: [], requiredSecrets: [] });
 

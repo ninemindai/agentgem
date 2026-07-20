@@ -1,7 +1,7 @@
 // Copyright (c) 2026 NineMind, Inc.
 // SPDX-License-Identifier: MIT
 import { describe, it, expect } from "vitest";
-import { getWarmStatus } from "../warm/orchestrator.js";
+import { getWarmStatus } from "@agentgem/app/warm/orchestrator";
 
 describe("warm status shape", () => {
   it("exposes running + last fields consumed by the /api/warm/status route", () => {

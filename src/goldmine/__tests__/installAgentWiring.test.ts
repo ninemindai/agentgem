@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: MIT
 // src/goldmine/__tests__/installAgentWiring.test.ts
 import { describe, it, expect, vi } from "vitest";
-import { installAgentFn } from "../chatRoutes.js";
+import { installAgentFn } from "@agentgem/app/goldmine/chatRoutes";
 import { adapterRuntimeCtx } from "@agentgem/base";
 import { mkdtempSync, mkdirSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";

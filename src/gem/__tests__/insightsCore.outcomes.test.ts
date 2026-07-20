@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: MIT
 import { describe, it, expect } from "vitest";
 import { openArtifactOutcomesStore, type WorkflowSignal, type SessionFacet } from "@agentgem/insight";
-import { persistOutcomes } from "../../insightsCore.js";
+import { persistOutcomes } from "@agentgem/app/insightsCore";
 
 function signal(): WorkflowSignal {
   return { sequences: { root: "/repo", sessions: [{

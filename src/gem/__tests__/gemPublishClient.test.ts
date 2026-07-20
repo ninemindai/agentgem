@@ -1,7 +1,7 @@
 // Copyright (c) 2026 NineMind, Inc.
 // SPDX-License-Identifier: MIT
 import { describe, it, expect, vi } from "vitest";
-import { postGemPublish } from "../gemPublishClient.js";
+import { postGemPublish } from "@agentgem/app/gem/gemPublishClient";
 import type { Identity } from "@agentgem/model";
 
 const identity: Identity = { publicKey: "ed25519:PUB", sign: (d) => "sig" + d.length };

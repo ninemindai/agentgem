@@ -4,7 +4,7 @@ import { describe, it, expect, afterEach } from "vitest";
 import { mkdtempSync, mkdirSync, writeFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { GemController } from "../gem.controller.js";
+import { GemController } from "@agentgem/app/gem.controller";
 import { InvalidInputError } from "@agentgem/model";   // same class the controller throws — required for toBeInstanceOf
 
 // summarizeSession scans the DEFAULT store: resolveDirs() reads $HOME, agentgemHome()

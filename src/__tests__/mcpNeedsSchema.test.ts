@@ -2,7 +2,7 @@
 import { describe, it, expect } from "vitest";
 import type { McpNeed } from "@agentgem/model";
 import type { z } from "zod";
-import { McpNeedSchema, McpNeedsSchema, GameArtifactSchema, PlaySaveRequestSchema, PlaySaveResponseSchema, PlayMiniappSchema, MiniappListSchema } from "../schemas.js";
+import { McpNeedSchema, McpNeedsSchema, GameArtifactSchema, PlaySaveRequestSchema, PlaySaveResponseSchema, PlayMiniappSchema, MiniappListSchema } from "@agentgem/app/schemas";
 
 // Compile-time lockstep pin: the wire schema and the model type must be assignable both ways.
 // If either side drifts, this file stops compiling — the drift guard for a STRUCTURED shape,

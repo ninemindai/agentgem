@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: MIT
 import { describe, it, expect } from "vitest";
 import { builtinRubrics, type Rubric, type RubricScope } from "@agentgem/insight";
-import { rubricToken, resolveRubric, listRubrics, listRubricsWithMeta } from "../rubricCore.js";
+import { rubricToken, resolveRubric, listRubrics, listRubricsWithMeta } from "@agentgem/app/rubricCore";
 
 const hygiene = builtinRubrics().find((r) => r.id === "hygiene")!;
 const project: RubricScope = { kind: "project", root: "/p" };

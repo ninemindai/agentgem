@@ -1,7 +1,7 @@
 // Copyright (c) 2026 NineMind, Inc.
 // SPDX-License-Identifier: MIT
 import { describe, it, expect } from "vitest";
-import { guardrailEntries } from "../harvest.js";
+import { guardrailEntries } from "@agentgem/app/dream/harvest";
 
 const draft = { detectorId: "repeated-tool-error", tool: "Bash", detail: "Bash errored 2x", confidence: "medium" as const, occurrences: 2,
   provenance: { occurrences: [{ sessionId: "s1", transcript: "s1.jsonl", messageIndices: [1, 2], atMs: 0 }] } };

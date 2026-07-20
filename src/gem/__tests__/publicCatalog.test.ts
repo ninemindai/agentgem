@@ -1,7 +1,7 @@
 // Copyright (c) 2026 NineMind, Inc.
 // SPDX-License-Identifier: MIT
 import { describe, it, expect } from "vitest";
-import { mapDbToGems } from "../publicCatalog.js";
+import { mapDbToGems } from "@agentgem/app/gem/publicCatalog";
 import type { CatalogRow } from "@agentgem/contract";
 
 describe("mapDbToGems", () => {

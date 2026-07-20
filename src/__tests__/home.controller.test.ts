@@ -5,8 +5,8 @@ import { mkdirSync, writeFileSync, readFileSync, existsSync, mkdtempSync, rmSync
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { clearScanCache, writeAnalysisCache } from "@agentgem/insight";
-import { SCORECARD_CACHE_ROOT } from "../gem/scorecard.js";
-import { HomeController, CLAUDE_GATE_MIN_SESSIONS } from "../home.controller.js";
+import { SCORECARD_CACHE_ROOT } from "@agentgem/app/gem/scorecard";
+import { HomeController, CLAUDE_GATE_MIN_SESSIONS } from "@agentgem/app/home.controller";
 import { useHermeticHome } from "./support/hermeticHome.js";
 import { createWorkspace, deleteWorkspace } from "@agentgem/base";
 import type { Gem } from "@agentgem/model";

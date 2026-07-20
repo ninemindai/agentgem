@@ -6,7 +6,7 @@ import { mkdtempSync, mkdirSync, writeFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { setConnectFnForTests, type AcpConnectFn } from "@agentgem/insight";
-import { GemController } from "../../gem.controller.js";
+import { GemController } from "@agentgem/app/gem.controller";
 
 let home: string, prevHome: string | undefined, prevAg: string | undefined;
 const fakeConnect = (canned: string): AcpConnectFn => async () => ({

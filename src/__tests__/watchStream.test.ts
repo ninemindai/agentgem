@@ -2,7 +2,7 @@ import { describe, it, expect, beforeAll, afterAll, afterEach, vi } from "vitest
 import { mkdtempSync, mkdirSync, writeFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { streamWatch } from "../watchStream.js";
+import { streamWatch } from "@agentgem/app/watchStream";
 
 // The stream validates ?file= against the real resolved home, so we redirect HOME
 // to a temp tree holding both a Claude and a Codex fixture session.

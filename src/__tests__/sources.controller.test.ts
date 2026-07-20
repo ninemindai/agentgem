@@ -2,7 +2,7 @@
 import { describe, it, expect } from "vitest";
 import { InvalidInputError } from "@agentgem/model";
 import { CURATED_SOURCES } from "@agentgem/distribute";
-import { SourcesController } from "../sources.controller.js";
+import { SourcesController } from "@agentgem/app/sources.controller";
 
 // Network-backed happy paths (divisions/agents/agent/import) are covered at the adapter layer
 // (agencyAgents.test.ts, with an injected fake Http). Here we exercise the controller's own

@@ -3,7 +3,7 @@
 // `agentgem get <key>[@<version>]` — download a published gem from the hosted marketplace and import
 // it into the local app as a workspace. Zero-config: no registry setup, no browser, no running daemon
 // — the CLI counterpart to the marketplace "Open in AgentGem" deep link, for anyone with Node.
-import { fetchHostedArchive, hasExecutable, executableArtifacts, type ArchiveHttp } from "./gem/hostedInstall.js";
+import { fetchHostedArchive, hasExecutable, executableArtifacts, type ArchiveHttp } from "@agentgem/app/gem/hostedInstall";
 import { importGem } from "@agentgem/distribute";
 import { createWorkspace } from "@agentgem/base";
 

@@ -5,12 +5,12 @@ import { describe, it, expect, beforeEach } from "vitest";
 import { mkdtempSync, mkdirSync, writeFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { DreamController } from "../dream.controller.js";
-import { enqueueNew, appendDiary } from "../dream/store.js";
+import { DreamController } from "@agentgem/app/dream.controller";
+import { enqueueNew, appendDiary } from "@agentgem/app/dream/store";
 import { appendVerification } from "@agentgem/run";
-import { runWarmPass } from "../warm/orchestrator.js";
-import type { DreamQueueEntry } from "../dream/types.js";
-import type { Warmable } from "../warm/registry.js";
+import { runWarmPass } from "@agentgem/app/warm/orchestrator";
+import type { DreamQueueEntry } from "@agentgem/app/dream/types";
+import type { Warmable } from "@agentgem/app/warm/registry";
 
 const prov = { occurrences: [{ sessionId: "s1", transcript: "t.jsonl", messageIndices: [1], atMs: 5 }] };
 function lessonEntry(): DreamQueueEntry {

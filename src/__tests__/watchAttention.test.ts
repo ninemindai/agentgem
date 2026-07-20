@@ -2,7 +2,7 @@ import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import { mkdtempSync, mkdirSync, writeFileSync, appendFileSync, rmSync, utimesSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { computeAttention, createAttentionLister, STALL_MS } from "../watchAttention.js";
+import { computeAttention, createAttentionLister, STALL_MS } from "@agentgem/app/watchAttention";
 import type { SessionEvent } from "@agentgem/insight";
 
 const NOW = Date.parse("2026-07-16T12:00:00.000Z");

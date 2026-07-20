@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: MIT
 import { describe, it, expect, vi, afterEach } from "vitest";
 import { transcriptToken } from "@agentgem/insight";
-import { ScorecardController, setScorecardDepsForTests, type ScorecardStreamDeps } from "../scorecard.stream.controller.js";
+import { ScorecardController, setScorecardDepsForTests, type ScorecardStreamDeps } from "@agentgem/app/scorecard.stream.controller";
 
 afterEach(() => setScorecardDepsForTests(null));
 

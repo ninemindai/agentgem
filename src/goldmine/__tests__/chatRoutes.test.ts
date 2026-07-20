@@ -11,7 +11,7 @@ import request from "supertest";
 import { RestApplication } from "@agentback/rest";
 import { ChatManager } from "@agentgem/run";
 import type { ChatConnectFn } from "@agentgem/run";
-import { registerChatRoutes, studioChatArgs, resolveChatCwd } from "../chatRoutes.js";
+import { registerChatRoutes, studioChatArgs, resolveChatCwd } from "@agentgem/app/goldmine/chatRoutes";
 
 // ── Fake connect fn ──────────────────────────────────────────────────────────
 function makeFakeConnectFn(opts: { fail?: boolean } = {}): ChatConnectFn {

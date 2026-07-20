@@ -10,7 +10,7 @@
 // clientEntry.test.ts (RestServer only mounts routes in start(), so assert after it).
 import { describe, it, expect, afterEach } from "vitest";
 import request from "supertest";
-import { buildCommonApp, finalizeCommonApp, ROOT_UI_MOUNT } from "../appCommon.js";
+import { buildCommonApp, finalizeCommonApp, ROOT_UI_MOUNT } from "@agentgem/app/appCommon";
 import type { RestApplication } from "@agentback/rest";
 
 describe("ROOT_UI_MOUNT seam", () => {

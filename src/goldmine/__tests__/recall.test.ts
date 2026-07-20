@@ -1,7 +1,7 @@
 // Copyright (c) 2026 NineMind, Inc.
 // SPDX-License-Identifier: MIT
 import { describe, it, expect } from "vitest";
-import { defaultRecallDbPath, serverFunnelDeps } from "../recall.js";
+import { defaultRecallDbPath, serverFunnelDeps } from "@agentgem/app/goldmine/recall";
 
 describe("defaultRecallDbPath", () => {
   it("resolves under ~/.agentgem and ends with recall-index.db", () => {

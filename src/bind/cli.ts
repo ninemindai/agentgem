@@ -1,7 +1,7 @@
 // Copyright (c) 2026 NineMind, Inc.
 // SPDX-License-Identifier: MIT
 // src/bind/cli.ts — `agentgem bind`: device-flow auth, then bind the local key to a GitHub account.
-import { bindConfig, startDeviceBind, completeDeviceBind } from "./bindCore.js";
+import { bindConfig, startDeviceBind, completeDeviceBind } from "@agentgem/app/bind/bindCore";
 
 export async function main(_argv: string[]): Promise<void> {
   const cfg = bindConfig();

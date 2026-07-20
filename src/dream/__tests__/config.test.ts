@@ -2,7 +2,7 @@ import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { dreamEnabled, setDreamEnabled } from "../config.js";
+import { dreamEnabled, setDreamEnabled } from "@agentgem/app/dream/config";
 
 describe("dream config", () => {
   let base: string;

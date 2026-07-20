@@ -4,7 +4,7 @@
 // distill one session into the dream review queue from the terminal, no server needed.
 // Exit codes: 0 success (including "nothing distilled"); 2 usage/containment errors.
 import { InvalidInputError } from "@agentgem/model";
-import { learnFromSession } from "./learnCore.js";
+import { learnFromSession } from "@agentgem/app/learnCore";
 
 interface LearnCliDeps {
   learn?: typeof learnFromSession;

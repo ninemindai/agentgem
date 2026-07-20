@@ -4,7 +4,7 @@ import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import { mkdtempSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
-import { AgentTasksController } from "../agentTasks.controller.js";
+import { AgentTasksController } from "@agentgem/app/agentTasks.controller";
 
 const orig = process.env.AGENTGEM_HOME;
 beforeEach(() => { process.env.AGENTGEM_HOME = mkdtempSync(join(tmpdir(), "agentgem-tasks-ctrl-")); });

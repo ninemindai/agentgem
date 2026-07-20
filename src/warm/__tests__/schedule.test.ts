@@ -1,7 +1,7 @@
 // Copyright (c) 2026 NineMind, Inc.
 // SPDX-License-Identifier: MIT
 import { describe, it, expect, afterEach } from "vitest";
-import { startWarmSchedule } from "../schedule.js";
+import { startWarmSchedule } from "@agentgem/app/warm/schedule";
 
 describe("startWarmSchedule", () => {
   it("runs once immediately and again on each interval tick, and stop() clears the timer", () => {

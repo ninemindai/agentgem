@@ -12,7 +12,7 @@ import { hostname } from "node:os";
 import { join, dirname } from "node:path";
 import { agentgemHome } from "@agentgem/model";
 import { scanSessionsCached, type SessionStat } from "@agentgem/insight";
-import { readSession, bindConfig } from "../bind/bindCore.js";
+import { readSession, bindConfig } from "@agentgem/app/bind/bindCore";
 import { createLogger } from "@agentgem/base";
 
 const log = createLogger("usage");

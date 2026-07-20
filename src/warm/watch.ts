@@ -10,7 +10,7 @@ import { watch as fsWatch } from "node:fs";
 import { join, resolve } from "node:path";
 import { resolveDirs } from "@agentgem/model";
 import { bucketTranscriptsByCwd } from "@agentgem/insight";
-import { runWarmPass } from "./orchestrator.js";
+import { runWarmPass } from "@agentgem/app/warm/orchestrator";
 import { createLogger } from "@agentgem/base";
 
 const log = createLogger("warm");
