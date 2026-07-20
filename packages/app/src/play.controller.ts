@@ -6,10 +6,10 @@ import { z } from "zod";
 import {
   saveMiniapp, deleteMiniapp, listMiniapps, readMiniapp, miniappsRoot, setRemote, push, seedStudio, importStudio, blankStudio,
   compactTurns, resolveSessionRef, mcpAppFor, migrateAllMiniapps, INSPECTOR_HTML, INSPECTOR_META, type MiniappMeta,
-  EMBER_HTML, EMBER_META, readMiniappShare, addUploadsToMiniapp,
+  EMBER_HTML, EMBER_META, REPO_PULSE_HTML, REPO_PULSE_META, readMiniappShare, addUploadsToMiniapp,
   callConnectorTool, listConnectorTools, resolveConnectorGem, resolveConnectorDigest, ConnectorError,
 } from "@agentgem/play";
-import { derivePayload } from "@agentgem/model";
+import { derivePayload, type McpNeed } from "@agentgem/model";
 import { defaultReaders } from "./play.readers.js";
 import { listActiveSessions } from "./watchSessions.js";
 import {
@@ -110,7 +110,10 @@ export class PlayController {
   async miniapps(): Promise<z.infer<typeof MiniappListSchema>> {
     // Built-in EMBER is a served constant (never in the registry) but IS listed so it shows as an Arcade
     // card — prepended so it leads the grid. `miniapp()` special-cases its name below.
-    const builtins = [{ name: EMBER_META.name, title: EMBER_META.title, genre: EMBER_META.genre, needs: EMBER_META.needs }];
+    const builtins = [
+      { name: EMBER_META.name, title: EMBER_META.title, genre: EMBER_META.genre, needs: EMBER_META.needs },
+      { name: REPO_PULSE_META.name, title: REPO_PULSE_META.title, genre: REPO_PULSE_META.genre },
+    ];
     const registry = listMiniapps().map((m) => ({ name: m.name, title: m.meta.title, genre: m.meta.genre, ...(m.meta.needs ? { needs: m.meta.needs } : {}) }));
     return { miniapps: [...builtins, ...registry] };
   }
@@ -123,6 +126,14 @@ export class PlayController {
       return { name: EMBER_META.name, html: EMBER_HTML, meta: {
         title: EMBER_META.title, genre: EMBER_META.genre, createdFrom: EMBER_META.createdFrom,
         engineVersion: EMBER_META.engineVersion, needs: EMBER_META.needs,
+      } };
+    }
+    // "__repo-pulse" (packages/play/src/repoPulse.ts) — the connectors demo built-in; its manifest
+    // rides meta.mcpNeeds so Studio's Runner attaches the mcp router (same read path as saved apps).
+    if (input.query.name === REPO_PULSE_META.name) {
+      return { name: REPO_PULSE_META.name, html: REPO_PULSE_HTML, meta: {
+        title: REPO_PULSE_META.title, genre: REPO_PULSE_META.genre, createdFrom: REPO_PULSE_META.createdFrom,
+        engineVersion: REPO_PULSE_META.engineVersion, mcpNeeds: REPO_PULSE_META.mcpNeeds,
       } };
     }
     try {
@@ -189,13 +200,23 @@ export class PlayController {
     } catch (e) { throw new AgentError(`publish failed: ${(e as Error).message}`, { status: 400 }); }
   }
 
+  // A built-in's connector manifest lives in its served constant, not the registry (readMiniapp
+  // throws for "__" names). Only Repo Pulse declares one; EMBER/Inspector have none, so falling
+  // through to readMiniapp keeps their (correct) 404 behavior on the mcp routes.
+  private builtinMcpNeeds(name: string): McpNeed[] | undefined {
+    return name === REPO_PULSE_META.name ? REPO_PULSE_META.mcpNeeds : undefined;
+  }
+
   @post("/play/mcp/call", { body: PlayMcpCallRequestSchema, response: PlayMcpCallResponseSchema })
   async mcpCall(input: { body: z.infer<typeof PlayMcpCallRequestSchema> }): Promise<z.infer<typeof PlayMcpCallResponseSchema>> {
     const { name, server, tool, input: args, expectedConfigDigest } = input.body;
     // 404 for an unknown miniapp (an AgentError, not an envelope error — the CALLER is malformed).
-    let mcpNeeds;
-    try { mcpNeeds = readMiniapp(name).meta.mcpNeeds ?? []; }
-    catch (e) { throw new AgentError((e as Error).message, { status: 404 }); }
+    // A built-in's manifest lives in its served constant — readMiniapp() throws for "__" names.
+    let mcpNeeds = this.builtinMcpNeeds(name);
+    if (!mcpNeeds) {
+      try { mcpNeeds = readMiniapp(name).meta.mcpNeeds ?? []; }
+      catch (e) { throw new AgentError((e as Error).message, { status: 404 }); }
+    }
     // THE SECURITY BOUNDARY: refuse any (server, tool) the SAVED manifest does not grant, before we
     // ever touch the connector. The console consent gate (PR-3) is UX; this is enforcement.
     const declared = mcpNeeds.find((n) => n.server === server);
@@ -228,9 +249,11 @@ export class PlayController {
 
   @get("/play/mcp/servers", { query: PlayMcpServersQuerySchema, response: PlayMcpServersResponseSchema })
   async mcpServers(input: { query: z.infer<typeof PlayMcpServersQuerySchema> }): Promise<z.infer<typeof PlayMcpServersResponseSchema>> {
-    let mcpNeeds;
-    try { mcpNeeds = readMiniapp(input.query.name).meta.mcpNeeds ?? []; }
-    catch (e) { throw new AgentError((e as Error).message, { status: 404 }); }
+    let mcpNeeds = this.builtinMcpNeeds(input.query.name);
+    if (!mcpNeeds) {
+      try { mcpNeeds = readMiniapp(input.query.name).meta.mcpNeeds ?? []; }
+      catch (e) { throw new AgentError((e as Error).message, { status: 404 }); }
+    }
     const servers = [];
     for (const need of mcpNeeds) {
       // A declared server with no matching installed gem lists with EMPTY tools (the not-connected
