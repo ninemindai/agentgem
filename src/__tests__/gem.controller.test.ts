@@ -774,35 +774,15 @@ describe("testbed ops", () => {
 });
 
 describe("run ops", () => {
-  it("GET /api/run-ready returns booleans", async () => {
+  it("GET /api/run-ready reports local readiness", async () => {
     const res = await client.get("/api/run-ready").query({ name: "gem", target: "eve" });
     expect(res.status).toBe(200);
     expect(typeof res.body.local).toBe("boolean");
-    expect(typeof res.body.vercel).toBe("boolean");
   });
 
-  it("POST /api/run mode=vercel without VERCEL_TOKEN is rejected", async () => {
-    delete process.env.VERCEL_TOKEN;
+  it("POST /api/run rejects a non-local mode (no dispatcher bound)", async () => {
     const res = await client.post("/api/run").send({ name: "gem", target: "eve", mode: "vercel" });
     expect(res.status).toBeGreaterThanOrEqual(400);
-  });
-
-  it("run-ready reports the cloudflare gate", async () => {
-    const savedToken = process.env.CLOUDFLARE_API_TOKEN;
-    try {
-      delete process.env.CLOUDFLARE_API_TOKEN;
-      const off = await client.get("/api/run-ready").query({ name: "gem", target: "eve" });
-      expect(off.status).toBe(200);
-      expect(off.body.cloudflare).toBe(false);
-
-      process.env.CLOUDFLARE_API_TOKEN = "cf-test-token";
-      const on = await client.get("/api/run-ready").query({ name: "gem", target: "eve" });
-      expect(on.status).toBe(200);
-      expect(on.body.cloudflare).toBe(true);
-    } finally {
-      if (savedToken !== undefined) process.env.CLOUDFLARE_API_TOKEN = savedToken;
-      else delete process.env.CLOUDFLARE_API_TOKEN;
-    }
   });
 
   // Containment guard: the `name` field flows startLocal -> ensureRunProject -> workspaceDir ->

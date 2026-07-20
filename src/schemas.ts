@@ -634,7 +634,7 @@ export const ListWorkspacesResponseSchema = z.object({ workspaces: z.array(Works
 export const DeleteWorkspaceResponseSchema = z.object({ deleted: z.string() });
 
 export const RunReadyQuerySchema = z.object({ name: z.string(), target: TargetIdSchema });
-export const RunReadyResponseSchema = z.object({ local: z.boolean(), vercel: z.boolean(), cloudflare: z.boolean() });
+export const RunReadyResponseSchema = z.object({ local: z.boolean() });
 export const RunRequestSchema = z.object({ name: z.string(), target: TargetIdSchema, mode: z.enum(["local", "vercel", "cloudflare"]), eveAuth: z.enum(["placeholder", "public"]).optional() });
 export const RunStatusQuerySchema = z.object({ name: z.string(), target: TargetIdSchema });
 export const RunStateSchema = z.object({
