@@ -13,22 +13,11 @@
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
-import { RestApplication, REST_DISPATCH_HOOK_TAG } from "@agentback/rest";
+import { RestApplication } from "@agentback/rest";
 import { installExplorer } from "@agentback/rest-explorer";
 import { MCPComponent } from "@agentback/mcp";
-import { GemTypesComponent } from "./gem/gemTypeRegistry.js";
-import { AgentSourcesComponent } from "./gem/sourceRegistry.js";
+import { GemCoreComponent } from "./gemCore.component.js";
 import { installMcpHttp } from "@agentback/mcp-http";
-import { GemController } from "./gem.controller.js";
-import { HomeController } from "./home.controller.js";
-import { ReviewController } from "./review.controller.js";
-import { DreamController } from "./dream.controller.js";
-import { GemTools } from "./gem.tools.js";
-import { WorkflowController } from "./workflow.controller.js";
-import { GemStreamController } from "./gem.stream.controller.js";
-import { ScorecardController } from "./scorecard.stream.controller.js";
-import { InsightsController } from "./insights.controller.js";
-import { RubricController } from "./rubric.controller.js";
 import { streamWatch } from "./watchStream.js";
 import { streamWatchEvents } from "./watchEvents.js";
 import { streamWatchHygiene } from "./watchHygiene.js";
@@ -52,13 +41,8 @@ import { join as pathJoin } from "node:path";
 import { mkdirSync } from "node:fs";
 import { closeSharedIndex } from "@agentgem/capture";
 import { originGuard } from "./originGuard.js";
-import { playNoCache } from "./playCache.js";
-import { gemNoCache } from "./gemCache.js";
 import { getWarmStatus } from "./warm/orchestrator.js";
 import { ReportRegistry, REPORT_REGISTRY } from "./report/registry.js";
-import { ShareProxyController } from "./share.proxy.controller.js";
-import { SourcesController } from "./sources.controller.js";
-import { PlayController } from "./play.controller.js";
 
 const serverLog = createLogger("server");
 
@@ -149,40 +133,22 @@ export async function buildCommonApp(port: number): Promise<{ app: RestApplicati
   } as never;
   app.configure("servers.RestServer").to({ port, host: serverHost(), bodyParser: { json: jsonBodyOptions } });
   app.component(MCPComponent);
-  app.component(GemTypesComponent);
-  app.component(AgentSourcesComponent);
   app.configure("servers.MCPServer").to({ name: "agentgem", version: "0.1.0", transports: { stdio: false } });
-  app.restController(GemController);
-  app.restController(HomeController);
-  app.restController(RubricController);
-  app.restController(ReviewController);
-  app.restController(DreamController);
-  app.restController(ShareProxyController);
-  app.restController(SourcesController);
-  app.restController(PlayController);
-  app.restController(InsightsController);
-  app.restController(WorkflowController);
-  app.restController(GemStreamController);
-  app.restController(ScorecardController);
-  app.service(GemTools);
+  // Every shared REST controller, GemTools, the two cache-control dispatch hooks, and the
+  // gem-type / agent-source extension-point registries — bundled as one component. Discovery is
+  // by tag at start(), so this is behavior-identical to the previous imperative restController
+  // list; membership now lives in gemCore.component.ts, and a downstream deployment installs the
+  // whole local-first surface with a single app.component(GemCoreComponent).
+  app.component(GemCoreComponent);
   // The persistent transcript index (capture) is a separate, lazily-opened on-disk
   // PGlite — not the aggregator DB. Close it on graceful shutdown too, so SIGTERM
   // flushes its WASM instance cleanly instead of leaving it resident until exit
   // (symmetric with the aggregator's registerDrizzle onStop). No-op if never opened.
   app.onStop(async () => { await closeSharedIndex(); });
-  // The Play registry reads serve mutable on-disk state; without Cache-Control the browser
-  // heuristically caches them off the bare ETag and the Studio renders a stale miniapp. A dispatch
-  // hook keys on the matched route rather than a path string, and writes through the neutral
-  // responseHeaders collector so it holds on the Web/edge pipeline too. Bound before start(): the
-  // hook list is resolved once, on the first dispatched request, and cached.
-  app.bind("hooks.playNoCache").to(playNoCache).tag(REST_DISPATCH_HOOK_TAG);
-  // hooks.gameHtmlCache (the arcade's sealed-game read cache) is aggregator-specific — bound by
-  // mountAggregator (serverAggregator.ts), not here, since it keys on AggregatorController, which
-  // the desktop client entry never mounts. See arcadeCache.ts's module comment.
-  // The inventory reads serve mutable local state (installing a skill changes them); without
-  // Cache-Control the browser heuristically caches them off the bare ETag. Same rationale and
-  // mechanism as hooks.playNoCache above.
-  app.bind("hooks.gemNoCache").to(gemNoCache).tag(REST_DISPATCH_HOOK_TAG);
+  // The two cache-control dispatch hooks (hooks.playNoCache, hooks.gemNoCache) are bound by
+  // GemCoreComponent, above. hooks.gameHtmlCache (the arcade's sealed-game read cache) is
+  // aggregator-specific — bound by mountAggregator (serverAggregator.ts), not here, since it keys
+  // on AggregatorController, which the desktop client entry never mounts. See arcadeCache.ts.
   await installExplorer(app, { title: "agentgem API" });
   await installMcpHttp(app);
   const server = await app.restServer;
