@@ -8,7 +8,7 @@
 // function here, not touching every call site.
 import type { SkillArtifact } from "@agentgem/model";
 import { InvalidInputError } from "@agentgem/model";
-import type { Http, GithubCfg } from "./registryGithub.js";
+import type { Http, GithubCfg } from "./registryTypes.js";
 import { defaultHttp } from "./githubContents.js";
 import type { CuratedSource } from "./curatedSources.js";
 import {

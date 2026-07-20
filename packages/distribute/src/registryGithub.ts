@@ -4,11 +4,9 @@
 // Isolated GitHub network client. All HTTP goes through the injected `http` fn so logic stays testable.
 // Fetch uses the Contents API (token-optional → public + private uniform). Publish builds one atomic
 // commit via the Git Data API (blobs → tree → commit → update ref).
-import type { RegistryIndex, RegistrySource, RegistryPublisher } from "./registry.js";
+import type { RegistrySource, RegistryPublisher } from "./registry.js";
+import type { RegistryIndex, GithubCfg, Http } from "./registryTypes.js";
 import type { FileTree } from "@agentgem/model";
-
-export interface GithubCfg { repo: string; ref: string; token?: string }
-export type Http = (url: string, init?: { method?: string; headers?: Record<string, string>; body?: string }) => Promise<{ status: number; text: () => Promise<string> }>;
 
 const API = "https://api.github.com";
 const defaultHttp: Http = async (url, init) => {

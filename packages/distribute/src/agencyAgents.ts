@@ -13,11 +13,11 @@
 // surfaced on the catalog *entry* (for the picker UI) but kept OUT of the imported skill's
 // content, so decoration never leaks into a Gem or its digest.
 //
-// All network goes through an injected `Http` (reused shape from registryGithub.ts) so the
+// All network goes through an injected `Http` (reused shape from registryTypes.ts) so the
 // walk + transforms stay unit-testable with a fake. Reads use the token-optional Contents API,
 // so public browsing needs no credentials (a token only lifts the 60/hr unauthenticated limit).
 import type { SkillArtifact } from "@agentgem/model";
-import type { Http, GithubCfg } from "./registryGithub.js";
+import type { Http, GithubCfg } from "./registryTypes.js";
 import { ghContents, decodeFile, defaultHttp, splitFrontmatter, fmField } from "./githubContents.js";
 
 export const AGENCY_AGENTS_REPO = { repo: "msitarzewski/agency-agents", ref: "main" } as const;

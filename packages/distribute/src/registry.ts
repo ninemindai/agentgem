@@ -4,24 +4,9 @@ import type { Gem, GemArtifact, SecretRequirement, GemCheck } from "@agentgem/mo
 import { readGemArchive, computeLock, verifyLock, writeGemArchive, readGemMeta } from "@agentgem/archive";
 import { materialize, assertGemSafe } from "@agentgem/model";
 import type { FileTree, TargetId } from "@agentgem/model";
+import type { RegistryIndex, RegistryItem, RegistryItemDiscovery } from "./registryTypes.js";
 
 export const REGISTRY_FORMAT_VERSION = 1;
-
-export interface RegistryItemVersion { path: string; gemDigest: string; dependencies: string[] }
-// Denormalized, searchable metadata for the latest version — additive/optional so older
-// readers ignore it and the format version need not bump. Populated at publish time.
-export interface RegistryItemDiscovery {
-  description?: string;
-  tags?: string[];
-  author?: string;
-  artifactKinds?: string[];
-  updatedAt?: string;
-  type?: string;        // the gem's cut (setup/kit/skill/integration/guide/playbook + plugin cuts)
-  publishedBy?: string; // server-verified GitHub login of the publishing account (distinct from free-form `author`)
-  grade?: number;       // authoring-quality floor (1..3) forwarded from the gem; the marketplace blends it with stars
-}
-export interface RegistryItem { latest: string; versions: Record<string, RegistryItemVersion>; discovery?: RegistryItemDiscovery }
-export interface RegistryIndex { formatVersion: number; items: Record<string, RegistryItem> }
 
 export interface ParsedRef { key: string; scope: string; name: string; range: string }
 

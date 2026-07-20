@@ -8,7 +8,7 @@
 // agency-layout (agencyAgents.ts, one repo of persona `.md` files) and skills-layout
 // (skillsLayout.ts, many repos of canonical `SKILL.md` files). Adding a same-layout source is
 // one more entry here; a differently shaped repo needs its own adapter + a new `kind`.
-import type { GithubCfg } from "./registryGithub.js";
+import type { GithubCfg } from "./registryTypes.js";
 
 // The on-disk layout a source uses, which selects the import adapter (see sourceImport.ts).
 export type CuratedSourceKind = "agency-layout" | "skills-layout";
