@@ -113,6 +113,14 @@ Once published, a game lives in the marketplace **arcade** (`app.agentgem.ai/`) 
 counts plays, and plays offline: a sealed game carries everything it needs, so there is
 no network to lose.
 
+## Connectors
+
+A mini-app can declare **`mcpNeeds`** — MCP tools it wants to call. Nothing is
+granted silently: at play time the console shows a **consent** card, and only after
+you allow it does the host **broker** those MCP calls to the mini-app. The built-in
+**Repo Pulse** demo ships as an `mcpNeeds`-only mini-app you can inspect. The full
+connector contract lives in the [miniapp spec](miniapps/spec.md).
+
 ## On the desktop app
 
 The embedded [desktop console](desktop.md) has the full Play experience — browse,
