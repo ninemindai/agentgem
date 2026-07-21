@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { defineConsolePage } from "../../registry.js";
 import { openChatStream, type ChatToolChip } from "./chatStream.js";
+import { useMessageQueue, QueueChips, postCancel } from "../chatQueue.js";
 import { ScopePicker, type Scope } from "../_shared/ScopePicker.js";
 
 interface Agent {
@@ -29,12 +30,10 @@ export function Chat({ apiBase }: { apiBase: string }) {
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState("");
   const [sending, setSending] = useState(false);
-  // Messages typed while a turn is in flight (2026-07-20 queue design). State renders the chips; the
-  // ref is the logic's copy so fireQueued never runs a send inside a state updater. chatIdRef keeps
-  // callbacks from earlier renders (a turn's onDone) on the LIVE session — the stale state would
-  // silently fork a second chat for the queued flush.
-  const [queued, setQueued] = useState<string[]>([]);
-  const queuedRef = useRef<string[]>([]);
+  // Messages typed while a turn is in flight — shared queue machinery (panels/chatQueue.tsx).
+  // chatIdRef keeps callbacks from earlier renders (a turn's onDone) on the LIVE session — the
+  // stale state would silently fork a second chat for the queued flush.
+  const queue = useMessageQueue((text) => void sendText(text));
   const chatIdRef = useRef<string | null>(null);
   useEffect(() => { chatIdRef.current = chatId; }, [chatId]);
   const [error, setError] = useState<string | null>(null);
@@ -63,30 +62,36 @@ export function Chat({ apiBase }: { apiBase: string }) {
   // Scroll to bottom on new messages
   useEffect(() => { bottomRef.current?.scrollIntoView({ behavior: "smooth" }); }, [messages]);
 
-  const pushQueued = (t: string) => { queuedRef.current = [...queuedRef.current, t]; setQueued(queuedRef.current); };
-  const removeQueued = (i: number) => { queuedRef.current = queuedRef.current.filter((_, j) => j !== i); setQueued(queuedRef.current); };
-  // Coalesce every queued message into ONE next turn. No-op when empty.
-  const fireQueued = () => {
-    const q = queuedRef.current;
-    if (!q.length) return;
-    queuedRef.current = [];
-    setQueued([]);
-    void sendText(q.join("\n"));
-  };
-
   // Interrupt the in-flight turn (ACP session/cancel) — the session survives; the stream ends with
-  // stopReason "cancelled" and any queued messages fire as the next turn.
+  // stopReason "cancelled" and any queued messages fire as the next turn. postCancel classifies the
+  // reply (eng review issues 3/8): HTTP errors are NOT thrown by fetch, so outcomes branch on the
+  // result — "failed" points at the End-session escape hatch, "noop" gets an honest line.
   const interrupt = async () => {
     const id = chatIdRef.current ?? chatId;
     if (!id) return;
-    try { await fetch(`${apiBase}/api/chat/${encodeURIComponent(id)}/cancel`, { method: "POST" }); }
-    catch { setError("interrupt failed — the turn will run to completion"); }
+    const r = await postCancel(apiBase, id);
+    if (r === "failed") setError("interrupt failed — End session to force-kill");
+    else if (r === "noop") setError("nothing to interrupt — the turn may have just finished");
+  };
+
+  // The guaranteed recovery (eng review issue 7): kill the whole agent session, even mid-turn —
+  // the escape hatch when an adapter ignores session/cancel. Queued messages were written against
+  // this session, so they die with it (issue 9).
+  const endSession = async () => {
+    const id = chatIdRef.current ?? chatId;
+    if (!id) return;
+    try { await fetch(`${apiBase}/api/chat/${encodeURIComponent(id)}`, { method: "DELETE" }); } catch { /* best-effort */ }
+    closeRef.current?.(); closeRef.current = null;
+    setChatId(null);
+    queue.clear();
+    setSending(false);
+    setError("session ended");
   };
 
   const sendMessage = async () => {
     const text = input.trim();
     if (!text) return;
-    if (sending) { pushQueued(text); setInput(""); return; }   // type-while-busy queues, never drops
+    if (sending) { queue.push(text); setInput(""); return; }   // type-while-busy queues, never drops
     setInput("");
     await sendText(text);
   };
@@ -147,7 +152,7 @@ export function Chat({ apiBase }: { apiBase: string }) {
             return next;
           });
           setSending(false);
-          fireQueued();   // redirect: anything typed mid-turn coalesces into the next turn now
+          queue.fire();   // redirect: anything typed mid-turn coalesces into the next turn now
         },
         onFailed: (err) => {
           setMessages((prev) => {
@@ -287,17 +292,7 @@ export function Chat({ apiBase }: { apiBase: string }) {
       {error && <p className="ledger-error" role="alert">{error}</p>}
 
       {/* Queued messages — typed mid-turn, removable until they fire */}
-      {queued.length > 0 && (
-        <div className="studio-queue" style={{ marginTop: 12 }}>
-          {queued.map((q, i) => (
-            <span key={`${i}:${q}`} className="studio-queue__chip" title="queued — sends when the agent finishes">
-              <span className="studio-queue__text">{q}</span>
-              <button aria-label={`remove queued message ${i + 1}`} onClick={() => removeQueued(i)}>✕</button>
-            </span>
-          ))}
-          {!sending && <button type="button" className="ledger-view" onClick={fireQueued}>Send queued</button>}
-        </div>
-      )}
+      <QueueChips queue={queue} busy={sending} fireButtonClassName="ledger-view" style={{ marginTop: 12 }} />
 
       {/* Input row — never disabled while a turn runs: typing queues */}
       <div className="run-status" style={{ marginTop: 12, gap: 8 }}>
@@ -315,6 +310,11 @@ export function Chat({ apiBase }: { apiBase: string }) {
         {sending && (
           <button type="button" className="ledger-sort" title="interrupt this turn — the session survives" onClick={() => void interrupt()}>
             Interrupt
+          </button>
+        )}
+        {chatId && (
+          <button type="button" className="ledger-sort" title="kill the agent session — the guaranteed recovery" onClick={() => void endSession()}>
+            End session
           </button>
         )}
         <button

@@ -4,7 +4,7 @@
 import { describe, it, expect, vi, afterEach } from "vitest";
 import { render, screen, cleanup, fireEvent, waitFor } from "@testing-library/react";
 import { Studio } from "../Studio.js";
-import { playMiniappRoute } from "../../../api/routes.js";
+import { playMiniappRoute, playUploadsRoute } from "../../../api/routes.js";
 import { IdentityProvider } from "../../../identity/IdentityProvider.js";
 
 class FakeES {
@@ -23,10 +23,12 @@ const app = {
   meta: { title: "G1", genre: "replay", createdFrom: { kind: "project", path: "/p", flavor: "node" }, engineVersion: "1" },
 } as const;
 
-const setup = async () => {
+const setup = async (intercept?: (url: string, init?: RequestInit) => unknown) => {
   const calls: { url: string; init?: RequestInit }[] = [];
   vi.stubGlobal("fetch", vi.fn(async (url: string, init?: RequestInit) => {
     calls.push({ url: String(url), init });
+    const hit = intercept?.(String(url), init);
+    if (hit) return hit;
     if (String(url).includes("/api/chat") && init?.method === "POST" && !String(url).includes("/cancel"))
       return { ok: true, json: async () => ({ chatId: "c1" }) };
     return { ok: true, json: async () => ({}) };
@@ -93,7 +95,9 @@ describe("Studio queue + interrupt", () => {
   });
 
   it("Interrupt cancels the turn; the cancelled done marks the transcript and fires the queue", async () => {
-    const { calls } = await setup();
+    const { calls } = await setup((url, init) => {
+      if (url.includes("/cancel") && init?.method === "POST") return { ok: true, json: async () => ({ cancelled: true }) };
+    });
     typeEnter("do this instead");
     fireEvent.click(screen.getByText("Interrupt"));
     await waitFor(() => expect(calls.some((c) => c.url.includes("/api/chat/c1/cancel") && c.init?.method === "POST")).toBe(true));
@@ -101,5 +105,65 @@ describe("Studio queue + interrupt", () => {
     await waitFor(() => expect(screen.getByText(/interrupted/)).toBeTruthy());
     await waitFor(() => expect(FakeES.count).toBe(2));           // redirect: queue fired
     expect(new URL(FakeES.last!.url, "http://x").searchParams.get("message")).toBe("do this instead");
+  });
+
+  // Eng review issue 8: fetch RESOLVES on HTTP errors — the fallback must run on ok:false, not
+  // only on network rejection.
+  it("Interrupt falls back to session-kill when the cancel route returns an HTTP error", async () => {
+    const { calls } = await setup((url, init) => {
+      if (url.includes("/cancel") && init?.method === "POST") return { ok: false, status: 500, json: async () => ({}) };
+    });
+    fireEvent.click(screen.getByText("Interrupt"));
+    await waitFor(() => expect(calls.some((c) => c.url.endsWith("/api/chat/c1") && c.init?.method === "DELETE")).toBe(true));
+  });
+
+  // Eng review issue 3: a cancelled:false reply (turn just ended, or no cancel support) must say so.
+  it("Interrupt surfaces a status line when there was nothing to cancel", async () => {
+    await setup((url, init) => {
+      if (url.includes("/cancel") && init?.method === "POST") return { ok: true, json: async () => ({ cancelled: false }) };
+    });
+    fireEvent.click(screen.getByText("Interrupt"));
+    await waitFor(() => expect(screen.getByText(/nothing to interrupt/)).toBeTruthy());
+  });
+
+  it("double-clicking Interrupt is a harmless no-op (two POSTs, one stream, no crash)", async () => {
+    const { calls } = await setup((url, init) => {
+      if (url.includes("/cancel") && init?.method === "POST") return { ok: true, json: async () => ({ cancelled: true }) };
+    });
+    fireEvent.click(screen.getByText("Interrupt"));
+    fireEvent.click(screen.getByText("Interrupt"));
+    await waitFor(() => expect(calls.filter((c) => c.url.includes("/cancel")).length).toBe(2));
+    expect(FakeES.count).toBe(1);
+    FakeES.last!.emit("done", { result: { text: "p", toolCalls: [], stopReason: "cancelled" } });
+    await waitFor(() => expect(screen.getByText(/interrupted/)).toBeTruthy());
+  });
+
+  // Eng review issue 9: queued messages were written against this session — Stop kills both.
+  it("session-kill Stop clears the queue; a late done fires nothing", async () => {
+    const { calls } = await setup();
+    typeEnter("orphan me");
+    fireEvent.click(screen.getByText("Stop"));
+    await waitFor(() => expect(calls.some((c) => c.url.endsWith("/api/chat/c1") && c.init?.method === "DELETE")).toBe(true));
+    await waitFor(() => expect(screen.queryByText("orphan me")).toBeNull());  // chips cleared
+    const streams = FakeES.count;
+    FakeES.last!.emit("done", { result: { text: "late", toolCalls: [] } });
+    await new Promise((r) => setTimeout(r, 20));
+    expect(FakeES.count).toBe(streams);                                        // nothing fired
+  });
+
+  // Uploads stay send-time-only (documented v1): files staged mid-turn do NOT join the queued
+  // flush — they keep their chips and attach to the next manual send.
+  it("files staged while busy do not join the queued flush", async () => {
+    const uploadSpy = vi.spyOn(playUploadsRoute, "call").mockResolvedValue({ files: [], ship: 0, ref: 0 } as never);
+    await setup();
+    const fileInput = await screen.findByTestId("uploads-input");
+    fireEvent.change(fileInput, { target: { files: [new File(["x"], "logo.png", { type: "image/png" })] } });
+    await screen.findByTestId("role-logo.png");                                // staged chip present
+    typeEnter("queued text");
+    FakeES.last!.emit("done", { result: { text: "ok", toolCalls: [] } });
+    await waitFor(() => expect(FakeES.count).toBe(2));
+    expect(new URL(FakeES.last!.url, "http://x").searchParams.get("message")).toBe("queued text"); // no preamble
+    expect(uploadSpy).not.toHaveBeenCalled();
+    expect(screen.getByTestId("role-logo.png")).toBeTruthy();                  // still staged for next send
   });
 });
