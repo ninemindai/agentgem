@@ -169,6 +169,49 @@ envelope, seen from the other end, plus the authority check:
 | **task** | "run / verify this for me" | your agent executes — sandboxed | `runGemWithAgent(task)` + `verifyGemRun` in `@agentgem/run`; async A2A binding | authorized actor; per-task consent |
 | **enforcement** | org/team policy directive | changes local policy | **new** — over the redaction / consent / capability model | org/team admin whose authority you accepted, revocable |
 
+### Trust is a signature against your own key-graph
+
+An inbound message is **trusted only when it is signed by a trusted party** — and
+those are two independent checks, not one:
+
+1. **The signature verifies.** Every message carries an ed25519 signature over its
+   canonical envelope. The local app runs `verify(senderPubkey, payload, sig)` —
+   the *same* `verify()` in `@agentgem/model/identity.ts` that `transfer` already
+   uses for Gem provenance (`verify(producer.publicKey, meta.gemDigest, …)`). No
+   new crypto; the signing side already exists on every outbound payload
+   (`catalogSigningPayload`, `reviewSubmitPayload`, … all sign `{pubkey, signedAt,
+   …}` via `canonicalJSON`).
+2. **The signer is a trusted party.** A valid signature from an *unknown* key is
+   still untrusted. The local app resolves the signer's `ed25519:…` token against
+   its **own key-graph** — friend keys, plus the group/role directory the review
+   flow already exposes (`groups: { id, name, role }`). Trust is
+   *valid-signature **and** known-signer-at-the-required-role*.
+
+**Signer identity + role is what bounds actionability.** This closes the loop over
+the last three refinements: `pubkey → membership/role → which kinds are accepted →
+which affordance`. An *enforcement* directive is honored only if signed by the org
+admin key you accepted at join; a *task* only if signed by an authorized actor; a
+*notification* only needs a known key. Drop the signature check and every actionable
+kind evaporates — signing is the load-bearing gate, not a nicety.
+
+**The relay authenticates transport; it is never the trust anchor.** The relay
+verifies senders to accept and rate-limit delivery, but the local app
+*independently* verifies the **origin** signature end-to-end. It does not take the
+relay's word for who sent a message. Because the relay holds no one's private key, a
+compromised or malicious relay still **cannot forge a trusted message** — it can
+delay or drop, but it can never mint an enforcement directive in your org admin's
+name. This is what lets the inbox lean on a hosted relay without weakening the
+secret-safe posture.
+
+**What the signature must bind** (mirroring the existing payload discipline, where
+each `scope` and `groupId`/`requestId` binding stops one signed request being
+replayed as another): sender pubkey, **recipient actor id** (a message to you can't
+be replayed into someone else's inbox), message id / nonce, `signedAt` (freshness
+window), `kind`, and a payload hash. Revocation falls out of the directory —
+unfriending or leaving a group removes that key's role, so its task/enforcement
+messages stop verifying-as-trusted from the next drain on; key rotation is a
+directory update, not a re-pairing.
+
 Two rules keep even the actionable kinds inside the secret-safe posture:
 
 - **`kind` sets the affordance; it never sets auto-execute.** The most a task or
@@ -269,10 +312,14 @@ Three rules carry the posture straight from the existing docs:
    review, not an instruction to execute — same stance `input-containment.md` takes
    toward transcripts and tool output. `kind` picks the console surface; it never
    grants auto-execution.
-3. **Authority is required to send an actionable kind, and actionable ≠ automatic.**
-   Only an accepted org/admin may send *enforcement*; enforcement can only tighten
-   and never exfiltrate; tasks run sandboxed under per-task consent. The most an
-   inbound message earns is the right button in the right panel.
+3. **Trust = a valid origin signature from a known key at the required role.**
+   Every message is ed25519-signed; the local app verifies the signature *and*
+   resolves the signer against its own key-graph (friends + group/role directory)
+   end-to-end, never trusting the relay's word. Only an accepted org/admin key may
+   send *enforcement* (tighten-only, never exfiltrate); a *task* only from an
+   authorized key, run sandboxed under per-task consent. The most an inbound message
+   earns is the right button in the right panel — and only if it's signed by someone
+   you trust.
 
 ---
 
