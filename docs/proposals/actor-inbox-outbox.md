@@ -323,6 +323,81 @@ Three rules carry the posture straight from the existing docs:
 
 ---
 
+## Transports — pluggable, with a mandatory baseline
+
+**Answer: pluggable via a transport registry — not one hard-coded transport, and
+not "anything goes."** An opinionated default set, with **HTTPS-relay as the
+non-negotiable baseline** so every install has one working path.
+
+Pluggable is the idiomatic choice here for three reasons:
+
+- **The codebase is already adapter-shaped, and `transfer` already does exactly
+  this.** Its transport is an `ObjectStore` supplied by a **factory with a test
+  seam** (`testStoreFactory ?? natsStoreFromEnv()`); memory has a provider
+  `REGISTRY`, model has materialize targets, runners have agent adapters. A
+  hard-coded mailbox transport would be the one exception in a registry-shaped code
+  base.
+- **The five audience scopes have genuinely different delivery semantics** —
+  1:1 ephemeral, group fan-out, public publish — so no single transport is best for
+  all of them.
+- **Environment reality.** Corporate firewalls block NATS ports; HTTPS always
+  works. Self-hosters want to swap ninemind's relay for their own (the local-first
+  ethos). Different networks need different pipes.
+
+### What makes pluggability safe: transport carries no trust
+
+The signed envelope from [Trust](#trust-is-a-signature-against-your-own-key-graph)
+is **transport-independent**. The trust decision happens *above* transport, over the
+canonical envelope — so transports are dumb pipes that never participate in trust. A
+malicious or buggy transport adapter can inject bytes, delay, or drop, but it
+**cannot inject a *trusted* message**, because it holds no trusted key. This is the
+"the relay is not the trust anchor" property generalized to **"no transport is the
+trust anchor."** A transport only owns: move bytes A→B, at-least-once, address to a
+peer/relay. It never inspects or upgrades trust.
+
+### The interface (mirrors the `ObjectStore` factory already in `transfer`)
+
+```ts
+interface MailboxTransport {
+  id: string;                                              // "https" | "nats" | "github" | ...
+  deliver(env: SignedEnvelope, to: Address): Promise<Receipt>;   // outbox push
+  drain(actor: ActorId, cursor: Cursor): Promise<SignedEnvelope[]>; // inbox pull
+  subscribe?(actor: ActorId, on: (e: SignedEnvelope) => void): Unsubscribe; // optional live push
+  capabilities: { streaming: boolean; offlineHold: boolean; fanout: boolean; maxInline: number };
+}
+```
+
+Registered exactly like memory's provider `REGISTRY` and the materialize targets.
+
+### The default set to ship
+
+| Transport | Role | Scope fit | Basis today |
+| --- | --- | --- | --- |
+| **HTTPS relay** *(baseline, mandatory)* | long-poll / SSE drain from the aggregator; `POST` to deliver | everything — the floor | aggregator already HTTPS (`api.agentgem.ai`, review flow) |
+| **NATS** *(preferred upgrade)* | live `subscribe` (push, not poll), JetStream durable hold, object-store for large payloads, WS for browser | friend 1:1, group/org relay | `@agentgem/transfer` (`ObjectStore`, `NATS_WS_URL`) |
+| **GitHub** | publish + others pull — git *is* the transport, durable & auditable | public | `@agentgem/distribute` GitHub registry |
+| **A2A push** *(bridge)* | inbound tasks via the generated server's push-notification handler | task, live-server case | A2A target (`docs/a2a.md`) |
+| **Loopback / in-proc** | same-machine actors + tests | self / dev | the memory outbox is effectively this (local file queue) |
+
+### Selection is capability negotiation, not user config
+
+The mailbox picks the best transport **both parties advertise** for the target
+scope, and **falls back to the HTTPS relay**, which every install supports. Because
+the envelope is signed end-to-end, **mixing transports is safe**: send over NATS, a
+peer drains over the HTTPS relay — same envelope, same trust decision. Users tune
+this only when self-hosting (point at their own relay) or hardening (disable a
+transport); the common path negotiates itself.
+
+**Recommendation:** pluggable registry; **HTTPS-relay mandatory** as the
+lowest-common-denominator floor; **NATS the preferred upgrade** (reuse `transfer`
+for live push, self-host, large payloads); **GitHub stays the public rail**; A2A-push
+bridges the live-server case; loopback for dev. Keep the default set **closed and
+vetted** — the interface is documented so self-hosters can add their own, but
+third-party pipes don't ship enabled by default (they widen the delivery-path attack
+and metadata surface even though they can't touch trust).
+
+---
+
 ## Increments
 
 Cheapest-first, each independently shippable:
@@ -374,3 +449,10 @@ needs membership fan-out.
 - **Does *unlisted* survive as a scope?** The contract already has `unlisted`
   between public and private — is it a distinct audience rung, or does it collapse
   into "group with an open link"?
+- **Third-party transports.** The interface is safe to open (trust is above
+  transport), but do we ever ship an email / Matrix / webhook adapter enabled, or
+  keep the registry closed to the vetted set and let self-hosters opt in? What's the
+  metadata-leakage bar for a transport that leaves ninemind's rails?
+- **Transport capability negotiation.** Where is each actor's advertised transport
+  set published — in the Agent Card, the group directory, or a per-actor record on
+  the relay? And what's the fallback ordering when several are shared?
