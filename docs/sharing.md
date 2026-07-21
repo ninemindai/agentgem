@@ -112,11 +112,13 @@ a card bug can never take the site down.
 Publishing and sharing are tied to a real account so the network can tell one author
 from a hundred throwaway ones. Identity has two layers:
 
-- **Web accounts** on [app.agentgem.ai](https://app.agentgem.ai) run on
-  [better-auth](https://better-auth.com): sign in with **GitHub, Google, or a passkey**,
-  and link more than one provider to the same account. Each account is keyed on a stable id
-  with an optional **`@handle`**, and gets a tabbed profile hub at
-  [`/@handle`](https://app.agentgem.ai) (apps, reviews, orgs, groups).
+- **Accounts on the community marketplace** ([app.agentgem.ai](https://app.agentgem.ai),
+  a free hosted service shared by both [editions](editions.md)) run on
+  [better-auth](https://better-auth.com): sign in with **GitHub, Google, X, or a
+  passkey**, and link more than one provider to the same account. Each account is
+  keyed on a stable id with an optional **`@handle`**, and gets a tabbed profile hub
+  at [`/@handle`](https://app.agentgem.ai) (apps, reviews). **Groups and orgs are
+  [Enterprise](editions.md).**
 - **This machine's signing key** is bound to a GitHub account from the CLI, which is what
   anti-sybil producer identity rests on. Bind it once:
 
