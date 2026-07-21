@@ -60,6 +60,11 @@ export function Studio({
   const [msgs, setMsgs] = useState<Msg[]>([]);
   const [input, setInput] = useState("");
   const [busy, setBusy] = useState(false);
+  // Messages typed while a turn is in flight. State renders the chips; the ref is the logic's copy so
+  // fireQueued/send never run inside a state updater (a side effect there would double-fire under
+  // StrictMode). Both are always written together.
+  const [queued, setQueued] = useState<string[]>([]);
+  const queuedRef = useRef<string[]>([]);
   const [working, setWorking] = useState("");
   const [html, setHtml] = useState("");
   // Remount generation for the preview Runner: the reload control bumps it so a wedged
@@ -295,7 +300,12 @@ export function Studio({
       closeRef.current = openStudioStream(apiBase, id, message, {
         onDelta: (t) => { setWorking("responding…"); pushDelta(t); },
         onTool: (tool) => { setWorking(activity(tool)); setMsgs((m) => [...m, { role: "tool", title: tool.title ?? tool.kind ?? "tool", failed: tool.status === "failed" }]); },
-        onDone: async () => { setBusy(false); setWorking(""); await refresh(); },
+        onDone: async (result) => {
+          setBusy(false); setWorking("");
+          if (result.stopReason === "cancelled") setMsgs((m) => [...m, { role: "tool", title: "⏹ interrupted" }]);
+          await refresh();
+          fireQueued(); // redirect: anything typed mid-turn coalesces into the next turn now
+        },
         onFailed: (e) => {
           // A turn stays alive server-side after a stream drop (Task 3). "already running"
           // (another window owns the turn) means the server REFUSED this message — un-append
@@ -328,9 +338,37 @@ export function Studio({
   // Guard on busy: the textarea's Enter handler calls submit() unconditionally, and send()
   // early-returns while busy — without this guard, pressing Enter mid-turn would still wipe
   // the composer (including a message an "already running" restore just put back).
+  const pushQueued = (t: string) => { queuedRef.current = [...queuedRef.current, t]; setQueued(queuedRef.current); };
+  const removeQueued = (i: number) => { queuedRef.current = queuedRef.current.filter((_, j) => j !== i); setQueued(queuedRef.current); };
+  // Coalesce every queued message into ONE next turn (spec: fewer, better-informed turns). No-op when empty.
+  function fireQueued() {
+    const q = queuedRef.current;
+    if (!q.length) return;
+    queuedRef.current = [];
+    setQueued([]);
+    void send(q.join("\n"));
+  }
+
+  // Interrupt the in-flight turn (ACP session/cancel) — the session survives and the stream ends with
+  // stopReason "cancelled". If even the cancel POST fails, fall back to the session-kill stop().
+  async function interrupt() {
+    if (!chatId) return;
+    try { await fetch(`${apiBase}/api/chat/${encodeURIComponent(chatId)}/cancel`, { method: "POST" }); }
+    catch { setStatus("interrupt failed — stopping the session"); await stop(); }
+  }
+
   async function submit() {
     const staged = up.uploads;
-    if (busy || !agentId || (!input.trim() && !staged.length)) return;
+    if (busy) {
+      // Type-while-busy queues instead of dropping. Uploads stay send-time-only: staged files keep
+      // their chips and attach to the next non-busy send, exactly as before.
+      const text = input.trim();
+      if (!text) return;
+      pushQueued(text);
+      setInput("");
+      return;
+    }
+    if (!agentId || (!input.trim() && !staged.length)) return;
     if (staged.length) {
       const ue = up.limitError();
       if (ue) { setStatus(`upload failed: ${ue}`); return; }
@@ -600,6 +638,7 @@ export function Studio({
         <span className="play-pill"><span className="play-pill__dot" style={{ background: g.tint }} />{g.icon} {g.label}</span>
         <span className="sp" />
         {status && <span className="play-intro" style={{ margin: 0 }}>{status}</span>}
+        {busy && <button className="play-btn play-btn--ghost" onClick={() => void interrupt()} title="interrupt this turn — the session survives">Interrupt</button>}
         {(busy || chatId) && <button className="play-btn play-btn--ghost" onClick={stop} title="kill the agent session">Stop</button>}
         <button className="play-btn play-btn--primary" onClick={shareToExplore} title="Share to app.agentgem.ai">Share</button>
         <button className="play-btn play-btn--ghost" onClick={requestReview}>Request review</button>
@@ -752,6 +791,17 @@ export function Studio({
       </div>
 
       <div className="play-composer-in" ref={composerRef}>
+        {queued.length > 0 && (
+          <div className="studio-queue">
+            {queued.map((q, i) => (
+              <span key={`${i}:${q}`} className="studio-queue__chip" title="queued — sends when the agent finishes">
+                <span className="studio-queue__text">{q}</span>
+                <button aria-label={`remove queued message ${i + 1}`} onClick={() => removeQueued(i)}>✕</button>
+              </span>
+            ))}
+            {!busy && <button className="play-btn" onClick={fireQueued}>Send queued</button>}
+          </div>
+        )}
         <UploadsField u={up} compact />
         <textarea ref={inputRef} className="play-input play-input--chat" rows={3}
           placeholder="ask the agent to build/edit the miniapp…" value={input}
@@ -759,7 +809,7 @@ export function Studio({
           onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); submit(); } }} />
         <div className="play-composer-foot">
           <span className="play-composer-hint"><kbd>Enter</kbd> to send · <kbd>Shift</kbd>+<kbd>Enter</kbd> for a new line</span>
-          <button className="play-btn play-btn--primary" disabled={busy || !agentId || (!input.trim() && up.uploads.length === 0)} onClick={submit}>{busy ? "…" : "Send"}</button>
+          <button className="play-btn play-btn--primary" disabled={!agentId || (busy ? !input.trim() : (!input.trim() && up.uploads.length === 0))} onClick={submit}>{busy ? "Queue" : "Send"}</button>
         </div>
       </div>
     </section>
