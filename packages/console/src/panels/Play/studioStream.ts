@@ -4,7 +4,7 @@ export interface StudioTool { title?: string; kind?: string; status?: string }
 export interface StudioStreamHandlers {
   onDelta: (text: string) => void;
   onTool: (tool: StudioTool) => void;
-  onDone: (result: { text: string; toolCalls: unknown[] }) => void;
+  onDone: (result: { text: string; toolCalls: unknown[]; stopReason?: string }) => void;
   onFailed: (error: string) => void;
 }
 export function openStudioStream(apiBase: string, chatId: string, message: string, h: StudioStreamHandlers): () => void {

@@ -19,9 +19,9 @@ describe("openStudioStream", () => {
     const h = handlers();
     openStudioStream("http://x", "c1", "hi", h);
     FakeES.last!.emit("delta", { text: "yo" });
-    FakeES.last!.emit("done", { result: { text: "yo", toolCalls: [] } });
+    FakeES.last!.emit("done", { result: { text: "yo", toolCalls: [], stopReason: "cancelled" } });
     expect(h.onDelta).toHaveBeenCalledWith("yo");
-    expect(h.onDone).toHaveBeenCalledWith({ text: "yo", toolCalls: [] });
+    expect(h.onDone).toHaveBeenCalledWith({ text: "yo", toolCalls: [], stopReason: "cancelled" });
     expect(FakeES.last!.closed).toBe(true);
   });
 
