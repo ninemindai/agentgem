@@ -76,20 +76,25 @@ See [Analyze](analyze.md).
 the inventory (by `evidence.root`) before resolution, so a selection can include an accepted draft
 by name.
 
-### Marketplace, benchmark, memory & cards
+### The hosted marketplace & local memory sync
 
-Beyond the local Gem-building surface above, the server (and the hosted marketplace it
-proxies) exposes several endpoint families. These are documented in full by the generated
-OpenAPI document at `/explorer`; the groups are:
+The **local** OSS server exposes one marketplace-facing read route,
+`GET /api/registry/gems` — the cached Explore index the console browses, plus the
+**Memory sync** family below. Everything else in this section is served by the
+**community marketplace** (`app.agentgem.ai`), a separate hosted service the console
+talks to as a client; those routes are **not** part of the local server and several
+of them (groups, orgs, review-gating) are [Enterprise](editions.md). The hosted
+API is documented by its own OpenAPI document; the groups are:
 
 | Group | Where | What it covers |
 | --- | --- | --- |
-| **Publish & catalog** | hosted marketplace | Publish with a **visibility scope** (Public/Unlisted/Private) + **versioning** pre-flight (`/api/publish-status`), Explore/browse (`GET /api/registry/gems`), zero-config install (`POST /api/install-hosted`), stars, reviews |
-| **Review-gated publishing & groups** | hosted marketplace | Review requests inbox (list/detail/approve/request-changes/comment/withdraw), groups (create/join/members/invites), group-shared private gems |
-| **Identity** | hosted marketplace | better-auth sign-in (GitHub/Google/passkeys), account linking, `/@handle` profiles, orgs + org **benchmark governance** |
-| **Benchmark contribution** | hosted marketplace + `/api/benchmark` proxy | Consent-gated ingest of ingredients-only attestations, signed `POST /my-gems`, k-anon benchmark read-back |
-| **Memory sync** | local core | Provider config, pull provider memories into recall, consent-gated push outbox (`/api/memory/*`, local-only — gated on `SERVE_CONSOLE`) |
-| **OG cards** | hosted marketplace | `GET /og/card.png?type=&key=` — branded/screenshot link-preview cards (see [Sharing](sharing.md#branded-link-previews)) |
+| **Explore index** | local server | `GET /api/registry/gems` — the cached marketplace catalog the console browses |
+| **Memory sync** | local server | Provider config, pull provider memories into recall, consent-gated push outbox (`/api/memory/*`, local-only — gated on `SERVE_CONSOLE`) |
+| **Publish & catalog** | hosted marketplace | Publish with a **visibility scope** (Public/Unlisted/Private) + **versioning**, Explore/browse, zero-config install, stars, reviews |
+| **Groups & review-gated publishing** *(Enterprise)* | hosted marketplace | Review-request inbox (approve/request-changes/comment/withdraw), groups (create/join/members/invites), group-shared private gems |
+| **Identity** | hosted marketplace | better-auth sign-in (GitHub/Google/X/passkeys), account linking, `/@handle` profiles; **orgs + benchmark governance** are [Enterprise](editions.md) |
+| **Benchmark contribution** | hosted marketplace | Consent-gated ingest of ingredients-only, k-anonymized attestations; benchmark read-back |
+| **OG cards** | hosted marketplace | Branded/screenshot link-preview cards (see [Sharing](sharing.md#branded-link-previews)) |
 
 ### Misc
 
