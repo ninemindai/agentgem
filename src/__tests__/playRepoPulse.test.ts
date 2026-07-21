@@ -65,6 +65,13 @@ describe("built-in repo pulse", () => {
     expect(r.servers[0].tools.length).toBeGreaterThan(0);
   });
 
+  it("save rejects the built-in namespace (a served constant can't be shadowed)", async () => {
+    const ctrl = new PlayController();
+    await expect(ctrl.save({
+      body: { name: "__repo-pulse", html: "<!doctype html><body><canvas></canvas></body>", meta: { title: "x", genre: "project-fun", createdFrom: { kind: "blank", title: "x" }, engineVersion: "1" } },
+    } as never)).rejects.toThrow(/built-in/);
+  });
+
   it("still 404s for a genuinely unknown name (built-in fallthrough is narrow)", async () => {
     const ctrl = new PlayController();
     await expect(ctrl.mcpCall({ body: { name: "__ghost", server: "github", tool: "list_commits", input: {} } })).rejects.toThrow();

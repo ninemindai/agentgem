@@ -156,6 +156,16 @@ describe("checkpoint-before-done ordering", () => {
   });
 });
 
+// Built-ins are served constants — a studio chat against one used to 500 with ENOENT on the
+// registry meta.json ("__repo-pulse", 2026-07-21). The guard rejects it as a client error.
+describe("POST /api/chat rejects built-in miniapps", () => {
+  it("400s with a clear message instead of ENOENT-500ing", async () => {
+    const { app } = await buildApp(plainConnectFn);
+    const res = await request(app).post("/api/chat").send({ agentId: "claude-code", miniapp: "__repo-pulse" }).expect(400);
+    expect(res.body.error).toMatch(/built-in/);
+  });
+});
+
 // ── POST-then-stream transport (2026-07-20 eng review, issue 10) ─────────────────────────────
 describe("POST /api/chat/turn + stream by turnId", () => {
   it("carries a large message through the POST body and streams the turn by turnId", async () => {

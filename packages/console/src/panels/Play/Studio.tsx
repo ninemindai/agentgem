@@ -57,6 +57,10 @@ export function Studio({
   onAgentIdChange: (agentId: string) => void;
   onBack: () => void;
 }) {
+  // Built-ins ("__" namespace: EMBER, Repo Pulse) are served constants with no registry entry —
+  // there is nothing an agent could edit, save, share, or review. Studio renders them read-only;
+  // the server rejects the same paths with a 400 (the "__repo-pulse" chat ENOENT, 2026-07-21).
+  const builtin = name.startsWith("__");
   const [chatId, setChatId] = useState<string | null>(null);
   // Current chatId for callbacks created in earlier renders: fireQueued/interrupt run from a turn's
   // onDone closure, whose captured `chatId` state can predate the session's creation — reading the
@@ -647,8 +651,8 @@ export function Studio({
         {status && <span className="play-intro" style={{ margin: 0 }}>{status}</span>}
         {busy && <button className="play-btn play-btn--ghost" onClick={() => void interrupt()} title="interrupt this turn — the session survives">Interrupt</button>}
         {(busy || chatId) && <button className="play-btn play-btn--ghost" onClick={stop} title="kill the agent session">Stop</button>}
-        <button className="play-btn play-btn--primary" onClick={shareToExplore} title="Share to app.agentgem.ai">Share</button>
-        <button className="play-btn play-btn--ghost" onClick={requestReview}>Request review</button>
+        {!builtin && <button className="play-btn play-btn--primary" onClick={shareToExplore} title="Share to app.agentgem.ai">Share</button>}
+        {!builtin && <button className="play-btn play-btn--ghost" onClick={requestReview}>Request review</button>}
       </div>
 
       <CapabilityStrip needs={meta?.needs} pruned={pruned} />
@@ -751,13 +755,13 @@ export function Studio({
         />
       )}
 
-      <AgentSelector
+      {!builtin && <AgentSelector
         agents={agents}
         agentId={agentId}
         disabled={busy}
         onChange={changeAgent}
         note={chatId ? "Changing agent starts a fresh studio chat." : "This agent will build/edit the miniapp."}
-      />
+      />}
 
       <div
         className={"play-grid-2" + (split.containerProps.className ? " " + split.containerProps.className : "")}
@@ -797,6 +801,11 @@ export function Studio({
         </div>
       </div>
 
+      {builtin ? (
+        <div className="play-composer-in" ref={composerRef}>
+          <span className="play-composer-hint">Built-in miniapp — a served constant, read-only. Create your own from <b>+ New miniapp</b> to build something like it.</span>
+        </div>
+      ) : (
       <div className="play-composer-in" ref={composerRef}>
         <QueueChips queue={queue} busy={busy} />
         <UploadsField u={up} compact />
@@ -809,6 +818,7 @@ export function Studio({
           <button className="play-btn play-btn--primary" disabled={!agentId || (busy ? !input.trim() : (!input.trim() && up.uploads.length === 0))} onClick={submit}>{busy ? "Queue" : "Send"}</button>
         </div>
       </div>
+      )}
     </section>
   );
 }

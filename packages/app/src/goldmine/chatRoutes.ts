@@ -86,6 +86,12 @@ export async function studioChatArgs(
   if (miniapp && project) throw new Error("miniapp and project are mutually exclusive");
   if (miniapp) {
     if (!deps.resolveStudio) throw new Error("studio not available");
+    // Built-ins are served constants with no registry entry — resolveStudio would ENOENT on their
+    // meta.json (the "__repo-pulse" 500, 2026-07-21). The "invalid miniapp name" prefix rides the
+    // route's existing client-error mapping to a 400.
+    if (miniapp.startsWith("__")) {
+      throw new Error(`invalid miniapp name: "${miniapp}" is a built-in (served constant) — it can't be edited`);
+    }
     const s = deps.resolveStudio(miniapp); // resolver validates the name; throws on a bad one
     // "allow" so the studio agent can Edit/Write the miniapp; its cwd is jailed to the miniapp dir.
     return { agentId, brief: s.brief, mcpServers: deps.goldmineMcp(), cwd: s.cwd, permission: "allow" };
