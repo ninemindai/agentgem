@@ -57,6 +57,11 @@ export function Studio({
   onBack: () => void;
 }) {
   const [chatId, setChatId] = useState<string | null>(null);
+  // Current chatId for callbacks created in earlier renders: fireQueued/interrupt run from a turn's
+  // onDone closure, whose captured `chatId` state can predate the session's creation — reading the
+  // stale null would silently open a SECOND chat session for the queued flush.
+  const chatIdRef = useRef<string | null>(null);
+  useEffect(() => { chatIdRef.current = chatId; }, [chatId]);
   const [msgs, setMsgs] = useState<Msg[]>([]);
   const [input, setInput] = useState("");
   const [busy, setBusy] = useState(false);
@@ -291,7 +296,7 @@ export function Studio({
     setBusy(true); setWorking("thinking…"); setGate(null); setShare(null);
     setMsgs((m) => [...m, { role: "user", text: message }]);
     try {
-      let id = chatId;
+      let id = chatIdRef.current ?? chatId;
       if (!id) {
         const res = await fetch(`${apiBase}/api/chat`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ agentId, miniapp: name }) }).then(j);
         id = res.chatId as string; setChatId(id);
@@ -352,8 +357,9 @@ export function Studio({
   // Interrupt the in-flight turn (ACP session/cancel) — the session survives and the stream ends with
   // stopReason "cancelled". If even the cancel POST fails, fall back to the session-kill stop().
   async function interrupt() {
-    if (!chatId) return;
-    try { await fetch(`${apiBase}/api/chat/${encodeURIComponent(chatId)}/cancel`, { method: "POST" }); }
+    const id = chatIdRef.current ?? chatId;
+    if (!id) return;
+    try { await fetch(`${apiBase}/api/chat/${encodeURIComponent(id)}/cancel`, { method: "POST" }); }
     catch { setStatus("interrupt failed — stopping the session"); await stop(); }
   }
 
