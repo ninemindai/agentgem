@@ -26,9 +26,13 @@ const blankApp = {
 } as const;
 const codex = [{ id: "codex", name: "Codex", available: true }];
 
+const turnPosts: string[] = [];
+const lastTurnMessage = () => JSON.parse(turnPosts.at(-1) ?? "{}").message as string;
 const stubChat = () => {
+  turnPosts.length = 0;
   const post = vi.fn();
   vi.stubGlobal("fetch", vi.fn(async (url: string, init?: RequestInit) => {
+    if (String(url).includes("/api/chat/turn") && init?.method === "POST") { turnPosts.push(String(init.body ?? "")); return { ok: true, json: async () => ({ turnId: "t1" }) }; }
     if (String(url).includes("/api/chat") && init?.method === "POST") { post(init); return { ok: true, json: async () => ({ chatId: "c1" }) }; }
     return { ok: true, json: async () => ({}) };
   }) as unknown as typeof fetch);
@@ -57,8 +61,8 @@ describe("Studio mid-session uploads", () => {
 
     // the agent hears the SERVER's stored filename, not the raw staged name
     await waitFor(() => expect(FakeES.last).toBeTruthy());
-    expect(FakeES.last!.url).toContain("my-logo.png");
-    expect(FakeES.last!.url).not.toContain("Logo.png"); // "My Logo.png" would encode with a capital L
+    expect(lastTurnMessage()).toContain("my-logo.png");
+    expect(lastTurnMessage()).not.toContain("Logo.png"); // "My Logo.png" is the raw staged name — the agent hears the stored one
 
     // chips clear on upload success
     expect(screen.queryByTestId("role-My Logo.png")).toBeNull();

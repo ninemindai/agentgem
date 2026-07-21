@@ -21,7 +21,7 @@ import { connectAcpAdapter, stdioMcpServer, resolveLaunch, adapterRuntimeCtx, AG
 import type { AgentAvailability, AgentDescriptor, McpServerStdio, AdapterCtx, AdapterInstaller } from "@agentgem/base";
 import { createAccumulator, applyUpdate } from "@agentgem/run";
 import { studioCwd } from "@agentgem/play";
-import type { ChatManager, ChatConnectFn, ChatCtx, ChatSessionHandle, ToolInvocation } from "@agentgem/run";
+import type { ChatManager, ChatConnectFn, ChatCtx, ChatEvent, ChatSessionHandle, ToolInvocation } from "@agentgem/run";
 import { draftGemFromChat } from "./draftGem.js";
 import { createAguiMapper } from "./aguiStream.js";
 import type { AguiEvent } from "./aguiStream.js";
@@ -179,65 +179,102 @@ export function registerChatRoutes(app: App, deps: ChatRouteDeps, guard: Middlew
     }
   });
 
-  // GET /api/chat/stream?chatId=...&message=... — SSE stream of ChatEvents
-  // Only message text flows from the query string; chatId is an opaque server-issued id.
+  // ── Turn engine: POST-then-stream transport (2026-07-20 eng review, issue 10) ──────────────
+  // The message travels in a POST body — no EventSource query-string/URL-length ceiling — and the
+  // SSE stream attaches by turnId, replaying buffered events before following live. The turn
+  // drains to completion inside startTurn regardless of whether a stream ever attaches (the
+  // background-completion guarantee R1 that used to live inline in the GET handler), which is
+  // also what lets a late or reconnecting client attach mid-turn and see the full history.
+  //
+  //   POST /api/chat/turn {chatId,message} ─▶ startTurn ─▶ drain sendMessage ─▶ events[] + wake
+  //                              │ {turnId}                    (checkpoint runs BEFORE `done`
+  //   GET /api/chat/stream?chatId&turnId ─▶ attach: replay events[0..] ─▶ await wake ─▶ … done
+  //   GET /api/chat/stream?chatId&message ─▶ legacy entrance: mints the turn itself, then attaches
+  interface LiveTurn { chatId: string; events: ChatEvent[]; done: boolean; wake: Set<() => void> }
+  const liveTurns = new Map<string, LiveTurn>();
+  const TURN_TTL_MS = 10 * 60_000; // the buffer survives briefly past done for a late re-attach
+
+  const startTurn = (chatId: string, message: string): string => {
+    const turnId = randomUUID();
+    const turn: LiveTurn = { chatId, events: [], done: false, wake: new Set() };
+    liveTurns.set(turnId, turn);
+    const bump = () => { const ws = [...turn.wake]; turn.wake.clear(); for (const w of ws) w(); };
+    void (async () => {
+      const miniapp = chatMiniapps.get(chatId);
+      try {
+        for await (const ev of deps.manager.sendMessage(chatId, message)) {
+          // Checkpoint BEFORE the done event becomes visible to any attached stream (2026-07-20
+          // eng review, issue 6): the client may auto-fire a queued next turn the moment it sees
+          // `done`, and that turn's edits must not race this turn's durability commit. A
+          // checkpoint failure is logged and swallowed — it must never turn a successful turn
+          // into a failed one, and `done` is buffered regardless.
+          if (ev.type === "done" && miniapp && deps.checkpointMiniapp) {
+            try { await deps.checkpointMiniapp(miniapp); }
+            catch (e) { console.error(`checkpoint failed for miniapp ${miniapp}:`, (e as Error).message); }
+          }
+          turn.events.push(ev); bump();
+        }
+      } catch (e) {
+        // A generator throw becomes a buffered `failed` event — attached streams (native or AG-UI,
+        // whose mapper routes `failed` to RUN_ERROR) forward it like any other frame.
+        turn.events.push({ type: "failed", error: (e as Error).message }); bump();
+      }
+      turn.done = true; bump();
+      const t = setTimeout(() => liveTurns.delete(turnId), TURN_TTL_MS);
+      (t as { unref?: () => void }).unref?.();
+    })();
+    return turnId;
+  };
+
+  // POST /api/chat/turn — start a turn with the message in the BODY; stream it via
+  // GET /api/chat/stream?chatId&turnId. A turn started while another runs still mints a turn —
+  // its stream immediately forwards the manager's "already running" failure, the same contract
+  // the legacy entrance always had.
+  app.post("/api/chat/turn", guard, async (req, res) => {
+    const { chatId, message } = (req.body ?? {}) as { chatId?: unknown; message?: unknown };
+    if (typeof chatId !== "string" || typeof message !== "string" || !message.trim()) {
+      res.status(400).json({ error: "chatId and message are required" }); return;
+    }
+    if (!deps.manager.stateOf(chatId).alive) { res.status(404).json({ error: "unknown chat" }); return; }
+    res.json({ turnId: startTurn(chatId, message) });
+  });
+
+  // GET /api/chat/stream — attach to a turn's SSE stream. Two entrances, one engine:
+  //   ?chatId&turnId   — attach to a POST-started turn (console path)
+  //   ?chatId&message  — legacy: mint the turn here, then attach (kept for external AG-UI
+  //                      consumers; small messages only — the query string caps at header size)
   app.get("/api/chat/stream", guard, async (req, res) => {
+    const chatId = String(req.query.chatId ?? "");
+    const turnIdParam = String(req.query.turnId ?? "");
+    const turnId = turnIdParam || startTurn(chatId, String(req.query.message ?? ""));
+    const turn = liveTurns.get(turnId);
+    if (!turn || turn.chatId !== chatId) { res.status(404).json({ error: "unknown turn" }); return; }
+
     res.setHeader("Content-Type", "text/event-stream");
     res.setHeader("Cache-Control", "no-cache");
     res.setHeader("X-Accel-Buffering", "no");
     res.setHeader("Connection", "keep-alive");
 
-    const chatId = String(req.query.chatId ?? "");
-    const message = String(req.query.message ?? "");
-
-    // AG-UI protocol opt-in: same underlying ChatEvent stream, translated via the
-    // aguiStream mapper into standard AG-UI events. The event type lives inside the
-    // JSON payload (no `event:` line) per the AG-UI SSE convention. Additive — the
-    // native path below is untouched for any other (or absent) `protocol` value.
+    // Per-event forwarder: native `event:`-typed frames, or AG-UI translation when opted in (the
+    // event type lives inside the JSON payload, no `event:` line, per the AG-UI SSE convention).
+    // A write failure means the client disconnected — swallowed, because the turn's drain lives in
+    // startTurn and MUST NOT be tied to this socket (R1).
+    let forward: (ev: ChatEvent) => void;
     if (String(req.query.protocol ?? "") === "ag-ui") {
       const mapper = createAguiMapper({ threadId: chatId, runId: randomUUID(), genId: () => randomUUID() });
       const emit = (e: AguiEvent) => res.write(`data: ${JSON.stringify(e)}\n\n`);
-      for (const e of mapper.start()) emit(e);
-      try {
-        for await (const ev of deps.manager.sendMessage(chatId, message)) {
-          for (const e of mapper.onChat(ev)) emit(e);
-        }
-      } catch (e) {
-        for (const ev of mapper.error((e as Error).message)) emit(ev);
-      }
-      res.end();
-      return;
+      try { for (const e of mapper.start()) emit(e); } catch { /* client gone */ }
+      forward = (ev) => { try { for (const e of mapper.onChat(ev)) emit(e); } catch { /* client gone */ } };
+    } else {
+      forward = (ev) => { try { res.write(`event: ${ev.type}\ndata: ${JSON.stringify(ev)}\n\n`); } catch { /* client gone */ } };
     }
 
-    const send = (event: string, data: unknown) =>
-      res.write(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`);
-
-    const miniapp = chatMiniapps.get(chatId);
-    try {
-      for await (const ev of deps.manager.sendMessage(chatId, message)) {
-        // Checkpoint BEFORE the done frame reaches the client (2026-07-20 eng review, issue 6): the
-        // client may auto-fire a queued next turn the moment it sees `done`, and that turn's edits
-        // must not race this turn's durability commit — with the old after-the-loop ordering, the
-        // checkpoint could snapshot the NEXT turn's half-made edits under this turn's label. Seen
-        // here in the loop, it also still runs when the socket died mid-turn (the drain below keeps
-        // consuming to `done`). A checkpoint failure is logged and swallowed — it must never turn a
-        // successful turn into a failed one, and `done` is sent regardless.
-        if (ev.type === "done" && miniapp && deps.checkpointMiniapp) {
-          try { await deps.checkpointMiniapp(miniapp); }
-          catch (e) { console.error(`checkpoint failed for miniapp ${miniapp}:`, (e as Error).message); }
-        }
-        // A `send` (res.write) failure here means the client already disconnected (tab closed,
-        // network drop, navigated away). Swallow it INSIDE the loop body — letting it escape would
-        // make `for await` run IteratorClose on the manager's generator, which (a) skips the
-        // `await running` that lets the underlying prompt() finish before `chat.running` clears,
-        // and (b) aborts before `done`, so the checkpoint above never runs. Draining to completion
-        // regardless of the dead socket is the background-completion guarantee (R1).
-        try { send(ev.type, ev); } catch { /* client gone; turn continues in the background */ }
-      }
-    } catch (e) {
-      try { send("failed", { error: (e as Error).message }); } catch { /* client gone */ }
+    let i = 0;
+    for (;;) {
+      while (i < turn.events.length) forward(turn.events[i++]);
+      if (turn.done) break;
+      await new Promise<void>((r) => turn.wake.add(r));
     }
-
     try { res.end(); } catch { /* client already disconnected */ }
   });
 

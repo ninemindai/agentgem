@@ -13,13 +13,18 @@ class FakeES {
   close() {}
   emit(t: string, data: unknown) { for (const cb of this.listeners[t] ?? []) cb({ data: JSON.stringify(data) }); }
 }
-afterEach(() => { cleanup(); FakeES.last = null; vi.restoreAllMocks(); vi.unstubAllGlobals(); });
+afterEach(() => { cleanup(); FakeES.last = null; turnPosts.length = 0; vi.restoreAllMocks(); vi.unstubAllGlobals(); });
+
+// POST-then-stream transport: /api/chat/turn bodies land here (the message no longer rides the ES URL).
+const turnPosts: string[] = [];
+const lastTurnMessage = () => JSON.parse(turnPosts.at(-1) ?? "{}").message as string;
 
 describe("Studio", () => {
   it("opens a studio chat targeting the miniapp and refreshes the preview on done", async () => {
     // raw-fetch endpoints (agents + POST /api/chat); the client-route preview is spied separately
     const post = vi.fn();
     vi.stubGlobal("fetch", vi.fn(async (url: string, init?: RequestInit) => {
+      if (String(url).includes("/api/chat/turn") && init?.method === "POST") { turnPosts.push(String(init.body ?? "")); return { ok: true, json: async () => ({ turnId: "t1" }) }; }
       if (String(url).includes("/api/chat") && init?.method === "POST") { post(init); return { ok: true, json: async () => ({ chatId: "c1" }) }; }
       return { ok: true, json: async () => ({}) };
     }) as unknown as typeof fetch);
@@ -63,6 +68,7 @@ describe("Studio", () => {
   } as const;
   const stubChat = (post = vi.fn()) => {
     vi.stubGlobal("fetch", vi.fn(async (url: string, init?: RequestInit) => {
+      if (String(url).includes("/api/chat/turn") && init?.method === "POST") { turnPosts.push(String(init.body ?? "")); return { ok: true, json: async () => ({ turnId: "t1" }) }; }
       if (String(url).includes("/api/chat") && init?.method === "POST") { post(init); return { ok: true, json: async () => ({ chatId: "c1" }) }; }
       return { ok: true, json: async () => ({}) };
     }) as unknown as typeof fetch);
@@ -79,7 +85,7 @@ describe("Studio", () => {
 
     await waitFor(() => expect(FakeES.last).toBeTruthy());
     expect(JSON.parse(String(post.mock.calls[0][0].body))).toMatchObject({ agentId: "codex", miniapp: "space-dodger" });
-    expect(FakeES.last!.url).toContain("message=dodge+asteroids");
+    expect(lastTurnMessage()).toBe("dodge asteroids");
     expect(screen.getByText("dodge asteroids")).toBeTruthy(); // shown as the first user bubble
   });
 
@@ -100,7 +106,7 @@ describe("Studio", () => {
 
     fireEvent.keyDown(box, { key: "Enter" });
     await waitFor(() => expect(FakeES.last).toBeTruthy());
-    expect(FakeES.last!.url).toContain("message=make+it+blue");
+    expect(lastTurnMessage()).toBe("make it blue");
   });
 
   it("does not auto-send when there is no seed prompt", async () => {
@@ -134,7 +140,7 @@ describe("Studio", () => {
 
     rerender(<IdentityProvider apiBase=""><Studio {...props} agents={codex} agentId="codex" /></IdentityProvider>);
     await waitFor(() => expect(FakeES.last).toBeTruthy());
-    expect(FakeES.last!.url).toContain("message=dodge+asteroids");
+    expect(lastTurnMessage()).toBe("dodge asteroids");
   });
 
   // Studio mounts an agent list over raw fetch and an EventSource; stub both, then the two client routes.

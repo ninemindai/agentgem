@@ -29,6 +29,8 @@ const setup = async (intercept?: (url: string, init?: RequestInit) => unknown) =
     calls.push({ url: String(url), init });
     const hit = intercept?.(String(url), init);
     if (hit) return hit;
+    if (String(url).includes("/api/chat/turn") && init?.method === "POST")
+      return { ok: true, json: async () => ({ turnId: "t1" }) };
     if (String(url).includes("/api/chat") && init?.method === "POST" && !String(url).includes("/cancel"))
       return { ok: true, json: async () => ({ chatId: "c1" }) };
     return { ok: true, json: async () => ({}) };
@@ -44,6 +46,9 @@ const setup = async (intercept?: (url: string, init?: RequestInit) => unknown) =
   await waitFor(() => expect(FakeES.last).toBeTruthy());
   return { calls };
 };
+// POST-then-stream: the coalesced message rides the /api/chat/turn POST body.
+const lastTurnMessage = (calls: { url: string; init?: RequestInit }[]) =>
+  JSON.parse(String(calls.filter((c) => c.url.endsWith("/api/chat/turn") && c.init?.method === "POST").at(-1)?.init?.body ?? "{}")).message as string;
 const typeEnter = (text: string) => {
   const box = screen.getByPlaceholderText(/build\/edit/i);
   fireEvent.change(box, { target: { value: text } });
@@ -77,21 +82,21 @@ describe("Studio queue + interrupt", () => {
     typeEnter("b");
     FakeES.last!.emit("done", { result: { text: "ok", toolCalls: [] } });
     await waitFor(() => expect(FakeES.count).toBe(2));           // exactly one follow-up stream
-    expect(new URL(FakeES.last!.url, "http://x").searchParams.get("message")).toBe("a\nb");
+    expect(lastTurnMessage(calls)).toBe("a\nb");
     expect(screen.queryByText("a")).toBeNull();                  // chips cleared
     // The queued flush reuses the live session — a second POST /api/chat would fork a new one.
     expect(calls.filter((c) => c.url.endsWith("/api/chat") && c.init?.method === "POST").length).toBe(1);
   });
 
   it("failed holds the queue; 'Send queued' fires it explicitly", async () => {
-    await setup();
+    const { calls } = await setup();
     typeEnter("held");
     FakeES.last!.emit("failed", { error: "boom" });
     await new Promise((r) => setTimeout(r, 20));
     expect(FakeES.count).toBe(1);                                // no auto-fire into a broken turn
     fireEvent.click(await screen.findByText("Send queued"));
     await waitFor(() => expect(FakeES.count).toBe(2));
-    expect(decodeURIComponent(FakeES.last!.url)).toContain("held");
+    expect(lastTurnMessage(calls)).toBe("held");
   });
 
   it("Interrupt cancels the turn; the cancelled done marks the transcript and fires the queue", async () => {
@@ -104,7 +109,7 @@ describe("Studio queue + interrupt", () => {
     FakeES.last!.emit("done", { result: { text: "partial", toolCalls: [], stopReason: "cancelled" } });
     await waitFor(() => expect(screen.getByText(/interrupted/)).toBeTruthy());
     await waitFor(() => expect(FakeES.count).toBe(2));           // redirect: queue fired
-    expect(new URL(FakeES.last!.url, "http://x").searchParams.get("message")).toBe("do this instead");
+    expect(lastTurnMessage(calls)).toBe("do this instead");
   });
 
   // Eng review issue 8: fetch RESOLVES on HTTP errors — the fallback must run on ok:false, not
@@ -155,14 +160,14 @@ describe("Studio queue + interrupt", () => {
   // flush — they keep their chips and attach to the next manual send.
   it("files staged while busy do not join the queued flush", async () => {
     const uploadSpy = vi.spyOn(playUploadsRoute, "call").mockResolvedValue({ files: [], ship: 0, ref: 0 } as never);
-    await setup();
+    const { calls } = await setup();
     const fileInput = await screen.findByTestId("uploads-input");
     fireEvent.change(fileInput, { target: { files: [new File(["x"], "logo.png", { type: "image/png" })] } });
     await screen.findByTestId("role-logo.png");                                // staged chip present
     typeEnter("queued text");
     FakeES.last!.emit("done", { result: { text: "ok", toolCalls: [] } });
     await waitFor(() => expect(FakeES.count).toBe(2));
-    expect(new URL(FakeES.last!.url, "http://x").searchParams.get("message")).toBe("queued text"); // no preamble
+    expect(lastTurnMessage(calls)).toBe("queued text"); // no preamble
     expect(uploadSpy).not.toHaveBeenCalled();
     expect(screen.getByTestId("role-logo.png")).toBeTruthy();                  // still staged for next send
   });
