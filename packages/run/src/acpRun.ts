@@ -39,6 +39,8 @@ export interface ToolInvocation {
 export interface RunResult {
   text: string;
   toolCalls: ToolInvocation[];
+  /** ACP stop reason for the turn (e.g. "end_turn", "cancelled"); absent on adapters that omit it. */
+  stopReason?: string;
 }
 
 // ── Session-update reducer ───────────────────────────────────────────────────
@@ -219,9 +221,10 @@ export async function connectRunSession(
         setMode: (mode: string) => session.setMode(mode),
         async prompt(text, onDelta, onToolCall) {
           const acc = createAccumulator();
-          await session.prompt(text, (u) => applyUpdate(acc, (u ?? {}) as Parameters<typeof applyUpdate>[1], { onDelta, onToolCall }));
-          return acc;
+          const stopReason = await session.prompt(text, (u) => applyUpdate(acc, (u ?? {}) as Parameters<typeof applyUpdate>[1], { onDelta, onToolCall }));
+          return { ...acc, stopReason };
         },
+        cancel: () => session.cancel(),
         dispose: () => session.dispose(),
       };
     },
