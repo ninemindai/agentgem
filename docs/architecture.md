@@ -49,9 +49,10 @@ A bottom band — the **community marketplace** (`app.agentgem.ai`) — is a sep
 hosted service (operated by ninemind, shared by both [editions](editions.md)) that
 the console signs into and publishes to: better-auth identity (GitHub / Google / X
 / passkeys) with `/@handle` profiles, the catalog and its publish scopes /
-versioning, and stars / reviews. **Groups, orgs, review-gating, and the opt-in,
-k-anonymized [benchmark feedback loop](diagrams/benchmark-feedback-loop.html) with
-governance are [Enterprise](editions.md).** The console (and the desktop app) carry
+versioning, and stars / reviews. Contributing to the opt-in, k-anonymized
+[benchmark feedback loop](diagrams/benchmark-feedback-loop.html) is available to
+any core; **groups, orgs, review-gating, and benchmark *governance* are
+[Enterprise](editions.md).** The console (and the desktop app) carry
 none of this in-process — they talk to the service as a pure client (see the
 [client/server split](diagrams/desktop-client-server-architecture.html)).
 
