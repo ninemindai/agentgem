@@ -110,10 +110,11 @@ Promote memory's outbox from a memory-specific store to an **app-wide delivery
 queue** in `@agentgem/app` (or a small `@agentgem/mailbox` package — see Open
 questions). Generalize what's already there:
 
-- **Envelope** — `{ id, kind, target, payload-ref, consent, attempts, status }`.
+- **Envelope** — `{ id, kind, audience, payload-ref, consent, attempts, status }`.
   `kind` covers the activities AgentGem already emits: `gem.published`,
   `gem.transferred`, `a2a.task-result`, `memory.push` (the existing case becomes
-  one `kind`, not a parallel system).
+  one `kind`, not a parallel system). `audience` is a **scope**, not a single
+  actor — see [Addressing](#addressing--audience-scopes-not-one-actor).
 - **Consent gate** — carry forward the review-then-push model. Nothing leaves
   without an explicit local decision, same as memory today.
 - **Delivery executor** — routes by `kind` to the existing rails: `distribute`
@@ -149,6 +150,60 @@ A **Mailbox panel** mirroring the existing Memory outbox review UX: an Outbox ta
 (pending / delivering / delivered / failed, with retry) and an Inbox tab (drained
 messages awaiting review, with the containment framing made visible). This reuses
 the console patterns already built for the memory review outbox.
+
+---
+
+## Addressing — audience scopes, not one actor
+
+The local app sends to **team / org / friend / group / public**. So the outbox
+`audience` is a *scope*, not a point-to-point address — and each scope, tightest to
+widest, maps onto a rail that mostly already exists:
+
+| Scope | Meaning | Rail today | Fan-out |
+| --- | --- | --- | --- |
+| **self / private** | own devices & providers | memory push (`visibility:"private"`) | none |
+| **friend** | one named actor, 1:1 | `@agentgem/transfer` (NATS ticket → mint) | none — point-to-point |
+| **group / team** | a named membership set | **relay (new)** | relay resolves members, delivers to each inbox |
+| **org** | an organization directory | **relay (new)** | relay fan-out, admin-scoped |
+| **public** | anyone; discoverable | `@agentgem/distribute` + marketplace (`visibility:"public"`) | published, pulled |
+
+Four things follow from this:
+
+1. **Two of the five rails already exist.** *friend* is `transfer` (point-to-point
+   NATS). *public* is `distribute` + the existing
+   `Visibility = "public" | "unlisted" | "private"` axis on `CatalogRow` /
+   `CatalogManifest`. The **group/team/org middle tier is the real gap** — and it's
+   exactly where the relay earns its place. A `groupId` already appears in the
+   review-submit signing payload (`reviewSubmitPayload`), but there's no membership
+   directory behind it yet.
+
+2. **Fan-out belongs to the relay, not the laptop.** Sending to a group of N
+   members means the local app pushes **one** signed activity addressed to the
+   *scope*; the relay resolves membership and drops it into each member's relay
+   inbox (which they pull). The machine never performs N deliveries — same reason
+   the inbox is pull-based: NAT, offline, closed lid. A local app cannot reliably
+   fan out to an audience; a relay can.
+
+3. **Scope is an input to the redaction + consent gate, not just an address.** This
+   is the load-bearing point for a secret-safe product. *public* is the
+   highest-scrutiny gate; *friend* lower; each **wider** scope can only ever
+   **tighten** what shape is allowed to cross — the same
+   widening-ships-with-a-tightening rule the miniapp platform follows in CLAUDE.md.
+   The envelope's `consent` becomes scope-aware: the console review shows
+   *"you're about to send &lt;shape&gt; to &lt;scope&gt;"* with the diff of what
+   that scope additionally strips. Re-targeting an already-staged activity to a
+   wider scope re-opens consent — you can't quietly promote a friend message to
+   public.
+
+4. **Membership needs a directory the relay owns.** group/team/org are keyed by
+   actor pubkey (identity already exists as the signing key). The relay is the
+   authority on who's in a group and who may add/remove — reusing the
+   `ownerAccountId` / `groupId` seeds already in `@agentgem/contract`. *org* is a
+   group with an admin role; *team* is a group scoped under an org.
+
+So the scope ladder isn't new machinery bolted on — it's the existing
+private → transfer → marketplace spread, with the **group/team/org** rung filled in
+by the relay and every rung fed through one scope-aware consent gate.
 
 ---
 
@@ -188,6 +243,11 @@ Cheapest-first, each independently shippable:
 Increment 1 delivers value with zero new trust surface. Federation (3–4) only lands
 after the containment funnel is in place.
 
+The **audience scopes** land across these rungs rather than in one step: *friend*
+(2, over `transfer`) and *public* (1, over `distribute` — already shipped) come
+early; *group / team / org* arrive with the relay (3), since they're the tier that
+needs membership fan-out.
+
 ---
 
 ## Open questions
@@ -207,3 +267,12 @@ after the containment funnel is in place.
 - **Overlap with A2A push notifications.** `a2a.md` already mentions push
   notifications in the generated server — is the mailbox a superset, or do they
   coexist for the live-server case?
+- **Group membership authority & revocation.** Who may add/remove members of a
+  group/org, and can a member be evicted mid-flight? Is *org* just a group with an
+  admin role, or a distinct directory?
+- **Unsend / revocation across scopes.** Once fanned out to a group or published to
+  the marketplace, what does "recall this" mean — best-effort relay tombstone, or
+  no guarantee once it's on a member's machine?
+- **Does *unlisted* survive as a scope?** The contract already has `unlisted`
+  between public and private — is it a distinct audience rung, or does it collapse
+  into "group with an open link"?
