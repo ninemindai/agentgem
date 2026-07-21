@@ -44,6 +44,15 @@ and reading your past transcripts — not just the current context. Assistant re
 stream in, and each tool call the agent makes shows as a chip so you can see it
 searching your sessions.
 
+## Type while it's working
+
+You don't have to wait for the agent to finish. Type and send while a turn is
+streaming and your messages **queue** — they coalesce and flush as the next turn
+the moment the current one ends. To stop the current turn instead, **Interrupt**
+(beside *Attach files* in the composer) cancels it at the ACP `session/cancel`
+seam; the stream reports the turn's stop reason, and anything you'd queued is
+preserved so you can resume cleanly. The same queue + Interrupt work in Studio.
+
 ## Draft a Gem from the conversation
 
 Once a chat exists, a **Draft a Gem ◆** button turns the conversation into a
