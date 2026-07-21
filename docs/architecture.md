@@ -45,13 +45,15 @@ search (Recall), context-hygiene scoring, an aggregates-only chat/MCP, and Play 
 described in [Session intelligence](#session-intelligence-recall-hygiene-chat-play) below and is
 independent of the Gem-build spine.
 
-A bottom band — the **hosted marketplace** (`app.agentgem.ai`) — is where the console
-signs in, publishes, and contributes: better-auth identity (GitHub / Google / passkeys)
-with `/@handle` profiles, groups, and orgs; the catalog and its publish scopes /
-versioning / review-gating; and the opt-in, k-anonymized
-[benchmark feedback loop](diagrams/benchmark-feedback-loop.html) with org governance.
-The console (and the desktop app) talk to it as a pure client — see the
-[client/server split](diagrams/desktop-client-server-architecture.html).
+A bottom band — the **community marketplace** (`app.agentgem.ai`) — is a separate
+hosted service (operated by ninemind, shared by both [editions](editions.md)) that
+the console signs into and publishes to: better-auth identity (GitHub / Google / X
+/ passkeys) with `/@handle` profiles, the catalog and its publish scopes /
+versioning, and stars / reviews. **Groups, orgs, review-gating, and the opt-in,
+k-anonymized [benchmark feedback loop](diagrams/benchmark-feedback-loop.html) with
+governance are [Enterprise](editions.md).** The console (and the desktop app) carry
+none of this in-process — they talk to the service as a pure client (see the
+[client/server split](diagrams/desktop-client-server-architecture.html)).
 
 Server-side state lives under `~/.agentgem` (workspaces, recents, credentials) — never
 inside a Gem.
