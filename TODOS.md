@@ -271,3 +271,30 @@ releases `running`. Land after PR #469's transcript-poll UX proves out.
 
 **Depends on / blocked by:** Nothing hard; sequence after the Studio resume
 live-progress implementation PR.
+
+## Chat queue: persist queued messages across reloads
+
+**What:** Persist each composer's `queued[]` (see `packages/console/src/panels/chatQueue.tsx`)
+per miniapp/chat in `studioChatStore` (localStorage), restore on mount, and let the
+resume-poll completion path fire it — completing the walk-away story: queue a correction,
+close the laptop, come back, it sent.
+
+**Why:** The queue is in-memory (v1 cut, documented in
+`docs/superpowers/specs/2026-07-20-chat-queue-interrupt-design.md`): a reload drops
+queued chips. The 2026-07-20 eng review confirmed the resume-poll path now fires the
+queue (issue 1), so persistence is the one missing piece for reload survival.
+
+**Pros:** Typed intent survives crashes/reloads; symmetric with the durable chat
+sessions (#469) story.
+
+**Cons:** localStorage sync across tabs introduces a two-writers wrinkle (last-write-wins
+is probably fine for drafts); needs a "queued for a dead session" answer if the chat was
+killed while unloaded (eng review issue 9 chose clear-on-kill — mirror it on restore).
+
+**Context:** `useMessageQueue` in `panels/chatQueue.tsx` is the single home for queue
+logic (both composers consume it). Persistence belongs inside the hook so both surfaces
+get it at once. `studioChatStore.ts` already has the per-miniapp keyed-storage pattern
+to mirror.
+
+**Depends on / blocked by:** Nothing — issue-1 (resume firing) and issue-2 (shared hook)
+landed with the 2026-07-20 eng-review fix PR.

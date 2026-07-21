@@ -439,6 +439,50 @@ describe("Studio resume", () => {
     } finally { vi.useRealTimers(); }
   });
 
+  it("a turn completing via the resume poll fires the queued messages (eng review issue 1)", async () => {
+    vi.useFakeTimers();
+    try {
+      setStudioChat("demo15", { chatId: "chat_15", sessionId: "sess_15", agent: "codex" });
+      let stateCalls = 0;
+      vi.stubGlobal("fetch", vi.fn(async (url: string) => {
+        const path = new URL(url, "http://x").pathname;
+        if (path.includes("/api/chat/chat_15/state")) {
+          stateCalls++;
+          return { ok: true, json: async () => ({ alive: true, running: stateCalls < 2, sessionId: "sess_15", agent: "codex" }) } as unknown as Response;
+        }
+        if (path.includes("/api/inspect/session")) {
+          return { ok: true, json: async () => ({ sessionId: "sess_15", agent: "codex", meta: inspectMeta("sess_15"), turns: [] }), text: async () => "" } as unknown as Response;
+        }
+        return { ok: true, json: async () => ({}), text: async () => "{}" } as unknown as Response;
+      }));
+      vi.spyOn(playMiniappRoute, "call").mockResolvedValue({
+        name: "demo15", html: "<p>x</p>",
+        meta: { title: "Demo15", genre: "project-fun", createdFrom: { kind: "project", path: "/p", flavor: "node" }, engineVersion: "1" },
+      } as never);
+      // The queued flush's own stream: benign impl (no immediate onFailed) so the assert stays clean.
+      vi.mocked(openStudioStream).mockImplementation(() => () => {});
+
+      render(<IdentityProvider apiBase=""><Studio apiBase="" name="demo15" agents={codex} agentId="codex" onAgentIdChange={() => {}} onBack={() => {}} /></IdentityProvider>);
+      await vi.advanceTimersByTimeAsync(0);      // mount: resume detects the running background turn
+
+      // Type while the resumed turn is busy — must queue, not drop.
+      const textarea = screen.getByPlaceholderText(/ask the agent/i);
+      fireEvent.change(textarea, { target: { value: "queued during resume" } });
+      fireEvent.keyDown(textarea, { key: "Enter" });
+      await vi.waitFor(() => expect(screen.getByText("queued during resume")).toBeTruthy()); // chip
+
+      // Next poll tick sees running:false → completion path must FIRE the queue (not leave it held).
+      await vi.advanceTimersByTimeAsync(2000);
+      await vi.waitFor(() => {
+        const calls = vi.mocked(openStudioStream).mock.calls;
+        expect(calls.some((c) => c[2] === "queued during resume")).toBe(true);
+      });
+      // chips cleared (vi.waitFor: the state update happened in a poll-tick callback; the re-render
+      // needs a flush under fake timers)
+      await vi.waitFor(() => expect(screen.queryByText("queued during resume", { selector: ".studio-queue__text" })).toBeNull());
+    } finally { vi.useRealTimers(); }
+  });
+
   it("keeps polling through a non-ok /state response and still completes", async () => {
     vi.useFakeTimers();
     try {

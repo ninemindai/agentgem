@@ -7,6 +7,7 @@ import { CapabilityStrip } from "./CapabilityStrip.js";
 import { RequestReviewModal } from "./RequestReviewModal.js";
 import { Runner, type RunnerHandle } from "./Runner.js";
 import { openStudioStream } from "./studioStream.js";
+import { useMessageQueue, QueueChips, postCancel } from "../chatQueue.js";
 import { genre as genreOf, parseGateFailure, fixSealPrompt } from "./playMeta.js";
 import { useIdentity } from "../../identity/IdentityProvider.js";
 import { useGitHubBind } from "../../identity/useGitHubBind.js";
@@ -64,12 +65,15 @@ export function Studio({
   useEffect(() => { chatIdRef.current = chatId; }, [chatId]);
   const [msgs, setMsgs] = useState<Msg[]>([]);
   const [input, setInput] = useState("");
-  const [busy, setBusy] = useState(false);
-  // Messages typed while a turn is in flight. State renders the chips; the ref is the logic's copy so
-  // fireQueued/send never run inside a state updater (a side effect there would double-fire under
-  // StrictMode). Both are always written together.
-  const [queued, setQueued] = useState<string[]>([]);
-  const queuedRef = useRef<string[]>([]);
+  const [busy, setBusyState] = useState(false);
+  // busyRef mirrors busy SYNCHRONOUSLY: send()'s re-entry guard must read reality, not a render
+  // vintage. The queue's fire() runs `setBusy(false); …; queue.fire()` inside one callback — the
+  // state value in any closure is still true at that instant, so a state-read guard would silently
+  // swallow the queued flush (found by the eng-review fix tests).
+  const busyRef = useRef(false);
+  const setBusy = (b: boolean) => { busyRef.current = b; setBusyState(b); };
+  // Messages typed while a turn is in flight — shared queue machinery (panels/chatQueue.tsx).
+  const queue = useMessageQueue((text) => void send(text));
   const [working, setWorking] = useState("");
   const [html, setHtml] = useState("");
   // Remount generation for the preview Runner: the reload control bumps it so a wedged
@@ -192,6 +196,10 @@ export function Studio({
           setMsgs(r.msgs);
           setBusy(false); setWorking("");
           await refresh();
+          // Eng review issue 1: a turn that completes via THIS path (stream drop reconciled to
+          // polling) must honor the queue's promise too, not just the stream's onDone. Safe after
+          // a supersede: stop() bumps the generation AND clears the queue, so a stale fire no-ops.
+          queue.fire();
           return;
         }
         // Still running — reflect live work and grow the log. Replace only when the transcript
@@ -287,12 +295,13 @@ export function Studio({
     setChatId(null);
     clearChatId(name); // keep sessionId so history still renders
     if (id) { try { await fetch(`${apiBase}/api/chat/${encodeURIComponent(id)}`, { method: "DELETE" }); } catch { /* best-effort */ } }
+    queue.clear(); // eng review issue 9: queued messages were written against this session — they die with it
     setStatus("session stopped");
   }
 
   async function send(text: string) {
     const message = text.trim();
-    if (!message || busy || !agentId) return;
+    if (!message || busyRef.current || !agentId) return; // busyRef: see its declaration — closures lie here
     setBusy(true); setWorking("thinking…"); setGate(null); setShare(null);
     setMsgs((m) => [...m, { role: "user", text: message }]);
     try {
@@ -309,7 +318,7 @@ export function Studio({
           setBusy(false); setWorking("");
           if (result.stopReason === "cancelled") setMsgs((m) => [...m, { role: "tool", title: "⏹ interrupted" }]);
           await refresh();
-          fireQueued(); // redirect: anything typed mid-turn coalesces into the next turn now
+          queue.fire(); // redirect: anything typed mid-turn coalesces into the next turn now
         },
         onFailed: (e) => {
           // A turn stays alive server-side after a stream drop (Task 3). "already running"
@@ -343,24 +352,16 @@ export function Studio({
   // Guard on busy: the textarea's Enter handler calls submit() unconditionally, and send()
   // early-returns while busy — without this guard, pressing Enter mid-turn would still wipe
   // the composer (including a message an "already running" restore just put back).
-  const pushQueued = (t: string) => { queuedRef.current = [...queuedRef.current, t]; setQueued(queuedRef.current); };
-  const removeQueued = (i: number) => { queuedRef.current = queuedRef.current.filter((_, j) => j !== i); setQueued(queuedRef.current); };
-  // Coalesce every queued message into ONE next turn (spec: fewer, better-informed turns). No-op when empty.
-  function fireQueued() {
-    const q = queuedRef.current;
-    if (!q.length) return;
-    queuedRef.current = [];
-    setQueued([]);
-    void send(q.join("\n"));
-  }
-
   // Interrupt the in-flight turn (ACP session/cancel) — the session survives and the stream ends with
-  // stopReason "cancelled". If even the cancel POST fails, fall back to the session-kill stop().
+  // stopReason "cancelled". postCancel classifies the reply (eng review issues 3/8): an HTTP error or
+  // unreachable route falls back to the session-kill stop(); a no-op gets an honest status line instead
+  // of silence (the turn may have just finished, or this agent's adapter has no cancel support).
   async function interrupt() {
     const id = chatIdRef.current ?? chatId;
-    if (!id) return;
-    try { await fetch(`${apiBase}/api/chat/${encodeURIComponent(id)}/cancel`, { method: "POST" }); }
-    catch { setStatus("interrupt failed — stopping the session"); await stop(); }
+    if (!id) { setStatus("nothing to interrupt yet"); return; }
+    const r = await postCancel(apiBase, id);
+    if (r === "failed") { setStatus("interrupt failed — stopping the session"); await stop(); }
+    else if (r === "noop") setStatus("nothing to interrupt — the turn may have just finished, or this agent doesn't support interrupts");
   }
 
   async function submit() {
@@ -370,7 +371,7 @@ export function Studio({
       // their chips and attach to the next non-busy send, exactly as before.
       const text = input.trim();
       if (!text) return;
-      pushQueued(text);
+      queue.push(text);
       setInput("");
       return;
     }
@@ -797,17 +798,7 @@ export function Studio({
       </div>
 
       <div className="play-composer-in" ref={composerRef}>
-        {queued.length > 0 && (
-          <div className="studio-queue">
-            {queued.map((q, i) => (
-              <span key={`${i}:${q}`} className="studio-queue__chip" title="queued — sends when the agent finishes">
-                <span className="studio-queue__text">{q}</span>
-                <button aria-label={`remove queued message ${i + 1}`} onClick={() => removeQueued(i)}>✕</button>
-              </span>
-            ))}
-            {!busy && <button className="play-btn" onClick={fireQueued}>Send queued</button>}
-          </div>
-        )}
+        <QueueChips queue={queue} busy={busy} />
         <UploadsField u={up} compact />
         <textarea ref={inputRef} className="play-input play-input--chat" rows={3}
           placeholder="ask the agent to build/edit the miniapp…" value={input}
