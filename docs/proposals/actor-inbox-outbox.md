@@ -31,6 +31,41 @@ without spending the local-first, secret-safe posture that *is* the product.
 
 ---
 
+## What this is — and isn't
+
+Net-net: **a message bus for transport, an actor mailbox for semantics.** The
+distinction is load-bearing — it's the difference between "compose the bus we
+already have" and "bolt on a generic event system."
+
+**Mechanically, yes — it's a message bus, and mostly one that already exists.**
+Durable queues (outbox/inbox), typed messages (`kind`s), publish/subscribe over a
+broker, fan-out to audiences, at-least-once delivery with cursors — those are the
+canonical bus parts, and NATS/JetStream *is* one underneath. We compose existing bus
+primitives (`transfer`'s NATS + the memory outbox); we don't invent a broker.
+
+**Semantically, no — it's a signed actor mailbox, and that's the deliberate
+difference.** Three things separate it from a generic event bus:
+
+- **Identity-addressed, not topic-addressed.** Messages go to *actor identities* (or
+  scopes that resolve to identities) and are trusted per-signer — the ActivityPub /
+  email model, not the Kafka topic-firehose model. Identity + signature is what
+  makes it a *mailbox*, not a *bus*.
+- **Gated activities, not fire-and-forget events.** Nothing auto-acts: outbound is
+  consent-gated, inbound lands in a typed queue for a decision, actionable kinds
+  need a trusted signature *plus* a human affordance. The plumbing never drives
+  behavior on its own.
+- **A boundary layer, not internal wiring.** It's how *different actors* talk across
+  the machine/trust boundary — not how AgentGem's own components talk to each other.
+  It's the external interop skin, not a replacement for internal control flow.
+
+It carries **both** events and messages: *notifications* are genuine fire-and-forget
+events; *tasks / enforcement / review / sharing* are directed messages. But they
+ride the **same** signed, addressed, gated envelope — so it's message-oriented with
+events as one `kind`, not a reactive event bus. Think **email/ActivityPub for
+agents**, not an internal app event bus.
+
+---
+
 ## Motivation — the arc is already written down
 
 `docs/a2a.md` states the destination explicitly: exporting a Gem to A2A is
