@@ -210,6 +210,7 @@ ${FONTS}
       <a href="https://app.agentgem.ai">Marketplace</a>
       <a href="${rel}docs/index.html">Docs</a>
       <a href="${rel}docs/getting-started.html">Get started</a>
+      <a href="${rel}docs/editions.html">Enterprise</a>
       <a href="${rel}blog/index.html">Blog</a>
       <a href="${GITHUB}">GitHub</a>
     </div>
