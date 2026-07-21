@@ -53,7 +53,6 @@ const DOC_PAGES = [
   'docs/api-reference.md',
   'docs/targets.md',
   'docs/a2a.md',
-  'docs/registry.md',
   'docs/sharing.md',
   'docs/testbed-and-run.md',
   'docs/development.md',
@@ -95,7 +94,6 @@ const NAV_SECTIONS = [
     items: [
       ['docs/targets.md', 'Targets & deploy'],
       ['docs/a2a.md', 'A2A'],
-      ['docs/registry.md', 'Registry'],
       ['docs/sharing.md', 'Sharing & identity'],
       ['docs/testbed-and-run.md', 'Testbed & run'],
     ],
@@ -232,7 +230,6 @@ ${body}
       <a href="${rel}docs/getting-started.html">Getting started</a>
       <a href="${rel}docs/concepts.html">Concepts</a>
       <a href="${rel}docs/targets.html">Targets &amp; deploy</a>
-      <a href="${rel}docs/registry.html">Registry</a>
       <a href="${rel}llms.txt">llms.txt</a>
       <a href="https://agentback.dev">AgentBack</a>
     </div>
