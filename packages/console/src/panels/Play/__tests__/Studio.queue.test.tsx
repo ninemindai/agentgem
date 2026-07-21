@@ -69,14 +69,16 @@ describe("Studio queue + interrupt", () => {
     expect(FakeES.count).toBe(1);                                // removed chip never sent
   });
 
-  it("done coalesces the queue into ONE next turn", async () => {
-    await setup();
+  it("done coalesces the queue into ONE next turn on the SAME chat session", async () => {
+    const { calls } = await setup();
     typeEnter("a");
     typeEnter("b");
     FakeES.last!.emit("done", { result: { text: "ok", toolCalls: [] } });
     await waitFor(() => expect(FakeES.count).toBe(2));           // exactly one follow-up stream
-    expect(decodeURIComponent(FakeES.last!.url)).toContain("a\nb");
+    expect(new URL(FakeES.last!.url, "http://x").searchParams.get("message")).toBe("a\nb");
     expect(screen.queryByText("a")).toBeNull();                  // chips cleared
+    // The queued flush reuses the live session — a second POST /api/chat would fork a new one.
+    expect(calls.filter((c) => c.url.endsWith("/api/chat") && c.init?.method === "POST").length).toBe(1);
   });
 
   it("failed holds the queue; 'Send queued' fires it explicitly", async () => {
