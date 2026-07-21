@@ -373,11 +373,40 @@ Registered exactly like memory's provider `REGISTRY` and the materialize targets
 
 | Transport | Role | Scope fit | Basis today |
 | --- | --- | --- | --- |
-| **HTTPS relay** *(baseline, mandatory)* | long-poll / SSE drain from the aggregator; `POST` to deliver | everything — the floor | aggregator already HTTPS (`api.agentgem.ai`, review flow) |
-| **NATS** *(preferred upgrade)* | live `subscribe` (push, not poll), JetStream durable hold, object-store for large payloads, WS for browser | friend 1:1, group/org relay | `@agentgem/transfer` (`ObjectStore`, `NATS_WS_URL`) |
+| **HTTPS relay** *(baseline, mandatory)* | **SSE** drain (unidirectional server→client, cursor via `Last-Event-ID`), long-poll fallback; `POST` to deliver | everything — the floor | aggregator already HTTPS (`api.agentgem.ai`, review flow) |
+| **NATS-over-WebSocket** *(preferred live upgrade)* | live `subscribe` (push, not poll), JetStream durable hold, object-store for large payloads | friend 1:1, group/org relay, browser console | `@agentgem/transfer` (`ObjectStore`, `NATS_WS_URL`) |
 | **GitHub** | publish + others pull — git *is* the transport, durable & auditable | public | `@agentgem/distribute` GitHub registry |
 | **A2A push** *(bridge)* | inbound tasks via the generated server's push-notification handler | task, live-server case | A2A target (`docs/a2a.md`) |
 | **Loopback / in-proc** | same-machine actors + tests | self / dev | the memory outbox is effectively this (local file queue) |
+
+### WebSocket for the relay: yes, as the live upgrade — not the baseline
+
+The drain is **unidirectional** — the machine pulls envelopes down, and pushes
+deliveries up as a *separate* `POST`. So for the baseline, **SSE beats WebSocket**:
+it's server→client only (exactly what a pull-inbox needs), runs over plain HTTP/2
+with no upgrade handshake, sails through proxies, and **auto-reconnects with
+`Last-Event-ID`** — which doubles as the drain cursor for free. WebSocket's
+bidirectionality would be dead weight when `deliver` is already its own request.
+Long-poll is the fallback where even SSE is blocked.
+
+Where WebSocket *does* belong is the **live-push upgrade — and it already exists as
+NATS-over-WebSocket.** Don't hand-roll a bespoke WS relay server; reuse the
+`NATS_WS_URL` path `transfer` already ships. That one choice gives, over a single
+client-dialed `wss://` upgrade on 443:
+
+- **live push** (`subscribe`, not poll) for the "a task/notification just arrived"
+  feel;
+- **durable hold** via a JetStream consumer — the machine is offline most of the
+  time, so the relay must queue and the consumer cursor replays on reconnect;
+- **browser reach** — the console is a React app that *cannot* hold a raw NATS TCP
+  socket, so WS is the only way it gets live inbox updates at all;
+- **the no-inbound-port property intact** — WS is client-initiated, so the machine
+  still only ever dials out.
+
+So: **WS = NATS-over-WS for liveness and the browser; SSE for the stateless HTTPS
+floor.** Both carry the identical signed envelope, so which one a peer uses is a
+liveness negotiation, transparent to trust — a message pushed over `wss://` and one
+drained over SSE get the same verification.
 
 ### Selection is capability negotiation, not user config
 
