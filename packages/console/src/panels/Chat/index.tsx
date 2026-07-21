@@ -29,6 +29,14 @@ export function Chat({ apiBase }: { apiBase: string }) {
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState("");
   const [sending, setSending] = useState(false);
+  // Messages typed while a turn is in flight (2026-07-20 queue design). State renders the chips; the
+  // ref is the logic's copy so fireQueued never runs a send inside a state updater. chatIdRef keeps
+  // callbacks from earlier renders (a turn's onDone) on the LIVE session — the stale state would
+  // silently fork a second chat for the queued flush.
+  const [queued, setQueued] = useState<string[]>([]);
+  const queuedRef = useRef<string[]>([]);
+  const chatIdRef = useRef<string | null>(null);
+  useEffect(() => { chatIdRef.current = chatId; }, [chatId]);
   const [error, setError] = useState<string | null>(null);
   const [draftResult, setDraftResult] = useState<string | null>(null);
   const [drafting, setDrafting] = useState(false);
@@ -55,10 +63,35 @@ export function Chat({ apiBase }: { apiBase: string }) {
   // Scroll to bottom on new messages
   useEffect(() => { bottomRef.current?.scrollIntoView({ behavior: "smooth" }); }, [messages]);
 
+  const pushQueued = (t: string) => { queuedRef.current = [...queuedRef.current, t]; setQueued(queuedRef.current); };
+  const removeQueued = (i: number) => { queuedRef.current = queuedRef.current.filter((_, j) => j !== i); setQueued(queuedRef.current); };
+  // Coalesce every queued message into ONE next turn. No-op when empty.
+  const fireQueued = () => {
+    const q = queuedRef.current;
+    if (!q.length) return;
+    queuedRef.current = [];
+    setQueued([]);
+    void sendText(q.join("\n"));
+  };
+
+  // Interrupt the in-flight turn (ACP session/cancel) — the session survives; the stream ends with
+  // stopReason "cancelled" and any queued messages fire as the next turn.
+  const interrupt = async () => {
+    const id = chatIdRef.current ?? chatId;
+    if (!id) return;
+    try { await fetch(`${apiBase}/api/chat/${encodeURIComponent(id)}/cancel`, { method: "POST" }); }
+    catch { setError("interrupt failed — the turn will run to completion"); }
+  };
+
   const sendMessage = async () => {
     const text = input.trim();
-    if (!text || sending) return;
+    if (!text) return;
+    if (sending) { pushQueued(text); setInput(""); return; }   // type-while-busy queues, never drops
     setInput("");
+    await sendText(text);
+  };
+
+  const sendText = async (text: string) => {
     setError(null);
     setSending(true);
 
@@ -68,7 +101,7 @@ export function Chat({ apiBase }: { apiBase: string }) {
     setMessages((prev) => [...prev, userMsg, assistantMsg]);
 
     try {
-      let activeChatId = chatId;
+      let activeChatId = chatIdRef.current ?? chatId;
       if (!activeChatId) {
         const res = await fetch(`${apiBase}/api/chat`, {
           method: "POST",
@@ -101,14 +134,20 @@ export function Chat({ apiBase }: { apiBase: string }) {
             return next;
           });
         },
-        onDone: () => {
+        onDone: (result) => {
           setMessages((prev) => {
             const next = [...prev];
             const idx = next.length - 1;
-            next[idx] = { ...next[idx], streaming: false };
+            const interrupted = result.stopReason === "cancelled";
+            next[idx] = {
+              ...next[idx],
+              streaming: false,
+              text: interrupted ? (next[idx].text ? `${next[idx].text}\n⏹ interrupted` : "⏹ interrupted") : next[idx].text,
+            };
             return next;
           });
           setSending(false);
+          fireQueued();   // redirect: anything typed mid-turn coalesces into the next turn now
         },
         onFailed: (err) => {
           setMessages((prev) => {
@@ -247,7 +286,20 @@ export function Chat({ apiBase }: { apiBase: string }) {
 
       {error && <p className="ledger-error" role="alert">{error}</p>}
 
-      {/* Input row */}
+      {/* Queued messages — typed mid-turn, removable until they fire */}
+      {queued.length > 0 && (
+        <div className="studio-queue" style={{ marginTop: 12 }}>
+          {queued.map((q, i) => (
+            <span key={`${i}:${q}`} className="studio-queue__chip" title="queued — sends when the agent finishes">
+              <span className="studio-queue__text">{q}</span>
+              <button aria-label={`remove queued message ${i + 1}`} onClick={() => removeQueued(i)}>✕</button>
+            </span>
+          ))}
+          {!sending && <button type="button" className="ledger-view" onClick={fireQueued}>Send queued</button>}
+        </div>
+      )}
+
+      {/* Input row — never disabled while a turn runs: typing queues */}
       <div className="run-status" style={{ marginTop: 12, gap: 8 }}>
         <input
           className="ledger-search"
@@ -255,18 +307,23 @@ export function Chat({ apiBase }: { apiBase: string }) {
           placeholder="Type a message…"
           aria-label="chat message"
           value={input}
-          disabled={sending || agents === null || (agents?.length === 0)}
+          disabled={agents === null || (agents?.length === 0)}
           style={{ flex: 1, marginBottom: 0 }}
           onChange={(e) => setInput(e.target.value)}
           onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); void sendMessage(); } }}
         />
+        {sending && (
+          <button type="button" className="ledger-sort" title="interrupt this turn — the session survives" onClick={() => void interrupt()}>
+            Interrupt
+          </button>
+        )}
         <button
           type="button"
           className="ledger-view"
-          disabled={sending || !input.trim() || agents === null || (agents?.length === 0)}
+          disabled={!input.trim() || agents === null || (agents?.length === 0)}
           onClick={() => void sendMessage()}
         >
-          {sending ? "Sending…" : "Send →"}
+          {sending ? "Queue" : "Send →"}
         </button>
       </div>
 
