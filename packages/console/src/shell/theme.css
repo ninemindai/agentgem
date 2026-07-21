@@ -811,6 +811,8 @@ body::before {
   font-size: 16px; line-height: 1; padding: 0 2px; }
 .play-uploads__x:hover { color: var(--ink); }
 .play-uploads--compact { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+/* Attach files + Interrupt share a centered row above the composer (Interrupt shows only mid-turn). */
+.play-attach-row { display: flex; align-items: center; justify-content: center; gap: 8px; flex-wrap: wrap; }
 .play-attach { cursor: pointer; white-space: nowrap; }
 
 /* ── Loading — the facet mark catching the light ── */

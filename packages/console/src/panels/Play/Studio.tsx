@@ -649,7 +649,6 @@ export function Studio({
         <span className="play-pill"><span className="play-pill__dot" style={{ background: g.tint }} />{g.icon} {g.label}</span>
         <span className="sp" />
         {status && <span className="play-intro" style={{ margin: 0 }}>{status}</span>}
-        {busy && <button className="play-btn play-btn--ghost" onClick={() => void interrupt()} title="interrupt this turn — the session survives">Interrupt</button>}
         {(busy || chatId) && <button className="play-btn play-btn--ghost" onClick={stop} title="kill the agent session">Stop</button>}
         {!builtin && <button className="play-btn play-btn--primary" onClick={shareToExplore} title="Share to app.agentgem.ai">Share</button>}
         {!builtin && <button className="play-btn play-btn--ghost" onClick={requestReview}>Request review</button>}
@@ -808,7 +807,12 @@ export function Studio({
       ) : (
       <div className="play-composer-in" ref={composerRef}>
         <QueueChips queue={queue} busy={busy} />
-        <UploadsField u={up} compact />
+        {/* Interrupt lives beside Attach files (2026-07-21): mid-turn, the composer is where the
+            user's eyes are — the header keeps only the session-kill Stop. */}
+        <div className="play-attach-row">
+          <UploadsField u={up} compact />
+          {busy && <button className="play-btn play-btn--ghost" onClick={() => void interrupt()} title="interrupt this turn — the session survives">Interrupt</button>}
+        </div>
         <textarea ref={inputRef} className="play-input play-input--chat" rows={3}
           placeholder="ask the agent to build/edit the miniapp…" value={input}
           onChange={(e) => setInput(e.target.value)}
