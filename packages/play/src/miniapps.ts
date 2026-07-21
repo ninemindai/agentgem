@@ -97,7 +97,18 @@ function writeGameGem(name: string, html: string, meta: MiniappMeta): void {
   writeArchiveDir(wdir, writeGemArchive(gem).files);
 }
 
+/** Built-in miniapps (EMBER, the Protocol Inspector, Repo Pulse) are served CONSTANTS: nothing
+ * under the "__" namespace exists in the registry, and an agent editing registry files could never
+ * change what is actually served. Every write entrance rejects the namespace with the same message
+ * (surfaced verbatim in the Studio UI). */
+export function assertNotBuiltin(name: string): void {
+  if (name.startsWith("__")) {
+    throw new Error(`"${name}" is a built-in miniapp — it is a served constant and can't be edited or saved`);
+  }
+}
+
 export async function saveMiniapp(input: SaveMiniappInput): Promise<SaveMiniappResult> {
+  assertNotBuiltin(input.name);
   const dir = miniappDir(input.name);             // validates the name (throws on bad) + jails the path
   const safe = input.name;
 

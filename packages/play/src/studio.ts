@@ -10,7 +10,7 @@ import { deriveNeeds } from "./capabilityScan.js";
 import { extractSource, type SourceReaders } from "./sourceContext.js";
 import { genreFor } from "./genres.js";
 import { scaffoldFor, minimalTemplate } from "./scaffolds.js";
-import { miniappDir, miniappsRoot, claimMiniappDir, miniappHtmlPath, MINIAPP_HTML, type MiniappMeta } from "./miniapps.js";
+import { miniappDir, miniappsRoot, claimMiniappDir, miniappHtmlPath, assertNotBuiltin, MINIAPP_HTML, type MiniappMeta } from "./miniapps.js";
 import { ensureRepo, commitWithLock } from "./git.js";
 import { redactForBake } from "./redact.js";
 import { MINIAPP_BUILDER_BRIEF } from "./builderBrief.js";
@@ -150,6 +150,7 @@ export async function blankStudio(title: string, prompt?: string, name?: string,
 // from the working tree, studioBrief reads meta.json from disk, and the next per-turn checkpoint / Save
 // commits the files — committing here would `git add -A` the agent's in-progress edits into an upload commit.
 export async function addUploadsToMiniapp(name: string, files: UploadFile[]): Promise<UploadResult> {
+  assertNotBuiltin(name);
   const dir = miniappDir(name);                    // validates + jails the name (bad name → throws)
   if (!existsSync(dir)) throw new Error(`miniapp not found: '${name}'`); // readMiniapp would throw a bare ENOENT
   const result = writeUploads(dir, files);         // merge-aware, atomic; result.ship/ref are cumulative
