@@ -212,30 +212,30 @@ export function registerChatRoutes(app: App, deps: ChatRouteDeps, guard: Middlew
     const send = (event: string, data: unknown) =>
       res.write(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`);
 
-    let failed = false;
+    const miniapp = chatMiniapps.get(chatId);
     try {
       for await (const ev of deps.manager.sendMessage(chatId, message)) {
-        if (ev.type === "failed") failed = true;
+        // Checkpoint BEFORE the done frame reaches the client (2026-07-20 eng review, issue 6): the
+        // client may auto-fire a queued next turn the moment it sees `done`, and that turn's edits
+        // must not race this turn's durability commit — with the old after-the-loop ordering, the
+        // checkpoint could snapshot the NEXT turn's half-made edits under this turn's label. Seen
+        // here in the loop, it also still runs when the socket died mid-turn (the drain below keeps
+        // consuming to `done`). A checkpoint failure is logged and swallowed — it must never turn a
+        // successful turn into a failed one, and `done` is sent regardless.
+        if (ev.type === "done" && miniapp && deps.checkpointMiniapp) {
+          try { await deps.checkpointMiniapp(miniapp); }
+          catch (e) { console.error(`checkpoint failed for miniapp ${miniapp}:`, (e as Error).message); }
+        }
         // A `send` (res.write) failure here means the client already disconnected (tab closed,
         // network drop, navigated away). Swallow it INSIDE the loop body — letting it escape would
         // make `for await` run IteratorClose on the manager's generator, which (a) skips the
         // `await running` that lets the underlying prompt() finish before `chat.running` clears,
-        // and (b) aborts before `done`, so the checkpoint below never runs. Draining to completion
+        // and (b) aborts before `done`, so the checkpoint above never runs. Draining to completion
         // regardless of the dead socket is the background-completion guarantee (R1).
         try { send(ev.type, ev); } catch { /* client gone; turn continues in the background */ }
       }
     } catch (e) {
-      failed = true;
       try { send("failed", { error: (e as Error).message }); } catch { /* client gone */ }
-    }
-
-    // Turn done. For a studio session that did NOT fail, checkpoint the miniapp (durability + opportunistic
-    // gem). The client already received `done`; this runs after and never affects the turn — a checkpoint
-    // failure is logged and swallowed.
-    const miniapp = chatMiniapps.get(chatId);
-    if (!failed && miniapp && deps.checkpointMiniapp) {
-      try { await deps.checkpointMiniapp(miniapp); }
-      catch (e) { console.error(`checkpoint failed for miniapp ${miniapp}:`, (e as Error).message); }
     }
 
     try { res.end(); } catch { /* client already disconnected */ }

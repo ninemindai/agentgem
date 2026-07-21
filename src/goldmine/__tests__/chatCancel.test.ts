@@ -108,6 +108,54 @@ async function buildApp(connectFn: ChatConnectFn) {
   return { app: server.expressApp, manager };
 }
 
+// Eng review issue 6 (cross-model): the client may auto-fire a queued next turn the instant it
+// sees `done`, so the checkpoint must complete BEFORE the done frame is written — otherwise the
+// next turn's edits race this turn's durability commit. Raw-handler pattern from chatRoutes.test.ts.
+describe("checkpoint-before-done ordering", () => {
+  it("writes the done frame only after checkpointMiniapp resolves", async () => {
+    const order: string[] = [];
+    const fakeManager = {
+      openChat: async () => "chat_o",
+      stateOf: () => ({ alive: true, running: false, sessionId: "s", agent: "claude-code" }),
+      async *sendMessage() {
+        yield { type: "phase", phase: "running" };
+        yield { type: "delta", text: "a" };
+        yield { type: "done", result: { text: "a", toolCalls: [] } };
+      },
+    };
+    const routes: Record<string, (req: unknown, res: unknown) => unknown> = {};
+    const fakeApp = {
+      get: (p: string, _g: unknown, h: (req: unknown, res: unknown) => unknown) => { routes[`GET ${p}`] = h; },
+      post: (p: string, _g: unknown, h: (req: unknown, res: unknown) => unknown) => { routes[`POST ${p}`] = h; },
+      delete: (p: string, _g: unknown, h: (req: unknown, res: unknown) => unknown) => { routes[`DELETE ${p}`] = h; },
+    };
+    registerChatRoutes(fakeApp as never, {
+      manager: fakeManager as never,
+      buildBrief: async () => "BRIEF",
+      goldmineMcp: () => [],
+      listAgents: () => [],
+      resolveStudio: () => ({ cwd: "/tmp/miniapp", brief: "STUDIO" }),
+      neutralCwd: "/neutral",
+      checkpointMiniapp: async () => {
+        await new Promise((r) => setTimeout(r, 10));   // a real checkpoint takes time — expose racing
+        order.push("checkpoint");
+      },
+    } as never);
+
+    let chatId = "";
+    const postRes = { json: (b: { chatId: string }) => { chatId = b.chatId; }, status() { return this; }, setHeader() {}, write() {}, end() {} };
+    await routes["POST /api/chat"]({ body: { agentId: "claude-code", miniapp: "demo" }, query: {}, params: {} }, postRes);
+    expect(chatId).toBeTruthy();
+
+    const streamRes = {
+      setHeader() {}, flushHeaders() {}, end() {}, status() { return this; }, json() {},
+      write: (chunk: string) => { if (chunk.includes("event: done")) order.push("done-frame"); return true; },
+    };
+    await routes["GET /api/chat/stream"]({ query: { chatId, message: "go" }, params: {}, body: {} }, streamRes);
+    expect(order).toEqual(["checkpoint", "done-frame"]);
+  });
+});
+
 describe("POST /api/chat/:id/cancel", () => {
   it("404s for an unknown chat", async () => {
     const { app } = await buildApp(plainConnectFn);
