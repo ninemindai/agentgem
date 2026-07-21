@@ -78,22 +78,25 @@ call exactly the same thing.
   runnable A2A server so other agents can discover and call it.
 - **A native desktop app** — a [macOS/Windows/Linux build](docs/desktop.md) alongside the
   `npx` CLI, hosting the same local server in its own window.
-- **A public marketplace** — publish and install composable Gems over the same
-  archive format, and browse them at
-  [app.agentgem.ai](https://app.agentgem.ai). Publish a Gem **Public, Unlisted, or
-  Private**, cut a **new version** or overwrite the current one, and gate a release
-  behind **group review** (request review → a member installs it to test → an approval
-  publishes). **Rubrics** are a first-class Gem type. Mini-apps are **installable PWAs**
-  that **play offline** and are searchable by genre and tag. Every shareable link — a
-  game, gem, `@handle` profile, or curated skill —
-  [unfurls with a branded preview card](docs/sharing.md#branded-link-previews) in Slack,
-  X, or iMessage. The hosted marketplace is an **early testbed**: treat it as a preview,
-  and expect accounts, stars, and reviews to be reset occasionally.
-- **Identity, profiles, and teams** — sign in with **GitHub, Google, or a passkey**
-  ([better-auth](https://better-auth.com) under the hood); each account gets a tabbed
-  **`/@handle` profile hub** (apps, reviews, orgs, groups). Create or join a **group** to
-  share a private Gem with teammates or run peer review, and an org gets a scorecard,
-  team-usage dashboard, and **benchmark governance**.
+- **A community marketplace** — publish and install composable Gems over the same
+  archive format at [app.agentgem.ai](https://app.agentgem.ai), a free hosted
+  service shared by both [editions](docs/editions.md). Publish a Gem **Public,
+  Unlisted, or Private**, cut a **new version**, and **star or review** what others
+  publish. **Rubrics** are a first-class Gem type. Mini-apps are **installable PWAs**
+  that **play offline** and are searchable by genre and tag. Every shareable link
+  [unfurls with a branded preview card](docs/sharing.md#branded-link-previews).
+  **Groups and review-gated releases are [Enterprise](docs/editions.md).** The hosted
+  marketplace is an **early testbed** — expect accounts, stars, and reviews to be
+  reset occasionally.
+- **Identity & profiles** — marketplace accounts sign in with **GitHub, Google, X,
+  or a passkey** ([better-auth](https://better-auth.com) under the hood); each gets a
+  tabbed **`/@handle` profile hub**. **Teams (groups, review, orgs, benchmark
+  governance) are part of [AgentGem Enterprise](docs/editions.md).**
+- **OSS & Enterprise** — the local-first console, Gem building, materialize, Play,
+  and the marketplace client are **MIT open source**. Groups, org governance, cloud
+  miniapp builds, the GitHub App, and AWS self-host are **AgentGem Enterprise** (early
+  access) — see [Editions](docs/editions.md) or email
+  [raymond@ninemind.ai](mailto:raymond@ninemind.ai).
 - **Direct sharing & signing** — [`agentgem get`](docs/sharing.md) installs a
   published Gem with one command; `agentgem send` / `receive` pass one directly over an
   encrypted, one-time hand-off; `agentgem verify` checks a Gem runs across your local
