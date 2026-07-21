@@ -393,7 +393,7 @@ describe("Studio resume", () => {
     } finally { vi.useRealTimers(); }
   });
 
-  it("does not wipe the restored composer text when Enter is pressed while still busy", async () => {
+  it("Enter while busy queues the restored composer text — promised for the next turn, never lost", async () => {
     vi.useFakeTimers();
     try {
       // No pre-seeded studioChatStore entry for "demo12" (a fresh miniapp/chat, unlike the other
@@ -430,9 +430,12 @@ describe("Studio resume", () => {
       await vi.waitFor(() => expect(screen.getByDisplayValue("second thought")).toBeTruthy());
       expect(post).toHaveBeenCalled();
 
-      // Pressing Enter while still busy must be a no-op — not wipe the just-restored text.
+      // Pressing Enter while still busy QUEUES the restored text (2026-07-20 queue design). This
+      // supersedes the old no-op protection with a stronger one: the message leaves the composer
+      // as a queued chip that fires when the background turn ends — promised, not lost.
       fireEvent.keyDown(textarea, { key: "Enter" });
-      expect(screen.getByDisplayValue("second thought")).toBeTruthy();
+      expect(screen.queryByDisplayValue("second thought")).toBeNull();
+      expect(screen.getByText("second thought", { selector: ".studio-queue__text" })).toBeTruthy();
     } finally { vi.useRealTimers(); }
   });
 
