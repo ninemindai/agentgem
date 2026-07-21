@@ -156,6 +156,37 @@ describe("checkpoint-before-done ordering", () => {
   });
 });
 
+// ── POST-then-stream transport (2026-07-20 eng review, issue 10) ─────────────────────────────
+describe("POST /api/chat/turn + stream by turnId", () => {
+  it("carries a large message through the POST body and streams the turn by turnId", async () => {
+    const { app, manager } = await buildApp(plainConnectFn);
+    const chatId = await manager.openChat(openArgs);
+    const message = "x".repeat(64 * 1024);   // 64KB — impossible in a query string (≈16KB header cap)
+    const turnRes = await request(app).post("/api/chat/turn").send({ chatId, message }).expect(200);
+    expect(turnRes.body.turnId).toBeTruthy();
+    const stream = await request(app).get(`/api/chat/stream?chatId=${chatId}&turnId=${turnRes.body.turnId}`).expect(200);
+    expect(stream.text).toContain("event: done");
+  });
+
+  it("replays the full buffer when the stream attaches after the turn finished", async () => {
+    const { app, manager } = await buildApp(plainConnectFn);
+    const chatId = await manager.openChat(openArgs);
+    const turnRes = await request(app).post("/api/chat/turn").send({ chatId, message: "go" }).expect(200);
+    await new Promise((r) => setTimeout(r, 30));   // turn completes with no stream attached (R1)
+    const stream = await request(app).get(`/api/chat/stream?chatId=${chatId}&turnId=${turnRes.body.turnId}`).expect(200);
+    expect(stream.text).toContain("event: phase");  // replayed from the start
+    expect(stream.text).toContain("event: done");
+  });
+
+  it("400s without chatId/message; 404s for an unknown chat or turn", async () => {
+    const { app, manager } = await buildApp(plainConnectFn);
+    await request(app).post("/api/chat/turn").send({ chatId: "c" }).expect(400);
+    await request(app).post("/api/chat/turn").send({ chatId: "ghost", message: "hi" }).expect(404);
+    const chatId = await manager.openChat(openArgs);
+    await request(app).get(`/api/chat/stream?chatId=${chatId}&turnId=nope`).expect(404);
+  });
+});
+
 describe("POST /api/chat/:id/cancel", () => {
   it("404s for an unknown chat", async () => {
     const { app } = await buildApp(plainConnectFn);

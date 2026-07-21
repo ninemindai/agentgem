@@ -1,4 +1,4 @@
-import { describe, it, expect, vi } from "vitest";
+import { describe, it, expect, vi, afterEach } from "vitest";
 import { openChatStream } from "../chatStream.js";
 
 class FakeES {
@@ -13,12 +13,24 @@ class FakeES {
   }
 }
 
+// POST-then-stream: openChatStream first POSTs /api/chat/turn, then attaches by turnId.
+const stubTurn = () => {
+  vi.stubGlobal("fetch", vi.fn(async () => ({ ok: true, json: async () => ({ turnId: "t1" }) })) as unknown as typeof fetch);
+};
+const openAndWait = async (chatId: string, message: string, h: Parameters<typeof openChatStream>[2]) => {
+  const close = openChatStream(chatId, message, h);
+  await vi.waitFor(() => { if (!FakeES.last) throw new Error("stream not open yet"); });
+  return close;
+};
+afterEach(() => { FakeES.last = null; vi.restoreAllMocks(); vi.unstubAllGlobals(); });
+
 describe("openChatStream", () => {
-  it("routes named events to handlers and can unsubscribe", () => {
+  it("routes named events to handlers and can unsubscribe", async () => {
     vi.stubGlobal("EventSource", FakeES as unknown as typeof EventSource);
+    stubTurn();
     const onDelta = vi.fn();
     const onDone = vi.fn();
-    const stop = openChatStream("chat_1", "hi", {
+    const stop = await openAndWait("chat_1", "hi", {
       onDelta,
       onTool: vi.fn(),
       onDone,
@@ -37,10 +49,11 @@ describe("openChatStream", () => {
     expect(FakeES.last!.closed).toBe(true);
   });
 
-  it("routes tool events to onTool handler", () => {
+  it("routes tool events to onTool handler", async () => {
     vi.stubGlobal("EventSource", FakeES as unknown as typeof EventSource);
+    stubTurn();
     const onTool = vi.fn();
-    openChatStream("chat_2", "hello", {
+    await openAndWait("chat_2", "hello", {
       onDelta: vi.fn(),
       onTool,
       onDone: vi.fn(),
@@ -51,10 +64,11 @@ describe("openChatStream", () => {
     expect(onTool).toHaveBeenCalledWith({ toolCallId: "t1", title: "Read file", status: "running" });
   });
 
-  it("routes failed events and closes", () => {
+  it("routes failed events and closes", async () => {
     vi.stubGlobal("EventSource", FakeES as unknown as typeof EventSource);
+    stubTurn();
     const onFailed = vi.fn();
-    openChatStream("chat_3", "oops", {
+    await openAndWait("chat_3", "oops", {
       onDelta: vi.fn(),
       onTool: vi.fn(),
       onDone: vi.fn(),
@@ -66,9 +80,10 @@ describe("openChatStream", () => {
     expect(FakeES.last!.closed).toBe(true);
   });
 
-  it("unsubscribe closes the EventSource", () => {
+  it("unsubscribe closes the EventSource", async () => {
     vi.stubGlobal("EventSource", FakeES as unknown as typeof EventSource);
-    const stop = openChatStream("chat_4", "bye", {
+    stubTurn();
+    const stop = await openAndWait("chat_4", "bye", {
       onDelta: vi.fn(),
       onTool: vi.fn(),
       onDone: vi.fn(),
@@ -79,10 +94,11 @@ describe("openChatStream", () => {
     expect(FakeES.last!.closed).toBe(true);
   });
 
-  it("error event calls onFailed and closes the EventSource", () => {
+  it("error event calls onFailed and closes the EventSource", async () => {
     vi.stubGlobal("EventSource", FakeES as unknown as typeof EventSource);
+    stubTurn();
     const onFailed = vi.fn();
-    openChatStream("chat_5", "error-test", {
+    await openAndWait("chat_5", "error-test", {
       onDelta: vi.fn(),
       onTool: vi.fn(),
       onDone: vi.fn(),

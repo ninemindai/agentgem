@@ -27,6 +27,7 @@ const setup = async (intercept?: (url: string, init?: RequestInit) => unknown) =
     calls.push({ url: u, init });
     const hit = intercept?.(u, init);
     if (hit) return hit;
+    if (u.endsWith("/api/chat/turn") && init?.method === "POST") return res({ turnId: "t1" });
     if (u.endsWith("/api/agents")) return res({ agents: [{ id: "claude-code", name: "Claude Code", available: true }] });
     if (u.endsWith("/api/testbed/recents")) return res({ recents: [] });
     if (u.endsWith("/api/testbed/projects")) return res({ projects: [] });
@@ -41,6 +42,9 @@ const setup = async (intercept?: (url: string, init?: RequestInit) => unknown) =
   await waitFor(() => expect(FakeES.last).toBeTruthy());
   return { calls, box: box as HTMLInputElement };
 };
+// POST-then-stream: the coalesced message rides the /api/chat/turn POST body.
+const lastTurnMessage = (calls: { url: string; init?: RequestInit }[]) =>
+  JSON.parse(String(calls.filter((c) => c.url.endsWith("/api/chat/turn") && c.init?.method === "POST").at(-1)?.init?.body ?? "{}")).message as string;
 const typeEnter = (box: HTMLInputElement, text: string) => {
   fireEvent.change(box, { target: { value: text } });
   fireEvent.keyDown(box, { key: "Enter" });
@@ -72,19 +76,19 @@ describe("Chat tab queue + interrupt", () => {
     typeEnter(box, "b");
     FakeES.last!.emit("done", { result: { text: "ok", toolCalls: [] } });
     await waitFor(() => expect(FakeES.count).toBe(2));
-    expect(new URL(FakeES.last!.url, "http://x").searchParams.get("message")).toBe("a\nb");
+    expect(lastTurnMessage(calls)).toBe("a\nb");
     expect(calls.filter((c) => c.url.endsWith("/api/chat") && c.init?.method === "POST").length).toBe(1);
   });
 
   it("failed holds the queue; 'Send queued' fires it explicitly", async () => {
-    const { box } = await setup();
+    const { calls, box } = await setup();
     typeEnter(box, "held");
     FakeES.last!.emit("failed", { error: "boom" });
     await new Promise((r) => setTimeout(r, 20));
     expect(FakeES.count).toBe(1);
     fireEvent.click(await screen.findByText("Send queued"));
     await waitFor(() => expect(FakeES.count).toBe(2));
-    expect(new URL(FakeES.last!.url, "http://x").searchParams.get("message")).toBe("held");
+    expect(lastTurnMessage(calls)).toBe("held");
   });
 
   it("Interrupt cancels the turn; the cancelled done marks the transcript and fires the queue", async () => {
@@ -97,7 +101,7 @@ describe("Chat tab queue + interrupt", () => {
     FakeES.last!.emit("done", { result: { text: "partial", toolCalls: [], stopReason: "cancelled" } });
     await waitFor(() => expect(screen.getByText(/interrupted/)).toBeTruthy());
     await waitFor(() => expect(FakeES.count).toBe(2));
-    expect(new URL(FakeES.last!.url, "http://x").searchParams.get("message")).toBe("do this instead");
+    expect(lastTurnMessage(calls)).toBe("do this instead");
   });
 
   // Eng review issue 8: fetch resolves on HTTP errors — the failure message must still surface.
