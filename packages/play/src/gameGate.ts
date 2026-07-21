@@ -89,6 +89,21 @@ export async function gameGate(html: string, opts: GateOptions = {}): Promise<Ga
   const vc = new VirtualConsole();
   vc.on("jsdomError", (err: Error) => failures.push(`inline script threw: ${err.message}`));
 
+  // Async escapes from the smoke — a promise rejection in the game's async boot(), which neither
+  // jsdom's virtual console nor the try/catch below can see — otherwise bubble to the Node process
+  // and KILL THE SERVER (observed 2026-07-21: `new Path2D(...)` inside an awaited boot took the app
+  // down mid-Save). For the smoke's single-tick window, take over the process-level escape hatches
+  // entirely (saving and restoring any existing listeners, so e.g. a test runner's own handlers
+  // don't double-report) and convert anything caught into a gate failure. The window is one
+  // macrotask, so mis-attributing an unrelated escape is vanishingly unlikely — and strictly
+  // better than the guaranteed crash it replaces.
+  const trap = (err: unknown) => { failures.push(`inline script crashed asynchronously: ${(err as Error)?.message ?? String(err)}`); };
+  const savedRejection = process.listeners("unhandledRejection");
+  const savedException = process.listeners("uncaughtException");
+  process.removeAllListeners("unhandledRejection");
+  process.removeAllListeners("uncaughtException");
+  process.on("unhandledRejection", trap);
+  process.on("uncaughtException", trap);
   try {
     const dom = new JSDOM(html, {
       runScripts: "dangerously", // execute inline <script>; jsdom does NOT fetch external resources
@@ -98,6 +113,16 @@ export async function gameGate(html: string, opts: GateOptions = {}): Promise<Ga
       // canvas game. Stub a no-op 2D context so canvas games load-smoke cleanly (drawing correctness is
       // the human preview's job, Tier-2; this gate only catches genuine load-time throws).
       beforeParse(window) {
+        // Canvas API surface jsdom lacks BEYOND getContext: constructing these throws ReferenceErrors
+        // that can escape asynchronously (a Path2D in an async boot() crashed the whole server on a
+        // Save, 2026-07-21). No-op stand-ins keep the smoke about genuine load failures, not about
+        // jsdom's missing canvas backend. Guarded assignments — if jsdom grows real ones, they win.
+        const w = window as unknown as Record<string, unknown>;
+        if (!w.Path2D) w.Path2D = class { addPath() {} moveTo() {} lineTo() {} bezierCurveTo() {} quadraticCurveTo() {} arc() {} arcTo() {} ellipse() {} rect() {} roundRect() {} closePath() {} };
+        if (!w.DOMMatrix) w.DOMMatrix = class { multiply() { return this; } translate() { return this; } scale() { return this; } rotate() { return this; } invertSelf() { return this; } };
+        if (!w.ImageData) w.ImageData = class { data = new Uint8ClampedArray(4); width = 1; height = 1; };
+        if (!w.OffscreenCanvas) w.OffscreenCanvas = class { getContext() { return null; } };
+        if (!w.createImageBitmap) w.createImageBitmap = async () => ({ width: 1, height: 1, close() {} });
         const proto = (window.HTMLCanvasElement?.prototype as unknown as Record<string, unknown> | undefined);
         if (!proto) return;
         proto.getContext = function (this: unknown) {
@@ -117,9 +142,15 @@ export async function gameGate(html: string, opts: GateOptions = {}): Promise<Ga
       },
     });
     await new Promise((r) => setTimeout(r, 0)); // let the first tick run
+    await new Promise((r) => setTimeout(r, 0)); // and the microtask backlog behind it (async boot())
     dom.window.close();
   } catch (err) {
     failures.push(`bundle failed to load: ${(err as Error).message}`);
+  } finally {
+    process.removeListener("unhandledRejection", trap);
+    process.removeListener("uncaughtException", trap);
+    for (const l of savedRejection) process.on("unhandledRejection", l as (...args: unknown[]) => void);
+    for (const l of savedException) process.on("uncaughtException", l as (...args: unknown[]) => void);
   }
 
   return { ok: failures.length === 0, failures };

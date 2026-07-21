@@ -23,3 +23,30 @@ describe("gameGate — canvas games", () => {
     expect(r.failures.some((f) => f.includes("boom"))).toBe(true);
   });
 });
+
+// 2026-07-21 regression: a Path2D in an async boot() crashed the WHOLE SERVER on Save — the
+// rejection escaped jsdom, and Node's default unhandledRejection behavior killed the process.
+describe("async-escape containment", () => {
+  it("Path2D (and canvas friends) exist in the smoke world", async () => {
+    const r = await gameGate(`<!doctype html><body><canvas></canvas><script>
+      const p = new Path2D("M0 0"); p.lineTo(1, 1);
+      const m = new DOMMatrix(); m.scale(2);
+    </script></body>`);
+    expect(r.ok, r.failures.join("; ")).toBe(true);
+  });
+
+  it("a promise rejection in an async boot becomes a gate failure, not a process crash", async () => {
+    const r = await gameGate(`<!doctype html><body><canvas></canvas><script>
+      (async () => { await Promise.resolve(); throw new Error("boom-async"); })();
+    </script></body>`);
+    expect(r.ok).toBe(false);
+    expect(r.failures.join(" ")).toContain("crashed asynchronously");
+    expect(r.failures.join(" ")).toContain("boom-async");
+  });
+
+  it("the process-level listeners are restored after the smoke", async () => {
+    const before = process.listeners("unhandledRejection").length;
+    await gameGate(`<!doctype html><body><p>x</p></body>`);
+    expect(process.listeners("unhandledRejection").length).toBe(before);
+  });
+});
