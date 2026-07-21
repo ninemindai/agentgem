@@ -141,15 +141,57 @@ the local app drains them.
   them. No inbound port on the machine.
 - **Containment funnel** — every drained message is **untrusted external data** and
   routes through the existing input-containment machinery *before* it can influence
-  any agent action or touch config. Inbound messages surface in the console as a
-  review queue (mirror of the outbox's review UI), never auto-acted.
+  any agent action or touch config. Inbound messages surface in the console, never
+  auto-acted.
+
+### The inbox is a typed bus, not one queue
+
+The inbox receives messages for **review, enforcement, sharing, notification, and
+tasks**. These are not one kind with one handler — they differ along the axis that
+matters most here: **actionability**. A notification is inert; a task asks your
+agent to *do work*; an enforcement message asks to *change your local policy*. So
+the inbox is a *typed* bus, and two things decide how a message is handled:
+
+1. **`kind`** — which console surface / handler it routes to.
+2. **Sender authority** — from the group/role directory the review flow *already*
+   exposes (`ReviewGroupsResult` returns `groups: { id, name, role }`). Authority
+   gates *which kinds a given sender may even send you*. A stranger cannot send you
+   an enforcement directive; only an org whose authority you accepted at join can.
+
+Most inbox kinds are the **receiving face of an outbox `kind`** — the same signed
+envelope, seen from the other end, plus the authority check:
+
+| Inbox kind | Purpose | Actionability | Maps onto | Accepted from |
+| --- | --- | --- | --- | --- |
+| **notification** | "your Gem was installed", "new version" | inert (read-only) | console background jobs (`useBackgroundJobs`) | any known actor; unknown → dropped |
+| **sharing** | a friend sends you a Gem / skill / `.gem` | opt-in install, explicit consent | `transfer` / `distribute` inbound | friend or wider |
+| **review** | "review my Gem" — you act as reviewer | you review & decide | the existing review flow (`review.controller`, `reviewClient`, aggregator staging) | group member with submit rights |
+| **task** | "run / verify this for me" | your agent executes — sandboxed | `runGemWithAgent(task)` + `verifyGemRun` in `@agentgem/run`; async A2A binding | authorized actor; per-task consent |
+| **enforcement** | org/team policy directive | changes local policy | **new** — over the redaction / consent / capability model | org/team admin whose authority you accepted, revocable |
+
+Two rules keep even the actionable kinds inside the secret-safe posture:
+
+- **`kind` sets the affordance; it never sets auto-execute.** The most a task or
+  enforcement message can do on arrival is land in the right console surface with
+  the right button (*Run in sandbox*, *Apply policy*). The ceiling is always
+  "queued for a decision," never "already done." This is the containment funnel
+  applied per kind, not bypassed by kind.
+- **Enforcement can only *tighten*, and can never *exfiltrate*.** The one kind where
+  a remote actor changes local behavior is fenced: it may ban an MCP server, raise
+  a redaction floor, require a Gem — but it can never *loosen* a control or command
+  a send (the same widening-ships-with-a-tightening rule, and no directive can move
+  secrets outward). Accepting an org's enforcement is a revocable act you take at
+  join time, and every applied directive is still *surfaced*, never silent.
 
 ### Console surface
 
 A **Mailbox panel** mirroring the existing Memory outbox review UX: an Outbox tab
-(pending / delivering / delivered / failed, with retry) and an Inbox tab (drained
-messages awaiting review, with the containment framing made visible). This reuses
-the console patterns already built for the memory review outbox.
+(pending / delivering / delivered / failed, with retry) and an Inbox tab. The Inbox
+tab is **filtered by `kind`** — notifications read inline, sharing offers an install,
+review routes into the existing review UI, tasks offer *Run in sandbox*, enforcement
+shows the directive and what it tightens before you accept. Each kind reuses a
+surface the console already has (background jobs, the review panel, the run flow)
+rather than inventing a new one.
 
 ---
 
@@ -195,11 +237,15 @@ Four things follow from this:
    wider scope re-opens consent — you can't quietly promote a friend message to
    public.
 
-4. **Membership needs a directory the relay owns.** group/team/org are keyed by
-   actor pubkey (identity already exists as the signing key). The relay is the
-   authority on who's in a group and who may add/remove — reusing the
-   `ownerAccountId` / `groupId` seeds already in `@agentgem/contract`. *org* is a
-   group with an admin role; *team* is a group scoped under an org.
+4. **Membership needs a directory the relay owns — and one already exists.** The
+   review flow already returns `groups: { id, name, role }` (`ReviewGroupsResult`),
+   so the aggregator is *already* the authority on group membership and role. That
+   same directory is what gates inbound actionable kinds (see
+   [the typed inbox](#the-inbox-is-a-typed-bus-not-one-queue)): the `role` decides
+   who may submit a review, who may send an enforcement directive, who may assign a
+   task. group/team/org are keyed by actor pubkey (identity already exists as the
+   signing key). *org* is a group with an admin role; *team* is a group scoped under
+   an org.
 
 So the scope ladder isn't new machinery bolted on — it's the existing
 private → transfer → marketplace spread, with the **group/team/org** rung filled in
@@ -212,16 +258,21 @@ by the relay and every rung fed through one scope-aware consent gate.
 | Direction | Initiator | Where it lives | Trust treatment |
 | --- | --- | --- | --- |
 | **Outbox** | local machine | `~/.agentgem/` durable queue | consent-gated at source; only redacted shapes leave (existing redaction) |
-| **Inbox** | remote actor → relay; local *pulls* | hosted aggregator holds; local drains | every message untrusted external data → input-containment → console review, never auto-acted |
+| **Inbox** | remote actor → relay; local *pulls* | hosted aggregator holds; local drains | every message untrusted external data → input-containment → console, never auto-acted; `kind` + sender authority decide the *affordance*, never auto-execute |
 
-Two rules carry the posture straight from the existing docs:
+Three rules carry the posture straight from the existing docs:
 
 1. **No inbound port on the user's machine, ever.** The machine only ever
    *initiates* connections (push out, pull in). This is what keeps the secret-safe
    posture intact.
 2. **Inbound is contained before it's useful.** A drained message is data to
    review, not an instruction to execute — same stance `input-containment.md` takes
-   toward transcripts and tool output.
+   toward transcripts and tool output. `kind` picks the console surface; it never
+   grants auto-execution.
+3. **Authority is required to send an actionable kind, and actionable ≠ automatic.**
+   Only an accepted org/admin may send *enforcement*; enforcement can only tighten
+   and never exfiltrate; tasks run sandboxed under per-task consent. The most an
+   inbound message earns is the right button in the right panel.
 
 ---
 
