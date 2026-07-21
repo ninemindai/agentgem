@@ -42,6 +42,7 @@ const DOC_PAGES = [
   'docs/desktop.md',
   'docs/analyze.md',
   'docs/concepts.md',
+  'docs/editions.md',
   'docs/recall.md',
   'docs/chat.md',
   'docs/context-hygiene.md',
@@ -68,6 +69,7 @@ const NAV_SECTIONS = [
       ['docs/desktop.md', 'Desktop app'],
       ['docs/analyze.md', 'Analyze'],
       ['docs/concepts.md', 'Concepts'],
+      ['docs/editions.md', 'Editions'],
     ],
   },
   {

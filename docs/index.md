@@ -22,6 +22,8 @@ OpenAPI 3.1 document — so the web page and your local agent call exactly the s
   recommendations, and **distill new draft skills** from the procedures you repeat by hand.
 - **[Concepts](concepts.md)** — what a Gem is, the archive format, the redaction trust
   boundary, and the AgentBack one-contract model.
+- **[Editions](editions.md)** — AgentGem OSS vs. Enterprise, and the community
+  marketplace both share.
 
 ## Working with your sessions
 
