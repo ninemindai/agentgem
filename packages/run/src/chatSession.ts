@@ -28,6 +28,9 @@ export interface ChatSessionHandle {
     onDelta?: (c: string) => void,
     onToolCall?: (t: ToolInvocation) => void,
   ): Promise<RunResult>;
+  /** Fire-and-forget cancel of the in-flight prompt (ACP session/cancel). Optional: fakes and
+   * adapters without cancel support simply omit it. */
+  cancel?(): void;
   dispose(): void;
 }
 
@@ -171,6 +174,15 @@ export class ChatManager {
     } finally {
       chat.running = false;
     }
+  }
+
+  /** Cancel the running turn of a chat, if any. The turn's own stream then finishes with
+   * done + stopReason "cancelled"; the session stays alive. Returns whether a cancel was sent. */
+  cancelChat(chatId: string): boolean {
+    const chat = this.live.get(chatId);
+    if (!chat?.running || !chat.handle.cancel) return false;
+    try { chat.handle.cancel(); } catch { return false; }
+    return true;
   }
 
   closeChat(chatId: string): void {

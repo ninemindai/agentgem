@@ -254,6 +254,14 @@ export function registerChatRoutes(app: App, deps: ChatRouteDeps, guard: Middlew
     }
   });
 
+  // POST /api/chat/:chatId/cancel — interrupt the running turn (ACP session/cancel); the session
+  // stays alive and the turn's own stream finishes with done + stopReason "cancelled". Idle chat →
+  // { cancelled: false } (interrupting an already-finished turn is a no-op, never an error).
+  app.post("/api/chat/:chatId/cancel", guard, async (req, res) => {
+    if (!deps.manager.stateOf(req.params.chatId).alive) { res.status(404).json({ error: "unknown chat" }); return; }
+    res.json({ cancelled: deps.manager.cancelChat(req.params.chatId) });
+  });
+
   // DELETE /api/chat/:chatId — close + evict the session
   app.delete("/api/chat/:chatId", guard, (req, res) => {
     deps.manager.closeChat(req.params.chatId);
@@ -294,11 +302,12 @@ export function makeChatConnectFn(resolve: (d: AgentDescriptor) => AgentDescript
           setMode: (m: string) => session.setMode(m),
           async prompt(text: string, onDelta?: (c: string) => void, onToolCall?: (t: ToolInvocation) => void) {
             const acc = createAccumulator();
-            await session.prompt(text, (u) =>
+            const stopReason = await session.prompt(text, (u) =>
               applyUpdate(acc, (u ?? {}) as Parameters<typeof applyUpdate>[1], { onDelta, onToolCall }),
             );
-            return acc;
+            return { ...acc, stopReason };
           },
+          cancel: () => session.cancel(),
           dispose: () => session.dispose(),
         };
       },

@@ -69,7 +69,10 @@ export function spawnEnv(descriptor: AgentDescriptor, base: NodeJS.ProcessEnv = 
 export interface RawAcpSession {
   sessionId: string;
   setMode(mode: string): Promise<void>;
-  prompt(text: string, onUpdate: (update: unknown) => void): Promise<void>;
+  /** Resolves with the turn's stop reason (e.g. "end_turn", "cancelled") once the agent stops. */
+  prompt(text: string, onUpdate: (update: unknown) => void): Promise<string | undefined>;
+  /** Fire-and-forget ACP session/cancel — the in-flight prompt then ends with stopReason "cancelled". */
+  cancel(): void;
   dispose(): void;
 }
 export interface RawAcpConnection {
@@ -148,9 +151,14 @@ export async function connectAcpAdapter(
           for (;;) {
             // Race the next update against child death so a crashed adapter rejects here, not hangs.
             const msg: any = await Promise.race([session.nextUpdate(), dead]);
-            if (msg.kind === "stop") break;
+            if (msg.kind === "stop") return msg.response?.stopReason as string | undefined;
             if (msg.kind === "session_update") onUpdate(msg.update);
           }
+        },
+        cancel() {
+          // A notification, not a request: the agent may still emit final updates, then the running
+          // prompt ends with stopReason "cancelled" (ACP spec). Never awaited against the turn.
+          void agentCtx.notify("session/cancel", { sessionId }).catch(() => {});
         },
         dispose() { try { session.dispose?.(); } catch { /* ignore */ } },
       };
