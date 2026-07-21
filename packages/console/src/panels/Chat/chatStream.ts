@@ -11,7 +11,7 @@ export interface ChatToolChip {
 export interface ChatStreamHandlers {
   onDelta: (text: string) => void;
   onTool: (tool: ChatToolChip) => void;
-  onDone: (result: { text: string; toolCalls: unknown[] }) => void;
+  onDone: (result: { text: string; toolCalls: unknown[]; stopReason?: string }) => void;
   onFailed: (error: string) => void;
 }
 
