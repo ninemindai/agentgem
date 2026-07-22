@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: MIT
 // Play JSON routes over the miniapps registry: save (gate + dual-write), list, publish (git push).
 import { api, get, post, AgentError } from "@agentback/openapi";
+import { inject } from "@agentback/core";
 import { z } from "zod";
 import {
   saveMiniapp, deleteMiniapp, listMiniapps, readMiniapp, miniappsRoot, setRemote, push, seedStudio, importStudio, blankStudio,
@@ -10,6 +11,8 @@ import {
   callConnectorTool, listConnectorTools, listConnectorCandidates, resolveConnectorGem, resolveConnectorDigest, ConnectorError,
 } from "@agentgem/play";
 import { derivePayload, type McpNeed } from "@agentgem/model";
+import type { FabricRouter } from "@agentgem/fabric";
+import { FABRIC_ROUTER, MCP_ASK_TIMEOUT_MS, mapAskFailure, type McpAskReply } from "./fabric.binding.js";
 import { defaultReaders } from "./play.readers.js";
 import { listActiveSessions } from "./watchSessions.js";
 import {
@@ -25,6 +28,12 @@ import {
 
 @api({ basePath: "/api" })
 export class PlayController {
+  // Optional so bare-controller embeddings (no DI container, e.g. the direct-construction unit
+  // tests) keep the pre-fabric direct-call path byte-identical — see mcpCall below.
+  constructor(
+    @inject(FABRIC_ROUTER, { optional: true }) private fabricRouter?: FabricRouter,
+  ) {}
+
   @post("/play/save", { body: PlaySaveRequestSchema, response: PlaySaveResponseSchema })
   async save(input: { body: z.infer<typeof PlaySaveRequestSchema> }): Promise<z.infer<typeof PlaySaveResponseSchema>> {
     try {
@@ -238,13 +247,21 @@ export class PlayController {
       }
     }
     try {
-      const result = await callConnectorTool(server, tool, args);
-      // callConnectorTool's content is unknown[] (the raw SDK content blocks); derivePayload only reads
-      // block.type/.text, matching McpContentBlock's shape at runtime.
-      return { ok: true, payload: derivePayload(result as Parameters<typeof derivePayload>[0]), content: result.content };
+      const raw = this.fabricRouter
+        ? await this.fabricRouter.ask(`agentgem://self/mcp/${server}`, "mcp.tool.call", { tool, input: args }, { timeoutMs: MCP_ASK_TIMEOUT_MS })
+        : undefined;
+      if (raw === undefined) {
+        //  No router bound (bare-controller embeddings): the direct path keeps behavior identical.
+        const result = await callConnectorTool(server, tool, args);
+        return { ok: true, payload: derivePayload(result as Parameters<typeof derivePayload>[0]), content: result.content };
+      }
+      const reply = raw as McpAskReply;
+      if (!reply.ok) return { ok: false, error: { code: reply.code as never, message: reply.message } };
+      return { ok: true, payload: derivePayload(reply.result as Parameters<typeof derivePayload>[0]), content: reply.result.content };
     } catch (e) {
       if (e instanceof ConnectorError) return { ok: false, error: { code: e.code, message: e.message } };
-      return { ok: false, error: { code: "upstream_error", message: (e as Error).message } };
+      const mapped = mapAskFailure(e);
+      return { ok: false, error: { code: mapped.code as never, message: mapped.message } };
     }
   }
 

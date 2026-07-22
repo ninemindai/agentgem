@@ -6,7 +6,7 @@
 // in PlayController.mcpCall — by the proposal's three-layer split, the fabric
 // authorizes the message, the handler owns the business outcome.
 import { BindingKey } from "@agentback/core";
-import { FabricRouter, parseAddress } from "@agentgem/fabric";
+import { FabricRouter, FabricRouterError, parseAddress } from "@agentgem/fabric";
 import { z } from "zod";
 
 export const FABRIC_ROUTER = BindingKey.create<FabricRouter>("agentgem.fabric.router");
@@ -42,4 +42,13 @@ export function registerMcpAdapter(router: FabricRouter, deps: McpAdapterDeps): 
             throw e;
         }
     });
+}
+
+// The caller-side counterpart to registerMcpAdapter's own error handling: maps a thrown ask()
+// failure onto the existing MCP error-code contract. A fabric TIMEOUT matches callConnectorTool's
+// own timeout contract (server_unavailable); everything else (transport, or a non-fabric throw) is
+// an upstream_error — the connector call itself never reached a usable outcome.
+export function mapAskFailure(e: unknown): { code: string; message: string } {
+    if (e instanceof FabricRouterError && e.kind === "timeout") return { code: "server_unavailable", message: e.message };
+    return { code: "upstream_error", message: (e as Error).message };
 }
