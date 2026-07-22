@@ -10,7 +10,7 @@
 import { join } from "node:path";
 import { agentgemHome } from "@agentgem/model";
 import {
-  connectAcpAdapter, createLogger, resolveLaunch, adapterRuntimeCtx, ADAPTER_VERSIONS, taskAgent,
+  connectAcpAdapter, createLogger, resolveLaunch, adapterRuntimeCtx, ADAPTER_VERSIONS, taskAgent, promptRun,
   type AgentDescriptor, type AdapterCtx,
 } from "@agentgem/base";
 export type { AgentDescriptor } from "@agentgem/base";
@@ -304,15 +304,8 @@ export const defaultConnectFn: AcpConnectFn = async (descriptor) => {
       return {
         setMode: (mode: string) => session.setMode(mode),
         async promptText(text: string, onDelta?: (chunk: string) => void) {
-          let out = "";
-          await session.prompt(text, (u) => {
-            const update = u as { sessionUpdate?: string; content?: { type?: string; text?: string } };
-            if (update?.sessionUpdate === "agent_message_chunk") {
-              const block = update.content;
-              if (block?.type === "text" && typeof block.text === "string") { out += block.text; onDelta?.(block.text); }
-            }
-          });
-          return out;
+          const result = await promptRun(session, text, { onDelta });
+          return result.text;
         },
         dispose: () => session.dispose(),
       };

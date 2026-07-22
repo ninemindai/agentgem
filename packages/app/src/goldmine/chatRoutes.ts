@@ -17,9 +17,8 @@
 import { fileURLToPath } from "node:url";
 import { dirname, join, resolve } from "node:path";
 import { randomUUID } from "node:crypto";
-import { connectAcpAdapter, stdioMcpServer, resolveLaunch, adapterRuntimeCtx, AGENTS, ensureAdapter } from "@agentgem/base";
+import { connectAcpAdapter, stdioMcpServer, resolveLaunch, adapterRuntimeCtx, AGENTS, ensureAdapter, promptRun } from "@agentgem/base";
 import type { AgentAvailability, AgentDescriptor, McpServerStdio, AdapterCtx, AdapterInstaller } from "@agentgem/base";
-import { createAccumulator, applyUpdate } from "@agentgem/run";
 import { studioCwd } from "@agentgem/play";
 import type { ChatManager, ChatConnectFn, ChatCtx, ChatEvent, ChatSessionHandle, ToolInvocation } from "@agentgem/run";
 import { draftGemFromChat } from "./draftGem.js";
@@ -353,13 +352,8 @@ export function makeChatConnectFn(resolve: (d: AgentDescriptor) => AgentDescript
         return {
           sessionId: session.sessionId,
           setMode: (m: string) => session.setMode(m),
-          async prompt(text: string, onDelta?: (c: string) => void, onToolCall?: (t: ToolInvocation) => void) {
-            const acc = createAccumulator();
-            const stopReason = await session.prompt(text, (u) =>
-              applyUpdate(acc, (u ?? {}) as Parameters<typeof applyUpdate>[1], { onDelta, onToolCall }),
-            );
-            return { ...acc, stopReason };
-          },
+          prompt: (text: string, onDelta?: (c: string) => void, onToolCall?: (t: ToolInvocation) => void) =>
+            promptRun(session, text, { onDelta, onToolCall }),
           cancel: () => session.cancel(),
           dispose: () => session.dispose(),
         };
@@ -369,13 +363,8 @@ export function makeChatConnectFn(resolve: (d: AgentDescriptor) => AgentDescript
         return {
           sessionId: session.sessionId,
           setMode: (m: string) => session.setMode(m),
-          async prompt(text: string, onDelta?: (c: string) => void, onToolCall?: (t: ToolInvocation) => void) {
-            const acc = createAccumulator();
-            const stopReason = await session.prompt(text, (u) =>
-              applyUpdate(acc, (u ?? {}) as Parameters<typeof applyUpdate>[1], { onDelta, onToolCall }),
-            );
-            return { ...acc, stopReason };
-          },
+          prompt: (text: string, onDelta?: (c: string) => void, onToolCall?: (t: ToolInvocation) => void) =>
+            promptRun(session, text, { onDelta, onToolCall }),
           cancel: () => session.cancel(),
           dispose: () => session.dispose(),
         };
