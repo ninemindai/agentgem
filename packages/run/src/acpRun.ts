@@ -146,6 +146,8 @@ export const DEFAULT_RUN_TIMEOUT_MS = 300_000;
 
 function withTimeout<T>(p: Promise<T>, ms: number): Promise<T> {
   return new Promise<T>((resolve, reject) => {
+    // "timed out" is load-bearing: normalizeAcpError's timeout regex classifies this
+    // message, which is what gates the salvage path below. Pinned by acpRunSalvage tests.
     const timer = setTimeout(() => reject(new Error(`agent run timed out after ${ms}ms`)), ms);
     p.then((v) => { clearTimeout(timer); resolve(v); }, (e) => { clearTimeout(timer); reject(e); });
   });

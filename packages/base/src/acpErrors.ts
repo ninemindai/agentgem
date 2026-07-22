@@ -27,6 +27,9 @@ export function normalizeAcpError(err: unknown): NormalizedAcpError {
   const message = typeof e?.message === "string" ? e.message : String(err);
   const code = typeof e?.code === "number" ? e.code : undefined;
   if (code !== undefined) {
+    // Auth detection deliberately PRECEDES the code-based rules and applies to every
+    // code: adapters wrap upstream failures (a login error can surface as -32603), and
+    // retrying an auth failure is useless whatever code carries it — permanent wins.
     if (e?.data?.authRequired === true || AUTH_HINT.test(message)) return { kind: "auth", retryable: false, code, message };
     if (RETRYABLE_RPC.has(code)) return { kind: "protocol", retryable: true, code, message };
     if (PERMANENT_RPC.has(code)) return { kind: "protocol", retryable: false, code, message };
