@@ -43,3 +43,40 @@ describe("SourceList", () => {
     expect(onPick).toHaveBeenCalledWith(rows[2]);
   });
 });
+
+describe("SourceList shortlist", () => {
+  const many: Row[] = Array.from({ length: 10 }, (_, i) => ({ id: `id${i}`, name: `item-${i}` }));
+  const renderMany = () =>
+    render(<SourceList<Row> items={many} filter={(r, q) => r.name.includes(q)} onPick={vi.fn()}
+      renderRow={(r) => ({ key: r.id, main: r.name })} placeholder="search…" loadingLabel="Loading…" />);
+
+  it("shows only the top 6 by default with a Show all toggle, expandable to all", () => {
+    renderMany();
+    expect(screen.getAllByRole("option").length).toBe(6);
+    fireEvent.click(screen.getByRole("button", { name: /show all 10/i }));
+    expect(screen.getAllByRole("option").length).toBe(10);
+    fireEvent.click(screen.getByRole("button", { name: /show fewer/i }));
+    expect(screen.getAllByRole("option").length).toBe(6);
+  });
+
+  it("search reveals a match beyond the shortlist (ignores the cap)", () => {
+    renderMany();
+    fireEvent.change(screen.getByPlaceholderText("search…"), { target: { value: "item-9" } });
+    expect(screen.getByText("item-9")).toBeTruthy();
+    expect(screen.getAllByRole("option").length).toBe(1);
+    expect(screen.queryByRole("button", { name: /show all/i })).toBeNull();
+  });
+
+  it("orders the shortlist by the rank comparator", () => {
+    render(<SourceList<Row> items={many} filter={(r, q) => r.name.includes(q)} onPick={vi.fn()}
+      renderRow={(r) => ({ key: r.id, main: r.name })} placeholder="search…" loadingLabel="Loading…"
+      rank={(a, b) => b.name.localeCompare(a.name)} />);   // reverse-alpha → item-9 first
+    expect(screen.getAllByRole("option")[0].textContent).toContain("item-9");
+  });
+
+  it("shows no toggle when items fit within the shortlist", () => {
+    render(<SourceList<Row> items={rows} filter={(r, q) => r.name.includes(q)} onPick={vi.fn()}
+      renderRow={(r) => ({ key: r.id, main: r.name })} placeholder="search…" loadingLabel="Loading…" />);
+    expect(screen.queryByRole("button", { name: /show all/i })).toBeNull();
+  });
+});
