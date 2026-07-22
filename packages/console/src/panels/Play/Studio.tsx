@@ -15,7 +15,7 @@ import { ConnectGitHub } from "../../identity/ConnectGitHub.js";
 import { useSplit } from "../../shell/useSplit.js";
 import { useUploads } from "./uploads.js";
 import { UploadsField } from "./UploadsField.js";
-import { setStudioChat, clearChatId, clearStudioChat } from "./studioChatStore.js";
+import { setStudioChat, clearChatId, clearStudioChat, getStudioChat } from "./studioChatStore.js";
 import { loadStudioSession, loadStudioTranscript } from "./studioResume.js";
 import { resolvePublishAction, type PublishAction } from "./publishAction.js";
 import { parseTags } from "./parseTags.js";
@@ -325,7 +325,8 @@ export function Studio({
     try {
       let id = chatIdRef.current ?? chatId;
       if (!id) {
-        const res = await fetch(`${apiBase}/api/chat`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ agentId, miniapp: name }) }).then(j);
+        const stored = getStudioChat(name);
+        const res = await fetch(`${apiBase}/api/chat`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ agentId, miniapp: name, ...(stored?.sessionId ? { resume: stored.sessionId } : {}) }) }).then(j);
         id = res.chatId as string; setChatId(id);
         setStudioChat(name, { chatId: id, sessionId: res.sessionId as string, agent: agentId });
       }

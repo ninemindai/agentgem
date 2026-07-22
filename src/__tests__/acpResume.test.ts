@@ -5,6 +5,7 @@ import { join } from "node:path";
 import { connectAcpAdapter, type AgentDescriptor } from "@agentgem/base";
 import { writeFakeAdapter } from "./fakeAcpAdapter.js";
 import { ChatManager, type ChatCtx, type ChatSessionHandle } from "@agentgem/run";
+import { studioChatArgs } from "@agentgem/app/goldmine/chatRoutes";
 
 const fixtureDir = mkdtempSync(join(tmpdir(), "agentgem-acp-resume-"));
 const adapterPath = writeFakeAdapter(fixtureDir);
@@ -68,5 +69,22 @@ describe("ChatManager resume", () => {
     expect(mgr.stateOf(chatId)).toMatchObject({ alive: true, sessionId: "sess-fresh", resumed: false });
     for await (const _ of mgr.sendMessage(chatId, "hi")) { /* drain */ }
     expect(prompts[0].startsWith("BRIEF")).toBe(true);
+  });
+});
+
+describe("studioChatArgs resume passthrough", () => {
+  it("threads body.resume through as resumeSessionId", async () => {
+    const args = await studioChatArgs(
+      { agentId: "claude-code", resume: "sess-9" },
+      { buildBrief: async () => "B", goldmineMcp: () => [], neutralCwd: "/tmp/neutral" },
+    );
+    expect(args.resumeSessionId).toBe("sess-9");
+  });
+  it("omits resumeSessionId when body.resume is absent or not a string", async () => {
+    const args = await studioChatArgs(
+      { agentId: "claude-code", resume: 42 as unknown },
+      { buildBrief: async () => "B", goldmineMcp: () => [], neutralCwd: "/tmp/neutral" },
+    );
+    expect(args.resumeSessionId).toBeUndefined();
   });
 });
