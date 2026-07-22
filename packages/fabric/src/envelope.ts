@@ -41,12 +41,25 @@ export const envelopeSchema = z
         correlationId: z.string().regex(ULID_RE).optional(),
         replyTo: addressSchema.optional(),
         channel: z.string().min(1),
+        // Required: signal-only kinds (e.g. fabric.gap) send an explicit null, never omit.
         payload: z.unknown(),
         signature: signatureSchema.optional(),
         signedAt: z.iso.datetime().optional(),
     })
     .strict();
 export type Envelope = z.infer<typeof envelopeSchema>;
+
+// Forward-compat parse path for park-and-surface: a newer-versioned envelope may
+// carry fields this install's strict schema rejects, but the router must still read
+// enough to park it visibly ("needs a newer version") instead of dropping bytes.
+// Loose by design — unknown keys tolerated, only the header fields validated.
+export const envelopeHeaderSchema = z
+    .looseObject({
+        v: z.number().int().positive(),
+        id: z.string().regex(ULID_RE),
+        kind: z.string().min(1),
+    });
+export type EnvelopeHeader = z.infer<typeof envelopeHeaderSchema>;
 
 // ask() durability follows zone (proposal §Verbs): in-zone asks are in-memory with a
 // timeout; cross-zone asks are feed-backed with a deadline. The XOR is the contract —
@@ -79,7 +92,10 @@ export const DELIVERY_STATES = ["pending", "delivering", "delivered", "refused",
 export type DeliveryState = (typeof DELIVERY_STATES)[number];
 
 // `self` is router-local: signatures must bind absolute addresses, so an envelope on
-// a zone-crossing hop must not name `self` anywhere routable.
+// a zone-crossing hop must not name `self` anywhere routable. Scope-form `to`
+// ({scope: "self"}) is deliberately out of scope here: scopes are resolved to
+// concrete addresses by the router before any hop, so only address strings are
+// checked.
 export function assertNoSelfAcrossZones(envelope: Envelope, fromZone: Zone, toZone: Zone): void {
     if (!isZoneCrossing(fromZone, toZone)) return;
     const routable = [envelope.from, typeof envelope.to === "string" ? envelope.to : undefined, envelope.replyTo];

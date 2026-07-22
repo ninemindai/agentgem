@@ -6,6 +6,7 @@ import {
     assertNoSelfAcrossZones,
     DELIVERY_STATES,
     type Envelope,
+    envelopeHeaderSchema,
     envelopeSchema,
     FABRIC_ENVELOPE_VERSION,
     fabricErrorSchema,
@@ -63,6 +64,27 @@ describe("envelope schema", () => {
 
     it("rejects unknown extra fields (wire strictness)", () => {
         expect(envelopeSchema.safeParse({ ...(validEnvelope() as object), extra: 1 }).success).toBe(false);
+    });
+
+    it("requires payload — signal-only kinds send explicit null, never omit", () => {
+        const { payload: _dropped, ...withoutPayload } = validEnvelope() as Record<string, unknown>;
+        expect(envelopeSchema.safeParse(withoutPayload).success).toBe(false);
+        expect(envelopeSchema.safeParse(validEnvelope({ payload: null })).success).toBe(true);
+    });
+});
+
+describe("envelope header — forward-compat parse for park-and-surface", () => {
+    it("reads v/id/kind off a newer envelope carrying unknown fields", () => {
+        const v2 = { ...(validEnvelope() as object), v: 2, futureField: { x: 1 } };
+        expect(envelopeSchema.safeParse(v2).success).toBe(false); //  strict schema rejects it...
+        const header = envelopeHeaderSchema.safeParse(v2); //  ...but the header still parses,
+        expect(header.success).toBe(true); //  so the router can park it visibly.
+        if (header.success) expect(header.data.v).toBe(2);
+    });
+
+    it("still rejects garbage", () => {
+        expect(envelopeHeaderSchema.safeParse({ v: 2 }).success).toBe(false);
+        expect(envelopeHeaderSchema.safeParse({ v: "2", id: "x", kind: "k" }).success).toBe(false);
     });
 });
 
