@@ -9,7 +9,7 @@
 //
 // The connectFn seam mirrors acpRun/acpRecommender: tests inject a plain fake;
 // production passes a real ACP adapter. No subprocess is spawned here.
-import { AGENTS, type AgentDescriptor } from "@agentgem/base";
+import { AGENTS, turnEvents, type AgentDescriptor } from "@agentgem/base";
 import type { ToolInvocation, RunResult } from "./acpRun.js";
 
 
@@ -164,37 +164,10 @@ export class ChatManager {
       chat.brief = null;
 
       yield { type: "phase", phase: "running" };
-
-      // Live streaming: bridge the prompt's push-callbacks to this generator so deltas/tools are yielded
-      // AS they arrive, not buffered until the turn ends. Without this, a long turn shows only
-      // "phase: running" until it completes — indistinguishable from a hang.
-      const queue: ChatEvent[] = [];
-      let wake: (() => void) | null = null;
-      const bump = () => { if (wake) { wake(); wake = null; } };
-      let settled = false;
-      let result: Awaited<ReturnType<ChatSessionHandle["prompt"]>> | undefined;
-      let error: Error | undefined;
-
-      const running = chat.handle
-        .prompt(
-          prompt,
-          (text) => { queue.push({ type: "delta", text }); bump(); },
-          (tool) => { queue.push({ type: "tool", tool }); bump(); },
-        )
-        .then((r) => { result = r; })
-        .catch((e) => { error = e as Error; })
-        .finally(() => { settled = true; bump(); });
-
-      while (true) {
-        while (queue.length) yield queue.shift()!;
-        if (settled) break;
-        await new Promise<void>((res) => { wake = res; });
+      for await (const ev of turnEvents((onDelta, onToolCall) => chat.handle.prompt(prompt, onDelta, onToolCall))) {
+        if (ev.type === "done") chat.lastMs = this.now();
+        yield ev;
       }
-      await running; // ensure the promise's finally has run
-
-      if (error) { yield { type: "failed", error: error.message }; return; }
-      chat.lastMs = this.now();
-      yield { type: "done", result: result! };
     } finally {
       chat.running = false;
     }

@@ -15,11 +15,7 @@
 // tests inject a plain fake. Unlike the recommender there is no deterministic
 // fallback — a failed run is a real outcome the caller (e.g. verification) needs,
 // so we never throw: failures surface as { ok:false, error }.
-//
-// NOTE (consolidation): the ACP façade is duplicated from acpRecommender on purpose
-// while this path is prototyped. Once both are proven, the two connectFns should be
-// unified into a shared acpSession module.
-import { connectAcpAdapter, createLogger, createAccumulator, applyUpdate, normalizeAcpError, type AgentDescriptor, type AcpErrorKind, type ToolInvocation, type RunResult, type RunAccumulator } from "@agentgem/base";
+import { connectAcpAdapter, createLogger, createAccumulator, promptRun, normalizeAcpError, type AgentDescriptor, type AcpErrorKind, type ToolInvocation, type RunResult, type RunAccumulator } from "@agentgem/base";
 export { createAccumulator, applyUpdate } from "@agentgem/base";
 export type { AgentDescriptor, ToolInvocation, RunResult, RunAccumulator } from "@agentgem/base";
 import { selectRunBackend, envPermission } from "./sandbox.js";   // values used at call-time (safe ESM cycle)
@@ -160,11 +156,7 @@ export async function connectRunSession(
       const session = await raw.open(cwd);
       return {
         setMode: (mode: string) => session.setMode(mode),
-        async prompt(text, onDelta, onToolCall) {
-          const acc = createAccumulator();
-          const stopReason = await session.prompt(text, (u) => applyUpdate(acc, (u ?? {}) as Parameters<typeof applyUpdate>[1], { onDelta, onToolCall }));
-          return { ...acc, stopReason };
-        },
+        prompt: (text, onDelta, onToolCall) => promptRun(session, text, { onDelta, onToolCall }),
         cancel: () => session.cancel(),
         dispose: () => session.dispose(),
       };
