@@ -15,8 +15,8 @@ export const FABRIC_ENVELOPE_VERSION = 1;
 // contract only validates shape.
 export const ULID_RE = /^[0-9A-HJKMNP-TV-Z]{26}$/;
 
-// Registered kinds are dotted lowercase: chat.token, gem.published, mcp.tool.call.
-export const KIND_RE = /^[a-z][a-z0-9]*(\.[a-z][a-z0-9-]*)+$/;
+// Registered kinds are dotted lowercase, dashes interior-only: chat.token, repo-pulse.event.
+export const KIND_RE = /^[a-z][a-z0-9]*(-[a-z0-9]+)*(\.[a-z][a-z0-9]*(-[a-z0-9]+)*)+$/;
 
 export const signatureSchema = z
     .object({ alg: z.literal("ed25519"), pubkey: z.string().min(1), sig: z.string().min(1) })
@@ -61,6 +61,18 @@ export type AskOptions = z.infer<typeof askOptionsSchema>;
 // reply payloads, never fabric errors.
 export const FABRIC_ERROR_KINDS = ["timeout", "refused-at-gate", "transport"] as const;
 export type FabricErrorKind = (typeof FABRIC_ERROR_KINDS)[number];
+
+// The contract-level error shape adapters construct and match on. The router
+// (increment 2) throws/returns these; application-level errors are reply payloads
+// and never use this shape.
+export const fabricErrorSchema = z
+    .object({
+        kind: z.enum(FABRIC_ERROR_KINDS),
+        message: z.string().min(1),
+        envelopeId: z.string().regex(ULID_RE).optional(),
+    })
+    .strict();
+export type FabricError = z.infer<typeof fabricErrorSchema>;
 
 // Sender-visible delivery states for cross-zone sends (proposal §Error handling).
 export const DELIVERY_STATES = ["pending", "delivering", "delivered", "refused", "expired", "failed"] as const;

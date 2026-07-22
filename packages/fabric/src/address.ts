@@ -10,7 +10,7 @@ export const SELF_ROOT = "self";
 
 // Roots and segments: lowercase alphanumerics with interior dashes (inst-a1b2,
 // org-ninemind, mcp, repo-pulse). No uppercase, no empty segments, no trailing slash.
-const SEGMENT = "[a-z0-9][a-z0-9-]*";
+const SEGMENT = "[a-z0-9]+(-[a-z0-9]+)*";
 const ADDRESS_RE = new RegExp(`^agentgem://${SEGMENT}(/${SEGMENT})*$`);
 
 export const addressSchema = z.string().regex(ADDRESS_RE, "not an agentgem:// address");
