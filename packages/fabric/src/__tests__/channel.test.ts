@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: MIT
 import { describe, expect, it } from "vitest";
 import { channelSchema, GAP_KIND } from "../channel.js";
+import { KIND_RE } from "../envelope.js";
 
 const base = { id: "org/announcements", kinds: ["org.announcement"], zones: ["federated"] };
 
@@ -35,5 +36,6 @@ describe("channel declarations", () => {
 
     it("exposes the explicit gap kind", () => {
         expect(GAP_KIND).toBe("fabric.gap");
+        expect(KIND_RE.test(GAP_KIND)).toBe(true);
     });
 });

@@ -8,6 +8,7 @@ import {
     type Envelope,
     envelopeSchema,
     FABRIC_ENVELOPE_VERSION,
+    fabricErrorSchema,
     FABRIC_ERROR_KINDS,
     scopeSchema,
 } from "../envelope.js";
@@ -54,7 +55,10 @@ describe("envelope schema", () => {
         expect(envelopeSchema.safeParse(validEnvelope({ id: "not-a-ulid" })).success).toBe(false);
         expect(envelopeSchema.safeParse(validEnvelope({ kind: "NoDots" })).success).toBe(false);
         expect(envelopeSchema.safeParse(validEnvelope({ kind: "Chat.Token" })).success).toBe(false);
+        expect(envelopeSchema.safeParse(validEnvelope({ kind: "org.foo-" })).success).toBe(false);
+        expect(envelopeSchema.safeParse(validEnvelope({ kind: "a--b.x" })).success).toBe(false);
         expect(envelopeSchema.safeParse(validEnvelope({ from: "https://x" as never })).success).toBe(false);
+        expect(envelopeSchema.safeParse(validEnvelope({ kind: "repo-pulse.event" })).success).toBe(true);
     });
 
     it("rejects unknown extra fields (wire strictness)", () => {
@@ -103,5 +107,21 @@ describe("self addresses never cross zones", () => {
             validEnvelope({ replyTo: "agentgem://self/agent/goldmine" } as Partial<Envelope>),
         );
         expect(() => assertNoSelfAcrossZones(withReply, "machine", "federated")).toThrow(TypeError);
+    });
+    it("checks to too", () => {
+        const withSelfTo = envelopeSchema.parse(
+            validEnvelope({ to: "agentgem://self/miniapp/x" } as Partial<Envelope>),
+        );
+        expect(() => assertNoSelfAcrossZones(withSelfTo, "machine", "federated")).toThrow(TypeError);
+    });
+});
+
+describe("fabric error carrier", () => {
+    it("accepts the three kinds and rejects everything else", () => {
+        expect(fabricErrorSchema.safeParse({ kind: "timeout", message: "no reply" }).success).toBe(true);
+        expect(fabricErrorSchema.safeParse({ kind: "refused-at-gate", message: "consent denied", envelopeId: ULID }).success).toBe(true);
+        expect(fabricErrorSchema.safeParse({ kind: "app-error", message: "x" }).success).toBe(false);
+        expect(fabricErrorSchema.safeParse({ kind: "timeout", message: "" }).success).toBe(false);
+        expect(fabricErrorSchema.safeParse({ kind: "timeout", message: "x", extra: 1 }).success).toBe(false);
     });
 });

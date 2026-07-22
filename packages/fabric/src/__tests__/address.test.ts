@@ -35,6 +35,9 @@ describe("address parsing", () => {
             "agentgem://inst-a1b2//agent", //  empty segment
             "agentgem://inst-a1b2/agent/", //  trailing slash
             "https://inst-a1b2", //  wrong scheme
+            "agentgem://foo-", //  trailing dash
+            "agentgem://a--b", //  double dash
+            "agentgem://inst-a1b2/agent-", //  trailing dash
         ]) {
             expect(() => parseAddress(bad), bad).toThrow(TypeError);
             expect(addressSchema.safeParse(bad).success, bad).toBe(false);
