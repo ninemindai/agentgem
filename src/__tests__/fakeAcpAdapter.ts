@@ -37,7 +37,10 @@ rl.on("line", (line) => {
   } else if (msg.method === "session/new") {
     send({ jsonrpc: "2.0", id: msg.id, result: { sessionId: "sess-new-1" } });
   } else if (msg.method === "session/resume") {
-    send({ jsonrpc: "2.0", id: msg.id, result: {} });
+    // load-only mode REJECTS session/resume so a ladder-ordering regression (taking the
+    // resume rung despite the capability saying no) fails the test loudly, not silently.
+    if (mode === "load-only") send({ jsonrpc: "2.0", id: msg.id, error: { code: -32601, message: "method not found" } });
+    else send({ jsonrpc: "2.0", id: msg.id, result: {} });
   } else if (msg.method === "session/load") {
     send({ jsonrpc: "2.0", method: "session/update", params: {
       sessionId: msg.params.sessionId,
