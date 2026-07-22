@@ -9,9 +9,15 @@ description: Build, launch, and drive this repo's console app to verify a change
 
 ```bash
 pnpm build                       # tsc -b AND the console SPA bundle — both required
-AGENTGEM_HOME=$(mktemp -d) PORT=<unused-port> node dist/index.js
+AGENTGEM_HOME=$(mktemp -d) PORT=<unused-port> node dist/client.js
 ```
 
+- **Entry is `dist/client.js`** (the local-mode server) — NOT `dist/index.js`, which no longer
+  exists after the server-library extraction into `@agentgem/app`. The banner is
+  `agentgem (client mode) listening at …`.
+- **After pulling a refactor, clean `dist/` first** — `rm -rf dist tsconfig.tsbuildinfo
+  packages/*/tsconfig.tsbuildinfo && pnpm build`. Stale incremental output can leave a dead
+  `dist/index.js` importing a since-removed package (e.g. `@agentgem/deploy`), which crashes on boot.
 - **Always restart the server after a rebuild** — it caches the console SPA HTML at boot, and
   built-in miniapp constants (e.g. `EMBER_HTML`) are module-level imports.
 - **Pick a genuinely unused port** and confirm ownership: with concurrent agent sessions in
