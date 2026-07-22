@@ -2496,6 +2496,7 @@ button.scorecard-intent { line-height: 1.4; }
 .play-srclist__search { margin: 0; }
 .play-srclist .play-src { max-height: 320px; overflow-y: auto; }
 .play-srclist__empty { font-size: 12px; opacity: 0.7; margin: 4px 0; }
+.play-srclist__more { align-self: flex-start; background: none; border: 0; padding: 2px 0; cursor: pointer; font: inherit; font-size: 12px; color: var(--accent); }
 .play-src-row.is-hi { background: var(--line-soft); }
 /* Connector chips + combobox */
 .play-connectors { display: flex; align-items: baseline; gap: 8px; }

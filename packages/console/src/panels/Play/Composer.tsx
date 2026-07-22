@@ -10,7 +10,7 @@ import { useUploads } from "./uploads.js";
 import { UploadsField } from "./UploadsField.js";
 
 type Kind = "project" | "session" | "skill" | "html" | "blank";
-type Proj = { path: string; flavor: string; exists: boolean };
+type Proj = { path: string; flavor: string; exists: boolean; lastUsed?: string | null };
 type Skill = { name: string; description?: string };
 // The source shapes accepted by POST /api/play/studio (mirrors the server's GameSource union).
 type Source =
@@ -193,6 +193,7 @@ export function Composer({
       {kind === "project" && (
         <SourceList<Proj> items={projects}
           filter={(p, q) => p.path.toLowerCase().includes(q) || p.flavor.toLowerCase().includes(q)}
+          rank={(a, b) => (b.lastUsed ?? "").localeCompare(a.lastUsed ?? "")}   /* most-recently-used first */
           onPick={(p) => seed({ kind: "project", path: p.path, flavor: p.flavor })}
           renderRow={(p) => ({ key: p.path, main: p.path, meta: p.flavor })}
           placeholder="search projects…" loadingLabel="Loading projects…" />
@@ -207,6 +208,7 @@ export function Composer({
           </div>
           <SourceList<WatchSession> items={sessions}
             filter={(s, q) => sessionSummary(s).toLowerCase().includes(q)}
+            rank={(a, b) => b.endMs - a.endMs}   /* most-recent session first */
             onPick={(s) => seed({ kind: "session", agent: s.agent, ...(s.project ? { project: s.project } : {}), sessionId: s.id, summary: sessionSummary(s) })}
             renderRow={(s) => ({ key: s.id, main: s.project ?? "session", meta: `${s.agent} · ${s.msgs} msgs` })}
             placeholder="search sessions…" loadingLabel="Loading sessions…" />
@@ -216,6 +218,7 @@ export function Composer({
       {kind === "skill" && (
         <SourceList<Skill> items={skills}
           filter={(k, q) => k.name.toLowerCase().includes(q) || (k.description ?? "").toLowerCase().includes(q)}
+          rank={(a, b) => a.name.localeCompare(b.name)}   /* no usage signal — alphabetical */
           onPick={(k) => seed({ kind: "skill", skillName: k.name })}
           renderRow={(k) => ({ key: k.name, main: k.name, meta: k.description })}
           placeholder="search skills…" loadingLabel="Loading skills…" />
