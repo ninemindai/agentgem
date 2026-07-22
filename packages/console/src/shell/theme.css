@@ -624,6 +624,8 @@ body::before {
 .play-caps__cap { font-family: var(--font-mono); opacity: 0.75; }
 .play-caps__cost { opacity: 0.65; }
 .play-caps__row--pruned { font-size: 12px; opacity: 0.7; font-style: italic; }
+.play-caps__mcp .play-caps__cap { color: var(--accent); }
+.play-caps__mcp--missing .play-caps__cost { color: var(--gold); opacity: 0.9; }
 /* stretch (not start): the transcript column takes its height from the plate column, so the log
    tracks whatever size Runner computes for the preview instead of guessing at a fixed height. */
 .play-grid-2 { position: relative; display: grid; grid-template-columns: minmax(0, var(--split, 1.5fr)) minmax(300px, 1fr); gap: 18px; align-items: stretch; }
@@ -2486,6 +2488,16 @@ button.scorecard-intent { line-height: 1.4; }
 .play-caps-pick { border: 0; padding: 0; margin: 10px 0; }
 .play-caps-pick legend { font-size: 12px; opacity: 0.7; padding: 0; }
 .play-caps-pick__row { display: flex; gap: 8px; align-items: center; font-size: 13px; margin-top: 4px; }
+.play-connectors-pick { border: 0; padding: 0; margin: 10px 0; }
+.play-connectors-pick legend { font-size: 12px; opacity: 0.7; padding: 0; }
+.play-connectors-pick__empty { font-size: 12px; opacity: 0.7; margin-top: 4px; }
+.play-connectors-pick__item { border-top: 1px solid var(--line-soft); }
+.play-connectors-pick__row { display: flex; align-items: center; justify-content: space-between; gap: 8px; font-size: 13px; padding: 4px 0; }
+.play-connectors-pick__pick { display: flex; align-items: center; gap: 8px; }
+.play-connectors-pick__toggle { display: flex; align-items: center; gap: 6px; background: none; border: 0; cursor: pointer; font: inherit; color: var(--muted); }
+.play-connectors-pick__meta { font-size: 12px; }
+.play-connectors-pick__tools { font-size: 12px; color: var(--muted); padding: 0 0 6px 24px; font-family: var(--font-mono); }
+.play-linkbtn { background: none; border: 0; padding: 0; cursor: pointer; color: var(--accent); text-decoration: underline; font: inherit; }
 
 /* Watch: needs-input alerts */
 .watch-session-row { position: relative; }
