@@ -2488,15 +2488,33 @@ button.scorecard-intent { line-height: 1.4; }
 .play-caps-pick { border: 0; padding: 0; margin: 10px 0; }
 .play-caps-pick legend { font-size: 12px; opacity: 0.7; padding: 0; }
 .play-caps-pick__row { display: flex; gap: 8px; align-items: center; font-size: 13px; margin-top: 4px; }
-.play-connectors-pick { border: 0; padding: 0; margin: 10px 0; }
-.play-connectors-pick legend { font-size: 12px; opacity: 0.7; padding: 0; }
-.play-connectors-pick__empty { font-size: 12px; opacity: 0.7; margin-top: 4px; }
-.play-connectors-pick__item { border-top: 1px solid var(--line-soft); }
-.play-connectors-pick__row { display: flex; align-items: center; justify-content: space-between; gap: 8px; font-size: 13px; padding: 4px 0; }
-.play-connectors-pick__pick { display: flex; align-items: center; gap: 8px; }
-.play-connectors-pick__toggle { display: flex; align-items: center; gap: 6px; background: none; border: 0; cursor: pointer; font: inherit; color: var(--muted); }
-.play-connectors-pick__meta { font-size: 12px; }
-.play-connectors-pick__tools { font-size: 12px; color: var(--muted); padding: 0 0 6px 24px; font-family: var(--font-mono); }
+/* Options band (Permissions disclosure + connector picker), above the source tabs */
+.play-options { display: flex; flex-direction: column; gap: 8px; margin: 10px 0; }
+.play-perms__toggle { background: none; border: 0; padding: 0; cursor: pointer; font: inherit; color: var(--ink); font-size: 13px; }
+/* SourceList — searchable, always-visible source list */
+.play-srclist { display: flex; flex-direction: column; gap: 8px; }
+.play-srclist__search { margin: 0; }
+.play-srclist .play-src { max-height: 320px; overflow-y: auto; }
+.play-srclist__empty { font-size: 12px; opacity: 0.7; margin: 4px 0; }
+.play-src-row.is-hi { background: var(--line-soft); }
+/* Connector chips + combobox */
+.play-connectors { display: flex; align-items: baseline; gap: 8px; }
+.play-connectors__label { font-size: 12px; opacity: 0.7; }
+.play-connectors__chips { display: flex; flex-wrap: wrap; gap: 6px; align-items: flex-start; }
+.play-connectors__meta { font-size: 12px; opacity: 0.7; margin-left: 8px; }
+.play-chip-wrap { display: flex; flex-direction: column; }
+.play-chip { display: inline-flex; align-items: center; gap: 4px; border: 1px solid var(--line); border-radius: 12px; padding: 2px 4px 2px 8px; font-size: 12px; }
+.play-chip__body { background: none; border: 0; padding: 0; cursor: pointer; font: inherit; color: var(--ink); }
+.play-chip__x { background: none; border: 0; padding: 0 2px; cursor: pointer; font: inherit; color: var(--muted); }
+.play-chip__tools { font-size: 12px; color: var(--muted); font-family: var(--font-mono); padding: 4px 0 0 8px; max-width: 320px; }
+.play-combo { position: relative; }
+.play-combo__btn { border: 1px dashed var(--line); border-radius: 12px; background: none; cursor: pointer; font: inherit; font-size: 12px; padding: 2px 8px; color: var(--muted); }
+.play-combo__menu { position: absolute; z-index: 5; margin-top: 4px; min-width: 220px; background: var(--raised); border: 1px solid var(--line); border-radius: 8px; padding: 6px; box-shadow: 0 6px 20px rgba(0,0,0,0.12); }
+.play-combo__search { margin: 0 0 6px; width: 100%; }
+.play-combo__empty { font-size: 12px; opacity: 0.7; margin: 4px; }
+.play-combo__list { list-style: none; margin: 0; padding: 0; max-height: 240px; overflow-y: auto; }
+.play-combo__opt { display: flex; justify-content: space-between; align-items: baseline; padding: 5px 6px; border-radius: 6px; cursor: pointer; font-size: 13px; }
+.play-combo__opt:hover { background: var(--line-soft); }
 .play-linkbtn { background: none; border: 0; padding: 0; cursor: pointer; color: var(--accent); text-decoration: underline; font: inherit; }
 
 /* Watch: needs-input alerts */
