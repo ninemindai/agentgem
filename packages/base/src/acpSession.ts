@@ -87,6 +87,14 @@ export interface ConnectAdapterOptions {
   permission: "allow" | "deny";
 }
 
+// Rolling stderr evidence: keep only the LAST `max` chars so a chatty adapter can't
+// grow memory, while the tail (where the fatal error lands) is always preserved.
+// Borrowed from acpx's bounded startup-stderr capture.
+export function boundedTail(prev: string, chunk: string, max = 4096): string {
+  const joined = prev + chunk;
+  return joined.length <= max ? joined : joined.slice(joined.length - max);
+}
+
 export async function connectAcpAdapter(
   descriptor: AgentDescriptor,
   opts: ConnectAdapterOptions,
@@ -94,14 +102,15 @@ export async function connectAcpAdapter(
   const { client, ndJsonStream, PROTOCOL_VERSION } = await import("@agentclientprotocol/sdk");
   const [bin, ...args] = descriptor.command;
   const child = spawn(bin, args, { stdio: ["pipe", "pipe", "pipe"], env: spawnEnv(descriptor) });
-  // Capture the adapter's stderr rather than inheriting it. A dying adapter writes its
-  // own crash dump to stderr (e.g. an unhandled EPIPE when we close its stdio on
-  // teardown); inheriting it dumps that stack trace into agentgem's log as if the
-  // server itself had crashed. Forward at debug (silent by default) so it stays
-  // available for diagnosis without polluting normal logs.
+  // Capture the adapter's stderr rather than inheriting it (crash dumps must not
+  // pollute server logs) AND keep a bounded rolling tail so a startup failure can
+  // say WHY the adapter died instead of a generic exit code.
+  let stderrTail = "";
   child.stderr?.on("data", (chunk: Buffer) => {
-    const text = chunk.toString("utf8").trimEnd();
-    if (text) acpLog.debug(`[${bin}] ${text}`);
+    const text = chunk.toString("utf8");
+    stderrTail = boundedTail(stderrTail, text);
+    const trimmed = text.trimEnd();
+    if (trimmed) acpLog.debug(`[${bin}] ${trimmed}`);
   });
   await new Promise<void>((resolve, reject) => {
     child.once("spawn", () => resolve());
@@ -115,9 +124,24 @@ export async function connectAcpAdapter(
   let signalDead: (e: Error) => void = () => {};
   const dead = new Promise<never>((_, reject) => { signalDead = reject; });
   dead.catch(() => {}); // consumed via Promise.race; pre-attach so Node doesn't flag an unhandled rejection
-  const markDead = (e: Error) => { if (!died) { died = e; signalDead(e); } };
+  const markDead = (e: Error) => {
+    if (!died) {
+      const tail = stderrTail.trim();
+      died = tail ? new Error(`${e.message}\nadapter stderr: ${tail}`) : e;
+      signalDead(died);
+    }
+  };
   child.once("exit", (code, signal) => markDead(new Error(`agent process exited (code ${code ?? "null"}, signal ${signal ?? "null"})`)));
   child.once("error", (e) => markDead(new Error(`agent process error: ${e.message}`)));
+  // stdout EOF (child closes its write end, e.g. by exiting) reaches the SDK's own
+  // ndjson reader — via the `Readable.toWeb(child.stdout!)` wrap below — before the
+  // ChildProcess "exit" event fires, and the SDK reacts by rejecting every pending
+  // request with a generic "ACP connection closed", losing the stderr evidence.
+  // Registering our own "end" listener on the raw stream here, BEFORE it's wrapped,
+  // wins that race: Node invokes listeners for the same event in registration
+  // order, so this synchronous handler populates `died` (and calls signalDead)
+  // before the SDK's wrapper even observes the EOF.
+  child.stdout?.once("end", () => markDead(new Error(`agent process exited (code ${child.exitCode ?? "null"}, signal ${child.signalCode ?? "null"})`)));
   const app: any = client({ name: opts.clientName });
   const reply = opts.permission === "allow"
     ? { outcome: { outcome: "selected", optionId: "allow" } }
@@ -131,14 +155,14 @@ export async function connectAcpAdapter(
   // tolerated skipping it; codex-acp strictly rejects session/new with "Not
   // initialized" (-32603) without it. We advertise no client capabilities we don't
   // implement (no fs/terminal handlers) — both adapters write files directly.
-  await agentCtx.request("initialize", { protocolVersion: PROTOCOL_VERSION });
+  await Promise.race([agentCtx.request("initialize", { protocolVersion: PROTOCOL_VERSION }), dead]);
 
   return {
     async open(cwd: string, opts?: { mcpServers?: McpServer[] }) {
       try { mkdirSync(cwd, { recursive: true }); } catch { /* best-effort */ }
       let builder: any = agentCtx.buildSession(cwd);
       for (const s of opts?.mcpServers ?? []) builder = builder.withMcpServer(s);
-      const session: any = await builder.start();
+      const session: any = await Promise.race([builder.start(), dead]);
       const sessionId = session.sessionId as string;
       return {
         sessionId,
