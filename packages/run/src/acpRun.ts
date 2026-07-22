@@ -19,7 +19,7 @@
 // NOTE (consolidation): the ACP façade is duplicated from acpRecommender on purpose
 // while this path is prototyped. Once both are proven, the two connectFns should be
 // unified into a shared acpSession module.
-import { connectAcpAdapter, createLogger, type AgentDescriptor } from "@agentgem/base";
+import { connectAcpAdapter, createLogger, normalizeAcpError, type AgentDescriptor, type AcpErrorKind } from "@agentgem/base";
 export type { AgentDescriptor } from "@agentgem/base";
 import { selectRunBackend, envPermission } from "./sandbox.js";   // values used at call-time (safe ESM cycle)
 
@@ -124,6 +124,11 @@ export interface GemRunOutcome {
   ok: boolean;
   result: RunResult;
   error?: string;
+  /** Classification of `error` (normalizeAcpError), present on failure. */
+  errorKind?: AcpErrorKind;
+  /** True when the prompt RPC timed out but the agent's reply had already streamed —
+   * the result is trusted evidence (acpx's "session shows a reply" salvage). */
+  salvaged?: boolean;
   sandbox: { backend: string; isolated: boolean };
 }
 
@@ -181,14 +186,26 @@ export async function runGemWithAgent(opts: RunGemOptions): Promise<GemRunOutcom
   const timeoutMs = opts.timeoutMs ?? DEFAULT_RUN_TIMEOUT_MS;
   let conn: { ctx: RunCtx; close: () => void } | null = null;
   let handle: RunSessionHandle | null = null;
+  const mirror = createAccumulator();
   try {
     conn = await connectFn(opts.descriptor ?? CLAUDE_RUN_AGENT, null);
     handle = await conn.ctx.open(opts.dir);   // the testbed dir — NOT a neutral one
     await handle.setMode(mode);               // tool-capable — the agent uses the Gem
-    const result = await withTimeout(handle.prompt(opts.task, opts.onDelta, opts.onToolCall), timeoutMs);
+    // Salvage mirror: everything the agent streams also lands here, so a timed-out
+    // RPC whose answer already arrived can be returned instead of discarded. Tool
+    // entries are the same object references applyUpdate mutates on status updates,
+    // so final statuses propagate into the mirror for free.
+    const onDelta = (c: string) => { mirror.text += c; opts.onDelta?.(c); };
+    const onToolCall = (t: ToolInvocation) => { mirror.toolCalls.push(t); opts.onToolCall?.(t); };
+    const result = await withTimeout(handle.prompt(opts.task, onDelta, onToolCall), timeoutMs);
     return { ok: true, result, sandbox };
   } catch (err) {
-    return { ok: false, result: { text: "", toolCalls: [] }, error: (err as Error).message, sandbox };
+    const norm = normalizeAcpError(err);
+    if (norm.kind === "timeout" && mirror.text) {
+      log.warn("acp run: prompt RPC timed out after reply streamed — salvaging %d chars", mirror.text.length);
+      return { ok: true, result: { ...mirror, stopReason: "end_turn" }, salvaged: true, sandbox };
+    }
+    return { ok: false, result: { text: "", toolCalls: [] }, error: norm.message, errorKind: norm.kind, sandbox };
   } finally {
     try { handle?.dispose(); } catch (err) { log.debug("acp teardown/dispose failed: %s", (err as Error)?.message ?? err); }
     try { conn?.close(); } catch (err) { log.debug("acp teardown/close failed: %s", (err as Error)?.message ?? err); }
