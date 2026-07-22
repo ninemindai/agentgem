@@ -24,7 +24,7 @@ describe("fabric app wiring", () => {
                 return { content: [{ type: "text", text: "ok" }], structuredContent: { fine: true } };
             },
         });
-        const reply = await router.ask("agentgem://self/mcp/github", "mcp.tool.call", { tool: "listCommits", input: { n: 1 } }, { timeoutMs: 1000 });
+        const reply = await router.ask("agentgem://self/mcp", "mcp.tool.call", { server: "github", tool: "listCommits", input: { n: 1 } }, { timeoutMs: 1000 });
         expect(calls).toEqual([["github", "listCommits", { n: 1 }]]);
         expect(reply).toEqual({ ok: true, result: { content: [{ type: "text", text: "ok" }], structuredContent: { fine: true } } });
     });
@@ -36,7 +36,7 @@ describe("fabric app wiring", () => {
             callConnectorTool: async () => { throw new FakeConnectorError("boom"); },
             isConnectorError: (e): e is Error & { code: string } => e instanceof FakeConnectorError,
         });
-        const reply = await router.ask("agentgem://self/mcp/github", "mcp.tool.call", { tool: "x", input: {} }, { timeoutMs: 1000 });
+        const reply = await router.ask("agentgem://self/mcp", "mcp.tool.call", { server: "github", tool: "x", input: {} }, { timeoutMs: 1000 });
         expect(reply).toEqual({ ok: false, code: "tool_error", message: "boom" });
     });
 });

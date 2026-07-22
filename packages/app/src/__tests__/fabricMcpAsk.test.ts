@@ -52,6 +52,27 @@ describe("mcpCall rides the router when one is bound", () => {
         expect(res).toEqual({ ok: true, payload: { echoed: { q: 1 } }, content: [{ type: "text", text: "ok" }] });
     });
 
+    // Regression: MCP connector server names come from user config with no slug constraint
+    // ("browser_use" is legal there) but fabric addresses forbid underscores — an address built
+    // as `agentgem://self/mcp/${server}` would throw `malformed fabric address` on this name. The
+    // server now rides the ask() payload instead, so a non-slug name must still flow end to end.
+    it("a manifest-declared server with a non-slug name (browser_use) still flows through the fabric ask() path", async () => {
+        const router = new FabricRouter();
+        const calls: unknown[] = [];
+        registerMcpAdapter(router, {
+            callConnectorTool: async (server, tool, input) => {
+                calls.push([server, tool, input]);
+                return { content: [{ type: "text", text: "ok" }], structuredContent: { echoed: input } };
+            },
+        });
+        const ctrl = new PlayController(router);
+        await ctrl.save({ body: { name: "pulse", html: mcpHtml(`window.agentgemApp.mcp.callTool("browser_use","read_thing")`), meta: { ...meta, mcpNeeds: [{ server: "browser_use", tools: ["read_thing"] }] } } });
+        const res = await ctrl.mcpCall({ body: { name: "pulse", server: "browser_use", tool: "read_thing", input: { q: 1 } } });
+
+        expect(calls).toEqual([["browser_use", "read_thing", { q: 1 }]]);
+        expect(res).toEqual({ ok: true, payload: { echoed: { q: 1 } }, content: [{ type: "text", text: "ok" }] });
+    });
+
     it("still refuses a (server, tool) outside the saved manifest WITHOUT ever asking the router", async () => {
         const router = new FabricRouter();
         registerMcpAdapter(router, { callConnectorTool: async () => { throw new Error("must not be called"); } });
