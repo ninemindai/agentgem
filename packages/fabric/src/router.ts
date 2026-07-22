@@ -8,6 +8,7 @@
 import { FABRIC_ENVELOPE_VERSION, type Envelope, type FabricErrorKind } from "./envelope.js";
 import { createKindRegistry, type KindRegistry } from "./kinds.js";
 import { parseAddress, SELF_ROOT } from "./address.js";
+import { channelSchema } from "./channel.js";
 import { ulid } from "./ulid.js";
 
 export class FabricRouterError extends Error {
@@ -22,6 +23,15 @@ export class FabricRouterError extends Error {
 }
 
 type AskHandler = (envelope: Envelope) => Promise<unknown>;
+
+interface LiveFeed {
+    kinds: Set<string>;
+    envelopes: Envelope[];
+    done: boolean;
+    closedAt?: number;
+    maxAgeMs: number;
+    wake: Set<() => void>;
+}
 
 export class FabricRouter {
     readonly kinds: KindRegistry = createKindRegistry();
@@ -78,5 +88,81 @@ export class FabricRouter {
         void this.ask(to, kind, payload, { timeoutMs: 30_000 }).catch((e) => {
             console.error(`fabric send failed (${to}, ${kind}):`, (e as Error).message);
         });
+    }
+
+    private readonly feeds = new Map<string, LiveFeed>();
+
+    /** Open an in-memory feed (process-scoped; durable feeds arrive in increment 5). */
+    openFeed(declaration: { id: string; kinds: string[]; maxAgeMs: number }): void {
+        if (this.feeds.has(declaration.id)) throw new TypeError(`feed already open: ${declaration.id}`);
+        //  Boundary validation (hot-path rule): the declaration is checked ONCE here,
+        //  per-publish work is Set lookups only.
+        channelSchema.parse({
+            id: declaration.id,
+            class: "feed",
+            kinds: declaration.kinds,
+            zones: ["in-proc"],
+            retention: { maxAgeMs: declaration.maxAgeMs },
+        });
+        for (const kind of declaration.kinds) {
+            if (!this.kinds.has(kind)) throw new TypeError(`feed ${declaration.id}: unregistered kind ${kind}`);
+        }
+        this.feeds.set(declaration.id, {
+            kinds: new Set(declaration.kinds),
+            envelopes: [],
+            done: false,
+            maxAgeMs: declaration.maxAgeMs,
+            wake: new Set(),
+        });
+    }
+
+    publish(channelId: string, kind: string, payload: unknown): void {
+        const feed = this.feeds.get(channelId);
+        if (!feed) throw new TypeError(`unknown feed: ${channelId}`);
+        if (feed.done) throw new TypeError(`feed closed: ${channelId}`);
+        if (!feed.kinds.has(kind)) throw new TypeError(`kind ${kind} not declared on ${channelId}`);
+        feed.envelopes.push({
+            v: FABRIC_ENVELOPE_VERSION,
+            id: ulid(),
+            kind,
+            from: `agentgem://${SELF_ROOT}`,
+            to: { scope: "self" },
+            channel: channelId,
+            payload,
+        });
+        this.bump(feed);
+    }
+
+    readFeed(channelId: string, from: number): { envelopes: Envelope[]; done: boolean } {
+        const feed = this.feeds.get(channelId);
+        if (!feed) return { envelopes: [], done: true };
+        return { envelopes: feed.envelopes.slice(from), done: feed.done };
+    }
+
+    waitFeed(channelId: string, after: number): Promise<void> {
+        const feed = this.feeds.get(channelId);
+        if (!feed || feed.done || feed.envelopes.length > after) return Promise.resolve();
+        return new Promise<void>((resolve) => feed.wake.add(resolve));
+    }
+
+    closeFeed(channelId: string): void {
+        const feed = this.feeds.get(channelId);
+        if (!feed || feed.done) return;
+        feed.done = true;
+        feed.closedAt = Date.now();
+        this.bump(feed);
+    }
+
+    /** Drop feeds whose close is older than their retention. Called on an interval by the host. */
+    sweep(now: number = Date.now()): void {
+        for (const [id, feed] of this.feeds) {
+            if (feed.done && feed.closedAt !== undefined && now - feed.closedAt > feed.maxAgeMs) this.feeds.delete(id);
+        }
+    }
+
+    private bump(feed: LiveFeed): void {
+        const waiters = [...feed.wake];
+        feed.wake.clear();
+        for (const wake of waiters) wake();
     }
 }
