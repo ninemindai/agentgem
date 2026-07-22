@@ -61,3 +61,21 @@ describe("connectAcpAdapter shutdown ladder", () => {
     expect(await waitForDeath(pid, 5000)).toBe(true);
   });
 });
+
+import { supportsLoadSession, supportsResumeSession } from "@agentgem/base";
+
+describe("capability snapshot", () => {
+  it("captures the initialize response's capabilities and agent name", async () => {
+    const conn = await connectAcpAdapter(descriptor("ok"), { clientName: "t", permission: "deny" });
+    expect(conn.info.capabilities.loadSession).toBe(true);
+    expect(conn.info.agentName).toBe("fake-adapter");
+    expect(supportsLoadSession(conn.info)).toBe(true);
+    expect(supportsResumeSession(conn.info)).toBe(true);
+    conn.close();
+  });
+  it("helpers are false for empty capabilities", () => {
+    const info = { capabilities: {} };
+    expect(supportsLoadSession(info)).toBe(false);
+    expect(supportsResumeSession(info)).toBe(false);
+  });
+});
