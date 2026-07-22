@@ -344,6 +344,12 @@ importers:
         specifier: ^8.7.0
         version: 8.7.0
 
+  packages/fabric:
+    dependencies:
+      zod:
+        specifier: ^4.4.3
+        version: 4.4.3
+
   packages/insight:
     dependencies:
       '@agentgem/archive':
