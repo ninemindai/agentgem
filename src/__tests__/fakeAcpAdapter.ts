@@ -6,6 +6,12 @@
 //   crash-before-init — writes to stderr and exits 7 before answering anything.
 //   ignore-term      — like ok, but ignores SIGTERM and never exits on stdin end,
 //                      forcing the SIGKILL rung of the shutdown ladder.
+//   load-only        — advertises loadSession only (NO sessionCapabilities.resume), so
+//                      openExisting's ladder falls to session/load. session/load replays
+//                      two session/update notifications ("replayed-1"/"replayed-2") before
+//                      its result — exercising the drop-by-design path (no handler is
+//                      registered yet, so acpSession.ts's dispatcher silently drops them).
+//                      session/prompt behaves identically to "ok".
 import { writeFileSync } from "node:fs";
 import { join } from "node:path";
 
@@ -20,14 +26,27 @@ const rl = readline.createInterface({ input: process.stdin });
 rl.on("line", (line) => {
   let msg; try { msg = JSON.parse(line); } catch { return; }
   if (msg.method === "initialize") {
+    const agentCapabilities = mode === "load-only"
+      ? { loadSession: true }
+      : { loadSession: true, sessionCapabilities: { resume: {} } };
     send({ jsonrpc: "2.0", id: msg.id, result: {
       protocolVersion: msg.params && msg.params.protocolVersion,
-      agentCapabilities: { loadSession: true, sessionCapabilities: { resume: {} } },
+      agentCapabilities,
       agentInfo: { name: "fake-adapter", version: "1.0.0" },
     } });
   } else if (msg.method === "session/new") {
     send({ jsonrpc: "2.0", id: msg.id, result: { sessionId: "sess-new-1" } });
   } else if (msg.method === "session/resume") {
+    send({ jsonrpc: "2.0", id: msg.id, result: {} });
+  } else if (msg.method === "session/load") {
+    send({ jsonrpc: "2.0", method: "session/update", params: {
+      sessionId: msg.params.sessionId,
+      update: { sessionUpdate: "agent_message_chunk", content: { type: "text", text: "replayed-1" } },
+    } });
+    send({ jsonrpc: "2.0", method: "session/update", params: {
+      sessionId: msg.params.sessionId,
+      update: { sessionUpdate: "agent_message_chunk", content: { type: "text", text: "replayed-2" } },
+    } });
     send({ jsonrpc: "2.0", id: msg.id, result: {} });
   } else if (msg.method === "session/prompt") {
     send({ jsonrpc: "2.0", method: "session/update", params: {

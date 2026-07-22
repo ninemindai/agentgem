@@ -97,7 +97,12 @@ export interface RawAcpConnection {
   info: AcpAgentInfo;
   open(cwd: string, opts?: { mcpServers?: McpServer[] }): Promise<RawAcpSession>;
   /** Attach to a previously-created session (session/resume, else session/load).
-   * Throws { code: "resume_unsupported" } when the agent advertises neither. */
+   * Throws { code: "resume_unsupported" } when the agent advertises neither.
+   * CAVEAT: the returned session's update routing is keyed by sessionId (see
+   * `externalUpdates` below), so two concurrent prompt() calls against the SAME
+   * resumed sessionId would clobber each other's handler. Not reachable today —
+   * ChatManager serializes turns per chat — but callers of openExisting MUST
+   * continue to serialize turns on a given sessionId. */
   openExisting(cwd: string, sessionId: string, opts?: { mcpServers?: McpServer[] }): Promise<RawAcpSession>;
   close(): void;
 }
@@ -182,6 +187,11 @@ export async function connectAcpAdapter(
   // dispatches by sessionId; a session with no registered handler (e.g. the history
   // replay session/load streams before its first prompt) is deliberately dropped —
   // the console restores display history from the transcript instead.
+  // NOT SAFE for two concurrent prompt() calls on the same sessionId — the single
+  // per-sessionId slot means the second call's handler registration overwrites the
+  // first's (see openExisting's prompt(), which set()s/delete()s this on each turn).
+  // Unreachable today because ChatManager serializes turns per chat; any future
+  // caller of openExisting must preserve that same per-sessionId serialization.
   const externalUpdates = new Map<string, (update: unknown) => void>();
   // The handler receives an SDK context object ({ params, signal, agent }), NOT the raw
   // notification params directly — confirmed against node_modules/@agentclientprotocol/sdk's

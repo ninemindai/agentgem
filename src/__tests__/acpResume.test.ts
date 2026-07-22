@@ -32,6 +32,26 @@ describe("openExisting", () => {
     await expect(conn.openExisting(fixtureDir, "sess-x")).rejects.toMatchObject({ code: "resume_unsupported" });
     conn.close();
   });
+  it("falls to session/load when the agent advertises loadSession but not resume; replay updates are dropped, then prompt streams normally", async () => {
+    const loadOnlyDescriptor: AgentDescriptor = { id: "fake-load-only", name: "Fake", command: [process.execPath, adapterPath, "load-only"] };
+    const conn = await connectAcpAdapter(loadOnlyDescriptor, { clientName: "t", permission: "deny" });
+    expect(conn.info.capabilities.loadSession).toBe(true);
+    expect(conn.info.capabilities.sessionCapabilities).toBeUndefined();
+    const session = await conn.openExisting(fixtureDir, "sess-prior-load");
+    expect(session.sessionId).toBe("sess-prior-load");
+    let text = "";
+    const stop = await session.prompt("continue", (u) => {
+      const up = u as { sessionUpdate?: string; content?: { type?: string; text?: string } };
+      if (up?.sessionUpdate === "agent_message_chunk" && up.content?.type === "text") text += up.content.text;
+    });
+    // The two "replayed-*" session/update notifications sent during session/load arrived before
+    // any prompt() registered a handler for this sessionId — dropped by design (acpSession.ts's
+    // externalUpdates dispatcher silently drops updates with no registered handler), so only the
+    // prompt's own update shows up here.
+    expect(stop).toBe("end_turn");
+    expect(text).toBe("hello from fake");
+    conn.close();
+  });
 });
 
 const mkHandle = (sessionId: string): ChatSessionHandle => ({
