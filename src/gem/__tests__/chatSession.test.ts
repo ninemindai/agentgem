@@ -112,7 +112,7 @@ describe("ChatManager", () => {
     }) }, close: () => {} });
     const mgr = new ChatManager({ connectFn: connect as any });
     const id = await mgr.openChat({ agentId: "claude-code", brief: "B" });
-    expect(mgr.stateOf(id)).toEqual({ alive: true, running: false, sessionId: "sess_abc", agent: "claude-code" });
+    expect(mgr.stateOf(id)).toEqual({ alive: true, running: false, sessionId: "sess_abc", agent: "claude-code", resumed: false });
     expect(mgr.stateOf("nope")).toEqual({ alive: false });
   });
 

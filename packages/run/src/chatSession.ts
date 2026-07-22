@@ -36,6 +36,9 @@ export interface ChatSessionHandle {
 
 export interface ChatCtx {
   open(cwd: string, opts?: { mcpServers?: unknown[] }): Promise<ChatSessionHandle>;
+  /** Attach to a prior ACP session (session/resume / session/load). Optional: fakes and
+   * pre-resume adapters omit it; ChatManager falls back to open() on absence OR failure. */
+  openExisting?(cwd: string, sessionId: string, opts?: { mcpServers?: unknown[] }): Promise<ChatSessionHandle>;
 }
 
 // Per-connection options. `permission` controls tool-confirmation policy: neutral goldmine chat uses
@@ -54,6 +57,9 @@ interface LiveChat {
   /** Set while a turn is in flight; guards against a second concurrent turn and protects
    * this chat from idle-sweep and LRU-eviction while it's running. */
   running: boolean;
+  /** True when this session reattached to a prior ACP session (openExisting) rather than
+   * opening fresh. Surfaced via stateOf() so the client knows whether context carried over. */
+  resumed: boolean;
 }
 
 let counter = 0;
@@ -85,6 +91,8 @@ export class ChatManager {
     descriptor?: AgentDescriptor;
     cwd?: string;
     permission?: "allow" | "deny";   // tool-confirmation policy for this session (default from the connectFn)
+    /** Prior ACP sessionId to reattach to. Absent or a failed reattach falls back to a fresh session. */
+    resumeSessionId?: string;
   }): Promise<string> {
     // Evict LRU sessions until we're under the cap
     while (this.live.size >= this.maxLive) {
@@ -100,9 +108,22 @@ export class ChatManager {
       })();
 
     const conn = await this.connectFn(descriptor, { permission: input.permission });
-    let handle: ChatSessionHandle;
+    let handle: ChatSessionHandle | undefined;
+    let resumed = false;
+    // Guarded resume ladder: reattaching to the prior session restores the agent's
+    // in-context memory. ANY failure falls back to a fresh session — for us that is
+    // exactly the previously-shipped behavior (display history comes from the
+    // transcript restore), so fallback is safe; we surface `resumed` honestly in
+    // stateOf() rather than pretending. (acpx's stricter never-discard rule protects
+    // agent-side history we don't lose here.)
+    if (input.resumeSessionId && conn.ctx.openExisting) {
+      try {
+        handle = await conn.ctx.openExisting(input.cwd ?? process.cwd(), input.resumeSessionId, { mcpServers: input.mcpServers });
+        resumed = true;
+      } catch { handle = undefined; }
+    }
     try {
-      handle = await conn.ctx.open(input.cwd ?? process.cwd(), { mcpServers: input.mcpServers });
+      handle ??= await conn.ctx.open(input.cwd ?? process.cwd(), { mcpServers: input.mcpServers });
     } catch (err) {
       try { conn.close(); } catch { /* ignore */ }
       throw err;
@@ -113,7 +134,10 @@ export class ChatManager {
       agentId: input.agentId,
       sessionId: handle.sessionId,
       running: false,
-      brief: input.brief,
+      resumed,
+      // A resumed session already holds its original brief in-context — re-injecting
+      // it would duplicate instructions and burn tokens.
+      brief: resumed ? null : input.brief,
       conn,
       handle,
       lastMs: this.now(),
@@ -194,10 +218,10 @@ export class ChatManager {
   }
 
   /** Liveness + identity for a chat, for client reconciliation after navigation/reload. */
-  stateOf(chatId: string): { alive: true; running: boolean; sessionId: string; agent: string } | { alive: false } {
+  stateOf(chatId: string): { alive: true; running: boolean; sessionId: string; agent: string; resumed: boolean } | { alive: false } {
     const c = this.live.get(chatId);
     if (!c) return { alive: false };
-    return { alive: true, running: c.running, sessionId: c.sessionId, agent: c.agentId };
+    return { alive: true, running: c.running, sessionId: c.sessionId, agent: c.agentId, resumed: c.resumed };
   }
 
   sweepIdle(): void {
