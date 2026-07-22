@@ -4,7 +4,7 @@
 - **Date:** 2026-07-21
 - **Area:** app spine (`@agentgem/app`), transfer (`@agentgem/transfer`), the hosted aggregator contract (`@agentgem/contract`), memory outbox (`@agentgem/memory`), console (`packages/console/src/panels/`)
 - **Depends on:** the NATS transfer bus (`seal → ticket → object store → mint`), the memory review outbox (`packages/memory/src/outbox.ts`), the A2A materialize target (`docs/a2a.md`), agent identity (`docs/agent-identity-access.md`)
-- **Relates to:** [A2A](../a2a.md), [redaction](../redaction.md), [input containment](../input-containment.md), [backend decomposition](./backend-decomposition.md)
+- **Relates to:** [message fabric](./message-fabric.md), [A2A](../a2a.md), [redaction](../redaction.md), [input containment](../input-containment.md), [backend decomposition](./backend-decomposition.md)
 
 ## Summary
 
@@ -54,9 +54,11 @@ difference.** Three things separate it from a generic event bus:
   consent-gated, inbound lands in a typed queue for a decision, actionable kinds
   need a trusted signature *plus* a human affordance. The plumbing never drives
   behavior on its own.
-- **A boundary layer, not internal wiring.** It's how *different actors* talk across
-  the machine/trust boundary — not how AgentGem's own components talk to each other.
-  It's the external interop skin, not a replacement for internal control flow.
+- **The boundary tier of the [message fabric](./message-fabric.md), not internal
+  wiring.** It's how *different actors* talk across the machine/trust boundary —
+  not how AgentGem's own components talk to each other. Inside the machine, the
+  fabric's local router carries that traffic; this mailbox is the fabric's
+  federated link, the one gate where zone-crossing rules apply.
 
 It carries **both** events and messages: *notifications* are genuine fire-and-forget
 events; *tasks / enforcement / review / sharing* are directed messages. But they
