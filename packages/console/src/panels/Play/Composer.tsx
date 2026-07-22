@@ -1,6 +1,6 @@
 // packages/console/src/panels/Play/Composer.tsx
 import { useEffect, useState } from "react";
-import { makeClient, playStudioRoute, playImportRoute, playBlankRoute, testbedProjectsRoute, inventoryRoute } from "../../api/routes.js";
+import { makeClient, playStudioRoute, playImportRoute, playBlankRoute, testbedProjectsRoute, inventoryRoute, playMcpCandidatesRoute, playMcpCandidateToolsRoute } from "../../api/routes.js";
 import { fetchSessions, type WatchSession } from "../Watch/watchStream.js";
 import { AgentSelector, type PlayAgent } from "./AgentSelector.js";
 import { CAP_TOOL, CAP_LABEL, CONSENT_CAPS } from "./consent.js";
@@ -38,6 +38,22 @@ function capPreamble(caps: Cap[]): string {
     "This miniapp should use these host capabilities. For each one, call the listed MCP tool and add the",
     'capability to `"needs"` in meta.json:',
     ...lines,
+  ].join("\n");
+}
+
+// Candidate MCP servers the author can steer the build toward. `transport`/`needsSecret` come from the
+// redacted /candidates route; tools are fetched lazily per server on expand.
+type Candidate = { server: string; transport: string; needsSecret: boolean };
+type ToolState = { name: string }[] | "loading" | "error";
+
+// Like capPreamble: INTENT only. Checking a connector appends a hint to the agent's first build prompt;
+// it never writes meta.json. The save-time scan stays the single authority over mcpNeeds.
+function connectorPreamble(servers: string[]): string {
+  if (!servers.length) return "";
+  return [
+    "This miniapp should use these MCP connectors — for each, call its tools via",
+    '`window.agentgemApp.mcp.callTool(server, tool)` and add the server to `"mcpNeeds"` in meta.json:',
+    ...servers.map((s) => `- ${s}`),
   ].join("\n");
 }
 
@@ -82,6 +98,27 @@ export function Composer({
   const [sessionGenre, setSessionGenre] = useState<"replay" | "session-heatmap">("replay");
   const [caps, setCaps] = useState<Cap[]>([]);
   const toggleCap = (c: Cap) => setCaps((cs) => (cs.includes(c) ? cs.filter((x) => x !== c) : [...cs, c]));
+  // Connector picker (intent): installed MCP servers, the servers the author checked, and lazily-fetched
+  // tools per server (keyed by name; "loading"/"error" while a connect is in flight or failed).
+  const [candidates, setCandidates] = useState<Candidate[] | null>(null);
+  const [connectors, setConnectors] = useState<string[]>([]);
+  const [expanded, setExpanded] = useState<string | null>(null);
+  const [toolsByServer, setToolsByServer] = useState<Record<string, ToolState>>({});
+  const toggleConnector = (s: string) => setConnectors((cs) => (cs.includes(s) ? cs.filter((x) => x !== s) : [...cs, s]));
+  // Fetch a server's tools once. `force` overrides the needs-secret guard (the "Try anyway" affordance) —
+  // otherwise a secret-gated server never spawns a doomed connect just to populate the row.
+  function loadTools(c: Candidate, force = false) {
+    if ((c.needsSecret && !force) || toolsByServer[c.server]) return;
+    setToolsByServer((m) => ({ ...m, [c.server]: "loading" }));
+    playMcpCandidateToolsRoute.call(makeClient(apiBase), { query: { server: c.server } })
+      .then((r) => setToolsByServer((m) => ({ ...m, [c.server]: r.tools })))
+      .catch(() => setToolsByServer((m) => ({ ...m, [c.server]: "error" })));
+  }
+  function toggleExpand(c: Candidate) {
+    const open = expanded === c.server;
+    setExpanded(open ? null : c.server);
+    if (!open) loadTools(c);
+  }
 
   // Optional seed files, shared by the Blank and HTML tabs — `role` decides where the server lands each
   // one (ship → inlined into the miniapp, reference → build context only). See uploads.ts/UploadsField.
@@ -94,6 +131,11 @@ export function Composer({
     if (kind === "skill" && !skills) inventoryRoute.call(makeClient(apiBase), { query: {} }).then((r) => setSkills(r.skills)).catch(() => setSkills([]));
   }, [kind, apiBase, projects, sessions, skills]);
 
+  // Connectors are global intent (like the capability checkboxes), not tab-scoped — load once on mount.
+  useEffect(() => {
+    playMcpCandidatesRoute.call(makeClient(apiBase)).then((r) => setCandidates(r.servers)).catch(() => setCandidates([]));
+  }, [apiBase]);
+
   async function seed(source: Source) {
     if (busy) return;
     setBusy(true); setError("");
@@ -102,7 +144,7 @@ export function Composer({
       const res = await playStudioRoute.call(makeClient(apiBase), { body: { source, ...named(), ...genre } });
       // Only pass a second argument when there's a preamble to carry — preserves the old single-arg
       // call shape when no capability is checked (seedPrompt reads as undefined either way).
-      const preamble = capPreamble(caps);
+      const preamble = [capPreamble(caps), connectorPreamble(connectors)].filter(Boolean).join("\n\n");
       if (preamble) onCreated(res.name, preamble); else onCreated(res.name);
     } catch (e) { setError((e as Error).message); setBusy(false); }
   }
@@ -139,7 +181,7 @@ export function Composer({
     try {
       const res = await playBlankRoute.call(makeClient(apiBase), { body: { title: blankTitle.trim(), ...named(), ...up.payload() } });
       // The description isn't baked server-side; it's auto-sent as the studio's first build prompt.
-      onCreated(res.name, [capPreamble(caps), up.preamble(), blankPrompt.trim()].filter(Boolean).join("\n\n") || undefined);
+      onCreated(res.name, [capPreamble(caps), connectorPreamble(connectors), up.preamble(), blankPrompt.trim()].filter(Boolean).join("\n\n") || undefined);
     } catch (e) { setError((e as Error).message); setBusy(false); }
   }
 
@@ -160,6 +202,43 @@ export function Composer({
             <span>{CAP_LABEL[c]}</span>
           </label>
         ))}
+      </fieldset>
+      <fieldset className="play-connectors-pick">
+        <legend>MCP connectors (from your agent setup):</legend>
+        {candidates == null ? null : candidates.length === 0 ? (
+          <div className="play-connectors-pick__empty">
+            No MCP servers found in your agent setup. Add one to <code>~/.claude/.mcp.json</code> and it’ll appear here.
+          </div>
+        ) : candidates.map((c) => {
+          const open = expanded === c.server;
+          const tools = toolsByServer[c.server];
+          return (
+            <div key={c.server} className="play-connectors-pick__item">
+              <div className="play-connectors-pick__row">
+                <label className="play-connectors-pick__pick">
+                  <input type="checkbox" checked={connectors.includes(c.server)} onChange={() => toggleConnector(c.server)} />
+                  <span>{c.server}</span>
+                </label>
+                <button type="button" className="play-connectors-pick__toggle" aria-label={`${c.server} tools`}
+                  aria-expanded={open} aria-controls={`mcp-tools-${c.server}`} onClick={() => toggleExpand(c)}>
+                  <span className="play-connectors-pick__meta">{c.transport}{c.needsSecret ? " · needs secret" : ""}</span>
+                  <span aria-hidden="true">{open ? "▾" : "▸"}</span>
+                </button>
+              </div>
+              {open && (
+                <div id={`mcp-tools-${c.server}`} className="play-connectors-pick__tools">
+                  {c.needsSecret && !tools ? (
+                    <span>Needs secret — set it in your env, then reload. <button type="button" className="play-linkbtn" onClick={() => loadTools(c, true)}>Try anyway</button></span>
+                  ) : tools === "loading" ? <span>Connecting…</span>
+                    : tools === "error" ? <span>Couldn’t connect to {c.server}.</span>
+                    : tools == null ? null
+                    : tools.length === 0 ? <span>This server exposes no tools.</span>
+                    : <span>{tools.map((t) => t.name).join(", ")}</span>}
+                </div>
+              )}
+            </div>
+          );
+        })}
       </fieldset>
       <div className="play-tabs">
         {TABS.map((t) => (
