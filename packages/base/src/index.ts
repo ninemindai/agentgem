@@ -5,6 +5,7 @@
 export * from "./workspaces.js";
 export * from "./deployRecord.js";
 export * from "./acpSession.js";
+export * from "./acpUpdates.js";
 export * from "./acpErrors.js";
 export * from "./redact.js";
 // Moved to @agentgem/model so the egress packages (distribute, deploy) can gate on the canary
