@@ -27,7 +27,7 @@
   "references": [
     { "path": "../archive" }, { "path": "../base" }, { "path": "../build" },
     { "path": "../capture" }, { "path": "../contract" }, { "path": "../distribute" },
-    { "path": "../insight" }, { "path": "../memory" }, { "path": "../model" },
+    { "path": "../fabric" }, { "path": "../insight" }, { "path": "../memory" }, { "path": "../model" },
     { "path": "../play" }, { "path": "../recall" }, { "path": "../run" },
     { "path": "../testbed" }, { "path": "../transfer" }
   ]

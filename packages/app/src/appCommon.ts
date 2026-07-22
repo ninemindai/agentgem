@@ -18,6 +18,8 @@ import { BindingKey } from "@agentback/core";
 import { installExplorer } from "@agentback/rest-explorer";
 import { MCPComponent } from "@agentback/mcp";
 import { GemCoreComponent } from "./gemCore.component.js";
+import { FabricRouter } from "@agentgem/fabric";
+import { FABRIC_ROUTER, registerMcpAdapter } from "./fabric.binding.js";
 import { installMcpHttp } from "@agentback/mcp-http";
 import { streamWatch } from "./watchStream.js";
 import { streamWatchEvents } from "./watchEvents.js";
@@ -32,7 +34,7 @@ import { defaultRecallDbPath, serverFunnelDeps } from "./goldmine/recall.js";
 import { registerRecallRoutes } from "./goldmine/recallRoutes.js";
 import { registerMemoryRoutes } from "./goldmine/memoryRoutes.js";
 import { ChatManager } from "@agentgem/run";
-import { miniappDir, studioBrief, checkpointMiniapp } from "@agentgem/play";
+import { miniappDir, studioBrief, checkpointMiniapp, callConnectorTool, ConnectorError } from "@agentgem/play";
 import { availableAgents, adapterRuntimeCtx, resolveLaunch, npmAdapterInstaller, createLogger } from "@agentgem/base";
 import { collectScorecard, defaultScorecardDeps } from "./gem/scorecard.js";
 import { buildGoldmineBrief, type GoldmineBriefInput,
@@ -146,6 +148,13 @@ export async function buildCommonApp(port: number): Promise<{ app: RestApplicati
   // list; membership now lives in gemCore.component.ts, and a downstream deployment installs the
   // whole local-first surface with a single app.component(GemCoreComponent).
   app.component(GemCoreComponent);
+  //  The fabric router (message-fabric increment 2): one in-proc instance per spine.
+  const fabricRouter = new FabricRouter();
+  registerMcpAdapter(fabricRouter, {
+    callConnectorTool,
+    isConnectorError: (e): e is Error & { code: string } => e instanceof ConnectorError,
+  });
+  app.bind(FABRIC_ROUTER).to(fabricRouter);
   // The persistent transcript index (capture) is a separate, lazily-opened on-disk
   // PGlite — not the aggregator DB. Close it on graceful shutdown too, so SIGTERM
   // flushes its WASM instance cleanly instead of leaving it resident until exit
@@ -323,6 +332,8 @@ export function finalizeCommonApp(app: RestApplication, server: Awaited<RestAppl
       },
     });
     setInterval(() => chatManager.sweepIdle(), 60_000).unref();
+    const fabricRouter = app.getSync(FABRIC_ROUTER);
+    setInterval(() => fabricRouter.sweep(), 60_000).unref();
     registerChatRoutes(server.expressApp as never, {
       manager: chatManager,
       resolveStudio: (miniapp: string) => ({ cwd: miniappDir(miniapp), brief: studioBrief(miniapp) }),

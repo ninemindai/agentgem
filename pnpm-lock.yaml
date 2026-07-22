@@ -195,6 +195,9 @@ importers:
       '@agentgem/distribute':
         specifier: workspace:*
         version: link:../distribute
+      '@agentgem/fabric':
+        specifier: workspace:*
+        version: link:../fabric
       '@agentgem/insight':
         specifier: workspace:*
         version: link:../insight

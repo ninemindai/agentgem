@@ -30,6 +30,7 @@
     "@agentgem/capture": "workspace:*",
     "@agentgem/contract": "workspace:*",
     "@agentgem/distribute": "workspace:*",
+    "@agentgem/fabric": "workspace:*",
     "@agentgem/insight": "workspace:*",
     "@agentgem/memory": "workspace:*",
     "@agentgem/model": "workspace:*",
