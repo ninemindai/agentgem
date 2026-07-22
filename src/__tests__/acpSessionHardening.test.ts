@@ -2,7 +2,7 @@ import { describe, it, expect } from "vitest";
 import { mkdtempSync, readFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { connectAcpAdapter, boundedTail, type AgentDescriptor } from "@agentgem/base";
+import { connectAcpAdapter, boundedTail, supportsLoadSession, supportsResumeSession, type AgentDescriptor } from "@agentgem/base";
 import { writeFakeAdapter } from "./fakeAcpAdapter.js";
 
 const fixtureDir = mkdtempSync(join(tmpdir(), "agentgem-acp-test-"));
@@ -61,8 +61,6 @@ describe("connectAcpAdapter shutdown ladder", () => {
     expect(await waitForDeath(pid, 5000)).toBe(true);
   });
 });
-
-import { supportsLoadSession, supportsResumeSession } from "@agentgem/base";
 
 describe("capability snapshot", () => {
   it("captures the initialize response's capabilities and agent name", async () => {

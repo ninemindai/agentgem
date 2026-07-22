@@ -149,6 +149,9 @@ export async function connectAcpAdapter(
   const markDead = (e: Error) => {
     if (!died) {
       const tail = stderrTail.trim();
+      // Include the stderr tail in the error message; consuming surfaces are loopback-guarded local console
+      // and local gem-run outcomes (same user, same machine). Provider credentials were stripped at spawn via
+      // localAgentEnv, so the tail is the user's own local crash output — richness beats redaction here.
       died = tail ? new Error(`${e.message}\nadapter stderr: ${tail}`) : e;
       signalDead(died);
     }
@@ -162,7 +165,9 @@ export async function connectAcpAdapter(
   // Registering our own "end" listener on the raw stream here, BEFORE it's wrapped,
   // wins that race: Node invokes listeners for the same event in registration
   // order, so this synchronous handler populates `died` (and calls signalDead)
-  // before the SDK's wrapper even observes the EOF.
+  // before the SDK's wrapper even observes the EOF. Note: exit/stdout-end fire before
+  // all buffered stderr chunks may be delivered (stdio pipes have no cross-stream ordering),
+  // so the tail may occasionally be incomplete — accepted tradeoff over delay-to-death.
   child.stdout?.once("end", () => markDead(new Error(`agent process exited (code ${child.exitCode ?? "null"}, signal ${child.signalCode ?? "null"})`)));
   const app: any = client({ name: opts.clientName });
   const reply = opts.permission === "allow"
@@ -216,21 +221,26 @@ export async function connectAcpAdapter(
         dispose() { try { session.dispose?.(); } catch { /* ignore */ } },
       };
     },
-    close: () => {
-      try { connection.close(); } catch { /* ignore */ }
-      // Graceful shutdown ladder (borrowed from acpx): stdin end() is the cleanest
-      // signal for a stdio ACP agent (EOF on its read loop) — most adapters exit on
-      // it. SIGTERM catches ones that don't; SIGKILL catches ones that trap SIGTERM.
-      // Timers are unref'd so a wedged adapter can't keep the server process alive.
-      if (died || child.exitCode !== null) { try { child.kill("SIGKILL"); } catch { /* already gone */ } return; }
-      const termMs = opts.shutdown?.termMs ?? 1500;
-      const killMs = opts.shutdown?.killMs ?? 1000;
-      try { child.stdin?.end(); } catch { /* ignore */ }
-      const term = setTimeout(() => { try { child.kill("SIGTERM"); } catch { /* ignore */ } }, termMs);
-      const kill = setTimeout(() => { try { child.kill("SIGKILL"); } catch { /* ignore */ } }, termMs + killMs);
-      (term as { unref?: () => void }).unref?.();
-      (kill as { unref?: () => void }).unref?.();
-      child.once("exit", () => { clearTimeout(term); clearTimeout(kill); });
-    },
+    close: (() => {
+      let closed = false;
+      return () => {
+        if (closed) return;
+        closed = true;
+        try { connection.close(); } catch { /* ignore */ }
+        // Graceful shutdown ladder (borrowed from acpx): stdin end() is the cleanest
+        // signal for a stdio ACP agent (EOF on its read loop) — most adapters exit on
+        // it. SIGTERM catches ones that don't; SIGKILL catches ones that trap SIGTERM.
+        // Timers are unref'd so a wedged adapter can't keep the server process alive.
+        if (died || child.exitCode !== null) { try { child.kill("SIGKILL"); } catch { /* already gone */ } return; }
+        const termMs = opts.shutdown?.termMs ?? 1500;
+        const killMs = opts.shutdown?.killMs ?? 1000;
+        try { child.stdin?.end(); } catch { /* ignore */ }
+        const term = setTimeout(() => { try { child.kill("SIGTERM"); } catch { /* ignore */ } }, termMs);
+        const kill = setTimeout(() => { try { child.kill("SIGKILL"); } catch { /* ignore */ } }, termMs + killMs);
+        (term as { unref?: () => void }).unref?.();
+        (kill as { unref?: () => void }).unref?.();
+        child.once("exit", () => { clearTimeout(term); clearTimeout(kill); });
+      };
+    })(),
   };
 }
