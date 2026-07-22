@@ -50,6 +50,15 @@ describe("router ask", () => {
         expect((boom as Error).message).toContain("adapter exploded");
     });
 
+    it("a synchronously-throwing handler still maps to a transport error", async () => {
+        const router = routerWithEcho();
+        router.handle("syncboom", () => { throw new Error("sync explode"); });
+        const err = await router.ask("agentgem://self/syncboom", "test.echo", {}, { timeoutMs: 100 }).catch((e) => e);
+        expect(err).toBeInstanceOf(FabricRouterError);
+        expect((err as FabricRouterError).kind).toBe("transport");
+        expect((err as Error).message).toContain("sync explode");
+    });
+
     it("rejects unregistered kinds and non-self roots (in-proc only in increment 2)", async () => {
         const router = routerWithEcho();
         await expect(router.ask("agentgem://self/echo", "not.registered", {}, { timeoutMs: 100 })).rejects.toThrow(TypeError);

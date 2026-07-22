@@ -62,7 +62,7 @@ export class FabricRouter {
         });
         try {
             return await Promise.race([
-                handler(envelope).catch((e) => {
+                Promise.resolve().then(() => handler(envelope)).catch((e) => {
                     if (e instanceof FabricRouterError) throw e;
                     throw new FabricRouterError("transport", (e as Error).message, envelope.id);
                 }),
