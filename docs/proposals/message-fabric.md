@@ -12,13 +12,13 @@ Every AgentGem party — an install, an org, the open marketplace, and, inside o
 install, a miniapp UI, the backend, its MCPs, and its agents — needs to talk to
 some other party asynchronously. Today that need is met by N unrelated,
 hand-rolled mechanisms: the console alone runs bespoke SSE pairs per panel
-(`chatStream`, `studioStream`, `insightsStream`, `runStream`, `analyzeStream`),
-chat rides its own POST-then-stream turn transport, miniapps are wired through a
-sealed-runtime channel with no general messaging primitive, and the mailbox
-proposal ([actor-inbox-outbox](./actor-inbox-outbox.md)) adds a federated
-inbox/outbox that explicitly scopes itself to the machine/trust boundary, not
-internal wiring. Each of these reinvents the same shape — addressed parties,
-typed messages, delivery guarantees — with its own types, its own error
+(`chatStream`, `studioStream`, `insightsStream`, `runStream`, `analyzeStream`,
+`scorecardStream`), chat rides its own POST-then-stream turn transport, miniapps
+are wired through a sealed-runtime channel with no general messaging primitive,
+and the mailbox proposal ([actor-inbox-outbox](./actor-inbox-outbox.md)) adds a
+federated inbox/outbox that explicitly scopes itself to the machine/trust
+boundary, not internal wiring. Each of these reinvents the same shape — addressed
+parties, typed messages, delivery guarantees — with its own types, its own error
 handling, and its own test surface.
 
 The fabric is the one way any two parties send each other typed envelopes,
@@ -37,10 +37,9 @@ it stands on already exists: the memory outbox's consent-gated queue, the
 transfer NATS bus, the signing and trust machinery
 [actor-inbox-outbox.md](./actor-inbox-outbox.md) already defines, the review
 flow's group/role directory, and the sealed miniapp channel. The fabric's job
-is to
-give these one shared envelope and one shared address space, and to let the
-console's five bespoke streams and the chat transport migrate onto it one at a
-time instead of multiplying into a sixth and seventh bespoke mechanism.
+is to give these one shared envelope and one shared address space, and to let
+the console's bespoke streams and the chat transport migrate onto it one at a
+time instead of multiplying into yet more bespoke mechanisms.
 
 ## What this is — and isn't
 
@@ -230,9 +229,9 @@ proposal's data model, error model, or tests — the link adapter wraps the
 mailbox as it ships, on the mailbox's terms. Trust, signing, containment, and
 the transport registry stay normative in
 [actor-inbox-outbox.md](./actor-inbox-outbox.md); this proposal does not
-restate them, only routes to them. The mailbox doc's own description of
-itself as "a boundary layer, not internal wiring" is the same idea from the
-other side: it is the fabric's boundary **tier**, not a parallel system.
+restate them, only routes to them. The mailbox doc says the same thing from
+the other side — it names itself the fabric's boundary tier, not internal
+wiring: one gate, not a parallel system.
 
 ## Worked flows
 
