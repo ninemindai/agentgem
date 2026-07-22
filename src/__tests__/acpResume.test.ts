@@ -4,6 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { connectAcpAdapter, type AgentDescriptor } from "@agentgem/base";
 import { writeFakeAdapter } from "./fakeAcpAdapter.js";
+import { ChatManager, type ChatCtx, type ChatSessionHandle } from "@agentgem/run";
 
 const fixtureDir = mkdtempSync(join(tmpdir(), "agentgem-acp-resume-"));
 const adapterPath = writeFakeAdapter(fixtureDir);
@@ -29,5 +30,43 @@ describe("openExisting", () => {
     (conn.info.capabilities as Record<string, unknown>).sessionCapabilities = {};
     await expect(conn.openExisting(fixtureDir, "sess-x")).rejects.toMatchObject({ code: "resume_unsupported" });
     conn.close();
+  });
+});
+
+const mkHandle = (sessionId: string): ChatSessionHandle => ({
+  sessionId,
+  setMode: async () => {},
+  prompt: async (text) => ({ text: `echo:${text}`, toolCalls: [] }),
+  dispose: () => {},
+});
+
+describe("ChatManager resume", () => {
+  it("resumes via openExisting: no brief injection, resumed=true, same sessionId", async () => {
+    const prompts: string[] = [];
+    const ctx: ChatCtx & { openExisting?: (cwd: string, sid: string) => Promise<ChatSessionHandle> } = {
+      open: async () => { throw new Error("must not open a fresh session"); },
+      openExisting: async (_cwd, sid) => {
+        const h = mkHandle(sid);
+        return { ...h, prompt: async (text) => { prompts.push(text); return { text: "ok", toolCalls: [] }; } };
+      },
+    };
+    const mgr = new ChatManager({ connectFn: async () => ({ ctx, close: () => {} }) });
+    const chatId = await mgr.openChat({ agentId: "fake", brief: "BRIEF", descriptor: { id: "f", name: "F", command: ["x"] }, resumeSessionId: "sess-old" });
+    const st = mgr.stateOf(chatId);
+    expect(st).toMatchObject({ alive: true, sessionId: "sess-old", resumed: true });
+    for await (const _ of mgr.sendMessage(chatId, "hi")) { /* drain */ }
+    expect(prompts).toEqual(["hi"]); // resumed session already has its context — no brief re-injection
+  });
+  it("falls back to a fresh session when openExisting fails, and injects the brief", async () => {
+    const prompts: string[] = [];
+    const ctx: ChatCtx & { openExisting?: (cwd: string, sid: string) => Promise<ChatSessionHandle> } = {
+      open: async () => ({ ...mkHandle("sess-fresh"), prompt: async (text) => { prompts.push(text); return { text: "ok", toolCalls: [] }; } }),
+      openExisting: async () => { throw Object.assign(new Error("nope"), { code: "resume_unsupported" }); },
+    };
+    const mgr = new ChatManager({ connectFn: async () => ({ ctx, close: () => {} }) });
+    const chatId = await mgr.openChat({ agentId: "fake", brief: "BRIEF", descriptor: { id: "f", name: "F", command: ["x"] }, resumeSessionId: "sess-old" });
+    expect(mgr.stateOf(chatId)).toMatchObject({ alive: true, sessionId: "sess-fresh", resumed: false });
+    for await (const _ of mgr.sendMessage(chatId, "hi")) { /* drain */ }
+    expect(prompts[0].startsWith("BRIEF")).toBe(true);
   });
 });
