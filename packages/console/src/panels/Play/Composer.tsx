@@ -1,9 +1,11 @@
 // packages/console/src/panels/Play/Composer.tsx
 import { useEffect, useState } from "react";
-import { makeClient, playStudioRoute, playImportRoute, playBlankRoute, testbedProjectsRoute, inventoryRoute, playMcpCandidatesRoute, playMcpCandidateToolsRoute } from "../../api/routes.js";
+import { makeClient, playStudioRoute, playImportRoute, playBlankRoute, testbedProjectsRoute, inventoryRoute } from "../../api/routes.js";
 import { fetchSessions, type WatchSession } from "../Watch/watchStream.js";
 import { AgentSelector, type PlayAgent } from "./AgentSelector.js";
 import { CAP_TOOL, CAP_LABEL, CONSENT_CAPS } from "./consent.js";
+import { SourceList } from "./SourceList.js";
+import { ConnectorPicker, connectorPreamble } from "./ConnectorPicker.js";
 import { useUploads } from "./uploads.js";
 import { UploadsField } from "./UploadsField.js";
 
@@ -38,22 +40,6 @@ function capPreamble(caps: Cap[]): string {
     "This miniapp should use these host capabilities. For each one, call the listed MCP tool and add the",
     'capability to `"needs"` in meta.json:',
     ...lines,
-  ].join("\n");
-}
-
-// Candidate MCP servers the author can steer the build toward. `transport`/`needsSecret` come from the
-// redacted /candidates route; tools are fetched lazily per server on expand.
-type Candidate = { server: string; transport: string; needsSecret: boolean };
-type ToolState = { name: string }[] | "loading" | "error";
-
-// Like capPreamble: INTENT only. Checking a connector appends a hint to the agent's first build prompt;
-// it never writes meta.json. The save-time scan stays the single authority over mcpNeeds.
-function connectorPreamble(servers: string[]): string {
-  if (!servers.length) return "";
-  return [
-    "This miniapp should use these MCP connectors — for each, call its tools via",
-    '`window.agentgemApp.mcp.callTool(server, tool)` and add the server to `"mcpNeeds"` in meta.json:',
-    ...servers.map((s) => `- ${s}`),
   ].join("\n");
 }
 
@@ -98,27 +84,8 @@ export function Composer({
   const [sessionGenre, setSessionGenre] = useState<"replay" | "session-heatmap">("replay");
   const [caps, setCaps] = useState<Cap[]>([]);
   const toggleCap = (c: Cap) => setCaps((cs) => (cs.includes(c) ? cs.filter((x) => x !== c) : [...cs, c]));
-  // Connector picker (intent): installed MCP servers, the servers the author checked, and lazily-fetched
-  // tools per server (keyed by name; "loading"/"error" while a connect is in flight or failed).
-  const [candidates, setCandidates] = useState<Candidate[] | null>(null);
-  const [connectors, setConnectors] = useState<string[]>([]);
-  const [expanded, setExpanded] = useState<string | null>(null);
-  const [toolsByServer, setToolsByServer] = useState<Record<string, ToolState>>({});
-  const toggleConnector = (s: string) => setConnectors((cs) => (cs.includes(s) ? cs.filter((x) => x !== s) : [...cs, s]));
-  // Fetch a server's tools once. `force` overrides the needs-secret guard (the "Try anyway" affordance) —
-  // otherwise a secret-gated server never spawns a doomed connect just to populate the row.
-  function loadTools(c: Candidate, force = false) {
-    if ((c.needsSecret && !force) || toolsByServer[c.server]) return;
-    setToolsByServer((m) => ({ ...m, [c.server]: "loading" }));
-    playMcpCandidateToolsRoute.call(makeClient(apiBase), { query: { server: c.server } })
-      .then((r) => setToolsByServer((m) => ({ ...m, [c.server]: r.tools })))
-      .catch(() => setToolsByServer((m) => ({ ...m, [c.server]: "error" })));
-  }
-  function toggleExpand(c: Candidate) {
-    const open = expanded === c.server;
-    setExpanded(open ? null : c.server);
-    if (!open) loadTools(c);
-  }
+  const [permsOpen, setPermsOpen] = useState(false);
+  const [connectors, setConnectors] = useState<string[]>([]);   // picked connectors (intent); ConnectorPicker owns candidates/tools state
 
   // Optional seed files, shared by the Blank and HTML tabs — `role` decides where the server lands each
   // one (ship → inlined into the miniapp, reference → build context only). See uploads.ts/UploadsField.
@@ -130,11 +97,6 @@ export function Composer({
     if (kind === "session" && !sessions) fetchSessions(apiBase).then(setSessions).catch(() => setSessions([]));
     if (kind === "skill" && !skills) inventoryRoute.call(makeClient(apiBase), { query: {} }).then((r) => setSkills(r.skills)).catch(() => setSkills([]));
   }, [kind, apiBase, projects, sessions, skills]);
-
-  // Connectors are global intent (like the capability checkboxes), not tab-scoped — load once on mount.
-  useEffect(() => {
-    playMcpCandidatesRoute.call(makeClient(apiBase)).then((r) => setCandidates(r.servers)).catch(() => setCandidates([]));
-  }, [apiBase]);
 
   async function seed(source: Source) {
     if (busy) return;
@@ -194,52 +156,25 @@ export function Composer({
         onChange={onAgentIdChange}
         note="Used when you ask the studio to build or edit the game."
       />
-      <fieldset className="play-caps-pick">
-        <legend>This miniapp may:</legend>
-        {CONSENT_CAPS.map((c) => (
-          <label key={c} className="play-caps-pick__row">
-            <input type="checkbox" checked={caps.includes(c)} onChange={() => toggleCap(c)} />
-            <span>{CAP_LABEL[c]}</span>
-          </label>
-        ))}
-      </fieldset>
-      <fieldset className="play-connectors-pick">
-        <legend>MCP connectors (from your agent setup):</legend>
-        {candidates == null ? null : candidates.length === 0 ? (
-          <div className="play-connectors-pick__empty">
-            No MCP servers found in your agent setup. Add one to <code>~/.claude/.mcp.json</code> and it’ll appear here.
-          </div>
-        ) : candidates.map((c) => {
-          const open = expanded === c.server;
-          const tools = toolsByServer[c.server];
-          return (
-            <div key={c.server} className="play-connectors-pick__item">
-              <div className="play-connectors-pick__row">
-                <label className="play-connectors-pick__pick">
-                  <input type="checkbox" checked={connectors.includes(c.server)} onChange={() => toggleConnector(c.server)} />
-                  <span>{c.server}</span>
+      <div className="play-options">
+        <div className="play-perms">
+          <button type="button" className="play-perms__toggle" aria-expanded={permsOpen} onClick={() => setPermsOpen((o) => !o)}>
+            Permissions{caps.length ? ` · ${caps.length} enabled` : ""} <span aria-hidden="true">{permsOpen ? "▾" : "▸"}</span>
+          </button>
+          {permsOpen && (
+            <fieldset className="play-caps-pick">
+              <legend>This miniapp may:</legend>
+              {CONSENT_CAPS.map((c) => (
+                <label key={c} className="play-caps-pick__row">
+                  <input type="checkbox" checked={caps.includes(c)} onChange={() => toggleCap(c)} />
+                  <span>{CAP_LABEL[c]}</span>
                 </label>
-                <button type="button" className="play-connectors-pick__toggle" aria-label={`${c.server} tools`}
-                  aria-expanded={open} aria-controls={`mcp-tools-${c.server}`} onClick={() => toggleExpand(c)}>
-                  <span className="play-connectors-pick__meta">{c.transport}{c.needsSecret ? " · needs secret" : ""}</span>
-                  <span aria-hidden="true">{open ? "▾" : "▸"}</span>
-                </button>
-              </div>
-              {open && (
-                <div id={`mcp-tools-${c.server}`} className="play-connectors-pick__tools">
-                  {c.needsSecret && !tools ? (
-                    <span>Needs secret — set it in your env, then reload. <button type="button" className="play-linkbtn" onClick={() => loadTools(c, true)}>Try anyway</button></span>
-                  ) : tools === "loading" ? <span>Connecting…</span>
-                    : tools === "error" ? <span>Couldn’t connect to {c.server}.</span>
-                    : tools == null ? null
-                    : tools.length === 0 ? <span>This server exposes no tools.</span>
-                    : <span>{tools.map((t) => t.name).join(", ")}</span>}
-                </div>
-              )}
-            </div>
-          );
-        })}
-      </fieldset>
+              ))}
+            </fieldset>
+          )}
+        </div>
+        <ConnectorPicker apiBase={apiBase} selected={connectors} onChange={setConnectors} />
+      </div>
       <div className="play-tabs">
         {TABS.map((t) => (
           <button key={t.kind} className={`play-tab${kind === t.kind ? " is-active" : ""}`} onClick={() => setKind(t.kind)}>{t.label}</button>
@@ -255,14 +190,13 @@ export function Composer({
       />
       {(error || up.error) && <div className="play-banner"><span className="play-banner__ico">⚠</span><div className="play-banner__body"><div className="play-banner__detail">{error || up.error}</div></div></div>}
 
-      {kind === "project" && (!projects ? <p className="play-intro">Loading projects…</p> :
-        <ul className="play-src">
-          {projects.map((p) => (
-            <li key={p.path} className="play-src-row" onClick={() => seed({ kind: "project", path: p.path, flavor: p.flavor })}>
-              <span className="play-src-row__main">{p.path}</span><span className="play-src-row__meta">{p.flavor}</span>
-            </li>
-          ))}
-        </ul>)}
+      {kind === "project" && (
+        <SourceList<Proj> items={projects}
+          filter={(p, q) => p.path.toLowerCase().includes(q) || p.flavor.toLowerCase().includes(q)}
+          onPick={(p) => seed({ kind: "project", path: p.path, flavor: p.flavor })}
+          renderRow={(p) => ({ key: p.path, main: p.path, meta: p.flavor })}
+          placeholder="search projects…" loadingLabel="Loading projects…" />
+      )}
 
       {kind === "session" && (
         <>
@@ -271,26 +205,21 @@ export function Composer({
             <button type="button" className={`play-tab${sessionGenre === "replay" ? " is-active" : ""}`} onClick={() => setSessionGenre("replay")}>Replay</button>
             <button type="button" className={`play-tab${sessionGenre === "session-heatmap" ? " is-active" : ""}`} onClick={() => setSessionGenre("session-heatmap")}>Heatmap</button>
           </div>
-          {!sessions ? <p className="play-intro">Loading sessions…</p> :
-            <ul className="play-src">
-              {sessions.map((s) => (
-                <li key={s.id} className="play-src-row"
-                  onClick={() => seed({ kind: "session", agent: s.agent, ...(s.project ? { project: s.project } : {}), sessionId: s.id, summary: sessionSummary(s) })}>
-                  <span className="play-src-row__main">{s.project ?? "session"}</span><span className="play-src-row__meta">{s.agent} · {s.msgs} msgs</span>
-                </li>
-              ))}
-            </ul>}
+          <SourceList<WatchSession> items={sessions}
+            filter={(s, q) => sessionSummary(s).toLowerCase().includes(q)}
+            onPick={(s) => seed({ kind: "session", agent: s.agent, ...(s.project ? { project: s.project } : {}), sessionId: s.id, summary: sessionSummary(s) })}
+            renderRow={(s) => ({ key: s.id, main: s.project ?? "session", meta: `${s.agent} · ${s.msgs} msgs` })}
+            placeholder="search sessions…" loadingLabel="Loading sessions…" />
         </>
       )}
 
-      {kind === "skill" && (!skills ? <p className="play-intro">Loading skills…</p> :
-        <ul className="play-src">
-          {skills.map((k) => (
-            <li key={k.name} className="play-src-row" onClick={() => seed({ kind: "skill", skillName: k.name })}>
-              <span className="play-src-row__main">{k.name}</span>{k.description && <span className="play-src-row__meta">{k.description}</span>}
-            </li>
-          ))}
-        </ul>)}
+      {kind === "skill" && (
+        <SourceList<Skill> items={skills}
+          filter={(k, q) => k.name.toLowerCase().includes(q) || (k.description ?? "").toLowerCase().includes(q)}
+          onPick={(k) => seed({ kind: "skill", skillName: k.name })}
+          renderRow={(k) => ({ key: k.name, main: k.name, meta: k.description })}
+          placeholder="search skills…" loadingLabel="Loading skills…" />
+      )}
 
       {kind === "html" && (
         <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>

@@ -176,6 +176,7 @@ describe("Composer capability checkboxes", () => {
     const onCreated = vi.fn();
     renderComposer(onCreated);
     await waitFor(() => expect(screen.getByText("/p/demo")).toBeTruthy());
+    fireEvent.click(screen.getByRole("button", { name: /permissions/i }));   // caps live behind the disclosure now
     fireEvent.click(screen.getByLabelText(/watch your live coding sessions in real time/i));
     fireEvent.click(screen.getByText("/p/demo"));
     await waitFor(() => expect(onCreated).toHaveBeenCalled());
@@ -200,6 +201,7 @@ describe("Composer capability checkboxes", () => {
     const studio = vi.spyOn(playStudioRoute, "call").mockResolvedValue({ name: "demo" });
     renderComposer(vi.fn());
     await waitFor(() => expect(screen.getByText("/p/demo")).toBeTruthy());
+    fireEvent.click(screen.getByRole("button", { name: /permissions/i }));
     fireEvent.click(screen.getByLabelText(/run a local AI agent on your machine/i));
     fireEvent.click(screen.getByText("/p/demo"));
     await waitFor(() => expect(studio).toHaveBeenCalled());
@@ -214,6 +216,7 @@ describe("Composer capability checkboxes", () => {
     fireEvent.click(screen.getByText("Blank"));
     fireEvent.change(screen.getByPlaceholderText("title"), { target: { value: "My App" } });
     fireEvent.change(screen.getByPlaceholderText(/describe the mini-game/i), { target: { value: "a dashboard" } });
+    fireEvent.click(screen.getByRole("button", { name: /permissions/i }));
     fireEvent.click(screen.getByLabelText(/read your local setup/i));
     fireEvent.click(screen.getByRole("button", { name: /Create miniapp/ }));
     await waitFor(() => expect(onCreated).toHaveBeenCalled());
