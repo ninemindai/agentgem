@@ -15,6 +15,11 @@ const ADDRESS_RE = new RegExp(`^agentgem://${SEGMENT}(/${SEGMENT})*$`);
 
 export const addressSchema = z.string().regex(ADDRESS_RE, "not an agentgem:// address");
 
+// A bare root-actor / group / org id — one address segment, no scheme. Scope ids and
+// directory keys reuse this so audiences never become a second, looser address grammar.
+export const ROOT_ID_RE = new RegExp(`^${SEGMENT}$`);
+export const rootIdSchema = z.string().regex(ROOT_ID_RE, "not a root/group id");
+
 export interface ParsedAddress {
     root: string;
     path: string[];

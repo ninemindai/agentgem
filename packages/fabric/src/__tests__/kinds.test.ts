@@ -16,16 +16,28 @@ describe("kind registry", () => {
         expect(reg.list().map((d) => d.kind)).toEqual(["chat.token"]);
     });
 
-    it("rejects duplicate registration — kinds are a public API with one owner", () => {
+    it("rejects duplicate (kind, version) — kinds are a public API with one owner", () => {
         const reg = createKindRegistry();
         reg.register(decl);
         expect(() => reg.register({ ...decl, owner: "@agentgem/other" })).toThrow(TypeError);
     });
 
-    it("rejects malformed kinds and versions", () => {
+    it("registers payload versions side by side; bare get returns the latest", () => {
+        const reg = createKindRegistry();
+        reg.register(decl);
+        reg.register({ ...decl, version: 2, payload: z.object({ text: z.string(), lang: z.string() }) });
+        expect(reg.get("chat.token", 1)?.version).toBe(1); //  feed replay: old entries, original schema
+        expect(reg.get("chat.token")?.version).toBe(2); //  new traffic: latest
+        expect(reg.has("chat.token", 3)).toBe(false);
+        expect(reg.list()).toHaveLength(2);
+    });
+
+    it("rejects malformed kinds, versions, owners, and non-zod payloads", () => {
         const reg = createKindRegistry();
         expect(() => reg.register({ ...decl, kind: "NoDots" })).toThrow(TypeError);
         expect(() => reg.register({ ...decl, version: 0 })).toThrow(TypeError);
         expect(() => reg.register({ ...decl, version: 1.5 })).toThrow(TypeError);
+        expect(() => reg.register({ ...decl, owner: "   " })).toThrow(TypeError);
+        expect(() => reg.register({ ...decl, payload: null as never })).toThrow(TypeError);
     });
 });

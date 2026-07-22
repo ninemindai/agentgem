@@ -34,6 +34,11 @@ describe("channel declarations", () => {
         expect(channelSchema.safeParse({ ...base, class: "stream", kinds: [] }).success).toBe(false);
     });
 
+    it("constrains channel ids to the shared grammar", () => {
+        expect(channelSchema.safeParse({ ...base, id: "Has Space", class: "stream" }).success).toBe(false);
+        expect(channelSchema.safeParse({ ...base, id: "trailing/", class: "stream" }).success).toBe(false);
+    });
+
     it("exposes the explicit gap kind", () => {
         expect(GAP_KIND).toBe("fabric.gap");
         expect(KIND_RE.test(GAP_KIND)).toBe(true);

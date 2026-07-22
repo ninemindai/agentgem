@@ -6,7 +6,7 @@
 // Signing SEMANTICS are normative in docs/proposals/actor-inbox-outbox.md — this file
 // only carries the bytes.
 import { z } from "zod";
-import { addressSchema, isSelfAddress } from "./address.js";
+import { addressSchema, isSelfAddress, rootIdSchema } from "./address.js";
 import { isZoneCrossing, type Zone } from "./zone.js";
 
 export const FABRIC_ENVELOPE_VERSION = 1;
@@ -18,29 +18,39 @@ export const ULID_RE = /^[0-9A-HJKMNP-TV-Z]{26}$/;
 // Registered kinds are dotted lowercase, dashes interior-only: chat.token, repo-pulse.event.
 export const KIND_RE = /^[a-z][a-z0-9]*(-[a-z0-9]+)*(\.[a-z][a-z0-9]*(-[a-z0-9]+)*)+$/;
 
+// Channel ids are slash-separated lowercase segments, dashes interior-only:
+// chat/turn-42, org/announcements. One grammar shared by envelopes and channel
+// declarations so routing keys, cursors, and signed envelopes can never disagree
+// on normalization.
+export const CHANNEL_ID_RE = /^[a-z0-9]+(-[a-z0-9]+)*(\/[a-z0-9]+(-[a-z0-9]+)*)*$/;
+export const channelIdSchema = z.string().regex(CHANNEL_ID_RE, "not a channel id");
+
 export const signatureSchema = z
     .object({ alg: z.literal("ed25519"), pubkey: z.string().min(1), sig: z.string().min(1) })
     .strict();
 export type EnvelopeSignature = z.infer<typeof signatureSchema>;
 
 // Audience scopes (proposal §Addresses): friend/group/org name a target and need its
-// id; self/public are absolute and take none.
+// id; self/public are absolute and take none. Ids reuse the address root grammar so
+// scopes never become a second, looser address system.
 export const scopeSchema = z.union([
-    z.object({ scope: z.enum(["friend", "group", "org"]), id: z.string().min(1) }).strict(),
+    z.object({ scope: z.enum(["friend", "group", "org"]), id: rootIdSchema }).strict(),
     z.object({ scope: z.enum(["self", "public"]) }).strict(),
 ]);
 export type Scope = z.infer<typeof scopeSchema>;
 
 export const envelopeSchema = z
     .object({
-        v: z.number().int().positive(),
+        // The SUPPORTED version, exactly — a v:2 envelope must fail this schema and be
+        // parked via envelopeHeaderSchema, never processed under v1 semantics.
+        v: z.literal(FABRIC_ENVELOPE_VERSION),
         id: z.string().regex(ULID_RE, "id must be a ULID"),
         kind: z.string().regex(KIND_RE, "kind must be dotted lowercase"),
         from: addressSchema,
         to: z.union([addressSchema, scopeSchema]),
         correlationId: z.string().regex(ULID_RE).optional(),
         replyTo: addressSchema.optional(),
-        channel: z.string().min(1),
+        channel: channelIdSchema,
         // Required: signal-only kinds (e.g. fabric.gap) send an explicit null, never omit.
         payload: z.unknown(),
         signature: signatureSchema.optional(),
@@ -103,5 +113,16 @@ export function assertNoSelfAcrossZones(envelope: Envelope, fromZone: Zone, toZo
         if (address !== undefined && isSelfAddress(address)) {
             throw new TypeError(`self address may not cross zones (${fromZone} -> ${toZone}): ${address}`);
         }
+    }
+}
+
+// Signature REQUIRED at zone crossings (proposal §Envelope) — the presence half of
+// that rule, as a pure check every link applies identically instead of hand-rolling.
+// Cryptographic verification (key resolution, canonical bytes, authority) stays
+// normative in docs/proposals/actor-inbox-outbox.md and is NOT this function's job.
+export function assertSignedAcrossZones(envelope: Envelope, fromZone: Zone, toZone: Zone): void {
+    if (!isZoneCrossing(fromZone, toZone)) return;
+    if (envelope.signature === undefined || envelope.signedAt === undefined) {
+        throw new TypeError(`zone-crossing envelope must carry signature and signedAt (${fromZone} -> ${toZone}): ${envelope.id}`);
     }
 }

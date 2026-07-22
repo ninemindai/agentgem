@@ -6,7 +6,7 @@
 // unbounded requires a written justification. A cursor that falls behind the horizon
 // gets an explicit GAP_KIND event — never a silent hole.
 import { z } from "zod";
-import { KIND_RE } from "./envelope.js";
+import { channelIdSchema, KIND_RE } from "./envelope.js";
 import { zoneSchema } from "./zone.js";
 
 export const GAP_KIND = "fabric.gap";
@@ -22,7 +22,7 @@ export const feedRetentionSchema = z.union([boundedRetention, unboundedRetention
 export type FeedRetention = z.infer<typeof feedRetentionSchema>;
 
 const channelBase = {
-    id: z.string().min(1),
+    id: channelIdSchema,
     kinds: z.array(z.string().regex(KIND_RE)).nonempty(),
     zones: z.array(zoneSchema).nonempty(),
 };
