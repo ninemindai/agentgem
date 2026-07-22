@@ -126,6 +126,80 @@ checked-but-unused one is simply never written.
 - The two paths **share no state** — authoring intent and post-save disclosure stay
   decoupled, which is what keeps "intent vs. authority" clean.
 
+### User-visible states (design review, Pass 2)
+
+The runtime is an APP-UI surface inside a dense console; each fetch needs a defined
+loading / empty / error rendering, described as what the *author sees*, not backend
+behavior. Empty states carry warmth + a next action, never a bare "none".
+
+| Surface | Loading | Empty | Error |
+| --- | --- | --- | --- |
+| Composer `/candidates` | resolves fast (local config read) — render nothing until resolved, then the list; no spinner | **"No MCP servers found in your agent setup."** + muted line "Add one to `~/.claude/.mcp.json` (or a project `.mcp.json`) and it'll appear here." The whole connectors fieldset still renders (labelled), so the feature is discoverable even at zero. | muted row "Couldn't read your MCP config" — the fieldset degrades to the empty affordance, never blocks the Create button. |
+| Candidate expand `/candidate-tools` | inline **"Connecting…"** in the expanded row (a live MCP connect takes seconds — the spinner is what stops it reading as broken) | **"This server exposes no tools."** | muted **"Couldn't connect to `<server>`."**, row stays expanded so the author can collapse/retry. |
+| Strip connector (post-save) | covered by the existing `/servers` fetch | the three install states (ready / unreachable / missing) are already specified above | same route degrades per row; one connector down never blanks the others (`play.controller.ts:259-265`). |
+
+**`needsSecret` expand behavior (Pass 7 decision, resolved).** If a candidate has
+`needsSecret`, expanding shows **"Needs secret: `<NAME>` — set it in your env, then
+reload"** and does **not** auto-connect (the connect would deterministically fail and
+spawn a doomed child process). A subtle "Try anyway" affordance still lets the author
+force the connect. Rationale: replenish the goodwill reservoir — don't punish the author
+with a spinner-then-error for a state we can predict.
+
+### Information architecture (Pass 1) & design-system fit (Pass 5)
+
+- **Candidate order:** flat alphabetical by server name. `needsSecret` servers are **not**
+  hidden or reordered (they're valid picks once the secret is set) — just tagged. Config
+  source (user / project / Codex) shows as a subtle secondary tag on the row, not a
+  grouping (grouping deferred — see NOT in scope).
+- **Strip row order:** built-in `needs` rows → connector rows → `pruned` rows, so the
+  reader scans "capabilities, then connectors, then what was removed" top-to-bottom.
+- **Mirror targets (no invented styling):** the fieldset mirrors `.play-caps-pick`
+  (`theme.css:2486`); each candidate row mirrors `.play-caps-pick__row`; strip connector
+  rows mirror `.play-caps__row` / `.play-caps__cost` (`theme.css:622-626`); the transport /
+  source tags reuse the existing muted-`__cost` opacity treatment rather than a new badge.
+  Every new class ships with its rule in the same change (repo "every className
+  CSS-enforced" rule).
+
+### Accessibility & responsive (Pass 6)
+
+- **Keyboard:** each expandable candidate is a real `<button aria-expanded={open}
+  aria-controls="mcp-tools-<server>">`, so Enter/Space toggles the tool list and the tool
+  panel carries the matching `id`. The select control is a **native `<input type=checkbox>`
+  with a visible `<label>`** (the server name) — never placeholder-as-label.
+- **Non-color signaling:** every connector state is glyph + text, never color alone — `⚠`
+  + "not installed here" (missing), "couldn't connect" (unreachable) — so the states read
+  without color perception.
+- **Focus:** reuse the console's existing `:focus-visible` outline token on the row button
+  and checkbox.
+- **Overflow (the one responsive concern for this desktop console):** the candidate list
+  gets `max-height` + `overflow-y: auto` so a long server list scrolls inside the fieldset
+  instead of pushing the Create button below the fold. No mobile breakpoint work — the
+  console is a desktop/Electron local surface.
+
+## What already exists (reuse, don't reinvent)
+
+- `/api/play/mcp/servers` (`playMcpServersRoute`) — reused verbatim for the strip; no
+  server change.
+- `.play-caps*` and `.play-caps-pick*` CSS + the `theme.css` design tokens — the strip and
+  picker mirror these; no new visual vocabulary.
+- `capPreamble` / `onCreated(name, preamble)` seam — `connectorPreamble` rides it; no new
+  plumbing.
+- `introspectConfig({redact:true})` + `McpServerArtifactSchema` redaction — the `/candidates`
+  route reuses the existing redaction path; secrets never reach the browser.
+
+## NOT in scope (design decisions deferred, with rationale)
+
+- **Per-tool selection in the picker** — server-level intent only; tool checkboxes would
+  drift toward control (violates single-authority). Author checks a server; the agent picks
+  tools; the scan reconciles.
+- **Grouping candidates by config source** — flat alphabetical for v1; a source tag is
+  enough. Group headers add chrome before we know the list is long enough to need them.
+- **Live connection-status chip in the picker** (gap 3) — needs a connect-per-candidate or
+  a new status endpoint; the strip already surfaces reachability post-save.
+- **Mobile/tablet breakpoints** — desktop-only console; overflow-scroll is the only
+  responsive affordance needed.
+- **OAuth Connect/Authorize UI** (gap 4) — see Deferred.
+
 ## Files changed
 
 **Server (`packages/app`)**
@@ -154,6 +228,13 @@ checked-but-unused one is simply never written.
 - **Routes** (app vitest): `/candidates` output is redacted (no `config`/secret values,
   `needsSecret` reflects `secretRefs`); `/candidate-tools` degrades to `{ tools: [] }` on a
   connect failure / unknown server rather than throwing.
+- **States** (vitest): `/candidates` empty → the "No MCP servers found" affordance renders
+  (fieldset still present); `/candidates` error → degrades without blocking Create; expand
+  shows "Connecting…" then tools / "no tools" / "couldn't connect"; a `needsSecret` candidate
+  shows the secret hint and does **not** auto-connect on expand.
+- **A11y** (vitest): candidate toggle is a `<button>` with `aria-expanded` flipping on
+  toggle and `aria-controls` pointing at the tool panel `id`; the select checkbox has an
+  associated visible `<label>`; connector states assert glyph+text (not color-only).
 - **CSS enforcement:** grep each new `play-*` className resolves to a rule (per the repo's
   "every className CSS-enforced" rule).
 - **Invariant re-checks:** picker writes no `meta.json` (assert `saveMiniapp` untouched by
@@ -181,3 +262,61 @@ checked-but-unused one is simply never written.
      runtime + `VERCEL_OIDC_TOKEN`, billed per token request) or **Composio** — layered onto
      the cloud edition, where tokens living off-machine is acceptable. Poor fit for the OSS
      local-first default; clean fit for the hosted edition.
+
+## Implementation Tasks
+
+Synthesized from this review's findings. Each derives from a specific finding above.
+
+- [ ] **T1 (P1, human: ~1d / CC: ~25min)** — Composer — connector candidate picker with
+      full state coverage
+  - Surfaced by: Pass 2 (interaction states), Pass 1 (ordering), Pass 7 (`needsSecret`)
+  - Files: `packages/app/src/schemas.ts`, `packages/app/src/play.controller.ts`,
+    `packages/console/src/api/routes.ts`, `packages/console/src/panels/Play/Composer.tsx`
+  - Verify: console vitest — empty/error/loading/needsSecret render paths; `/candidates`
+    redaction route test
+- [ ] **T2 (P1, human: ~3h / CC: ~15min)** — CapabilityStrip + Studio — disclose `mcpNeeds`
+      with the three install states
+  - Surfaced by: Problem gap 1, Pass 1 (strip row order)
+  - Files: `packages/console/src/panels/Play/CapabilityStrip.tsx`,
+    `packages/console/src/panels/Play/Studio.tsx`
+  - Verify: console vitest — ready / unreachable / missing rows; existing `needs`/`pruned`
+    unaffected
+- [ ] **T3 (P2, human: ~2h / CC: ~10min)** — a11y + overflow — `aria-expanded` toggle
+      button, labelled checkbox, non-color state signaling, `:focus-visible`, list
+      `max-height`+scroll
+  - Surfaced by: Pass 6 (accessibility & responsive)
+  - Files: `packages/console/src/panels/Play/Composer.tsx`,
+    `packages/console/src/shell/theme.css`
+  - Verify: console vitest — aria attributes + label association; manual keyboard walk
+- [ ] **T4 (P2, human: ~1h / CC: ~5min)** — CSS — `.play-connectors-pick*` + `.play-caps__mcp*`
+      rules adjacent to their siblings
+  - Surfaced by: Pass 5 (design-system fit) + repo "every className CSS-enforced" rule
+  - Files: `packages/console/src/shell/theme.css`
+  - Verify: grep each new class resolves to a rule (count > 0)
+
+## GSTACK REVIEW REPORT
+
+Review: /plan-design-review (auto-accept mode, per session goal — recommendations applied
+without interactive prompts). Target: this design spec. Classifier: APP UI (reuses existing
+console vocabulary). Mockups: skipped by design (no new visual language; AI mockups would
+misrepresent an embedded fieldset).
+
+| Pass | Dimension | Before | After | Findings applied |
+| --- | --- | --- | --- | --- |
+| 1 | Information Architecture | 6/10 | 9/10 | candidate sort (alphabetical), strip row order, source tag |
+| 2 | Interaction State Coverage | 3/10 | 9/10 | loading/empty/error table for `/candidates` + `/candidate-tools`; warm empty state |
+| 3 | User Journey & Emotional Arc | 6/10 | 8/10 | connecting-spinner (anti-"broken"), zero-servers empty affordance |
+| 4 | AI Slop Risk | 9/10 | 9/10 | none — reuses existing components; no cards/gradients/emoji |
+| 5 | Design System Alignment | 7/10 | 9/10 | named exact mirror classes/tokens; no invented styling |
+| 6 | Responsive & Accessibility | 4/10 | 8/10 | `aria-expanded` button, labelled checkbox, non-color signaling, focus, overflow-scroll |
+| 7 | Unresolved Decisions | — | resolved | `needsSecret`→no auto-connect; flat alphabetical sort; grouping deferred |
+
+Runs: 1. Status: issues_found → all applied (auto-accept). Overall design completeness:
+**5/10 → 8.6/10**. Required sections added: "What already exists", "NOT in scope",
+"Implementation Tasks". Outside voices (Codex / Claude subagent): skipped — auto-accept run,
+single-model. Adversarial/CEO/Eng review: not part of this skill.
+
+VERDICT: CLEARED — design-complete for implementation; every pass ≥ 8/10, no P1 design gaps
+open. Proceed to writing-plans.
+
+NO UNRESOLVED DECISIONS
