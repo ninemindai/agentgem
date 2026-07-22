@@ -40,6 +40,9 @@
       "path": "packages/contract"
     },
     {
+      "path": "packages/fabric"
+    },
+    {
       "path": "packages/archive"
     },
     {
