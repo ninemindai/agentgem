@@ -1163,4 +1163,20 @@ export const playMcpServersRoute = defineRoute("GET", "/api/play/mcp/servers", {
   }),
 });
 
+// Candidate picker (Studio Composer). /candidates is cheap + redacted (no connect); /candidate-tools
+// does one live connect, fetched lazily only when the author expands a candidate row.
+export const playMcpCandidatesRoute = defineRoute("GET", "/api/play/mcp/candidates", {
+  response: z.object({
+    servers: z.array(z.object({
+      server: z.string(),
+      transport: z.enum(["stdio", "http", "sse"]),
+      needsSecret: z.boolean(),
+    })),
+  }),
+});
+export const playMcpCandidateToolsRoute = defineRoute("GET", "/api/play/mcp/candidate-tools", {
+  query: z.object({ server: z.string() }),
+  response: z.object({ tools: z.array(z.object({ name: z.string(), description: z.string().optional() })) }),
+});
+
 export const makeClient = (apiBase: string): Client => createClient({ baseURL: apiBase });
