@@ -17,9 +17,11 @@
 import { fileURLToPath } from "node:url";
 import { dirname, join, resolve } from "node:path";
 import { randomUUID } from "node:crypto";
+import { z } from "zod";
 import { connectAcpAdapter, stdioMcpServer, resolveLaunch, adapterRuntimeCtx, AGENTS, ensureAdapter, promptRun } from "@agentgem/base";
 import type { AgentAvailability, AgentDescriptor, McpServerStdio, AdapterCtx, AdapterInstaller } from "@agentgem/base";
 import { studioCwd } from "@agentgem/play";
+import { FabricRouter } from "@agentgem/fabric";
 import type { ChatManager, ChatConnectFn, ChatCtx, ChatEvent, ChatSessionHandle, ToolInvocation } from "@agentgem/run";
 import { draftGemFromChat } from "./draftGem.js";
 import { createAguiMapper } from "./aguiStream.js";
@@ -69,6 +71,10 @@ export interface ChatRouteDeps {
   // Studio auto-checkpoint: commit the miniapp's on-disk state after a successful turn (durability).
   // Injected so the route stays testable without the real registry. Absent → checkpointing is a no-op.
   checkpointMiniapp?: (name: string) => Promise<unknown>;
+  // The app-spine fabric router (message-fabric increment 2): turn buffers ride its in-memory feed
+  // channels. Optional so every existing caller/test that builds deps without a router still compiles
+  // and runs — registerChatRoutes falls back to a private router with the chat kinds pre-registered.
+  router?: FabricRouter;
 }
 
 // Pure mapping of a POST /api/chat body to ChatManager.openChat args — extracted so the studio-vs-neutral
@@ -146,6 +152,18 @@ export function registerChatRoutes(app: App, deps: ChatRouteDeps, guard: Middlew
   // checkpoint. Populated on open, cleared on close. A leaked short string is harmless; we tidy anyway.
   const chatMiniapps = new Map<string, string>();
 
+  // deps.router is optional (see ChatRouteDeps) so every existing caller/test that builds deps
+  // without one still compiles and runs — fall back to a private router with the chat kinds
+  // pre-registered. Resolved once; every reference below uses this `router` local, never `deps.router`.
+  const fallback = () => {
+    const r = new FabricRouter();
+    for (const kind of ["chat.phase", "chat.delta", "chat.tool", "chat.done", "chat.failed"]) {
+      r.kinds.register({ kind, owner: "@agentgem/run", version: 1, payload: z.unknown() });
+    }
+    return r;
+  };
+  const router = deps.router ?? fallback();
+
   // GET /api/agents — list which agents are on PATH
   app.get("/api/agents", guard, (_req, res) => {
     res.json({ agents: deps.listAgents() });
@@ -205,15 +223,18 @@ export function registerChatRoutes(app: App, deps: ChatRouteDeps, guard: Middlew
   //                              │ {turnId}                    (checkpoint runs BEFORE `done`
   //   GET /api/chat/stream?chatId&turnId ─▶ attach: replay events[0..] ─▶ await wake ─▶ … done
   //   GET /api/chat/stream?chatId&message ─▶ legacy entrance: mints the turn itself, then attaches
-  interface LiveTurn { chatId: string; events: ChatEvent[]; done: boolean; wake: Set<() => void> }
-  const liveTurns = new Map<string, LiveTurn>();
+  //  Turn buffers are fabric in-memory feeds (message-fabric increment 2): replay-from-0,
+  //  wake-on-publish, close + TTL sweep — the same contract LiveTurn hand-rolled, now shared.
   const TURN_TTL_MS = 10 * 60_000; // the buffer survives briefly past done for a late re-attach
+  const CHAT_KINDS = ["chat.phase", "chat.delta", "chat.tool", "chat.done", "chat.failed"];
+  const turnChannel = (turnId: string) => `chat/turn-${turnId}`;
+  const turnChats = new Map<string, string>(); // turnId -> chatId (ownership check on attach)
 
   const startTurn = (chatId: string, message: string): string => {
     const turnId = randomUUID();
-    const turn: LiveTurn = { chatId, events: [], done: false, wake: new Set() };
-    liveTurns.set(turnId, turn);
-    const bump = () => { const ws = [...turn.wake]; turn.wake.clear(); for (const w of ws) w(); };
+    const channel = turnChannel(turnId);
+    router.openFeed({ id: channel, kinds: CHAT_KINDS, maxAgeMs: TURN_TTL_MS });
+    turnChats.set(turnId, chatId);
     void (async () => {
       const miniapp = chatMiniapps.get(chatId);
       try {
@@ -227,15 +248,15 @@ export function registerChatRoutes(app: App, deps: ChatRouteDeps, guard: Middlew
             try { await deps.checkpointMiniapp(miniapp); }
             catch (e) { console.error(`checkpoint failed for miniapp ${miniapp}:`, (e as Error).message); }
           }
-          turn.events.push(ev); bump();
+          router.publish(channel, `chat.${ev.type}`, ev);
         }
       } catch (e) {
         // A generator throw becomes a buffered `failed` event — attached streams (native or AG-UI,
         // whose mapper routes `failed` to RUN_ERROR) forward it like any other frame.
-        turn.events.push({ type: "failed", error: (e as Error).message }); bump();
+        router.publish(channel, "chat.failed", { type: "failed", error: (e as Error).message });
       }
-      turn.done = true; bump();
-      const t = setTimeout(() => liveTurns.delete(turnId), TURN_TTL_MS);
+      router.closeFeed(channel);
+      const t = setTimeout(() => turnChats.delete(turnId), TURN_TTL_MS);
       (t as { unref?: () => void }).unref?.();
     })();
     return turnId;
@@ -262,8 +283,9 @@ export function registerChatRoutes(app: App, deps: ChatRouteDeps, guard: Middlew
     const chatId = String(req.query.chatId ?? "");
     const turnIdParam = String(req.query.turnId ?? "");
     const turnId = turnIdParam || startTurn(chatId, String(req.query.message ?? ""));
-    const turn = liveTurns.get(turnId);
-    if (!turn || turn.chatId !== chatId) { res.status(404).json({ error: "unknown turn" }); return; }
+    const channel = turnChannel(turnId);
+    const owner = turnChats.get(turnId);
+    if (owner === undefined || owner !== chatId) { res.status(404).json({ error: "unknown turn" }); return; }
 
     res.setHeader("Content-Type", "text/event-stream");
     res.setHeader("Cache-Control", "no-cache");
@@ -286,9 +308,11 @@ export function registerChatRoutes(app: App, deps: ChatRouteDeps, guard: Middlew
 
     let i = 0;
     for (;;) {
-      while (i < turn.events.length) forward(turn.events[i++]);
-      if (turn.done) break;
-      await new Promise<void>((r) => turn.wake.add(r));
+      const { envelopes, done } = router.readFeed(channel, i);
+      for (const env of envelopes) forward(env.payload as ChatEvent);
+      i += envelopes.length;
+      if (done && envelopes.length === 0) break;
+      if (!done) await router.waitFeed(channel, i);
     }
     try { res.end(); } catch { /* client already disconnected */ }
   });

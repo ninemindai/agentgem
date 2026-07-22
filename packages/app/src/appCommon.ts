@@ -336,6 +336,7 @@ export function finalizeCommonApp(app: RestApplication, server: Awaited<RestAppl
     setInterval(() => fabricRouter.sweep(), 60_000).unref();
     registerChatRoutes(server.expressApp as never, {
       manager: chatManager,
+      router: fabricRouter,
       resolveStudio: (miniapp: string) => ({ cwd: miniappDir(miniapp), brief: studioBrief(miniapp) }),
       resolveProjectCwd,
       neutralCwd: chatCwd,
