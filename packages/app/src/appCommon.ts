@@ -308,6 +308,15 @@ export function finalizeCommonApp(app: RestApplication, server: Awaited<RestAppl
             // path can never redirect here.
             open: (cwd: string, opts?: { mcpServers?: unknown[] }) =>
               conn.ctx.open(resolveChatCwd(cwd, chatCwd, resolveProjectCwd), opts),
+            // Must also forward openExisting through the same re-guard — dropping it here silently
+            // degrades every resume to a fresh session (this exact bug: the wrapper only forwarded
+            // open(), so ChatManager's openExisting branch never fired against the real adapter).
+            // Optional on conn.ctx (fakes/pre-resume adapters omit it), so forward it conditionally
+            // rather than always defining the key — a spread-in keeps ChatCtx's own optionality intact.
+            ...(conn.ctx.openExisting ? {
+              openExisting: (cwd: string, sessionId: string, opts?: { mcpServers?: unknown[] }) =>
+                conn.ctx.openExisting!(resolveChatCwd(cwd, chatCwd, resolveProjectCwd), sessionId, opts),
+            } : {}),
           },
           close: conn.close,
         };

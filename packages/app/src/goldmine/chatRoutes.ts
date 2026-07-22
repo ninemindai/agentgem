@@ -85,10 +85,14 @@ export async function studioChatArgs(
   const project = body?.project ? String(body.project) : "";
   if (miniapp && project) throw new Error("miniapp and project are mutually exclusive");
   // SECURITY: `resume` is a client-supplied ACP sessionId. It never touches the fs —
-  // the adapter resolves it in its OWN session store, and the ACP spec requires the
-  // request cwd to match the session's cwd, so a sessionId from another project
-  // fails at the adapter rather than attaching to the wrong workspace. Worst case
-  // equals a failed resume → fresh session.
+  // the adapter resolves it in its OWN session store. Cwd/session binding on resume
+  // is a per-ADAPTER trust assumption, not something the ACP spec mandates (to be
+  // confirmed against real adapters in the live smoke) — a sessionId from another
+  // project may or may not fail at the adapter depending on how strictly that
+  // adapter enforces cwd match. Either way the worst case is bounded here: the
+  // session opens under the SERVER-derived cwd (resolveChatCwd re-guard) and the
+  // permission set by this route — never by the client — so a mismatched resume
+  // can misattach a session but cannot escalate access or redirect the filesystem.
   const resumeSessionId = typeof body?.resume === "string" && body.resume ? body.resume : undefined;
   if (miniapp) {
     if (!deps.resolveStudio) throw new Error("studio not available");
