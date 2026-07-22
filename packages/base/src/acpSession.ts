@@ -75,7 +75,26 @@ export interface RawAcpSession {
   cancel(): void;
   dispose(): void;
 }
+// What the agent told us at initialize: protocol version + advertised capabilities.
+// Callers gate optional methods (session/load, session/resume) on this instead of
+// probing-and-catching. Kept loose (Record) — the ACP capability surface is still
+// growing and we only ever read specific keys.
+export interface AcpAgentInfo {
+  protocolVersion?: number;
+  capabilities: { loadSession?: boolean; sessionCapabilities?: { resume?: object | null } } & Record<string, unknown>;
+  agentName?: string;
+}
+// Omitted/null means "not supported"; `{}` means supported (ACP capability convention).
+export function supportsLoadSession(info: AcpAgentInfo): boolean {
+  return info.capabilities.loadSession === true;
+}
+export function supportsResumeSession(info: AcpAgentInfo): boolean {
+  const r = info.capabilities.sessionCapabilities?.resume;
+  return r !== undefined && r !== null;
+}
+
 export interface RawAcpConnection {
+  info: AcpAgentInfo;
   open(cwd: string, opts?: { mcpServers?: McpServer[] }): Promise<RawAcpSession>;
   close(): void;
 }
@@ -158,9 +177,16 @@ export async function connectAcpAdapter(
   // tolerated skipping it; codex-acp strictly rejects session/new with "Not
   // initialized" (-32603) without it. We advertise no client capabilities we don't
   // implement (no fs/terminal handlers) — both adapters write files directly.
-  await Promise.race([agentCtx.request("initialize", { protocolVersion: PROTOCOL_VERSION }), dead]);
+  const init: any = await Promise.race([agentCtx.request("initialize", { protocolVersion: PROTOCOL_VERSION }), dead]);
+  const info: AcpAgentInfo = {
+    protocolVersion: init?.protocolVersion,
+    capabilities: (init?.agentCapabilities ?? {}) as AcpAgentInfo["capabilities"],
+    agentName: init?.agentInfo?.name,
+  };
+  acpLog.debug(`[${bin}] initialized: protocol=${info.protocolVersion} agent=${info.agentName ?? "?"} loadSession=${supportsLoadSession(info)} resume=${supportsResumeSession(info)}`);
 
   return {
+    info,
     async open(cwd: string, opts?: { mcpServers?: McpServer[] }) {
       try { mkdirSync(cwd, { recursive: true }); } catch { /* best-effort */ }
       let builder: any = agentCtx.buildSession(cwd);
