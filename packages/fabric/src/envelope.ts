@@ -1,0 +1,79 @@
+// Copyright (c) 2026 NineMind, Inc.
+// SPDX-License-Identifier: MIT
+// The one envelope every fabric message rides (docs/proposals/message-fabric.md
+// §Envelope). Versioned because cross-install skew is the steady state; unknown
+// versions/kinds are parked-and-surfaced by the router (increment 2), never dropped.
+// Signing SEMANTICS are normative in docs/proposals/actor-inbox-outbox.md — this file
+// only carries the bytes.
+import { z } from "zod";
+import { addressSchema, isSelfAddress } from "./address.js";
+import { isZoneCrossing, type Zone } from "./zone.js";
+
+export const FABRIC_ENVELOPE_VERSION = 1;
+
+// Crockford base32 ULID (26 chars). Generation is runtime (increment 2); the
+// contract only validates shape.
+export const ULID_RE = /^[0-9A-HJKMNP-TV-Z]{26}$/;
+
+// Registered kinds are dotted lowercase: chat.token, gem.published, mcp.tool.call.
+export const KIND_RE = /^[a-z][a-z0-9]*(\.[a-z][a-z0-9-]*)+$/;
+
+export const signatureSchema = z
+    .object({ alg: z.literal("ed25519"), pubkey: z.string().min(1), sig: z.string().min(1) })
+    .strict();
+export type EnvelopeSignature = z.infer<typeof signatureSchema>;
+
+// Audience scopes (proposal §Addresses): friend/group/org name a target and need its
+// id; self/public are absolute and take none.
+export const scopeSchema = z.union([
+    z.object({ scope: z.enum(["friend", "group", "org"]), id: z.string().min(1) }).strict(),
+    z.object({ scope: z.enum(["self", "public"]) }).strict(),
+]);
+export type Scope = z.infer<typeof scopeSchema>;
+
+export const envelopeSchema = z
+    .object({
+        v: z.number().int().positive(),
+        id: z.string().regex(ULID_RE, "id must be a ULID"),
+        kind: z.string().regex(KIND_RE, "kind must be dotted lowercase"),
+        from: addressSchema,
+        to: z.union([addressSchema, scopeSchema]),
+        correlationId: z.string().regex(ULID_RE).optional(),
+        replyTo: addressSchema.optional(),
+        channel: z.string().min(1),
+        payload: z.unknown(),
+        signature: signatureSchema.optional(),
+        signedAt: z.iso.datetime().optional(),
+    })
+    .strict();
+export type Envelope = z.infer<typeof envelopeSchema>;
+
+// ask() durability follows zone (proposal §Verbs): in-zone asks are in-memory with a
+// timeout; cross-zone asks are feed-backed with a deadline. The XOR is the contract —
+// a call site can never be ambiguous about which primitive it is using.
+export const askOptionsSchema = z.union([
+    z.object({ timeoutMs: z.number().int().positive() }).strict(),
+    z.object({ deadline: z.iso.datetime() }).strict(),
+]);
+export type AskOptions = z.infer<typeof askOptionsSchema>;
+
+// ask() fails exactly three ways at the fabric layer. Application-level errors are
+// reply payloads, never fabric errors.
+export const FABRIC_ERROR_KINDS = ["timeout", "refused-at-gate", "transport"] as const;
+export type FabricErrorKind = (typeof FABRIC_ERROR_KINDS)[number];
+
+// Sender-visible delivery states for cross-zone sends (proposal §Error handling).
+export const DELIVERY_STATES = ["pending", "delivering", "delivered", "refused", "expired", "failed"] as const;
+export type DeliveryState = (typeof DELIVERY_STATES)[number];
+
+// `self` is router-local: signatures must bind absolute addresses, so an envelope on
+// a zone-crossing hop must not name `self` anywhere routable.
+export function assertNoSelfAcrossZones(envelope: Envelope, fromZone: Zone, toZone: Zone): void {
+    if (!isZoneCrossing(fromZone, toZone)) return;
+    const routable = [envelope.from, typeof envelope.to === "string" ? envelope.to : undefined, envelope.replyTo];
+    for (const address of routable) {
+        if (address !== undefined && isSelfAddress(address)) {
+            throw new TypeError(`self address may not cross zones (${fromZone} -> ${toZone}): ${address}`);
+        }
+    }
+}
