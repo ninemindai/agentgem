@@ -17,6 +17,11 @@ describe("normalizeAcpError", () => {
     expect(normalizeAcpError(rpc(-32000, "authentication required"))).toMatchObject({ kind: "auth", retryable: false });
     expect(normalizeAcpError(rpc(-32000, "x", { authRequired: true }))).toMatchObject({ kind: "auth", retryable: false });
   });
+  it("auth precedence beats retryable codes: a wrapped login failure is never retryable", () => {
+    // Deliberate: adapters wrap upstream errors, so an auth failure can surface as
+    // -32603 — retrying it is useless. Pins the auth-before-code-rules ordering.
+    expect(normalizeAcpError(rpc(-32603, "authentication required"))).toMatchObject({ kind: "auth", retryable: false, code: -32603 });
+  });
   it("classifies process death as a non-retryable crash", () => {
     expect(normalizeAcpError(new Error("agent process exited (code 1, signal null)"))).toMatchObject({ kind: "crash", retryable: false });
     expect(normalizeAcpError(new Error("agent process error: spawn ENOENT"))).toMatchObject({ kind: "crash", retryable: false });
