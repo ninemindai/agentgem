@@ -31,3 +31,33 @@ describe("connectAcpAdapter startup evidence", () => {
     conn.close();
   });
 });
+
+const pidAlive = (pid: number) => { try { process.kill(pid, 0); return true; } catch { return false; } };
+const waitForDeath = async (pid: number, ms: number) => {
+  const deadline = Date.now() + ms;
+  while (Date.now() < deadline) {
+    if (!pidAlive(pid)) return true;
+    await new Promise((r) => setTimeout(r, 50));
+  }
+  return !pidAlive(pid);
+};
+
+describe("connectAcpAdapter shutdown ladder", () => {
+  it("a healthy adapter exits from stdin end alone", async () => {
+    const pidfile = join(fixtureDir, `pid-ok-${Date.now()}`);
+    const conn = await connectAcpAdapter(descriptor("ok", pidfile), { clientName: "t", permission: "deny" });
+    const pid = Number(readFileSync(pidfile, "utf8"));
+    conn.close();
+    expect(await waitForDeath(pid, 5000)).toBe(true);
+  });
+  it("escalates to SIGKILL when the adapter ignores stdin end and SIGTERM", async () => {
+    const pidfile = join(fixtureDir, `pid-stubborn-${Date.now()}`);
+    const conn = await connectAcpAdapter(
+      descriptor("ignore-term", pidfile),
+      { clientName: "t", permission: "deny", shutdown: { termMs: 100, killMs: 100 } },
+    );
+    const pid = Number(readFileSync(pidfile, "utf8"));
+    conn.close();
+    expect(await waitForDeath(pid, 5000)).toBe(true);
+  });
+});

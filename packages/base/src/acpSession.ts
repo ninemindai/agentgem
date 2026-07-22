@@ -85,6 +85,9 @@ export interface ConnectAdapterOptions {
   // Auto-response to session/request_permission: "deny" cancels every request
   // (recommender, read-only); "allow" approves them (runner, tool-capable).
   permission: "allow" | "deny";
+  // Shutdown ladder pacing (tests shrink these): stdin end → SIGTERM after termMs →
+  // SIGKILL after another killMs. Defaults 1500/1000.
+  shutdown?: { termMs?: number; killMs?: number };
 }
 
 // Rolling stderr evidence: keep only the LAST `max` chars so a chatty adapter can't
@@ -189,7 +192,19 @@ export async function connectAcpAdapter(
     },
     close: () => {
       try { connection.close(); } catch { /* ignore */ }
-      try { child.kill(); } catch { /* ignore */ }
+      // Graceful shutdown ladder (borrowed from acpx): stdin end() is the cleanest
+      // signal for a stdio ACP agent (EOF on its read loop) — most adapters exit on
+      // it. SIGTERM catches ones that don't; SIGKILL catches ones that trap SIGTERM.
+      // Timers are unref'd so a wedged adapter can't keep the server process alive.
+      if (died || child.exitCode !== null) { try { child.kill("SIGKILL"); } catch { /* already gone */ } return; }
+      const termMs = opts.shutdown?.termMs ?? 1500;
+      const killMs = opts.shutdown?.killMs ?? 1000;
+      try { child.stdin?.end(); } catch { /* ignore */ }
+      const term = setTimeout(() => { try { child.kill("SIGTERM"); } catch { /* ignore */ } }, termMs);
+      const kill = setTimeout(() => { try { child.kill("SIGKILL"); } catch { /* ignore */ } }, termMs + killMs);
+      (term as { unref?: () => void }).unref?.();
+      (kill as { unref?: () => void }).unref?.();
+      child.once("exit", () => { clearTimeout(term); clearTimeout(kill); });
     },
   };
 }
