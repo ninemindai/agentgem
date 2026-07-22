@@ -7,7 +7,7 @@ import {
   saveMiniapp, deleteMiniapp, listMiniapps, readMiniapp, miniappsRoot, setRemote, push, seedStudio, importStudio, blankStudio,
   compactTurns, resolveSessionRef, mcpAppFor, migrateAllMiniapps, INSPECTOR_HTML, INSPECTOR_META, type MiniappMeta,
   EMBER_HTML, EMBER_META, REPO_PULSE_HTML, REPO_PULSE_META, readMiniappShare, addUploadsToMiniapp,
-  callConnectorTool, listConnectorTools, resolveConnectorGem, resolveConnectorDigest, ConnectorError,
+  callConnectorTool, listConnectorTools, listConnectorCandidates, resolveConnectorGem, resolveConnectorDigest, ConnectorError,
 } from "@agentgem/play";
 import { derivePayload, type McpNeed } from "@agentgem/model";
 import { defaultReaders } from "./play.readers.js";
@@ -19,6 +19,7 @@ import {
   PlayMiniappQuerySchema, PlayMiniappSchema, PlaySessionDataSchema, PlaySessionDataQuerySchema, PlayMcpAppSchema,
   PlayMigrateResponseSchema, PlayInspectorSchema,
   PlayMcpCallRequestSchema, PlayMcpCallResponseSchema, PlayMcpServersQuerySchema, PlayMcpServersResponseSchema,
+  PlayMcpCandidatesResponseSchema, PlayMcpCandidateToolsQuerySchema, PlayMcpCandidateToolsResponseSchema,
   PlayUploadsRequestSchema, PlayUploadsResponseSchema,
 } from "./schemas.js";
 
@@ -265,5 +266,22 @@ export class PlayController {
       catch { servers.push({ server: need.server, tools: [], configDigest }); }
     }
     return { servers };
+  }
+
+  // Candidate picker source (Studio Composer): the installed MCP servers a miniapp COULD declare.
+  // Redacted (name + transport + needsSecret) — no connect, no config values.
+  @get("/play/mcp/candidates", { response: PlayMcpCandidatesResponseSchema })
+  async mcpCandidates(): Promise<z.infer<typeof PlayMcpCandidatesResponseSchema>> {
+    return { servers: listConnectorCandidates() };
+  }
+
+  // Lazy tools for one candidate, fetched only when the author expands its row. No installed gem →
+  // empty (skip the doomed connect); a connect failure on an installed gem also degrades to empty
+  // rather than failing the route (one connector down must not blind the picker).
+  @get("/play/mcp/candidate-tools", { query: PlayMcpCandidateToolsQuerySchema, response: PlayMcpCandidateToolsResponseSchema })
+  async mcpCandidateTools(input: { query: z.infer<typeof PlayMcpCandidateToolsQuerySchema> }): Promise<z.infer<typeof PlayMcpCandidateToolsResponseSchema>> {
+    if (!resolveConnectorGem(input.query.server)) return { tools: [] };
+    try { return { tools: await listConnectorTools(input.query.server) }; }
+    catch { return { tools: [] }; }
   }
 }

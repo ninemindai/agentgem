@@ -1056,17 +1056,31 @@ export const PlayMcpCallResponseSchema = z.object({
   content: z.array(z.unknown()).optional(),                          // raw blocks, for images/multi-block
   error: z.object({ code: McpErrorCodeEnum, message: z.string() }).optional(),  // present when !ok
 });
+// One tool object shape, shared by the declared-connector route and the candidate-tools route so the
+// two response schemas cannot drift.
+export const McpToolSchema = z.object({
+  name: z.string(),
+  description: z.string().optional(),
+  annotations: z.object({ readOnlyHint: z.boolean().optional(), destructiveHint: z.boolean().optional() }).optional(),
+});
 export const PlayMcpServersQuerySchema = z.object({ name: z.string() });
 export const PlayMcpServersResponseSchema = z.object({
   servers: z.array(z.object({
     server: z.string(),
-    tools: z.array(z.object({
-      name: z.string(),
-      description: z.string().optional(),
-      annotations: z.object({ readOnlyHint: z.boolean().optional(), destructiveHint: z.boolean().optional() }).optional(),
-    })),
+    tools: z.array(McpToolSchema),
     // The connector's live config digest (D3/D7) — present iff a matching gem is installed. The
     // console pins consent to this value and re-sends it as `expectedConfigDigest` on every call.
     configDigest: z.string().optional(),
   })),
 });
+// Candidate picker (Studio Composer): the installed MCP servers a miniapp COULD declare. Redacted —
+// name + transport + whether the gem declares a secret; never raw config.
+export const PlayMcpCandidatesResponseSchema = z.object({
+  servers: z.array(z.object({
+    server: z.string(),
+    transport: z.enum(["stdio", "http", "sse"]),
+    needsSecret: z.boolean(),
+  })),
+});
+export const PlayMcpCandidateToolsQuerySchema = z.object({ server: z.string() });
+export const PlayMcpCandidateToolsResponseSchema = z.object({ tools: z.array(McpToolSchema) });
