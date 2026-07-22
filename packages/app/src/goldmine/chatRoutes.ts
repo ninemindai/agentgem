@@ -23,6 +23,7 @@ import type { AgentAvailability, AgentDescriptor, McpServerStdio, AdapterCtx, Ad
 import { studioCwd } from "@agentgem/play";
 import { FabricRouter } from "@agentgem/fabric";
 import type { ChatManager, ChatConnectFn, ChatCtx, ChatEvent, ChatSessionHandle, ToolInvocation } from "@agentgem/run";
+import { CHAT_KINDS } from "../fabric.binding.js";
 import { draftGemFromChat } from "./draftGem.js";
 import { createAguiMapper } from "./aguiStream.js";
 import type { AguiEvent } from "./aguiStream.js";
@@ -157,7 +158,7 @@ export function registerChatRoutes(app: App, deps: ChatRouteDeps, guard: Middlew
   // pre-registered. Resolved once; every reference below uses this `router` local, never `deps.router`.
   const fallback = () => {
     const r = new FabricRouter();
-    for (const kind of ["chat.phase", "chat.delta", "chat.tool", "chat.done", "chat.failed"]) {
+    for (const kind of CHAT_KINDS) {
       r.kinds.register({ kind, owner: "@agentgem/run", version: 1, payload: z.unknown() });
     }
     return r;
@@ -226,14 +227,13 @@ export function registerChatRoutes(app: App, deps: ChatRouteDeps, guard: Middlew
   //  Turn buffers are fabric in-memory feeds (message-fabric increment 2): replay-from-0,
   //  wake-on-publish, close + TTL sweep — the same contract LiveTurn hand-rolled, now shared.
   const TURN_TTL_MS = 10 * 60_000; // the buffer survives briefly past done for a late re-attach
-  const CHAT_KINDS = ["chat.phase", "chat.delta", "chat.tool", "chat.done", "chat.failed"];
   const turnChannel = (turnId: string) => `chat/turn-${turnId}`;
   const turnChats = new Map<string, string>(); // turnId -> chatId (ownership check on attach)
 
   const startTurn = (chatId: string, message: string): string => {
     const turnId = randomUUID();
     const channel = turnChannel(turnId);
-    router.openFeed({ id: channel, kinds: CHAT_KINDS, maxAgeMs: TURN_TTL_MS });
+    router.openFeed({ id: channel, kinds: [...CHAT_KINDS], maxAgeMs: TURN_TTL_MS });
     turnChats.set(turnId, chatId);
     void (async () => {
       const miniapp = chatMiniapps.get(chatId);

@@ -248,7 +248,7 @@ export class PlayController {
     }
     try {
       const raw = this.fabricRouter
-        ? await this.fabricRouter.ask(`agentgem://self/mcp/${server}`, "mcp.tool.call", { tool, input: args }, { timeoutMs: MCP_ASK_TIMEOUT_MS })
+        ? await this.fabricRouter.ask("agentgem://self/mcp", "mcp.tool.call", { server, tool, input: args }, { timeoutMs: MCP_ASK_TIMEOUT_MS })
         : undefined;
       if (raw === undefined) {
         //  No router bound (bare-controller embeddings): the direct path keeps behavior identical.
