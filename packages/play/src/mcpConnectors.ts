@@ -37,6 +37,17 @@ export function resolveConnectorGem(server: string): McpServerArtifact | undefin
   return reader(server);
 }
 
+// Cheap, redacted candidate list for the Composer picker — name + transport + whether the gem
+// declares any secret. NO connect, NO tool listing; redacted so config/secret VALUES never leave the
+// server. `introspectConfig` already dedups by name across ~/.claude, project, and Codex sources.
+export function listConnectorCandidates(): { server: string; transport: "stdio" | "http" | "sse"; needsSecret: boolean }[] {
+  return introspectConfig({ redact: true }).mcpServers.map((g) => ({
+    server: g.name,
+    transport: g.transport,
+    needsSecret: (g.secretRefs?.length ?? 0) > 0,
+  }));
+}
+
 // The console pins consent to a digest at approval time and re-sends it on every call (D3/D7); this
 // is the live comparand — the CURRENT installed gem's digest, recomputed from disk each call, never
 // cached, so a config edit is visible immediately without needing a pool invalidation of its own.

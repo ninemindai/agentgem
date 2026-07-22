@@ -28,6 +28,7 @@ export {
   resolveConnectorGem,
   resolveConnectorDigest,
   listConnectorTools,
+  listConnectorCandidates,
   callConnectorTool,
   __setConnectorReaderForTest,
   __resetConnectorsForTest,
