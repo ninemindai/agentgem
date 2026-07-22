@@ -839,3 +839,21 @@ git commit -m "feat(fabric): kind registry and public index
 
 Co-Authored-By: Claude Fable 5 <noreply@anthropic.com>"
 ```
+
+## GSTACK REVIEW REPORT
+
+| Review | Trigger | Why | Runs | Status | Findings |
+|--------|---------|-----|------|--------|----------|
+| CEO Review | `/plan-ceo-review` | Scope & strategy | 0 | — | — |
+| Codex Review | `/codex review` | Independent 2nd opinion | 1 | ISSUES_FOUND (absorbed) | 1 Critical (v:2 parsed as supported v1) + 5 Warnings — all fixed on-branch |
+| Eng Review | `/plan-eng-review` | Architecture & tests (required) | 1 | CLEAR (DIFF) | 9 issues (3 own + 6 codex), 0 critical gaps — all fixed in commits ae59b1cb + 2249a9c7 |
+| Design Review | `/plan-design-review` | UI/UX gaps | 0 | — | — |
+| DX Review | `/plan-devex-review` | Developer experience gaps | 0 | — | — |
+
+**CODEX:** outside voice ran on the implementation diff (high reasoning); its Critical — `v: z.number()` lets a v2 envelope parse as *supported* v1, breaking the park-and-surface policy — was the sharpest finding of the review and is fixed with `z.literal(FABRIC_ENVELOPE_VERSION)` plus the loose `envelopeHeaderSchema` park path (which Codex independently endorsed). Its 5 warnings (kind-version dispatch, channel-id grammar, scope-id grammar, signed-crossing assert, registry declaration validation) all fixed.
+
+**CROSS-MODEL:** both models converged on the forward-compat parse path and (second review in a row) on the signed-crossing validator — the earlier deferral was overturned on cross-model signal. No unresolved disagreement.
+
+**VERDICT:** ENG CLEARED — branch ready to ship (full suite 2489 passed / 7 skipped after fixes; fabric tests 40/40).
+
+NO UNRESOLVED DECISIONS
