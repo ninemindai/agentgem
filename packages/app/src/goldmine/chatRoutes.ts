@@ -76,14 +76,20 @@ export interface ChatRouteDeps {
 // branch is unit-testable without driving Express. A `miniapp` (name) routes the session into that
 // miniapp's validated dir with a studio brief; otherwise the neutral brief and no cwd override.
 export async function studioChatArgs(
-  body: { agentId?: unknown; miniapp?: unknown; project?: unknown },
+  body: { agentId?: unknown; miniapp?: unknown; project?: unknown; resume?: unknown },
   deps: Pick<ChatRouteDeps, "buildBrief" | "goldmineMcp" | "resolveStudio" | "resolveProjectCwd" | "neutralCwd">,
-): Promise<{ agentId: string; brief: string; mcpServers: McpServerStdio[]; cwd?: string; permission?: "allow" | "deny" }> {
+): Promise<{ agentId: string; brief: string; mcpServers: McpServerStdio[]; cwd?: string; permission?: "allow" | "deny"; resumeSessionId?: string }> {
   const agentId = String(body?.agentId ?? "");
   if (!agentId) throw new Error("agentId required");
   const miniapp = body?.miniapp ? String(body.miniapp) : "";
   const project = body?.project ? String(body.project) : "";
   if (miniapp && project) throw new Error("miniapp and project are mutually exclusive");
+  // SECURITY: `resume` is a client-supplied ACP sessionId. It never touches the fs —
+  // the adapter resolves it in its OWN session store, and the ACP spec requires the
+  // request cwd to match the session's cwd, so a sessionId from another project
+  // fails at the adapter rather than attaching to the wrong workspace. Worst case
+  // equals a failed resume → fresh session.
+  const resumeSessionId = typeof body?.resume === "string" && body.resume ? body.resume : undefined;
   if (miniapp) {
     if (!deps.resolveStudio) throw new Error("studio not available");
     // Built-ins are served constants with no registry entry — resolveStudio would ENOENT on their
@@ -94,7 +100,7 @@ export async function studioChatArgs(
     }
     const s = deps.resolveStudio(miniapp); // resolver validates the name; throws on a bad one
     // "allow" so the studio agent can Edit/Write the miniapp; its cwd is jailed to the miniapp dir.
-    return { agentId, brief: s.brief, mcpServers: deps.goldmineMcp(), cwd: s.cwd, permission: "allow" };
+    return { agentId, brief: s.brief, mcpServers: deps.goldmineMcp(), cwd: s.cwd, permission: "allow", ...(resumeSessionId ? { resumeSessionId } : {}) };
   }
   if (project) {
     if (!deps.resolveProjectCwd) throw new Error("project launch not available");
@@ -102,9 +108,9 @@ export async function studioChatArgs(
     if (!cwd) throw new Error("unknown project");
     // Neutral brief + normal permission: a project chat is not a studio session and must not
     // silently gain write access to the real repo.
-    return { agentId, brief: await deps.buildBrief(), mcpServers: deps.goldmineMcp(), cwd };
+    return { agentId, brief: await deps.buildBrief(), mcpServers: deps.goldmineMcp(), cwd, ...(resumeSessionId ? { resumeSessionId } : {}) };
   }
-  return { agentId, brief: await deps.buildBrief(), mcpServers: deps.goldmineMcp(), cwd: deps.neutralCwd };
+  return { agentId, brief: await deps.buildBrief(), mcpServers: deps.goldmineMcp(), cwd: deps.neutralCwd, ...(resumeSessionId ? { resumeSessionId } : {}) };
 }
 
 // The connectFn re-guard (defense-in-depth): honor `requested` if studioCwd accepts it
@@ -173,7 +179,7 @@ export function registerChatRoutes(app: App, deps: ChatRouteDeps, guard: Middlew
       const miniapp = req.body?.miniapp ? String(req.body.miniapp) : "";
       if (miniapp) chatMiniapps.set(chatId, miniapp);
       const st = deps.manager.stateOf(chatId);
-      res.json({ chatId, sessionId: st.alive ? st.sessionId : "", agent: args.agentId });
+      res.json({ chatId, sessionId: st.alive ? st.sessionId : "", agent: args.agentId, resumed: st.alive ? st.resumed : false });
     } catch (e) {
       const msg = (e as Error).message;
       // Client errors (missing agentId, a bad/unknown miniapp or project) → 400; anything else → 500.
@@ -340,6 +346,22 @@ export function makeChatConnectFn(resolve: (d: AgentDescriptor) => AgentDescript
     const ctx: ChatCtx = {
       async open(cwd: string, openOpts?: { mcpServers?: unknown[] }): Promise<ChatSessionHandle> {
         const session = await raw.open(cwd, { mcpServers: openOpts?.mcpServers as never });
+        return {
+          sessionId: session.sessionId,
+          setMode: (m: string) => session.setMode(m),
+          async prompt(text: string, onDelta?: (c: string) => void, onToolCall?: (t: ToolInvocation) => void) {
+            const acc = createAccumulator();
+            const stopReason = await session.prompt(text, (u) =>
+              applyUpdate(acc, (u ?? {}) as Parameters<typeof applyUpdate>[1], { onDelta, onToolCall }),
+            );
+            return { ...acc, stopReason };
+          },
+          cancel: () => session.cancel(),
+          dispose: () => session.dispose(),
+        };
+      },
+      async openExisting(cwd: string, sessionId: string, openOpts?: { mcpServers?: unknown[] }): Promise<ChatSessionHandle> {
+        const session = await raw.openExisting(cwd, sessionId, { mcpServers: openOpts?.mcpServers as never });
         return {
           sessionId: session.sessionId,
           setMode: (m: string) => session.setMode(m),
