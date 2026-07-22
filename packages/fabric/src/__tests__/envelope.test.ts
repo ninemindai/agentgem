@@ -4,6 +4,7 @@ import { describe, expect, it } from "vitest";
 import {
     askOptionsSchema,
     assertNoSelfAcrossZones,
+    assertSignedAcrossZones,
     DELIVERY_STATES,
     type Envelope,
     envelopeHeaderSchema,
@@ -47,9 +48,19 @@ describe("envelope schema", () => {
         expect(parsed.success).toBe(true);
     });
 
-    it("requires v to be the integer schema version", () => {
-        expect(envelopeSchema.safeParse(validEnvelope({ v: undefined as unknown as number })).success).toBe(false);
-        expect(envelopeSchema.safeParse(validEnvelope({ v: 1.5 })).success).toBe(false);
+    it("requires v to be exactly the supported schema version", () => {
+        expect(envelopeSchema.safeParse(validEnvelope({ v: undefined as unknown as 1 })).success).toBe(false);
+        expect(envelopeSchema.safeParse(validEnvelope({ v: 1.5 as unknown as 1 })).success).toBe(false);
+        //  a v2 envelope must never parse as supported v1 — it parks via the header schema
+        expect(envelopeSchema.safeParse(validEnvelope({ v: 2 as unknown as 1 })).success).toBe(false);
+    });
+
+    it("constrains channel ids and scope ids to real grammars", () => {
+        expect(envelopeSchema.safeParse(validEnvelope({ channel: "has space" })).success).toBe(false);
+        expect(envelopeSchema.safeParse(validEnvelope({ channel: "Upper/Case" })).success).toBe(false);
+        expect(envelopeSchema.safeParse(validEnvelope({ channel: "org/announcements" })).success).toBe(true);
+        expect(scopeSchema.safeParse({ scope: "org", id: "   " }).success).toBe(false);
+        expect(scopeSchema.safeParse({ scope: "org", id: "org-ninemind" }).success).toBe(true);
     });
 
     it("rejects malformed ids, kinds, and addresses", () => {
@@ -135,6 +146,27 @@ describe("self addresses never cross zones", () => {
             validEnvelope({ to: "agentgem://self/miniapp/x" } as Partial<Envelope>),
         );
         expect(() => assertNoSelfAcrossZones(withSelfTo, "machine", "federated")).toThrow(TypeError);
+    });
+});
+
+describe("signature required at zone crossings (presence half — verification is the mailbox's)", () => {
+    const unsigned = envelopeSchema.parse(validEnvelope());
+    const signed = envelopeSchema.parse(
+        validEnvelope({
+            signature: { alg: "ed25519", pubkey: "pk", sig: "sg" },
+            signedAt: "2026-07-22T00:00:00.000Z",
+        } as Partial<Envelope>),
+    );
+    it("throws when an unsigned envelope would cross zones", () => {
+        expect(() => assertSignedAcrossZones(unsigned, "machine", "federated")).toThrow(TypeError);
+    });
+    it("passes a signed envelope across zones and any envelope in-zone", () => {
+        expect(() => assertSignedAcrossZones(signed, "machine", "federated")).not.toThrow();
+        expect(() => assertSignedAcrossZones(unsigned, "in-proc", "in-proc")).not.toThrow();
+    });
+    it("signedAt alone is not enough", () => {
+        const dated = envelopeSchema.parse(validEnvelope({ signedAt: "2026-07-22T00:00:00.000Z" } as Partial<Envelope>));
+        expect(() => assertSignedAcrossZones(dated, "machine", "federated")).toThrow(TypeError);
     });
 });
 
