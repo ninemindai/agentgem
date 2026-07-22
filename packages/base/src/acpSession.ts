@@ -96,6 +96,9 @@ export function supportsResumeSession(info: AcpAgentInfo): boolean {
 export interface RawAcpConnection {
   info: AcpAgentInfo;
   open(cwd: string, opts?: { mcpServers?: McpServer[] }): Promise<RawAcpSession>;
+  /** Attach to a previously-created session (session/resume, else session/load).
+   * Throws { code: "resume_unsupported" } when the agent advertises neither. */
+  openExisting(cwd: string, sessionId: string, opts?: { mcpServers?: McpServer[] }): Promise<RawAcpSession>;
   close(): void;
 }
 
@@ -174,6 +177,19 @@ export async function connectAcpAdapter(
     ? { outcome: { outcome: "selected", optionId: "allow" } }
     : { outcome: { outcome: "cancelled" } };
   app.onRequest?.("session/request_permission", async () => reply);
+  // Update routing for sessions attached via session/resume or session/load — the
+  // SDK's ActiveSession queue only wraps session/new. One connection-level handler
+  // dispatches by sessionId; a session with no registered handler (e.g. the history
+  // replay session/load streams before its first prompt) is deliberately dropped —
+  // the console restores display history from the transcript instead.
+  const externalUpdates = new Map<string, (update: unknown) => void>();
+  // The handler receives an SDK context object ({ params, signal, agent }), NOT the raw
+  // notification params directly — confirmed against node_modules/@agentclientprotocol/sdk's
+  // registerAppNotification (context() wraps params before invoking the handler).
+  app.onNotification?.("session/update", (ctx: any) => {
+    const sid = ctx?.params?.sessionId as string | undefined;
+    if (sid) externalUpdates.get(sid)?.(ctx.params.update);
+  });
   const input = Readable.toWeb(child.stdout!) as ReadableStream<Uint8Array>;
   const output = Writable.toWeb(child.stdin!) as WritableStream<Uint8Array>;
   const connection: any = app.connect(ndJsonStream(output, input));
@@ -219,6 +235,42 @@ export async function connectAcpAdapter(
           void agentCtx.notify("session/cancel", { sessionId }).catch(() => {});
         },
         dispose() { try { session.dispose?.(); } catch { /* ignore */ } },
+      };
+    },
+    async openExisting(cwd: string, sessionId: string, opts?: { mcpServers?: McpServer[] }) {
+      if (died) throw died;
+      // Capability-gated ladder (acpx): session/resume (no history replay — cheapest)
+      // → session/load (agent replays history; we drop it, transcript restore already
+      // rendered it) → typed refusal the caller can fall back on.
+      if (supportsResumeSession(info)) {
+        await Promise.race([agentCtx.request("session/resume", { sessionId, cwd, mcpServers: opts?.mcpServers ?? [] }), dead]);
+      } else if (supportsLoadSession(info)) {
+        await Promise.race([agentCtx.request("session/load", { sessionId, cwd, mcpServers: opts?.mcpServers ?? [] }), dead]);
+      } else {
+        throw Object.assign(new Error(`${descriptor.id} supports neither session/resume nor session/load`), { code: "resume_unsupported" });
+      }
+      return {
+        sessionId,
+        async setMode(mode: string) {
+          try { await agentCtx.request("session/set_mode", { sessionId, modeId: mode }); } catch { /* best-effort */ }
+        },
+        async prompt(text: string, onUpdate: (update: unknown) => void) {
+          if (died) throw died;
+          externalUpdates.set(sessionId, onUpdate);
+          try {
+            const resp: any = await Promise.race([
+              agentCtx.request("session/prompt", { sessionId, prompt: [{ type: "text", text }] }),
+              dead,
+            ]);
+            return resp?.stopReason as string | undefined;
+          } finally {
+            externalUpdates.delete(sessionId);
+          }
+        },
+        cancel() {
+          void agentCtx.notify("session/cancel", { sessionId }).catch(() => {});
+        },
+        dispose() { externalUpdates.delete(sessionId); },
       };
     },
     close: (() => {
