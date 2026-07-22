@@ -1,9 +1,9 @@
 // packages/console/src/panels/Play/Studio.tsx
 import { useEffect, useRef, useState } from "react";
 import type { McpNeed } from "@agentgem/model";
-import { makeClient, playMiniappRoute, playSaveRoute, playUploadsRoute, uploadsPreambleFromStored, publishSetupRoute, publishStatusRoute, reviewGroupsRoute, reviewRequestRoute } from "../../api/routes.js";
+import { makeClient, playMiniappRoute, playSaveRoute, playUploadsRoute, uploadsPreambleFromStored, publishSetupRoute, publishStatusRoute, reviewGroupsRoute, reviewRequestRoute, playMcpServersRoute } from "../../api/routes.js";
 import { AgentSelector, type PlayAgent } from "./AgentSelector.js";
-import { CapabilityStrip } from "./CapabilityStrip.js";
+import { CapabilityStrip, type ConnectorRow } from "./CapabilityStrip.js";
 import { RequestReviewModal } from "./RequestReviewModal.js";
 import { Runner, type RunnerHandle } from "./Runner.js";
 import { openStudioStream } from "./studioStream.js";
@@ -87,6 +87,7 @@ export function Studio({
   const [loadErr, setLoadErr] = useState<string | null>(null);   // preview fetch failed → say so, don't fake it
   const [meta, setMeta] = useState<{ title: string; genre: string; needs?: string[]; mcpNeeds?: McpNeed[] } | null>(null);
   const [pruned, setPruned] = useState<string[]>([]);
+  const [connectorRows, setConnectorRows] = useState<ConnectorRow[]>([]);   // declared MCP connectors, for the strip
   const [status, setStatus] = useState("");
   const [gate, setGate] = useState<string[] | null>(null);       // seal failures → actionable banner
   const [share, setShare] = useState<{ gemUrl: string; cardUrl?: string; message?: string } | null>(null);
@@ -136,9 +137,22 @@ export function Studio({
   // Never swallow this: html="" renders as a sealed-but-empty iframe, which reads as a working preview of
   // an empty app rather than as a failure. Keep the last good html on a refresh error — a failed reload
   // after a build shouldn't blank a preview that is still on screen and still correct.
+  // Post-load / post-save disclosure: fetch each declared connector's live tools + install state so the
+  // CapabilityStrip can show ready / unreachable / not-installed. A connector-less miniapp skips the fetch.
+  const refreshConnectors = (mcpNeeds: McpNeed[] | undefined, gameName: string) => {
+    if (!mcpNeeds?.length) { setConnectorRows([]); return; }
+    playMcpServersRoute.call(makeClient(apiBase), { query: { name: gameName } })
+      .then((r) => setConnectorRows(r.servers.map((s): ConnectorRow => ({
+        server: s.server,
+        tools: s.tools.map((t) => t.name),
+        state: s.configDigest ? (s.tools.length ? "ready" : "unreachable") : "missing",
+      }))))
+      .catch(() => setConnectorRows([]));
+  };
+
   const refresh = () =>
     playMiniappRoute.call(makeClient(apiBase), { query: { name } })
-      .then((r) => { setHtml(r.html); setMeta(r.meta); setLoadErr(null); })
+      .then((r) => { setHtml(r.html); setMeta(r.meta); setLoadErr(null); refreshConnectors(r.meta.mcpNeeds, name); })
       .catch((e: unknown) => setLoadErr(e instanceof Error ? e.message : String(e)));
 
   const pollRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -433,6 +447,7 @@ export function Studio({
       // mcpNeeds is never pruned (declared-authoritative) — carry it forward as-is so <Runner
       // mcpNeeds> stays correct after a save, the same way `needs` is reconciled above.
       setMeta({ title: cur.meta.title, genre: cur.meta.genre, ...(needs.length ? { needs } : {}), ...(cur.meta.mcpNeeds?.length ? { mcpNeeds: cur.meta.mcpNeeds } : {}) });
+      refreshConnectors(cur.meta.mcpNeeds, name);
       setStatus("saved ✓"); return true;
     } catch (e) {
       const failures = parseGateFailure((e as Error).message);
@@ -654,7 +669,7 @@ export function Studio({
         {!builtin && <button className="play-btn play-btn--ghost" onClick={requestReview}>Request review</button>}
       </div>
 
-      <CapabilityStrip needs={meta?.needs} pruned={pruned} />
+      <CapabilityStrip needs={meta?.needs} pruned={pruned} connectors={connectorRows} />
 
       {share && (
         <div className="play-banner play-banner--ok">
