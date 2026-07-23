@@ -233,7 +233,7 @@ export const archiveRoute = defineRoute("POST", "/api/archive", {
 // Materialize targets (registry keys on the server). Stable enum; mirrors the
 // vanilla UI's target select.
 export const TARGET_IDS = [
-  "claude", "codex", "agents", "hermes", "eve", "flue", "openai-sandbox", "agentcore", "a2a",
+  "claude", "codex", "agents", "hermes", "eve", "flue", "openai-sandbox", "agentcore", "a2a", "buzz",
   "cline", "gemini", "continue", "cursor",
 ] as const;
 export type TargetId = (typeof TARGET_IDS)[number];

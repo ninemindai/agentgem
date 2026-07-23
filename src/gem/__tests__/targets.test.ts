@@ -392,7 +392,7 @@ describe("compatibility", () => {
     expect(c.codex).toEqual({ supported: 1, skipped: 1 });   // hook unsupported
     expect(c.hermes).toEqual({ supported: 1, skipped: 1 });
     expect(c.eve).toEqual({ supported: 1, skipped: 1 }); // skill ok, hook unsupported
-    expect(Object.keys(TARGET_REGISTRY).sort()).toEqual(["a2a", "agentcore", "agents", "claude", "cline", "codex", "continue", "cursor", "eve", "flue", "gemini", "hermes", "openai-sandbox"]);
+    expect(Object.keys(TARGET_REGISTRY).sort()).toEqual(["a2a", "agentcore", "agents", "buzz", "claude", "cline", "codex", "continue", "cursor", "eve", "flue", "gemini", "hermes", "openai-sandbox"]);
   });
 });
 
@@ -602,5 +602,68 @@ describe("materialize a2a server mode ({ a2aServer: true })", () => {
     expect(s).toContain('app.use("/a2a"'); // gate invocation routes, not the .well-known card
     const md = materialize(gem([skill("review")]), "a2a", { a2aServer: true }).files["SECRETS.md"];
     expect(md).toContain("A2A_API_KEY");
+  });
+});
+
+// The buzz target projects a gem into a Buzz persona pack (github.com/block/buzz). Front matter is the
+// load-bearing contract with `buzz pack validate`: manifest id/name/version/personas, and each persona
+// carrying name/display_name/description. A generated pack passes the real `buzz pack validate` (checked
+// out-of-band). Compose-only like a2a: identity + instructions + skills map; MCP/hooks/channels/subagents
+// skip-report.
+describe("buzz target (persona pack)", () => {
+  const named = (name: string, artifacts: GemArtifact[]): Gem => ({ ...gem(artifacts), name });
+
+  it("emits a manifest with the required fields and a description from the first instruction line", () => {
+    const { files } = materialize(named("Code Reviewer", [instr("role", "# Role\n\nReview code for bugs.")]), "buzz");
+    const manifest = JSON.parse(files[".plugin/plugin.json"]);
+    expect(manifest.id).toMatch(/\S/);
+    expect(manifest.name).toBe("Code Reviewer");
+    expect(manifest.version).toMatch(/^\d+\.\d+\.\d+$/);
+    expect(manifest.personas).toEqual(["agents/code-reviewer.persona.md"]);
+    expect(manifest.description).toBe("Review code for bugs.");
+    expect(manifest.pack_instructions).toBe("instructions.md");
+  });
+
+  it("emits one persona file whose front matter carries the required fields and folds instructions into the body", () => {
+    const { files } = materialize(named("Code Reviewer", [instr("role", "# Role\n\nReview PRs carefully.")]), "buzz");
+    const persona = files["agents/code-reviewer.persona.md"];
+    const [, fm, body] = persona.split(/^---\n/m);
+    expect(fm).toContain("name: code-reviewer");
+    expect(fm).toContain("display_name: Code Reviewer");
+    expect(fm).toMatch(/description:\s*\S/);
+    expect(body).toContain("Review PRs carefully.");
+  });
+
+  it("reuses the SKILL.md renderer and references skills from the persona", () => {
+    const { files } = materialize(named("Reviewer", [skill("linting", "# lint")]), "buzz");
+    expect(files["skills/linting/SKILL.md"]).toBe("# lint");
+    expect(files["agents/reviewer.persona.md"]).toContain("./skills/linting/");
+  });
+
+  it("falls back to a minimal persona body when the gem has no instructions", () => {
+    const { files } = materialize(named("Solo", [skill("s")]), "buzz");
+    expect(files["agents/solo.persona.md"]).toContain("You are Solo.");
+    expect(files["instructions.md"]).toBeUndefined();
+    const manifest = JSON.parse(files[".plugin/plugin.json"]);
+    expect(manifest.pack_instructions).toBeUndefined();
+  });
+
+  it("skip-reports MCP, hooks, channels, and subagents with reasons", () => {
+    const { skipped } = materialize(named("R", [mcp("m"), hook(), subagent("sub")]), "buzz");
+    const kinds = skipped.map((s) => s.type);
+    expect(kinds).toContain("mcp_server");
+    expect(kinds).toContain("hook");
+    expect(kinds).toContain("subagent");
+    for (const s of skipped) expect(s.reason).toMatch(/\S/);
+  });
+
+  it("names the persona safely for an exotic gem name", () => {
+    const { files } = materialize(named("My Gem!! v2", [instr("r", "Hi.")]), "buzz");
+    expect(JSON.parse(files[".plugin/plugin.json"]).personas[0]).toBe("agents/my-gem-v2.persona.md");
+    expect(files["agents/my-gem-v2.persona.md"]).toBeDefined();
+  });
+
+  it("includes a buzz entry in compatibility()", () => {
+    expect(compatibility(gem([skill("a")])).buzz).toBeTruthy();
   });
 });

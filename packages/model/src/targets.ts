@@ -15,7 +15,7 @@ import { tomlMcpServers } from "./toml.js";
 import { stdioProxyRunner, PROXY_BASE_PORT, PROXY_HOST } from "./mcpProxy.js";
 import { stringify as stringifyYaml } from "yaml";
 
-export type TargetId = "claude" | "codex" | "agents" | "hermes" | "eve" | "flue" | "openai-sandbox" | "agentcore" | "a2a" | "cline" | "gemini" | "continue" | "cursor";
+export type TargetId = "claude" | "codex" | "agents" | "hermes" | "eve" | "flue" | "openai-sandbox" | "agentcore" | "a2a" | "buzz" | "cline" | "gemini" | "continue" | "cursor";
 export type FileTree = Record<string, string>;
 
 export interface SkippedArtifact { artifact: string; type: ArtifactType | "reference"; reason: string }
@@ -975,6 +975,76 @@ const continueCompose = (gem: Gem): MaterializeResult => {
   return { files: { "config.yaml": stringifyYaml(config) }, skipped };
 };
 
+// ── Buzz persona-pack target ──
+// materialize(gem, "buzz") emits a Buzz persona pack (github.com/block/buzz) — the gem projected as an
+// installable Buzz agent: a `.plugin/plugin.json` manifest, one `agents/<slug>.persona.md` (identity +
+// folded instructions), `instructions.md` (the pack_instructions), and `skills/<name>/SKILL.md` (the
+// existing skill renderer, reused verbatim — Buzz packs use the same SKILL.md shape). Compose-driven
+// like a2a: per-type renderers no-op, compose owns all skip reporting. Format tracks Buzz v0.4.x (the
+// `meadow-core` example); marked experimental until Block documents a stable pack spec.
+// Reverse-DNS-ish namespace for the manifest id; the pack is otherwise identified by name/version.
+const BUZZ_ID_PREFIX = "ai.agentgem.";
+// kebab-lowercase slug for the persona filename and `name` field (meadow-core personas are lowercase).
+// Same shape as flueWorkerName, kept local so buzz naming never couples to flue's worker-name rules.
+const buzzSlug = (name: string): string => {
+  const s = name.normalize("NFKC").toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "");
+  return s.length ? s : "agent";
+};
+
+const buzzPersonaMd = (gem: Gem, slug: string, description: string, skillNames: string[]): string => {
+  const instr = gem.artifacts.filter((a): a is InstructionsArtifact => a.type === "instructions");
+  const front: Record<string, unknown> = {
+    name: slug,
+    display_name: gem.name,
+    description,
+    triggers: { mentions: true }, // respond when @mentioned — matches the pack default posture
+  };
+  if (skillNames.length) front.skills = skillNames.map((n) => `./skills/${safePathSegment(n)}/`);
+  // Body is the gem's identity: its instructions, or a minimal fallback (a persona prompt is required).
+  const body = instr.map((i) => i.content).join("\n\n---\n\n").trim() || `You are ${gem.name}.`;
+  return `---\n${stringifyYaml(front)}---\n\n${body}\n`;
+};
+
+const buzzComposeProject = (gem: Gem): MaterializeResult => {
+  const slug = buzzSlug(gem.name);
+  const skills = gem.artifacts.filter((a): a is SkillArtifact => a.type === "skill");
+  const instr  = gem.artifacts.filter((a): a is InstructionsArtifact => a.type === "instructions");
+  const description = a2aFirstLine(instr[0]?.content ?? "") || `A Buzz agent packaged by AgentGem from the ${gem.name} gem.`;
+
+  const manifest: Record<string, unknown> = {
+    $schema: "https://open-plugin-spec.org/schema/v1/plugin.json",
+    id: `${BUZZ_ID_PREFIX}${slug}`,
+    name: gem.name,
+    version: "0.1.0",
+    description,
+    personas: [`agents/${slug}.persona.md`],
+  };
+  if (instr.length) manifest.pack_instructions = "instructions.md";
+
+  const files: FileTree = {
+    ".plugin/plugin.json": JSON.stringify(manifest, null, 2) + "\n",
+    [`agents/${slug}.persona.md`]: buzzPersonaMd(gem, slug, description, skills.map((s) => s.name)),
+  };
+  if (instr.length) files["instructions.md"] = instr.map((i) => `## ${i.name}\n\n${i.content}`).join("\n\n---\n\n") + "\n";
+  for (const s of skills) Object.assign(files, skillSkillMd(s)); // skills/<name>/SKILL.md — same shape Buzz packs use
+
+  // A persona pack expresses identity + instructions + skills, not MCP servers, hooks, channels, or
+  // Claude-native subagents. Report the rest so compatibility() stays honest (MCP mapping is a
+  // fast-follow once the pack's mcp_config format is verified against `buzz pack validate`).
+  const skipped: SkippedArtifact[] = [
+    ...gem.artifacts.filter((a): a is McpServerArtifact => a.type === "mcp_server")
+      .map((a): SkippedArtifact => ({ artifact: a.name, type: "mcp_server", reason: "a Buzz persona pack does not yet map MCP servers (pending pack mcp_config verification)" })),
+    ...gem.artifacts.filter((a): a is HookArtifact => a.type === "hook")
+      .map((a): SkippedArtifact => ({ artifact: a.name, type: "hook", reason: "a Buzz persona pack has no hook concept" })),
+    ...gem.artifacts.filter((a): a is ChannelArtifact => a.type === "channel")
+      .map((a): SkippedArtifact => ({ artifact: a.name, type: "channel", reason: "channels are wired by the Buzz community, not the pack" })),
+    ...gem.artifacts.filter((a): a is SubagentArtifact => a.type === "subagent")
+      .map((a): SkippedArtifact => ({ artifact: a.name, type: "subagent", reason: "one gem maps to one persona; multi-persona teams are not yet emitted" })),
+    ...skipResolvedReferenceArtifacts(gem, "buzz"),
+  ];
+  return { files, skipped };
+};
+
 // ── targets compose the shared renderers (convergence is literal, not duplicated) ──
 export const TARGET_REGISTRY: Record<TargetId, TargetSpec> = {
   claude: { id: "claude", label: "Claude", skill: skillSkillMd,       subagent: subagentAgentMd, instructions: instructionsClaudeMd, mcp: mcpDotMcpJson, hook: hooksSettingsJson },
@@ -995,6 +1065,9 @@ export const TARGET_REGISTRY: Record<TargetId, TargetSpec> = {
   // A2A Agent Card primitive. Wholly compose-driven (all per-type renderers no-op); compose emits the
   // runtime-free agent-card.json. Card-only mode reports nothing skipped.
   a2a: { id: "a2a", label: "A2A", skill: () => ({}), instructions: () => ({}), mcp: () => ({ files: {}, skipped: [] }), hook: () => ({}), compose: a2aComposeProject },
+  // Buzz persona pack. Compose-driven like a2a (all per-type renderers no-op); compose emits
+  // .plugin/plugin.json + agents/<slug>.persona.md + instructions.md + skills/<name>/SKILL.md.
+  buzz: { id: "buzz", label: "Buzz", skill: () => ({}), subagent: () => ({}), instructions: () => ({}), mcp: () => ({ files: {}, skipped: [] }), hook: () => ({}), channel: () => ({ files: {}, skipped: [] }), compose: buzzComposeProject },
   // Cline / Roo layout: .clinerules for instructions, .clinerules/skills/<name>/SKILL.md for
   // skills, cline_mcp_settings.json for MCP servers (hooks unsupported).
   cline: { id: "cline", label: "Cline / Roo", skill: skillClinerules, instructions: instructionsClinerules, mcp: mcpClineSettings },
