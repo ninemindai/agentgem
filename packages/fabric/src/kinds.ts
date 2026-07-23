@@ -12,6 +12,10 @@ export interface KindDeclaration<T = unknown> {
     kind: string;
     owner: string;
     version: number;
+    /** Payload schema. Enforced at channel-open and zone crossings per the proposal's
+     *  boundary-validation rule (docs/proposals/message-fabric.md §Envelope) — deliberately
+     *  NOT enforced per in-proc publish/ask; do not depend on registered-kind meaning
+     *  name-only, and do not add hot-path validation here. */
     payload: z.ZodType<T>;
 }
 

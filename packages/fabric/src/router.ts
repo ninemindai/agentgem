@@ -133,6 +133,9 @@ export class FabricRouter {
         this.bump(feed);
     }
 
+    /** Replay from a numeric index. Indices are PROCESS-LOCAL attach cursors, not durable
+     *  feed cursors — increment 5 (durable feeds) introduces opaque cursor tokens and
+     *  explicit gap events; nothing may persist these indices across processes. */
     readFeed(channelId: string, from: number): { envelopes: Envelope[]; done: boolean } {
         const feed = this.feeds.get(channelId);
         if (!feed) return { envelopes: [], done: true };
