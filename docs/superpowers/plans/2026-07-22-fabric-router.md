@@ -789,3 +789,21 @@ The manifest check, digest check, and 404 behavior above this block DO NOT MOVE 
 - [ ] **Step 4: Verify the parity gate** — `pnpm build`, then `pnpm vitest run dist/__tests__/playMcpCall.test.js dist/__tests__/playMcpRoute.test.js packages/app/dist/__tests__/fabricMcpAsk.test.js` all green with zero edits to existing test files; then full root suite green.
 
 - [ ] **Step 5: Commit** — `feat(app): mcp tool call rides fabric ask() — security boundary stays in PlayController` + trailer.
+
+## GSTACK REVIEW REPORT
+
+| Review | Trigger | Why | Runs | Status | Findings |
+|--------|---------|-----|------|--------|----------|
+| CEO Review | `/plan-ceo-review` | Scope & strategy | 0 | — | — |
+| Codex Review | `/codex review` | Independent 2nd opinion | 1 | ISSUES_FOUND (absorbed) | 1 Critical (waiters can't detach) + 4 Warnings — 4 fixed/documented, 1 rejected on decided-rule grounds |
+| Eng Review | `/plan-eng-review` | Architecture & tests (required) | 1 | CLEAR (DIFF) | 7 issues total (incl. whole-branch review's non-slug-server Critical), 0 critical gaps — fixes in 0c191ce5 + a0c686e8 |
+| Design Review | `/plan-design-review` | UI/UX gaps | 0 | — | — |
+| DX Review | `/plan-devex-review` | Developer experience gaps | 0 | — | — |
+
+**CODEX:** outside voice ran on the PR #535 diff (high reasoning). Its Critical — SSE attach loops can't detach on client disconnect — was a parity blind spot inherited from LiveTurn and promoted to public-API status by this branch; fixed with a `req close` race (no fabric API change) + disconnect and two-attacher tests. Its per-publish payload-validation remedy was **rejected**: it contradicts the proposal's decided boundary-validation rule; the enforcement semantics are now pinned in `kinds.ts` so the name-only behavior can't be Hyrum'd.
+
+**CROSS-MODEL:** the whole-branch Fable review and Codex converged on timeout-layering and API-freeze risks from different angles; no unresolved disagreement — each finding either fixed, documented in code, or deferred with a written increment-3/5 owner.
+
+**VERDICT:** ENG CLEARED — PR #535 green post-fix (full suite 2546 passed / 7 skipped; parity gate 52/52 unmodified).
+
+NO UNRESOLVED DECISIONS
