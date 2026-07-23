@@ -1009,6 +1009,7 @@ const buzzComposeProject = (gem: Gem): MaterializeResult => {
   const slug = buzzSlug(gem.name);
   const skills = gem.artifacts.filter((a): a is SkillArtifact => a.type === "skill");
   const instr  = gem.artifacts.filter((a): a is InstructionsArtifact => a.type === "instructions");
+  const mcps   = gem.artifacts.filter((a): a is McpServerArtifact => a.type === "mcp_server");
   const description = a2aFirstLine(instr[0]?.content ?? "") || `A Buzz agent packaged by AgentGem from the ${gem.name} gem.`;
 
   const manifest: Record<string, unknown> = {
@@ -1020,6 +1021,9 @@ const buzzComposeProject = (gem: Gem): MaterializeResult => {
     personas: [`agents/${slug}.persona.md`],
   };
   if (instr.length) manifest.pack_instructions = "instructions.md";
+  // Shared MCP is the pack's `.mcp.json` ({mcpServers}), the same file the claude target emits — the
+  // Buzz pack loader reads it as the pack-wide MCP config. Point the manifest at it explicitly.
+  if (mcps.length) manifest.mcp_config = ".mcp.json";
 
   const files: FileTree = {
     ".plugin/plugin.json": JSON.stringify(manifest, null, 2) + "\n",
@@ -1027,13 +1031,13 @@ const buzzComposeProject = (gem: Gem): MaterializeResult => {
   };
   if (instr.length) files["instructions.md"] = instr.map((i) => `## ${i.name}\n\n${i.content}`).join("\n\n---\n\n") + "\n";
   for (const s of skills) Object.assign(files, skillSkillMd(s)); // skills/<name>/SKILL.md — same shape Buzz packs use
+  if (mcps.length) Object.assign(files, mcpDotMcpJson(mcps).files); // .mcp.json — config already redacted at import
 
-  // A persona pack expresses identity + instructions + skills, not MCP servers, hooks, channels, or
-  // Claude-native subagents. Report the rest so compatibility() stays honest (MCP mapping is a
-  // fast-follow once the pack's mcp_config format is verified against `buzz pack validate`).
+  // A persona pack expresses identity + instructions + skills + shared MCP, not hooks, channels, or
+  // Claude-native subagents. Report the rest so compatibility() stays honest. Package-backed MCP refs
+  // are not yet resolved into the pack (only value mcp_server artifacts) — reported via
+  // skipResolvedReferenceArtifacts below.
   const skipped: SkippedArtifact[] = [
-    ...gem.artifacts.filter((a): a is McpServerArtifact => a.type === "mcp_server")
-      .map((a): SkippedArtifact => ({ artifact: a.name, type: "mcp_server", reason: "a Buzz persona pack does not yet map MCP servers (pending pack mcp_config verification)" })),
     ...gem.artifacts.filter((a): a is HookArtifact => a.type === "hook")
       .map((a): SkippedArtifact => ({ artifact: a.name, type: "hook", reason: "a Buzz persona pack has no hook concept" })),
     ...gem.artifacts.filter((a): a is ChannelArtifact => a.type === "channel")

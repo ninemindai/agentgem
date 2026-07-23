@@ -648,12 +648,22 @@ describe("buzz target (persona pack)", () => {
     expect(manifest.pack_instructions).toBeUndefined();
   });
 
-  it("skip-reports MCP, hooks, channels, and subagents with reasons", () => {
-    const { skipped } = materialize(named("R", [mcp("m"), hook(), subagent("sub")]), "buzz");
+  it("wires value MCP servers into a shared .mcp.json and points the manifest at it", () => {
+    const { files, skipped } = materialize(named("R", [httpMcp("linear")]), "buzz");
+    const mcp = JSON.parse(files[".mcp.json"]);
+    expect(mcp.mcpServers.linear.url).toBe("https://mcp.x/sse");
+    expect(JSON.parse(files[".plugin/plugin.json"]).mcp_config).toBe(".mcp.json");
+    expect(skipped.map((s) => s.type)).not.toContain("mcp_server");
+    expect(JSON.stringify(files)).not.toContain("<redacted>"); // secret values never emitted
+  });
+
+  it("skip-reports hooks, channels, and subagents with reasons", () => {
+    const { files, skipped } = materialize(named("R", [hook(), subagent("sub")]), "buzz");
     const kinds = skipped.map((s) => s.type);
-    expect(kinds).toContain("mcp_server");
     expect(kinds).toContain("hook");
     expect(kinds).toContain("subagent");
+    expect(files[".mcp.json"]).toBeUndefined(); // no MCP → no .mcp.json, no mcp_config
+    expect(JSON.parse(files[".plugin/plugin.json"]).mcp_config).toBeUndefined();
     for (const s of skipped) expect(s.reason).toMatch(/\S/);
   });
 
