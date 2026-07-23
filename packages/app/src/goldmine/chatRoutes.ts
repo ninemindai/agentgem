@@ -33,6 +33,10 @@ interface Req {
   body?: Record<string, unknown>;
   query: Record<string, unknown>;
   params: Record<string, string>;
+  // Optional: real Express requests always carry this (http.IncomingMessage emits "close" on
+  // disconnect); some pre-existing hand-rolled test fakes omit it entirely, so a caller lacking
+  // it simply never triggers the disconnect path below (falls back to the old drain-to-`done` behavior).
+  on?(event: "close", listener: () => void): void;
 }
 interface Res {
   status(code: number): Res;
@@ -306,13 +310,18 @@ export function registerChatRoutes(app: App, deps: ChatRouteDeps, guard: Middlew
       forward = (ev) => { try { res.write(`event: ${ev.type}\ndata: ${JSON.stringify(ev)}\n\n`); } catch { /* client gone */ } };
     }
 
+    // A disconnected client releases its attach loop at the next wake instead of
+    // consuming the rest of the turn (the drain itself is detached — R1 unaffected).
+    let clientGone = false;
+    const gone = new Promise<void>((resolve) => { req.on?.("close", () => { clientGone = true; resolve(); }); });
+
     let i = 0;
     for (;;) {
       const { envelopes, done } = router.readFeed(channel, i);
       for (const env of envelopes) forward(env.payload as ChatEvent);
       i += envelopes.length;
-      if (done && envelopes.length === 0) break;
-      if (!done) await router.waitFeed(channel, i);
+      if (clientGone || (done && envelopes.length === 0)) break;
+      if (!done) await Promise.race([router.waitFeed(channel, i), gone]);
     }
     try { res.end(); } catch { /* client already disconnected */ }
   });
