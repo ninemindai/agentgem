@@ -4,6 +4,7 @@
 // Barrel re-export; consumers import named symbols from "@agentgem/model".
 export * from "./types.js";
 export * from "./capabilities.js";
+export * from "./houseStyle.js";
 export * from "./artifactRef.js";
 export * from "./channels.js";
 export * from "./toml.js";
