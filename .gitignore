@@ -15,3 +15,14 @@ website/dist/
 # Claude Code project config: track shareable skills, ignore local runtime state
 .claude/*
 !.claude/skills
+
+# Local tool output. These are regenerable and large (~1.5GB combined in a
+# working checkout), and .deepsec/ carries its own pnpm workspace + node_modules
+# that must not be picked up by a root install.
+videos/
+.deepsec/
+.playwright-mcp/
+
+# Ad-hoc verification screenshots dropped at the repo root by browser runs.
+# Screenshots meant to be kept belong in docs/ and are tracked there.
+/watch-*.png
