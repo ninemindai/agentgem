@@ -490,7 +490,11 @@ function skillTunerScaffold(): string {
     function say(t) { document.getElementById("msg").textContent = t; }
     function copyOut() {
       var text = markdown();
-      if (!window.agentgemApp) { fallback(text); return; }
+      // Gate on the handshake, not on a rejection. With no host the shim gives up ONCE (~4.8s after
+      // load) and rejects only the calls pending at that instant; a click after that queues with no
+      // interval left to reject it, so awaiting copyCommand would hang and .catch would never fire.
+      // agentgemApp.ready stays false forever with no host, so this falls back immediately instead.
+      if (!window.agentgemApp || !window.agentgemApp.ready) { fallback(text); return; }
       window.agentgemApp.copyCommand(text).then(function () { say("Copied to your clipboard."); })
         .catch(function () { fallback(text); });
     }

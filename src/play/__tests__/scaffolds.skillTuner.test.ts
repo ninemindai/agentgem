@@ -22,4 +22,12 @@ describe("skill-tuner scaffold", () => {
     expect(html()).toContain('getElementById("game-data")');
     expect(html()).toContain("render()");
   });
+
+  it("gates the copy on agentgemApp.ready, not on a rejection", () => {
+    // With no host the shim's handshake gives up ONCE at ~4.8s and rejects only the calls pending at
+    // that instant; a user-initiated copyCommand clicked later queues with no interval left to reject
+    // it, so it hangs forever and a .catch(fallback) never fires. Gate on `ready` (false-forever with
+    // no host) so the fallback runs immediately instead.
+    expect(html()).toContain("agentgemApp.ready");
+  });
 });
