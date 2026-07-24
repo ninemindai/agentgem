@@ -7,6 +7,7 @@ export const GENRES: Record<string, { label: string; icon: string; tint: string 
   "project-fun": { label: "Project fun", icon: "★", tint: "var(--accent)" },
   "session-heatmap": { label: "Live session", icon: "🔥", tint: "var(--accent)" },
   "project-map": { label: "Project map", icon: "🗺", tint: "var(--gold)" },
+  "skill-tuner": { label: "Skill tuner", icon: "🎛", tint: "var(--emerald)" },
   html: { label: "Imported", icon: "⌘", tint: "var(--ink-soft)" },
 };
 export const genre = (g: string) => GENRES[g] ?? { label: g, icon: "◆", tint: "var(--muted)" };

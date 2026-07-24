@@ -422,12 +422,100 @@ function projectMapScaffold(): string {
 </body></html>`;
 }
 
+// A skill readout you can tune. Readout FIRST: portability.ts classifies copy-command as an
+// enhancement — "egress to the clipboard, never a game's primary content" — so this must be worth
+// opening when the clipboard is refused or no host exists. Tuner state is in-memory on purpose:
+// storage in a null-origin frame is a shim that dies on reload.
+function skillTunerScaffold(): string {
+  return `<!doctype html>
+<html lang="en"><head>${mcpAppClient()}<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Skill Tuner</title>
+<style>
+  :root { color-scheme: light dark; }
+  ${HOUSE_TOKENS}
+  ${themeAdapter("host")}
+  html,body { height:100%; margin:0; overflow:hidden;
+    background: var(--surface); color: var(--ink); font: var(--t-body)/1.5 var(--sans); }
+  #stage { position:fixed; inset:0; overflow:auto; }
+  #wrap { max-width:760px; margin:0 auto; padding:var(--sp-4) var(--sp-3); box-sizing:border-box; }
+  .eyebrow { font:500 var(--t-small) var(--mono); text-transform:uppercase; letter-spacing:.08em; opacity:.6; }
+  h1 { font:500 var(--t-display) var(--serif); letter-spacing:-.01em; margin:var(--sp-1) 0 var(--sp-3); }
+  label { display:block; font:600 var(--t-small) var(--sans); text-transform:uppercase; letter-spacing:.08em;
+    opacity:.6; margin:var(--sp-3) 0 var(--sp-1); }
+  input, textarea { width:100%; box-sizing:border-box; background:var(--surface-2); color:var(--ink);
+    border:1px solid var(--border); border-radius:var(--radius); padding:var(--sp-1) var(--sp-2);
+    font:var(--t-body) var(--mono); }
+  textarea { min-height:150px; resize:vertical; }
+  .row { display:flex; gap:var(--sp-2); align-items:center; margin-top:var(--sp-3); flex-wrap:wrap; }
+  button { background:var(--accent); color:#fff; border:0; border-radius:var(--radius);
+    padding:8px var(--sp-3); font:600 var(--t-body) var(--sans); cursor:pointer; }
+  .note { font:500 var(--t-small) var(--sans); opacity:.6; }
+  pre { background:var(--surface-2); border:1px solid var(--border); border-radius:var(--radius);
+    padding:var(--sp-2); overflow:auto; font:var(--t-body) var(--mono); white-space:pre-wrap; }
+</style></head>
+<body>
+  <div id="stage"><div id="wrap"><div id="app"></div></div></div>
+  <script>
+  (function () {
+    "use strict";
+    var app = document.getElementById("app");
+    var esc = function (s) { return String(s).replace(/[&<>]/g, function (c) { return ({ "&":"&amp;", "<":"&lt;", ">":"&gt;" })[c]; }); };
+    var dataEl = document.getElementById("game-data");
+    var DATA = dataEl ? JSON.parse(dataEl.textContent || "{}") : {};
+    var state = { name: DATA.name || "skill", trigger: String(DATA.trigger || ""), body: String(DATA.content || "") };
+
+    // ==== AGENTGEM:GAME-LOGIC START ====
+    function markdown() {
+      return "---\\nname: " + state.name + "\\ndescription: " + state.trigger + "\\n---\\n\\n" + state.body;
+    }
+    function render() {
+      app.innerHTML =
+        '<div class="eyebrow">skill tuner</div>' +
+        "<h1>" + esc(state.name) + "</h1>" +
+        '<label for="trg">description / trigger</label>' +
+        '<input id="trg" value="' + esc(state.trigger).replace(/"/g, "&quot;") + '" />' +
+        '<label for="bdy">body</label>' +
+        '<textarea id="bdy">' + esc(state.body) + "</textarea>" +
+        '<label>preview</label><pre id="pv"></pre>' +
+        '<div class="row"><button id="copy">Copy skill markdown</button>' +
+        '<span class="note" id="msg">Edits live in this frame only — copy to keep them.</span></div>';
+
+      document.getElementById("pv").textContent = markdown();
+      document.getElementById("trg").addEventListener("input", function (e) { state.trigger = e.target.value; preview(); });
+      document.getElementById("bdy").addEventListener("input", function (e) { state.body = e.target.value; preview(); });
+      document.getElementById("copy").addEventListener("click", copyOut);
+    }
+    function preview() { document.getElementById("pv").textContent = markdown(); }
+    function say(t) { document.getElementById("msg").textContent = t; }
+    function copyOut() {
+      var text = markdown();
+      if (!window.agentgemApp) { fallback(text); return; }
+      window.agentgemApp.copyCommand(text).then(function () { say("Copied to your clipboard."); })
+        .catch(function () { fallback(text); });
+    }
+    // No host, or consent refused: show the markdown selectable so the readout is still useful.
+    function fallback(text) {
+      var pv = document.getElementById("pv");
+      pv.textContent = text;
+      var r = document.createRange(); r.selectNodeContents(pv);
+      var sel = window.getSelection(); sel.removeAllRanges(); sel.addRange(r);
+      say("Clipboard unavailable — selected the markdown instead.");
+    }
+    render();
+    // ==== AGENTGEM:GAME-LOGIC END ====
+  })();
+  </script>
+</body></html>`;
+}
+
 const SCAFFOLDS: Record<string, string> = {
   replay: replayScaffold(),
   "skill-run": minimalTemplate("Skill Run", "⚙ practice"),
   "project-fun": minimalTemplate("Project Fun", "★ play"),
   heatmap: heatmapScaffold(),
   "project-map": projectMapScaffold(),
+  "skill-tuner": skillTunerScaffold(),
 };
 
 export function scaffoldFor(scaffoldId: string): string {

@@ -1051,7 +1051,7 @@ const PlaySourceSchema = z.discriminatedUnion("kind", [
   z.object({ kind: z.literal("blank"), title: z.string() }),
 ]);
 const PlayMetaSchema = z.object({
-  title: z.string(), genre: z.enum(["replay", "skill-run", "project-fun", "session-heatmap", "project-map"]),
+  title: z.string(), genre: z.enum(["replay", "skill-run", "project-fun", "session-heatmap", "project-map", "skill-tuner"]),
   createdFrom: PlaySourceSchema, engineVersion: z.string().default("1"), needs: PlayNeedsSchema,
   mcpNeeds: PlayMcpNeedsSchema,
 });
@@ -1078,7 +1078,7 @@ export const playInspectorRoute = defineRoute("GET", "/api/play/inspector", {
 export const playStudioRoute = defineRoute("POST", "/api/play/studio", {
   body: z.object({
     source: PlaySourceSchema, name: z.string().optional(),
-    genre: z.enum(["replay", "skill-run", "project-fun", "session-heatmap", "project-map"]).optional(),
+    genre: z.enum(["replay", "skill-run", "project-fun", "session-heatmap", "project-map", "skill-tuner"]).optional(),
   }),
   response: z.object({ name: z.string() }),
 });

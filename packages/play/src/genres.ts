@@ -35,6 +35,14 @@ export const GENRES: Record<GameGenre, GenreSpec> = {
       "Build a light, themed mini-game seeded by the PROJECT in the DATA (name, flavor, notable files). Theme " +
       "the visuals and copy to the project; gameplay can be simple.",
   },
+  "skill-tuner": {
+    id: "skill-tuner", sourceKind: "skill", title: "Skill Tuner", scaffold: "skill-tuner",
+    needs: ["copy-command"],
+    guidance:
+      "Build a readable readout of the SKILL in the DATA — name, trigger/description, body — that the " +
+      "user can also edit and copy back out as markdown. Readout first: the copy path may be refused, " +
+      "and the miniapp must still be worth opening. Analytical, not a game.",
+  },
   "project-map": {
     id: "project-map", sourceKind: "project", title: "Project Map", scaffold: "project-map",
     needs: ["local-project-access"],
