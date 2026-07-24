@@ -7,7 +7,7 @@ import type { GameGenre } from "@agentgem/model";
 // (Studio publishes ["game", <genre>, ...userTags]) and the marketplace reads back as the genre
 // facet — so a free-form tag must never collide with them. Kept as a local literal (a runtime value
 // import of the model's GAME_GENRES would drag node:* modules into the browser bundle), guarded below.
-const GENRE_TAGS = ["replay", "skill-run", "project-fun", "session-heatmap", "project-map"] as const;
+const GENRE_TAGS = ["replay", "skill-run", "project-fun", "session-heatmap", "project-map", "skill-tuner"] as const;
 // Compile-time drift guard: GENRE_TAGS must stay in lockstep with the canonical GameGenre union
 // (packages/model). `import type` is erased at build, so this costs the browser bundle nothing.
 type _GenreDrift = [GameGenre] extends [(typeof GENRE_TAGS)[number]]

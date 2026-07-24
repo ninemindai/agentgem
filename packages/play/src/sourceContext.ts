@@ -51,7 +51,13 @@ export async function extractSource(source: GameSource, readers: SourceReaders, 
   if (source.kind === "skill") {
     const k = await readers.readSkill(source.skillName);
     if (!k) throw new Error(`skill '${source.skillName}' not found`);
-    return { genre: "skill-run", createdFrom: source, data: k, brief: `Make a playable challenge that exercises the skill "${source.skillName}".` };
+    return {
+      genre: genre === "skill-tuner" ? "skill-tuner" : "skill-run",
+      createdFrom: source, data: k,
+      brief: genre === "skill-tuner"
+        ? `Build a readout and tuner for the skill "${source.skillName}".`
+        : `Make a playable challenge that exercises the skill "${source.skillName}".`,
+    };
   }
   if (source.kind === "html") throw new Error("html sources are imported directly (importStudio), not seeded");
   if (source.kind === "blank") throw new Error("blank sources are created directly (blankStudio), not seeded");
