@@ -320,11 +320,114 @@ function heatmapScaffold(): string {
 </body></html>`;
 }
 
+// An analytical readout of a project: structure and counts, not architecture. ProjectData is
+// { path, flavor, files: string[] } — file NAMES only, no contents — so this renders what it actually
+// has and upgrades via local-project-access when a host is present. No host (app.agentgem.ai) means
+// the baked list is what renders, which is why the boot path never waits on the bridge.
+function projectMapScaffold(): string {
+  return `<!doctype html>
+<html lang="en"><head>${mcpAppClient()}<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Project Map</title>
+<style>
+  :root { color-scheme: light dark; }
+  ${HOUSE_TOKENS}
+  ${themeAdapter("host")}
+  ${HOUSE_PARTIALS.kpiRow}
+  ${HOUSE_PARTIALS.svgBar}
+  html,body { height:100%; margin:0; overflow:hidden;
+    background: var(--surface); color: var(--ink); font: var(--t-body)/1.5 var(--sans); }
+  #stage { position:fixed; inset:0; overflow:auto; }
+  #wrap { max-width:820px; margin:0 auto; padding:var(--sp-4) var(--sp-3); box-sizing:border-box; }
+  .eyebrow { font:500 var(--t-small) var(--mono); text-transform:uppercase; letter-spacing:.08em; opacity:.6; }
+  h1 { font:500 var(--t-display) var(--serif); letter-spacing:-.01em; margin:var(--sp-1) 0 var(--sp-2); }
+  .dir { font:600 var(--t-small) var(--mono); text-transform:uppercase; letter-spacing:.06em; opacity:.6;
+    margin:var(--sp-3) 0 var(--sp-1); }
+  .file { font:var(--t-body) var(--mono); opacity:.9; padding:2px 0; }
+  .src { font:500 var(--t-small) var(--sans); opacity:.55; margin-top:var(--sp-3); }
+</style></head>
+<body>
+  <div id="stage"><div id="wrap"><div id="app"></div></div></div>
+  <script>
+  (function () {
+    "use strict";
+    var app = document.getElementById("app");
+    var esc = function (s) { return String(s).replace(/[&<>]/g, function (c) { return ({ "&":"&amp;", "<":"&lt;", ">":"&gt;" })[c]; }); };
+    var dataEl = document.getElementById("game-data");
+    var DATA = dataEl ? JSON.parse(dataEl.textContent || "{}") : {};
+    var LIVE = false;
+
+    // ==== AGENTGEM:GAME-LOGIC START ====
+    function groupByDir(files) {
+      var out = {};
+      (files || []).forEach(function (f) {
+        var i = String(f).lastIndexOf("/");
+        var dir = i < 0 ? "." : String(f).slice(0, i);
+        (out[dir] = out[dir] || []).push(i < 0 ? String(f) : String(f).slice(i + 1));
+      });
+      return out;
+    }
+    function extCounts(files) {
+      var out = {};
+      (files || []).forEach(function (f) {
+        var m = /\\.([a-z0-9]+)$/i.exec(String(f));
+        var k = m ? m[1].toLowerCase() : "(none)";
+        out[k] = (out[k] || 0) + 1;
+      });
+      return Object.keys(out).map(function (k) { return { ext: k, n: out[k] }; })
+        .sort(function (a, b) { return b.n - a.n; }).slice(0, 8);
+    }
+    function barSvg(rows) {
+      if (!rows.length) return "";
+      var max = rows[0].n, h = rows.length * 22, w = 620;
+      var bars = rows.map(function (r, i) {
+        var bw = Math.max(2, Math.round((r.n / max) * (w - 190)));
+        return '<rect x="130" y="' + (i * 22 + 4) + '" width="' + bw + '" height="14" rx="3"></rect>' +
+          '<text x="0" y="' + (i * 22 + 15) + '">' + esc(r.ext) + '</text>' +
+          '<text x="' + (136 + bw) + '" y="' + (i * 22 + 15) + '">' + r.n + '</text>';
+      }).join("");
+      return '<svg class="hs-bar" viewBox="0 0 ' + w + ' ' + h + '" role="img" aria-label="files by extension">' + bars + '</svg>';
+    }
+    function render() {
+      var files = DATA.files || [];
+      var dirs = groupByDir(files);
+      var dirNames = Object.keys(dirs).sort();
+      var exts = extCounts(files);
+      app.innerHTML =
+        '<div class="eyebrow">project map' + (LIVE ? " · live" : " · snapshot") + '</div>' +
+        "<h1>" + esc(DATA.path || "this project") + "</h1>" +
+        '<div class="hs-kpis">' +
+          '<div class="hs-kpi"><b>' + files.length + "</b><span>files</span></div>" +
+          '<div class="hs-kpi"><b>' + dirNames.length + "</b><span>directories</span></div>" +
+          '<div class="hs-kpi"><b>' + esc(DATA.flavor || "—") + "</b><span>flavor</span></div>" +
+        "</div>" +
+        barSvg(exts) +
+        dirNames.map(function (d) {
+          return '<div class="dir">' + esc(d) + "</div>" +
+            dirs[d].sort().map(function (f) { return '<div class="file">' + esc(f) + "</div>"; }).join("");
+        }).join("") +
+        '<div class="src">' + (LIVE ? "upgraded from the local inventory" : "baked snapshot — no host connected") + "</div>";
+    }
+    render();
+
+    // Enhancement only: with a host, upgrade to the real inventory. With none, the baked list stands.
+    if (window.agentgemApp) {
+      window.agentgemApp.callTool("agentgem_get_inventory", {}).then(function (inv) {
+        if (inv && inv.files && inv.files.length) { DATA = { path: DATA.path, flavor: DATA.flavor, files: inv.files }; LIVE = true; render(); }
+      }).catch(function () { /* no host, or consent refused — the snapshot is already rendered */ });
+    }
+    // ==== AGENTGEM:GAME-LOGIC END ====
+  })();
+  </script>
+</body></html>`;
+}
+
 const SCAFFOLDS: Record<string, string> = {
   replay: replayScaffold(),
   "skill-run": minimalTemplate("Skill Run", "⚙ practice"),
   "project-fun": minimalTemplate("Project Fun", "★ play"),
   heatmap: heatmapScaffold(),
+  "project-map": projectMapScaffold(),
 };
 
 export function scaffoldFor(scaffoldId: string): string {

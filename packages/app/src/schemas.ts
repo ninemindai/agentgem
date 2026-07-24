@@ -3,7 +3,7 @@
 // src/schemas.ts
 import { z } from "zod";
 import { RUNNER_REGISTRY } from "@agentgem/build";
-import { TARGET_REGISTRY, MCP_ERROR_CODES } from "@agentgem/model";
+import { TARGET_REGISTRY, MCP_ERROR_CODES, GAME_GENRES } from "@agentgem/model";
 import { flavorIds } from "@agentgem/testbed";
 import { CREDENTIAL_KEYS } from "@agentgem/capture";
 import type { UploadFile as PlayUploadFile } from "@agentgem/play";
@@ -116,7 +116,9 @@ export const McpNeedsSchema = z.array(McpNeedSchema).optional();
 
 // The GameGenre union (packages/model types.ts) as a wire enum. Used both by the archive-facing
 // GameArtifactSchema below and by the Play save-request meta — kept in one place so the two never drift.
-export const GameGenreEnum = z.enum(["replay", "skill-run", "project-fun", "session-heatmap"]);
+// Derived from GAME_GENRES rather than re-listed: a new genre reaches the wire without a second edit,
+// which is what this enum silently failed to do when it was a hand-written literal.
+export const GameGenreEnum = z.enum(GAME_GENRES);
 
 export const GameArtifactSchema = z.object({
   type: z.literal("game"),
@@ -979,12 +981,13 @@ export const PlayPublishRequestSchema = z.object({ remote: z.string().url().opti
 export const PlayPublishResponseSchema = z.object({ ok: z.boolean() });
 // `name` is the optional miniapp id. Omitted, it is derived from the source (and suffixed on collision);
 // supplied, it is slugified and claimed exactly — a collision is a 409, not a silent rename.
-// `genre` picks between the two genres a session source can fork into (replay | session-heatmap);
-// omitted, the source kind's default genre applies unchanged. Project→project-fun and skill→skill-run
-// have no alternate genre, so genre is not meaningful for those sources.
+// `genre` picks which template the source forks into; omitted, the source kind's default genre applies
+// unchanged. Any genre is accepted on the wire — extractSource rejects a genre whose GenreSpec.sourceKind
+// does not match the posted source, so the pair is validated where the mapping actually lives rather than
+// by an enum here that would have to be widened for every new template.
 export const PlayStudioRequestSchema = z.object({
   source: GameArtifactSchema.shape.createdFrom, name: z.string().optional(),
-  genre: z.enum(["replay", "session-heatmap"]).optional(),
+  genre: GameGenreEnum.optional(),
 });
 export const PlayStudioResponseSchema = z.object({ name: z.string() });
 // Author-supplied seed files (base64-in-JSON, the existing upload convention). `role` decides where they
