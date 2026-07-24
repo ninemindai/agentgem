@@ -8,6 +8,7 @@ import { SourceList } from "./SourceList.js";
 import { ConnectorPicker, connectorPreamble } from "./ConnectorPicker.js";
 import { useUploads } from "./uploads.js";
 import { UploadsField } from "./UploadsField.js";
+import type { GameGenre } from "@agentgem/model";
 
 type Kind = "project" | "session" | "skill" | "html" | "blank";
 type Proj = { path: string; flavor: string; exists: boolean; lastUsed?: string | null };
@@ -17,6 +18,24 @@ type Source =
   | { kind: "project"; path: string; flavor: string }
   | { kind: "session"; agent: string; project?: string; sessionId: string; summary: string }
   | { kind: "skill"; skillName: string };
+
+// Which template a source forks into. Exhaustive by construction: keying on GameGenre makes a new
+// genre without an entry here a COMPILE error. Kept as a local literal with a type-only import — a
+// runtime import of GAME_GENRES would drag node:* into the browser bundle (see parseTags.ts).
+// `first: true` marks the default template for a kind, so the picker never starts unselected.
+const PLAY_TEMPLATES: Record<GameGenre, { label: string; sourceKind: Kind; first?: boolean }> = {
+  replay: { label: "Replay", sourceKind: "session", first: true },
+  "session-heatmap": { label: "Heatmap", sourceKind: "session" },
+  "skill-run": { label: "Challenge", sourceKind: "skill", first: true },
+  "skill-tuner": { label: "Tuner", sourceKind: "skill" },
+  "project-fun": { label: "Mini-game", sourceKind: "project", first: true },
+  "project-map": { label: "Map", sourceKind: "project" },
+};
+type TemplateEntry = [GameGenre, (typeof PLAY_TEMPLATES)[GameGenre]];
+const templatesFor = (kind: Kind): TemplateEntry[] =>
+  (Object.entries(PLAY_TEMPLATES) as TemplateEntry[]).filter(([, t]) => t.sourceKind === kind);
+const defaultTemplate = (kind: Kind): GameGenre | null =>
+  templatesFor(kind).find(([, t]) => t.first)?.[0] ?? null;
 
 const TABS: { kind: Kind; label: string }[] = [
   { kind: "project", label: "Project" },
@@ -79,9 +98,10 @@ export function Composer({
   // suffixes it on collision; typed, the server claims it exactly and 409s if it is taken.
   const [name, setName] = useState("");
   const named = () => (name.trim() ? { name: name.trim() } : {});
-  // Session-only: which genre a session source forks into. Defaults to Replay; only threaded to the
-  // server when the user picks Heatmap, so the default seed call stays byte-identical to before.
-  const [sessionGenre, setSessionGenre] = useState<"replay" | "session-heatmap">("replay");
+  // Which template the chosen source forks into. Reset whenever the source kind changes, because a
+  // genre only belongs to its own sourceKind — the server rejects a mismatched pair outright.
+  const [template, setTemplate] = useState<GameGenre | null>(defaultTemplate(seeded ? "blank" : "project"));
+  function chooseKind(k: Kind) { setKind(k); setTemplate(defaultTemplate(k)); }
   const [caps, setCaps] = useState<Cap[]>([]);
   const toggleCap = (c: Cap) => setCaps((cs) => (cs.includes(c) ? cs.filter((x) => x !== c) : [...cs, c]));
   const [permsOpen, setPermsOpen] = useState(false);
@@ -102,7 +122,8 @@ export function Composer({
     if (busy) return;
     setBusy(true); setError("");
     try {
-      const genre = source.kind === "session" && sessionGenre === "session-heatmap" ? { genre: sessionGenre } : {};
+      // Omit the default template so the common seed call stays byte-identical to the pre-picker shape.
+      const genre = template && template !== defaultTemplate(source.kind) ? { genre: template } : {};
       const res = await playStudioRoute.call(makeClient(apiBase), { body: { source, ...named(), ...genre } });
       // Only pass a second argument when there's a preamble to carry — preserves the old single-arg
       // call shape when no capability is checked (seedPrompt reads as undefined either way).
@@ -177,7 +198,7 @@ export function Composer({
       </div>
       <div className="play-tabs">
         {TABS.map((t) => (
-          <button key={t.kind} className={`play-tab${kind === t.kind ? " is-active" : ""}`} onClick={() => setKind(t.kind)}>{t.label}</button>
+          <button key={t.kind} className={`play-tab${kind === t.kind ? " is-active" : ""}`} onClick={() => chooseKind(t.kind)}>{t.label}</button>
         ))}
       </div>
       {/* One id field for every tab. Blank/import default it from the title; project/session/skill default
@@ -199,13 +220,20 @@ export function Composer({
           placeholder="search projects…" loadingLabel="Loading projects…" />
       )}
 
+      {/* Template row: one entry per genre whose sourceKind matches the tab. Reuses the play-tabs /
+          play-tab styling the session genre fork already used, so every class here is CSS-enforced. */}
+      {templatesFor(kind).length > 1 && (
+        <div className="play-tabs" style={{ marginBottom: 10, alignItems: "center" }}>
+          <span className="play-intro" style={{ margin: 0 }}>Template:</span>
+          {templatesFor(kind).map(([id, t]) => (
+            <button key={id} type="button" className={`play-tab${template === id ? " is-active" : ""}`}
+              onClick={() => setTemplate(id)}>{t.label}</button>
+          ))}
+        </div>
+      )}
+
       {kind === "session" && (
         <>
-          <div className="play-tabs" style={{ marginBottom: 10, alignItems: "center" }}>
-            <span className="play-intro" style={{ margin: 0 }}>Genre:</span>
-            <button type="button" className={`play-tab${sessionGenre === "replay" ? " is-active" : ""}`} onClick={() => setSessionGenre("replay")}>Replay</button>
-            <button type="button" className={`play-tab${sessionGenre === "session-heatmap" ? " is-active" : ""}`} onClick={() => setSessionGenre("session-heatmap")}>Heatmap</button>
-          </div>
           <SourceList<WatchSession> items={sessions}
             filter={(s, q) => sessionSummary(s).toLowerCase().includes(q)}
             rank={(a, b) => b.endMs - a.endMs}   /* most-recent session first */

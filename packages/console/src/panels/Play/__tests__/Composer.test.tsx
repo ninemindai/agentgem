@@ -224,4 +224,35 @@ describe("Composer capability checkboxes", () => {
     expect(seedPrompt).toContain("agentgem_get_inventory");
     expect(seedPrompt).toContain("a dashboard");
   });
+
+  it("offers only the selected source kind's templates and posts the chosen genre", async () => {
+    vi.spyOn(inventoryRoute, "call").mockResolvedValue({ skills: [{ name: "gemit", description: "share a gem" }] } as never);
+    const studio = vi.spyOn(playStudioRoute, "call").mockResolvedValue({ name: "tuner" });
+    renderComposer(vi.fn());
+
+    fireEvent.click(screen.getByText("Skill"));
+    // Skill templates only — a project template must not leak into the skill tab.
+    await waitFor(() => expect(screen.getByText("Tuner")).toBeTruthy());
+    expect(screen.getByText("Challenge")).toBeTruthy();
+    expect(screen.queryByText("Map")).toBeNull();
+
+    fireEvent.click(screen.getByText("Tuner"));
+    await waitFor(() => expect(screen.getByText("gemit")).toBeTruthy());
+    fireEvent.click(screen.getByText("gemit"));
+    await waitFor(() => expect(studio).toHaveBeenCalled());
+    expect(studio.mock.calls[0][1]).toMatchObject({ body: { genre: "skill-tuner", source: { kind: "skill", skillName: "gemit" } } });
+  });
+
+  it("omits genre when the source kind's default template is used", async () => {
+    vi.spyOn(inventoryRoute, "call").mockResolvedValue({ skills: [{ name: "gemit", description: "share a gem" }] } as never);
+    const studio = vi.spyOn(playStudioRoute, "call").mockResolvedValue({ name: "run" });
+    renderComposer(vi.fn());
+
+    fireEvent.click(screen.getByText("Skill"));
+    await waitFor(() => expect(screen.getByText("gemit")).toBeTruthy());
+    fireEvent.click(screen.getByText("gemit"));
+    await waitFor(() => expect(studio).toHaveBeenCalled());
+    // Default template (skill-run) stays off the wire, so the common seed call is unchanged.
+    expect((studio.mock.calls[0][1] as { body: Record<string, unknown> }).body.genre).toBeUndefined();
+  });
 });
