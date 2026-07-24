@@ -9,7 +9,11 @@ import type {
   LoopSpec, LoopGuardrails, LoopSchedule, LoopGoal,
   RubricArtifact, RubricScopeKind, RubricFactorRef, LlmCriterion,
 } from "@agentgem/model";
-import { safePathSegment } from "@agentgem/model";
+import { safePathSegment, GAME_GENRES } from "@agentgem/model";
+import type { GameGenre } from "@agentgem/model";
+
+const isGameGenre = (g: unknown): g is GameGenre =>
+  typeof g === "string" && (GAME_GENRES as readonly string[]).includes(g);
 
 export type { FileTree, SkippedArtifact };
 export const ARCHIVE_FORMAT_VERSION = 1;
@@ -311,8 +315,9 @@ export function readGemArchive(files: FileTree): Gem {
         throw new Error(`game artifact '${e.name}' has no createdFrom in manifest`);
       }
       const genre = m.genre;
-      // keep in sync with GameGenre (packages/model)
-      if (genre !== "replay" && genre !== "skill-run" && genre !== "project-fun" && genre !== "session-heatmap") {
+      // Derived from GAME_GENRES, not re-listed: a hand-written `!==` chain here silently rejected
+      // every genre added after it was written. A type predicate keeps the narrowing that chain gave.
+      if (!isGameGenre(genre)) {
         throw new Error(`game artifact '${e.name}' has invalid genre '${String(genre)}'`);
       }
       const a: GameArtifact = {

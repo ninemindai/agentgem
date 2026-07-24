@@ -35,6 +35,14 @@ export const GENRES: Record<GameGenre, GenreSpec> = {
       "Build a light, themed mini-game seeded by the PROJECT in the DATA (name, flavor, notable files). Theme " +
       "the visuals and copy to the project; gameplay can be simple.",
   },
+  "project-map": {
+    id: "project-map", sourceKind: "project", title: "Project Map", scaffold: "project-map",
+    needs: ["local-project-access"],
+    guidance:
+      "Build an analytical readout of the PROJECT in the DATA: files grouped by directory, counts by " +
+      "extension, the flavor as the thesis line. Structure and counts only — the data carries file NAMES, " +
+      "not contents, so never claim to describe architecture. Analytical, not a game.",
+  },
   "session-heatmap": {
     id: "session-heatmap", sourceKind: "session", title: "Session Heatmap", scaffold: "heatmap", needs: ["session-data"],
     guidance:

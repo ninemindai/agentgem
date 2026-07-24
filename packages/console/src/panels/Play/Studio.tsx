@@ -1,6 +1,6 @@
 // packages/console/src/panels/Play/Studio.tsx
 import { useEffect, useRef, useState } from "react";
-import type { McpNeed } from "@agentgem/model";
+import type { McpNeed, GameGenre } from "@agentgem/model";
 import { makeClient, playMiniappRoute, playSaveRoute, playUploadsRoute, uploadsPreambleFromStored, publishSetupRoute, publishStatusRoute, reviewGroupsRoute, reviewRequestRoute, playMcpServersRoute } from "../../api/routes.js";
 import { AgentSelector, type PlayAgent } from "./AgentSelector.js";
 import { CapabilityStrip, type ConnectorRow } from "./CapabilityStrip.js";
@@ -429,7 +429,7 @@ export function Studio({
     try {
       const cur = await playMiniappRoute.call(makeClient(apiBase), { query: { name } });
       const res = await playSaveRoute.call(makeClient(apiBase), { body: { name, html: cur.html, meta: {
-        title: cur.meta.title, genre: cur.meta.genre as "replay" | "skill-run" | "project-fun" | "session-heatmap",
+        title: cur.meta.title, genre: cur.meta.genre as GameGenre,
         createdFrom: cur.meta.createdFrom, engineVersion: cur.meta.engineVersion,
         ...(cur.meta.needs ? { needs: cur.meta.needs } : {}),
         // mcpNeeds is declared-authoritative (D10) — the server merges declared∪derived, so dropping

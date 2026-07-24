@@ -1051,7 +1051,7 @@ const PlaySourceSchema = z.discriminatedUnion("kind", [
   z.object({ kind: z.literal("blank"), title: z.string() }),
 ]);
 const PlayMetaSchema = z.object({
-  title: z.string(), genre: z.enum(["replay", "skill-run", "project-fun", "session-heatmap"]),
+  title: z.string(), genre: z.enum(["replay", "skill-run", "project-fun", "session-heatmap", "project-map"]),
   createdFrom: PlaySourceSchema, engineVersion: z.string().default("1"), needs: PlayNeedsSchema,
   mcpNeeds: PlayMcpNeedsSchema,
 });
@@ -1072,10 +1072,14 @@ export const playInspectorRoute = defineRoute("GET", "/api/play/inspector", {
   response: z.object({ name: z.string(), html: z.string(), meta: z.object({ title: z.string(), genre: z.string(), createdFrom: PlaySourceSchema, engineVersion: z.string(), needs: PlayNeedsSchema }) }),
 });
 // `name` optional on all three: omitted it is derived from the source, supplied it must be free (409).
-// `genre` picks between a session source's two forks (replay | session-heatmap); omitted, the source
-// kind's default genre applies unchanged.
+// `genre` picks which template the source forks into; omitted, the source kind's default genre applies
+// unchanged. The server validates the genre/source pair (extractSource checks GenreSpec.sourceKind), so
+// this enum only has to carry every genre — not the legal pairings.
 export const playStudioRoute = defineRoute("POST", "/api/play/studio", {
-  body: z.object({ source: PlaySourceSchema, name: z.string().optional(), genre: z.enum(["replay", "session-heatmap"]).optional() }),
+  body: z.object({
+    source: PlaySourceSchema, name: z.string().optional(),
+    genre: z.enum(["replay", "skill-run", "project-fun", "session-heatmap", "project-map"]).optional(),
+  }),
   response: z.object({ name: z.string() }),
 });
 // Client mirror of UploadFileSchema (src/schemas.ts) — `role` decides where a file lands server-side:

@@ -57,5 +57,11 @@ export async function extractSource(source: GameSource, readers: SourceReaders, 
   if (source.kind === "blank") throw new Error("blank sources are created directly (blankStudio), not seeded");
   const p = await readers.readProject(source.path);
   if (!p) throw new Error(`project '${source.path}' not found`);
-  return { genre: "project-fun", createdFrom: source, data: p, brief: `Make a light themed mini-game seeded by the project at ${source.path} (${source.flavor}).` };
+  return {
+    genre: genre === "project-map" ? "project-map" : "project-fun",
+    createdFrom: source, data: p,
+    brief: genre === "project-map"
+      ? `Build an analytical map of the project at ${source.path} (${source.flavor}).`
+      : `Make a light themed mini-game seeded by the project at ${source.path} (${source.flavor}).`,
+  };
 }

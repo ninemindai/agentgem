@@ -47,7 +47,7 @@ export interface SubagentArtifact {
 // runtime). `createdFrom` is provenance only (a reference + one-line summary), never the raw source.
 // Canonical genre list. The union type is derived from this const so the two cannot drift, and it is
 // the single runtime source consumers dedupe against (console) or drift-guard against (marketplace).
-export const GAME_GENRES = ["replay", "skill-run", "project-fun", "session-heatmap"] as const; // v2: "watch" | "team"
+export const GAME_GENRES = ["replay", "skill-run", "project-fun", "session-heatmap", "project-map"] as const; // v2: "watch" | "team"
 export type GameGenre = (typeof GAME_GENRES)[number];
 
 // A capability a game may DECLARE. The trusted Play host — never the game — decides whether to grant
