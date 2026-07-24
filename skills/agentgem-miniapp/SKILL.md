@@ -115,6 +115,12 @@ An undeclared capability fails with JSON-RPC `-32601`. A refused consent fails w
 no host at all the handshake gives up after roughly four seconds and every `callTool` rejects with
 `"no host"`. Handle all three: a game that hangs waiting for a host is broken on the marketplace.
 
+That `"no host"` rejection only reaches calls already in flight when the handshake gives up. It fires
+**once**. An action you trigger on a **user click** — `copyCommand`, `openLink` — usually lands after
+that, so it queues with nothing left to reject it and awaiting it hangs; your `.catch` never runs. Gate
+egress on `window.agentgemApp.ready` (which stays `false` forever with no host) and fall back when it
+is false, rather than waiting for a rejection that will not come.
+
 Editing `meta.json` takes effect on the next Save, which re-reads it and renegotiates the preview's
 host with the new capabilities. There is no separate reload.
 
