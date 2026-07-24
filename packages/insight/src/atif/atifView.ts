@@ -5,6 +5,11 @@
 // non-system step; observation results pair onto tool_call spans by
 // source_call_id (mirror of parseClaudeTranscriptView pass 1). Scrub boundary
 // identical to atifImport.
+//
+// Deliberately collects NO import diagnostics: this path parses the document
+// twice (parseAtifDocument + parseAtifMeta), so a collector would double-count
+// every rejection. Import failures are reported once, at scan time — see
+// scanAtifSessions in ../sources/atif.ts.
 import { join } from "node:path";
 import { agentgemHome } from "@agentgem/model";
 import { scrubTruncate } from "../scrub.js";

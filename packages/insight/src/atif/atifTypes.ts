@@ -6,6 +6,7 @@
 // fields ride along untyped, structural violations degrade to null (total-
 // function contract, same as observeScan). Spec:
 // https://github.com/harbor-framework/harbor/blob/main/rfcs/0001-trajectory-format.md
+import { pushDiagnostic, safeSchemaVersion, type AtifDiagnostic, type AtifDiagnosticCode, type AtifDiagnostics } from "./atifDiagnostics.js";
 
 export interface AtifContentPart {
   type: "text" | "image";
@@ -65,16 +66,26 @@ export interface AtifTrajectory {
 }
 
 /** Tolerant parse: null unless it is a JSON object with an ATIF schema_version,
- *  an agent block, and a steps array. Never throws. */
-export function parseAtifDocument(text: string): AtifTrajectory | null {
+ *  an agent block, and a steps array. Never throws.
+ *
+ *  `path` and `diags` are optional observation only: when a collector is passed,
+ *  each rejection reason is recorded instead of being collapsed into a bare
+ *  null. Control flow is identical either way. */
+export function parseAtifDocument(text: string, path = "", diags?: AtifDiagnostics): AtifTrajectory | null {
+  const reject = (code: AtifDiagnosticCode, extra?: Partial<AtifDiagnostic>): null => {
+    pushDiagnostic(diags, { code, path, ...extra });
+    return null;
+  };
   let doc: unknown;
-  try { doc = JSON.parse(text); } catch { return null; }
-  if (!doc || typeof doc !== "object" || Array.isArray(doc)) return null;
+  try { doc = JSON.parse(text); } catch { return reject("invalid_json"); }
+  if (!doc || typeof doc !== "object" || Array.isArray(doc)) return reject("not_an_object");
   const d = doc as Record<string, unknown>;
-  if (typeof d.schema_version !== "string" || !d.schema_version.startsWith("ATIF-v")) return null;
+  if (typeof d.schema_version !== "string" || !d.schema_version.startsWith("ATIF-v")) {
+    return reject("unknown_schema_version", { schemaVersion: safeSchemaVersion(d.schema_version) });
+  }
   const agent = d.agent as Record<string, unknown> | undefined;
-  if (!agent || typeof agent.name !== "string") return null;
-  if (!Array.isArray(d.steps) || d.steps.length === 0) return null;
+  if (!agent || typeof agent.name !== "string") return reject("missing_agent");
+  if (!Array.isArray(d.steps) || d.steps.length === 0) return reject("no_steps");
   return d as unknown as AtifTrajectory;
 }
 

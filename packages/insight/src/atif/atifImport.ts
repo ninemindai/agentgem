@@ -14,6 +14,7 @@ import { scrubTruncate } from "../scrub.js";
 import type { SessionStat } from "../observeAggregate.js";
 import type { SessionEvent, SessionEventSpan } from "../inspectSession.js";
 import { parseAtifDocument, flattenAtifContent, type AtifTrajectory, type AtifStep } from "./atifTypes.js";
+import { pushDiagnostic, type AtifDiagnostics } from "./atifDiagnostics.js";
 
 export function atifSessionId(doc: AtifTrajectory, path: string): string {
   return doc.trajectory_id ?? doc.session_id ?? basename(path).replace(/\.json$/, "");
@@ -24,8 +25,8 @@ function stepMs(step: AtifStep): number {
   return Number.isNaN(ts) ? 0 : ts;
 }
 
-export function parseAtifMeta(text: string, path: string): SessionStat | null {
-  const doc = parseAtifDocument(text);
+export function parseAtifMeta(text: string, path: string, diags?: AtifDiagnostics): SessionStat | null {
+  const doc = parseAtifDocument(text, path, diags);
   if (!doc) return null;
   let startMs = Infinity, endMs = -Infinity, msgs = 0;
   let sumIn = 0, sumOut = 0, sumCache = 0;
@@ -41,6 +42,10 @@ export function parseAtifMeta(text: string, path: string): SessionStat | null {
       sumCache += cached;
     }
   }
+  // startMs is still Infinity iff no step carried a parseable timestamp, which
+  // is what sends the scanner to the mtime fallback below. Worth naming: a whole
+  // session dated by file mtime is honest but much coarser than the real thing.
+  if (startMs === Infinity) pushDiagnostic(diags, { code: "timestamps_missing", path });
   const fm = doc.final_metrics;
   // Cache falls back to the per-step sum even when final_metrics exists but
   // omits total_cached_tokens, and tokensIn is always net of that same cache
@@ -68,10 +73,9 @@ export function parseAtifMeta(text: string, path: string): SessionStat | null {
   };
 }
 
-export function atifSessionEvents(text: string, path: string): SessionEvent[] {
-  const doc = parseAtifDocument(text);
+export function atifSessionEvents(text: string, path: string, diags?: AtifDiagnostics): SessionEvent[] {
+  const doc = parseAtifDocument(text, path, diags);
   if (!doc) return [];
-  void path;
   const out: SessionEvent[] = [];
   let lastMs = 0;
   for (const step of doc.steps) {
@@ -90,6 +94,9 @@ export function atifSessionEvents(text: string, path: string): SessionEvent[] {
       push({ kind: "tool_call", toolId: call.tool_call_id ?? null, name: call.function_name, input: scrubTruncate(input) });
     }
     for (const res of step.observation?.results ?? []) {
+      // No source_call_id means the result cannot be paired with its call, so
+      // the feed shows an unattached result. Usually a converter bug upstream.
+      if (!res.source_call_id) pushDiagnostic(diags, { code: "orphan_tool_result", path, stepId: step.step_id });
       push({ kind: "tool_result", toolId: res.source_call_id ?? null, output: scrubTruncate(flattenAtifContent(res.content)), error: false });
     }
   }
