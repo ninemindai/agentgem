@@ -3,6 +3,7 @@
 // The ONE genre-aware seam: GameSource → a compact GenerationInput (a human brief + JSON data) that
 // seeds the Chat studio. Readers are injected so this is unit-testable without disk/agents.
 import type { GameSource, GameGenre } from "@agentgem/model";
+import { genreFor } from "./genres.js";
 
 export interface GenerationInput { genre: GameGenre; brief: string; data: unknown; createdFrom: GameSource }
 export interface SessionData { sessionId: string; meta: unknown; turns: unknown }
@@ -31,6 +32,12 @@ export function compactTurns(turns: unknown): { role: string; tsMs: number; text
 // more than one genre) pick it explicitly; omitted, the default per-kind genre is byte-identical to
 // before this param existed.
 export async function extractSource(source: GameSource, readers: SourceReaders, genre?: GameGenre): Promise<GenerationInput> {
+  // A requested genre must belong to the source kind. Before the Composer offered a template list this
+  // was structurally impossible (one literal check inside the session branch); with a list, a mismatched
+  // pair would silently seed the DEFAULT genre and hand the user the wrong miniapp.
+  if (genre && genreFor(genre).sourceKind !== source.kind) {
+    throw new Error(`genre '${genre}' does not accept a ${source.kind} source`);
+  }
   if (source.kind === "session") {
     const s = await readers.loadSession(source.sessionId, source.agent);
     if (!s) throw new Error(`session '${source.sessionId}' not found`);
