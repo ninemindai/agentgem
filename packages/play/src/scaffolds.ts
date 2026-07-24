@@ -5,6 +5,7 @@
 // touches it. The agent replaces the block between the AGENTGEM:GAME-LOGIC markers. TS string
 // constants so they compile into dist (no fs paths).
 import { mcpAppClient } from "./mcpAppClient.js";
+import { HOUSE_TOKENS, HOUSE_PARTIALS, themeAdapter } from "@agentgem/model";
 
 // `title`/`subtitle` reach minimalTemplate from user input (blankStudio) and are baked
 // into the shared bundle outside the editable AGENTGEM:GAME-LOGIC markers, so any
@@ -214,24 +215,25 @@ function heatmapScaffold(): string {
 <title>Session Heatmap</title>
 <style>
   :root { color-scheme: light dark; }
+  ${HOUSE_TOKENS}
+  ${themeAdapter("host")}
+  ${HOUSE_PARTIALS.kpiRow}
   html,body { height:100%; margin:0; overflow:hidden;
-    background: var(--color-background-primary, #0d1117);
-    color: var(--color-text-primary, #e8edf4);
-    font:14px/1.5 system-ui, sans-serif; }
-  #wrap { max-width:820px; margin:0 auto; padding:18px; box-sizing:border-box; height:100%; display:flex; flex-direction:column; }
-  .wait { display:grid; place-items:center; height:100%; color:#8b98ac; font-size:15px; }
-  .title { font:700 18px Georgia, serif; text-align:center; }
-  .title .sub { display:block; font:600 11px system-ui; letter-spacing:.14em; text-transform:uppercase; opacity:.6; margin-top:3px; }
-  #grid { display:grid; gap:3px; margin:16px 0; }
-  .row-label { font:600 11px system-ui; text-transform:uppercase; letter-spacing:.08em; opacity:.7; align-self:center; padding-right:6px; }
-  .cell { border-radius:4px; border:1px solid var(--color-border-primary, #2a2340); cursor:pointer; aspect-ratio:1; }
-  .cell:hover { outline:2px solid #7c5cff; }
-  .axis { font:500 10px system-ui; opacity:.55; text-align:center; }
-  #detail { flex:1; overflow:auto; background: var(--color-background-secondary, #100d1c);
-    border:1px solid var(--color-border-primary, #241d38); border-radius:12px; padding:10px 12px; min-height:70px; }
-  #detail .line { font:500 12.5px system-ui; opacity:.9; margin-bottom:5px; }
+    background: var(--surface); color: var(--ink); font: var(--t-body)/1.5 var(--sans); }
+  #wrap { max-width:820px; margin:0 auto; padding:var(--sp-3); box-sizing:border-box; height:100%; display:flex; flex-direction:column; }
+  .wait { display:grid; place-items:center; height:100%; opacity:.6; font-size:15px; }
+  .title { font:700 var(--t-display) var(--serif); text-align:center; }
+  .title .sub { display:block; font:600 var(--t-small) var(--sans); letter-spacing:.14em; text-transform:uppercase; opacity:.6; margin-top:3px; }
+  #grid { display:grid; gap:3px; margin:var(--sp-3) 0; }
+  .row-label { font:600 var(--t-small) var(--sans); text-transform:uppercase; letter-spacing:.08em; opacity:.7; align-self:center; padding-right:6px; }
+  .cell { border-radius:4px; border:1px solid var(--border); cursor:pointer; aspect-ratio:1; }
+  .cell:hover { outline:2px solid var(--accent); }
+  .axis { font:500 10px var(--sans); opacity:.55; text-align:center; }
+  #detail { flex:1; overflow:auto; background: var(--surface-2);
+    border:1px solid var(--border); border-radius:var(--radius); padding:10px var(--sp-2); min-height:70px; }
+  #detail .line { font:500 12.5px var(--sans); opacity:.9; margin-bottom:5px; }
   #detail .empty { opacity:.5; }
-  #legend { display:flex; align-items:center; gap:6px; font:500 11px system-ui; opacity:.7; margin-bottom:6px; }
+  #legend { display:flex; align-items:center; gap:6px; font:500 var(--t-small) var(--sans); opacity:.7; margin-bottom:6px; }
   #legend .sw { width:12px; height:12px; border-radius:3px; display:inline-block; }
 </style></head>
 <body>
@@ -274,8 +276,8 @@ function heatmapScaffold(): string {
       Object.keys(cells).forEach(function (k) { max = Math.max(max, cells[k].length); });
 
       var html = '<div class="title">▦ ' + esc(project) + '<span class="sub">session activity heatmap · ' + timeline.length + ' turns</span></div>' +
-        '<div id="legend"><span class="sw" style="background:rgba(124,92,255,.15)"></span> low' +
-        '<span class="sw" style="background:rgba(124,92,255,.9)"></span> high</div>' +
+        '<div id="legend"><span class="sw" style="background:rgba(201,100,66,.15)"></span> low' +
+        '<span class="sw" style="background:rgba(201,100,66,.9)"></span> high</div>' +
         '<div id="grid" style="grid-template-columns:56px repeat(' + BUCKETS + ', 1fr);"><div></div>';
       for (var c = 0; c < BUCKETS; c++) html += '<div class="axis">' + (c + 1) + '</div>';
       ROWS.forEach(function (r) {
@@ -283,7 +285,7 @@ function heatmapScaffold(): string {
         for (var c2 = 0; c2 < BUCKETS; c2++) {
           var n = (cells[r.key + "," + c2] || []).length;
           var alpha = n ? 0.12 + 0.78 * (n / max) : 0.04;
-          html += '<div class="cell" data-row="' + r.key + '" data-col="' + c2 + '" style="background:rgba(124,92,255,' + alpha.toFixed(2) + ')" title="' + n + ' ' + esc(r.label) + ' turn(s)"></div>';
+          html += '<div class="cell" data-row="' + r.key + '" data-col="' + c2 + '" style="background:rgba(201,100,66,' + alpha.toFixed(2) + ')" title="' + n + ' ' + esc(r.label) + ' turn(s)"></div>';
         }
       });
       html += '</div><div id="detail"><div class="empty">Click a cell to see what happened.</div></div>';
