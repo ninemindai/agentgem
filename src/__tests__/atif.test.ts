@@ -4,7 +4,7 @@ import { describe, it, expect } from "vitest";
 import { mkdtempSync, writeFileSync, rmSync, statSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { parseAtifDocument, flattenAtifContent, parseAtifMeta, atifSessionEvents, parseAtifTranscriptView, loadSessionTranscript, atifSource, BUILTIN_SOURCES, watchableSources, sessionToAtif } from "@agentgem/insight";
+import { parseAtifDocument, flattenAtifContent, parseAtifMeta, atifSessionEvents, parseAtifTranscriptView, loadSessionTranscript, atifSource, BUILTIN_SOURCES, watchableSources, sessionToAtif, scanAtifSessions, summarizeDiagnostics, isFileRejection, type AtifDiagnostics } from "@agentgem/insight";
 
 const MIN_DOC = JSON.stringify({
   schema_version: "ATIF-v1.7",
@@ -142,6 +142,120 @@ describe("sessionToAtif", () => {
     expect(doc.final_metrics!.total_completion_tokens).toBe(124);  // from view.meta (parseAtifMeta of MIN_DOC)
     const rt = parseAtifTranscriptView(JSON.stringify(doc), "/tmp/rt.json");
     expect(rt!.turns).toHaveLength(view.turns.length);
+  });
+});
+
+describe("atif import diagnostics", () => {
+  const codesFor = (text: string, path = "/tmp/atif/x.json") => {
+    const diags: AtifDiagnostics = [];
+    parseAtifDocument(text, path, diags);
+    return diags.map((d) => d.code);
+  };
+
+  it("distinguishes all five whole-file rejection reasons", () => {
+    expect(codesFor("not json")).toEqual(["invalid_json"]);
+    expect(codesFor("[1,2,3]")).toEqual(["not_an_object"]);
+    expect(codesFor(JSON.stringify({ schema_version: "OTHER-v1", agent: { name: "x", version: "1" }, steps: [{}] }))).toEqual(["unknown_schema_version"]);
+    expect(codesFor(JSON.stringify({ schema_version: "ATIF-v1.7", steps: [{}] }))).toEqual(["missing_agent"]);
+    expect(codesFor(JSON.stringify({ schema_version: "ATIF-v1.7", agent: { name: "x", version: "1" }, steps: [] }))).toEqual(["no_steps"]);
+  });
+
+  it("records nothing for a well-formed trajectory", () => {
+    const diags: AtifDiagnostics = [];
+    expect(parseAtifMeta(MIN_DOC, "/tmp/atif/sess-1.json", diags)).not.toBeNull();
+    expect(atifSessionEvents(MIN_DOC, "/tmp/atif/sess-1.json", diags)).toHaveLength(4);
+    expect(diags).toEqual([]);
+  });
+
+  it("reports a foreign format's version verbatim, but only when it is identifier-shaped", () => {
+    const foreign = (v: unknown) => {
+      const diags: AtifDiagnostics = [];
+      parseAtifDocument(JSON.stringify({ schema_version: v, agent: { name: "x", version: "1" }, steps: [{}] }), "/tmp/x.json", diags);
+      return diags[0];
+    };
+    // The motivating case: someone drops a Letta trajectory-v1 file in the ATIF dir.
+    expect(foreign("trajectory-v1")).toMatchObject({ code: "unknown_schema_version", schemaVersion: "trajectory-v1" });
+    // Anything that is not a bare identifier is omitted rather than truncated.
+    expect(foreign("v1 <script>alert(1)</script>").schemaVersion).toBeUndefined();
+    expect(foreign("x".repeat(200)).schemaVersion).toBeUndefined();
+    expect(foreign(42).schemaVersion).toBeUndefined();
+  });
+
+  it("flags a trajectory whose steps carry no parseable timestamp", () => {
+    const doc = JSON.parse(MIN_DOC);
+    delete doc.steps[0].timestamp; delete doc.steps[1].timestamp;
+    const diags: AtifDiagnostics = [];
+    const s = parseAtifMeta(JSON.stringify(doc), "/tmp/atif/no-ts.json", diags);
+    expect(s!.startMs).toBe(0);                                   // the mtime fallback fires
+    expect(diags).toEqual([{ code: "timestamps_missing", path: "/tmp/atif/no-ts.json" }]);
+  });
+
+  it("flags observation results that cannot be paired with their call", () => {
+    const doc = JSON.parse(MIN_DOC);
+    delete doc.steps[1].observation.results[0].source_call_id;
+    const diags: AtifDiagnostics = [];
+    atifSessionEvents(JSON.stringify(doc), "/tmp/atif/orphan.json", diags);
+    expect(diags).toEqual([{ code: "orphan_tool_result", path: "/tmp/atif/orphan.json", stepId: 2 }]);
+  });
+
+  it("collapses repeats of one code into a count instead of one entry each", () => {
+    const doc = JSON.parse(MIN_DOC);
+    doc.steps[1].observation.results = Array.from({ length: 400 }, () => ({ content: "x" }));
+    const diags: AtifDiagnostics = [];
+    atifSessionEvents(JSON.stringify(doc), "/tmp/atif/many.json", diags);
+    expect(diags).toHaveLength(1);
+    expect(diags[0]).toMatchObject({ code: "orphan_tool_result", stepId: 2, count: 400 });
+  });
+
+  it("never carries transcript content", () => {
+    // Every string in the doc is a distinctive marker; none may reach a diagnostic.
+    const doc = JSON.parse(MIN_DOC);
+    doc.schema_version = "NOTATIF";
+    doc.steps[0].message = "SECRET_MESSAGE_MARKER";
+    doc.steps[1].tool_calls[0].arguments = { ticker: "SECRET_ARG_MARKER" };
+    doc.steps[1].observation.results[0].content = "SECRET_RESULT_MARKER";
+    const diags: AtifDiagnostics = [];
+    parseAtifDocument(JSON.stringify(doc), "/tmp/atif/secret.json", diags);
+    doc.schema_version = "ATIF-v1.7";                             // now let it parse, so step-scoped codes fire too
+    delete doc.steps[1].observation.results[0].source_call_id;
+    delete doc.steps[0].timestamp; delete doc.steps[1].timestamp;
+    parseAtifMeta(JSON.stringify(doc), "/tmp/atif/secret.json", diags);
+    atifSessionEvents(JSON.stringify(doc), "/tmp/atif/secret.json", diags);
+    expect(diags.length).toBeGreaterThan(1);
+    const serialized = JSON.stringify(diags);
+    for (const marker of ["SECRET_MESSAGE_MARKER", "SECRET_ARG_MARKER", "SECRET_RESULT_MARKER"]) {
+      expect(serialized).not.toContain(marker);
+    }
+  });
+
+  it("summarizes by code with a bounded path sample", () => {
+    const diags: AtifDiagnostics = [
+      { code: "invalid_json", path: "/a.json" },
+      { code: "invalid_json", path: "/b.json" },
+      { code: "invalid_json", path: "/c.json" },
+      { code: "invalid_json", path: "/d.json" },
+      { code: "orphan_tool_result", path: "/e.json", stepId: 2, count: 7 },
+    ];
+    const lines = summarizeDiagnostics(diags);
+    expect(lines).toHaveLength(2);
+    expect(lines[0]).toContain("invalid_json: 4 occurrence(s) across 4 rejected file(s)");
+    expect(lines[0]).toContain("(+1 more)");                      // 3 paths shown, 1 elided
+    expect(lines[1]).toContain("orphan_tool_result: 7 occurrence(s) across 1 degraded file(s)");
+    expect(isFileRejection("invalid_json")).toBe(true);
+    expect(isFileRejection("orphan_tool_result")).toBe(false);
+  });
+
+  it("scanAtifSessions surfaces the files it silently skipped", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "agentgem-atif-diag-"));
+    try {
+      writeFileSync(join(dir, "good.json"), MIN_DOC);
+      writeFileSync(join(dir, "junk.json"), "not a trajectory");
+      writeFileSync(join(dir, "foreign.json"), JSON.stringify({ schema_version: "trajectory-v1", agent: { name: "x", version: "1" }, steps: [{}] }));
+      const { stats, diagnostics } = await scanAtifSessions([join(dir, "good.json"), join(dir, "junk.json"), join(dir, "foreign.json")]);
+      expect(stats).toHaveLength(1);
+      expect(diagnostics.map((d) => d.code).sort()).toEqual(["invalid_json", "unknown_schema_version"]);
+      expect(diagnostics.find((d) => d.code === "unknown_schema_version")).toMatchObject({ schemaVersion: "trajectory-v1" });
+    } finally { rmSync(dir, { recursive: true, force: true }); }
   });
 });
 

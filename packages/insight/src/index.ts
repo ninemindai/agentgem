@@ -49,6 +49,7 @@ export * from "./sources/continue.js";
 export * from "./sources/cursor.js";
 export * from "./sources/codexArtifacts.js";
 export * from "./sources/atif.js";
+export * from "./atif/atifDiagnostics.js";
 export * from "./atif/atifTypes.js";
 export * from "./atif/atifImport.js";
 export * from "./atif/atifView.js";

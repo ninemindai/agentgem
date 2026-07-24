@@ -8,31 +8,49 @@
 // test override for the drop dir itself (gemini/continue pattern).
 import { readFile } from "node:fs/promises";
 import { statSync } from "node:fs";
+import { createLogger } from "@agentgem/base";
 import type { SourceSpec } from "../sources.js";
 import type { SessionStat } from "../observeAggregate.js";
 import { listFiles } from "../observeScan.js";
 import { parseAtifMeta, atifSessionEvents } from "../atif/atifImport.js";
+import { summarizeDiagnostics, type AtifDiagnostics } from "../atif/atifDiagnostics.js";
 import { atifDropDir } from "../atif/atifView.js";
 
-export async function scanAtifSessions(files: string[]): Promise<SessionStat[]> {
-  const out: SessionStat[] = [];
+const log = createLogger("insight");
+
+/**
+ * Scan the drop dir, collecting a diagnostic for every file that was rejected
+ * or imported lossily. The stats half is unchanged; `diagnostics` is the new
+ * half, and it is the only reason a caller can tell an empty drop dir apart
+ * from a drop dir full of files this parser refused.
+ */
+export async function scanAtifSessions(files: string[]): Promise<{ stats: SessionStat[]; diagnostics: AtifDiagnostics }> {
+  const stats: SessionStat[] = [];
+  const diagnostics: AtifDiagnostics = [];
   for (const f of files) {
     let text: string; try { text = await readFile(f, "utf8"); } catch { continue; }
-    const s = parseAtifMeta(text, f);
+    const s = parseAtifMeta(text, f, diagnostics);
     if (!s) continue;
     if (s.startMs === 0) {
       // Timestamps are optional in ATIF; the file's mtime is the honest fallback.
       let mtime = 0; try { mtime = statSync(f).mtimeMs; } catch { /* keep 0 */ }
-      out.push({ ...s, startMs: mtime, endMs: mtime });
-    } else out.push(s);
+      stats.push({ ...s, startMs: mtime, endMs: mtime });
+    } else stats.push(s);
   }
-  return out;
+  return { stats, diagnostics };
 }
 
 export const atifSource: SourceSpec = {
   id: "atif", label: "ATIF import", traits: { storage: "json" },
   roots: (env) => [atifDropDir(env.baseDir)],
-  scanSessions: (roots) => scanAtifSessions(roots.flatMap((r) => listFiles(r, ".json"))),
+  // SourceSpec.scanSessions returns stats only, so the diagnostics land in the
+  // log rather than being dropped. A rejected drop-dir file used to be silent;
+  // one warn line per distinct code is the cheapest sink that changes that.
+  scanSessions: async (roots) => {
+    const { stats, diagnostics } = await scanAtifSessions(roots.flatMap((r) => listFiles(r, ".json")));
+    for (const line of summarizeDiagnostics(diagnostics)) log.warn("atif import: %s", line);
+    return stats;
+  },
   watchFiles: (roots) => roots.flatMap((r) => listFiles(r, ".json")),
   parseMeta: parseAtifMeta,
   // Trajectories carry no reconstructable HTML documents; events feed the live view.
