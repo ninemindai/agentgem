@@ -4,7 +4,7 @@ import { describe, it, expect } from "vitest";
 import { mkdtempSync, writeFileSync, rmSync, statSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { parseAtifDocument, flattenAtifContent, parseAtifMeta, atifSessionEvents, parseAtifTranscriptView, loadSessionTranscript, atifSource, BUILTIN_SOURCES, watchableSources, sessionToAtif, scanAtifSessions, summarizeDiagnostics, isFileRejection, groupDiagnostics, type AtifDiagnostics } from "@agentgem/insight";
+import { parseAtifDocument, flattenAtifContent, parseAtifMeta, atifSessionEvents, parseAtifTranscriptView, loadSessionTranscript, atifSource, BUILTIN_SOURCES, watchableSources, sessionToAtif, scanAtifSessions, summarizeDiagnostics, isFileRejection, groupDiagnostics, scanAtifHealth, type AtifDiagnostics } from "@agentgem/insight";
 
 const MIN_DOC = JSON.stringify({
   schema_version: "ATIF-v1.7",
@@ -314,5 +314,33 @@ describe("groupDiagnostics", () => {
 
   it("returns an empty array for no diagnostics", () => {
     expect(groupDiagnostics([])).toEqual([]);
+  });
+});
+
+describe("scanAtifHealth", () => {
+  it("reports totals and grouped issues for a mixed drop dir, with no absolute paths", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "agentgem-atif-health-"));
+    try {
+      writeFileSync(join(dir, "good.json"), MIN_DOC);
+      writeFileSync(join(dir, "junk.json"), "not a trajectory");
+      writeFileSync(join(dir, "foreign.json"), JSON.stringify({ schema_version: "trajectory-v1", agent: { name: "x", version: "1" }, steps: [{}] }));
+
+      const health = await scanAtifHealth({ baseDir: dir });
+      expect(health.totalFiles).toBe(3);
+      expect(health.imported).toBe(1);                       // only good.json parses
+      expect(health.groups.map((g) => g.code).sort()).toEqual(["invalid_json", "unknown_schema_version"]);
+      expect(health.groups.find((g) => g.code === "unknown_schema_version")!.files).toEqual([{ name: "foreign.json" }]);
+      // privacy: the temp dir's absolute path must not appear anywhere in the payload
+      expect(JSON.stringify(health)).not.toContain(dir);
+    } finally { rmSync(dir, { recursive: true, force: true }); }
+  });
+
+  it("returns empty groups for a clean drop dir", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "agentgem-atif-clean-"));
+    try {
+      writeFileSync(join(dir, "good.json"), MIN_DOC);
+      const health = await scanAtifHealth({ baseDir: dir });
+      expect(health).toMatchObject({ totalFiles: 1, imported: 1, groups: [] });
+    } finally { rmSync(dir, { recursive: true, force: true }); }
   });
 });
