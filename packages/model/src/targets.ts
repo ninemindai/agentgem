@@ -991,7 +991,14 @@ const buzzSlug = (name: string): string => {
   return s.length ? s : "agent";
 };
 
-const buzzPersonaMd = (gem: Gem, slug: string, description: string, skillNames: string[]): string => {
+// A teammate's public identity as the orchestrator's roster sees it: its @display_name and a one-line role.
+interface BuzzTeammate { displayName: string; description: string }
+
+const buzzTeamSection = (team: BuzzTeammate[]): string =>
+  `\n\n## Your team\n\nYou coordinate this team — delegate by @mentioning a teammate:\n\n` +
+  team.map((t) => `- **@${t.displayName}** — ${t.description}`).join("\n");
+
+const buzzPersonaMd = (gem: Gem, slug: string, description: string, skillNames: string[], team: BuzzTeammate[] = []): string => {
   const instr = gem.artifacts.filter((a): a is InstructionsArtifact => a.type === "instructions");
   const front: Record<string, unknown> = {
     name: slug,
@@ -1001,7 +1008,27 @@ const buzzPersonaMd = (gem: Gem, slug: string, description: string, skillNames: 
   };
   if (skillNames.length) front.skills = skillNames.map((n) => `./skills/${safePathSegment(n)}/`);
   // Body is the gem's identity: its instructions, or a minimal fallback (a persona prompt is required).
-  const body = instr.map((i) => i.content).join("\n\n---\n\n").trim() || `You are ${gem.name}.`;
+  // When the gem carries subagents, append the roster so the orchestrator knows whom to delegate to.
+  let body = instr.map((i) => i.content).join("\n\n---\n\n").trim() || `You are ${gem.name}.`;
+  if (team.length) body += buzzTeamSection(team);
+  return `---\n${stringifyYaml(front)}---\n\n${body}\n`;
+};
+
+// One gem subagent -> one Buzz teammate persona. Its description feeds both the orchestrator's roster and
+// this persona's own front matter (single source). model/tools are intentionally dropped: a subagent's
+// model id isn't Buzz's `provider:model` form, and its tool allowlist has no persona equivalent (Buzz
+// grants tools via MCP) — the persona inherits the pack defaults instead of carrying a wrong mapping.
+const buzzSubDescription = (sub: SubagentArtifact): string =>
+  (sub.description ?? "").trim() || a2aFirstLine(sub.content) || `The ${sub.name} teammate.`;
+
+const buzzTeammatePersonaMd = (sub: SubagentArtifact, slug: string): string => {
+  const front: Record<string, unknown> = {
+    name: slug,
+    display_name: sub.name,
+    description: buzzSubDescription(sub),
+    triggers: { mentions: true },
+  };
+  const body = sub.content.trim() || `You are ${sub.name}.`;
   return `---\n${stringifyYaml(front)}---\n\n${body}\n`;
 };
 
@@ -1010,7 +1037,22 @@ const buzzComposeProject = (gem: Gem): MaterializeResult => {
   const skills = gem.artifacts.filter((a): a is SkillArtifact => a.type === "skill");
   const instr  = gem.artifacts.filter((a): a is InstructionsArtifact => a.type === "instructions");
   const mcps   = gem.artifacts.filter((a): a is McpServerArtifact => a.type === "mcp_server");
+  const subs   = gem.artifacts.filter((a): a is SubagentArtifact => a.type === "subagent");
   const description = a2aFirstLine(instr[0]?.content ?? "") || `A Buzz agent packaged by AgentGem from the ${gem.name} gem.`;
+
+  // Subagents become teammate personas — the gem is the orchestrator, so this is a multi-persona team
+  // pack (see meadow-core). Persona filenames must be unique; a subagent whose slug collides with the gem
+  // or an earlier teammate is skip-reported, never clobbered (Object.assign below would overwrite silently).
+  const usedSlugs = new Set<string>([slug]);
+  const teammates: { sub: SubagentArtifact; slug: string }[] = [];
+  const subSkips: SkippedArtifact[] = [];
+  for (const sub of subs) {
+    const s = buzzSlug(sub.name);
+    if (usedSlugs.has(s)) { subSkips.push({ artifact: sub.name, type: "subagent", reason: `persona name "${s}" collides with an earlier persona` }); continue; }
+    usedSlugs.add(s);
+    teammates.push({ sub, slug: s });
+  }
+  const roster: BuzzTeammate[] = teammates.map((t) => ({ displayName: t.sub.name, description: buzzSubDescription(t.sub) }));
 
   const manifest: Record<string, unknown> = {
     $schema: "https://open-plugin-spec.org/schema/v1/plugin.json",
@@ -1018,7 +1060,7 @@ const buzzComposeProject = (gem: Gem): MaterializeResult => {
     name: gem.name,
     version: "0.1.0",
     description,
-    personas: [`agents/${slug}.persona.md`],
+    personas: [`agents/${slug}.persona.md`, ...teammates.map((t) => `agents/${t.slug}.persona.md`)],
   };
   if (instr.length) manifest.pack_instructions = "instructions.md";
   // Shared MCP is the pack's `.mcp.json` ({mcpServers}), the same file the claude target emits — the
@@ -1027,23 +1069,23 @@ const buzzComposeProject = (gem: Gem): MaterializeResult => {
 
   const files: FileTree = {
     ".plugin/plugin.json": JSON.stringify(manifest, null, 2) + "\n",
-    [`agents/${slug}.persona.md`]: buzzPersonaMd(gem, slug, description, skills.map((s) => s.name)),
+    [`agents/${slug}.persona.md`]: buzzPersonaMd(gem, slug, description, skills.map((s) => s.name), roster),
   };
+  for (const t of teammates) files[`agents/${t.slug}.persona.md`] = buzzTeammatePersonaMd(t.sub, t.slug);
   if (instr.length) files["instructions.md"] = instr.map((i) => `## ${i.name}\n\n${i.content}`).join("\n\n---\n\n") + "\n";
   for (const s of skills) Object.assign(files, skillSkillMd(s)); // skills/<name>/SKILL.md — same shape Buzz packs use
   if (mcps.length) Object.assign(files, mcpDotMcpJson(mcps).files); // .mcp.json — config already redacted at import
 
-  // A persona pack expresses identity + instructions + skills + shared MCP, not hooks, channels, or
-  // Claude-native subagents. Report the rest so compatibility() stays honest. Package-backed MCP refs
-  // are not yet resolved into the pack (only value mcp_server artifacts) — reported via
-  // skipResolvedReferenceArtifacts below.
+  // A persona pack expresses identity + instructions + skills + shared MCP + teammate personas, not hooks
+  // or channels. Report those (and any collision-dropped subagents) so compatibility() stays honest.
+  // Package-backed MCP refs are not yet resolved into the pack (only value mcp_server artifacts) —
+  // reported via skipResolvedReferenceArtifacts below.
   const skipped: SkippedArtifact[] = [
     ...gem.artifacts.filter((a): a is HookArtifact => a.type === "hook")
       .map((a): SkippedArtifact => ({ artifact: a.name, type: "hook", reason: "a Buzz persona pack has no hook concept" })),
     ...gem.artifacts.filter((a): a is ChannelArtifact => a.type === "channel")
       .map((a): SkippedArtifact => ({ artifact: a.name, type: "channel", reason: "channels are wired by the Buzz community, not the pack" })),
-    ...gem.artifacts.filter((a): a is SubagentArtifact => a.type === "subagent")
-      .map((a): SkippedArtifact => ({ artifact: a.name, type: "subagent", reason: "one gem maps to one persona; multi-persona teams are not yet emitted" })),
+    ...subSkips,
     ...skipResolvedReferenceArtifacts(gem, "buzz"),
   ];
   return { files, skipped };
