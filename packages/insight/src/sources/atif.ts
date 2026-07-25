@@ -9,11 +9,11 @@
 import { readFile } from "node:fs/promises";
 import { statSync } from "node:fs";
 import { createLogger } from "@agentgem/base";
-import type { SourceSpec } from "../sources.js";
+import type { SourceSpec, SourceEnv } from "../sources.js";
 import type { SessionStat } from "../observeAggregate.js";
 import { listFiles } from "../observeScan.js";
 import { parseAtifMeta, atifSessionEvents } from "../atif/atifImport.js";
-import { summarizeDiagnostics, type AtifDiagnostics } from "../atif/atifDiagnostics.js";
+import { summarizeDiagnostics, groupDiagnostics, type AtifDiagnostics, type AtifHealthGroup } from "../atif/atifDiagnostics.js";
 import { atifDropDir } from "../atif/atifView.js";
 
 const log = createLogger("insight");
@@ -57,3 +57,24 @@ export const atifSource: SourceSpec = {
   resolveArtifactPaths: () => [],
   detectEvents: atifSessionEvents,
 };
+
+export interface AtifHealth {
+  /** *.json files present in the drop dir. */
+  totalFiles: number;
+  /** How many of them parsed into a session. */
+  imported: number;
+  /** Import problems, grouped by reason; empty when the drop dir is clean. */
+  groups: AtifHealthGroup[];
+}
+
+/**
+ * Scan the drop dir for a health snapshot: totals plus grouped diagnostics.
+ * Resolves the root exactly as the source does and reuses scanAtifSessions, so
+ * it sees the same files the telemetry scan sees. `env.baseDir` is the test
+ * override for the drop dir (same as the source).
+ */
+export async function scanAtifHealth(env: SourceEnv = {}): Promise<AtifHealth> {
+  const files = atifSource.roots(env).flatMap((r) => listFiles(r, ".json"));
+  const { stats, diagnostics } = await scanAtifSessions(files);
+  return { totalFiles: files.length, imported: stats.length, groups: groupDiagnostics(diagnostics) };
+}
