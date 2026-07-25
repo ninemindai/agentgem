@@ -140,10 +140,13 @@ export function questsFor(d: GemitData): Quest[] {
 // aria-labelledby (not a duplicated aria-label string) so the visible label is the slider's
 // only accessible name — an inline "Projected <label>" would repeat the discipline name into
 // the markup a second time and break the "renders once" invariant this collapse exists to fix.
+// aria-describedby points at #disc-mode (the "measured"/"projected" <em> in the h2, aria-live so
+// the toggle flip is announced) so the mode reaches assistive tech via the control's description
+// without touching its accessible name — the name test above still only ever sees the bare label.
 const discBar = (label: string, axis: string, v: number, i: number): string => `
       <div class="disc${v < 50 ? " low" : ""}" data-axis="${axis}">
         <div class="disc-head"><b id="lbl-${axis}">${label}</b><span class="tg-val mono">${v}</span></div>
-        <div class="track" role="slider" tabindex="0" aria-labelledby="lbl-${axis}"
+        <div class="track" role="slider" tabindex="0" aria-labelledby="lbl-${axis}" aria-describedby="disc-mode"
              aria-valuemin="${v}" aria-valuemax="100" aria-valuenow="${v}">
           <i class="tg-meas" style="--w:${v}%"></i><i class="tg-proj" style="width:${v}%;--d:${(0.2 + i * 0.12).toFixed(2)}s"></i>
         </div>
@@ -243,7 +246,7 @@ ${RUNTIME_JS}</script>`;
     <div class="seam"><span>The Record Behind It</span></div>
 
     <section id="disciplines">
-      <h2>The Three Disciplines <em id="disc-mode">measured</em>
+      <h2>The Three Disciplines <em id="disc-mode" aria-live="polite">measured</em>
         <button class="wi" type="button" aria-pressed="false">What if?</button></h2>
       ${discBar("Context Discipline", "ctx", data.ctx, 0)}
       ${discBar("Process Quality", "proc", data.proc, 1)}
