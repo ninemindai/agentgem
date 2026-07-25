@@ -4,7 +4,7 @@ import { describe, it, expect } from "vitest";
 import { mkdtempSync, writeFileSync, rmSync, statSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { parseAtifDocument, flattenAtifContent, parseAtifMeta, atifSessionEvents, parseAtifTranscriptView, loadSessionTranscript, atifSource, BUILTIN_SOURCES, watchableSources, sessionToAtif, scanAtifSessions, summarizeDiagnostics, isFileRejection, type AtifDiagnostics } from "@agentgem/insight";
+import { parseAtifDocument, flattenAtifContent, parseAtifMeta, atifSessionEvents, parseAtifTranscriptView, loadSessionTranscript, atifSource, BUILTIN_SOURCES, watchableSources, sessionToAtif, scanAtifSessions, summarizeDiagnostics, isFileRejection, groupDiagnostics, type AtifDiagnostics } from "@agentgem/insight";
 
 const MIN_DOC = JSON.stringify({
   schema_version: "ATIF-v1.7",
@@ -278,5 +278,41 @@ describe("atifSource", () => {
       expect(stats[0].startMs).toBeCloseTo(mtime, -2);
       expect(stats[0].endMs).toBeCloseTo(mtime, -2);
     } finally { rmSync(dir, { recursive: true, force: true }); }
+  });
+});
+
+describe("groupDiagnostics", () => {
+  it("groups by code, reduces paths to basenames, sums occurrences, and orders rejections first", () => {
+    const groups = groupDiagnostics([
+      { code: "orphan_tool_result", path: "/drop/partial.json", stepId: 2, count: 40 },
+      { code: "unknown_schema_version", path: "/drop/conv-1.json", schemaVersion: "trajectory-v1" },
+      { code: "unknown_schema_version", path: "/drop/conv-2.json" },
+    ]);
+    // rejections (unknown_schema_version) come before degradations (orphan_tool_result)
+    expect(groups.map((g) => g.code)).toEqual(["unknown_schema_version", "orphan_tool_result"]);
+
+    const rej = groups[0];
+    expect(rej.rejection).toBe(true);
+    expect(rej.occurrences).toBe(2);                       // two diagnostics, no counts → 1 + 1
+    expect(rej.files).toEqual([{ name: "conv-1.json" }, { name: "conv-2.json" }]); // basenames, no absolute paths
+
+    const deg = groups[1];
+    expect(deg.rejection).toBe(false);
+    expect(deg.occurrences).toBe(40);                      // count honoured
+    expect(deg.files).toEqual([{ name: "partial.json", detail: "step 2" }]);
+  });
+
+  it("collapses the same file+step but keeps distinct steps of one file", () => {
+    const [g] = groupDiagnostics([
+      { code: "orphan_tool_result", path: "/drop/a.json", stepId: 1 },
+      { code: "orphan_tool_result", path: "/drop/a.json", stepId: 1 },
+      { code: "orphan_tool_result", path: "/drop/a.json", stepId: 3 },
+    ]);
+    expect(g.files).toEqual([{ name: "a.json", detail: "step 1" }, { name: "a.json", detail: "step 3" }]);
+    expect(g.occurrences).toBe(3);
+  });
+
+  it("returns an empty array for no diagnostics", () => {
+    expect(groupDiagnostics([])).toEqual([]);
   });
 });
