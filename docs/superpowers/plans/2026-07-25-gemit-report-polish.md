@@ -752,8 +752,15 @@ const MIN_COHORT = 100;
 const scores = [];
 
 for await (const line of createInterface({ input: process.stdin })) {
-  const n = Number(line.trim());
-  if (Number.isInteger(n) && n >= 0 && n <= 100) scores.push(n);
+  // Reject the STRING before coercing. `Number("")`, `Number(" ")` and `Number("\t")`
+  // are all 0, so a blank line would otherwise be counted as a real composite of zero —
+  // padding the cohort with phantom low scores and shifting every percentile downward,
+  // making real operators look better than they are. `Number` also accepts hex ("0x10"
+  // → 16) and exponent form ("1e2" → 100, a perfect score from a malformed line).
+  const raw = line.trim();
+  if (!/^\d+$/.test(raw)) continue;
+  const n = Number(raw);
+  if (n <= 100) scores.push(n);
 }
 
 if (scores.length < MIN_COHORT) {
