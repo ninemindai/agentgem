@@ -49,7 +49,11 @@ ${themeAdapter("document")}
   #disciplines:not(.whatif) .tg-meas{ display:none; }
   .tg-proj { background: var(--gold); opacity: .85; animation: grow 1s cubic-bezier(.25,1,.3,1) var(--d) backwards; transition: width .35s cubic-bezier(.25,1,.3,1); }
   .disc.low .tg-proj { background: var(--accent); opacity: 1; }
-  .wi{ flex:none; order:2; align-self:center; font-family: var(--mono); font-size: 11px; letter-spacing: .08em; text-transform: uppercase; padding: 4px 11px; border-radius: 99px; cursor: pointer; border: 1px solid var(--border); background: transparent; color: inherit; opacity: .75; }
+  /* color: var(--ink) — NOT inherit. h2 (its parent) sets a dimmed color for its own label
+     text; inheriting that here would multiply with this button's own opacity below (0.6 *
+     .75 ≈ .45), the same effective fade as the compounding-opacity bug this task fixed. An
+     explicit, non-inherited full-strength colour means only this rule's own opacity applies. */
+  .wi{ flex:none; order:2; align-self:center; font-family: var(--mono); font-size: 11px; letter-spacing: .08em; text-transform: uppercase; padding: 4px 11px; border-radius: 99px; cursor: pointer; border: 1px solid var(--border); background: transparent; color: var(--ink); opacity: .75; }
   .wi[aria-pressed="true"] { background: var(--accent); border-color: var(--accent); color: #fff; opacity: 1; }
   h2::after{ order:1; }
   .tg-rank { margin: 14px 0 10px; border: 1px dashed var(--gold); width: fit-content; padding: 7px 14px; }
