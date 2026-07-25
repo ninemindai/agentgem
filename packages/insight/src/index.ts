@@ -62,6 +62,7 @@ export * from "./criterionJudge.js";
 export * from "./rubricReport.js";
 export * from "./dashboardRender.js";
 export * from "./reportBrief.js";
+export * from "./reportExemplar.js";
 export * from "./reportRender.js";
 export * from "./contextCap.js";
 export * from "./taskCluster.js";
