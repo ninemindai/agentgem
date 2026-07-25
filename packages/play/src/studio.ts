@@ -9,7 +9,7 @@ import { type GameSource, type GameGenre, AUTO_CAPS } from "@agentgem/model";
 import { deriveNeeds } from "./capabilityScan.js";
 import { extractSource, type SourceReaders } from "./sourceContext.js";
 import { genreFor } from "./genres.js";
-import { scaffoldFor, minimalTemplate } from "./scaffolds.js";
+import { scaffoldFor, minimalTemplate, docTemplate } from "./scaffolds.js";
 import { miniappDir, miniappsRoot, claimMiniappDir, miniappHtmlPath, assertNotBuiltin, MINIAPP_HTML, type MiniappMeta } from "./miniapps.js";
 import { ensureRepo, commitWithLock } from "./git.js";
 import { redactForBake } from "./redact.js";
@@ -130,19 +130,25 @@ export async function importStudio(title: string, html: string, name?: string, f
 // Create a miniapp from scratch — no source context. Seeds a fresh blank sealed canvas titled with the
 // user's title; the user then builds it by chatting in the studio. `prompt` is optional creative
 // direction (NOT baked into the HTML — it just opens the studio brief).
-export async function blankStudio(title: string, prompt?: string, name?: string, files?: UploadFile[]): Promise<{ name: string; brief: string }> {
+export async function blankStudio(title: string, prompt?: string, name?: string, files?: UploadFile[], template?: "canvas" | "doc"): Promise<{ name: string; brief: string }> {
   const source: GameSource = { kind: "blank", title };
   await ensureRepo(miniappsRoot());
   const { name: id, dir } = claimFor(source, name);
   const uploads = writeUploadsOrRelease(dir, files);
-  writeFileSync(join(dir, MINIAPP_HTML), minimalTemplate(title, "✦ new"));
+  // Two blank starting points: a full-window canvas game (default, unchanged), or a scrolling document
+  // (report/tool/readout). Both are sealed, gate-passing scaffolds the agent then edits.
+  const isDoc = template === "doc";
+  writeFileSync(join(dir, MINIAPP_HTML), (isDoc ? docTemplate : minimalTemplate)(title, "✦ new"));
   const meta: MiniappMeta = { title, genre: "project-fun", createdFrom: source, engineVersion: "1", ...((uploads.ship || uploads.ref) ? { uploads } : {}) };
   writeFileSync(join(dir, "meta.json"), JSON.stringify(meta, null, 2));
   await commitWithLock(miniappsRoot(), `create miniapp ${id}`);
+  const kind = isDoc ? "document (a report, tool or readout — it scrolls, it is not a game)" : "mini-game";
   const want = prompt?.trim()
     ? `The user wants to build: ${prompt.trim()}`
-    : `Ask the user what kind of mini-game they want, then build it. If they don't say, make a small, delightful arcade game.`;
-  return { name: id, brief: `You are building "${title}" from scratch — a self-contained HTML mini-game with no source data. ${want}${uploadsBrief(uploads)}\n\n${studioInstructions(MINIAPP_HTML)}` };
+    : isDoc
+      ? `Ask the user what document, tool or readout they want, then build it.`
+      : `Ask the user what kind of mini-game they want, then build it. If they don't say, make a small, delightful arcade game.`;
+  return { name: id, brief: `You are building "${title}" from scratch — a self-contained HTML ${kind} with no source data. ${want}${uploadsBrief(uploads)}\n\n${studioInstructions(MINIAPP_HTML)}` };
 }
 
 // Add author files to an ALREADY-created miniapp, mid-session. Writes into the workspace the studio agent

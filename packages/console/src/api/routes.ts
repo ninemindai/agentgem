@@ -1092,7 +1092,7 @@ export const playImportRoute = defineRoute("POST", "/api/play/import", {
   response: z.object({ name: z.string() }),
 });
 export const playBlankRoute = defineRoute("POST", "/api/play/blank", {
-  body: z.object({ title: z.string(), prompt: z.string().optional(), name: z.string().optional(), files: z.array(playUploadFileSchema).optional() }),
+  body: z.object({ title: z.string(), prompt: z.string().optional(), name: z.string().optional(), files: z.array(playUploadFileSchema).optional(), template: z.enum(["canvas", "doc"]).optional() }),
   response: z.object({ name: z.string() }),
 });
 // Add files to an EXISTING miniapp's workspace (mid-Studio-session uploads), distinct from

@@ -175,8 +175,11 @@ a guarantee. So:
 
 ## Traps that have already cost days
 
-- Lay out full-window: \`html, body { height: 100%; overflow: hidden }\` and
-  \`#stage { position: fixed; inset: 0 }\`.
+- Lay out for what you are. A **game or canvas app** goes full-window and does not scroll:
+  \`html, body { height: 100%; overflow: hidden }\` and \`#stage { position: fixed; inset: 0 }\`. A
+  **document** — a report, tool or readout — scrolls instead: keep a \`#stage { position: fixed; inset: 0;
+  overflow: auto }\` and let a centered \`#wrap\` grow past the fold. Do not trap a document at
+  \`overflow: hidden\`; do not let a game body scroll.
 - **Never measure the viewport once.** Listen for \`resize\`. A one-shot measurement at parse time is
   the single most common bug here: the frame can be born small, and going fullscreen changes the real
   viewport underneath you.

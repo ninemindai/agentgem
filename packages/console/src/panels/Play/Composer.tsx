@@ -94,6 +94,7 @@ export function Composer({
   const [dragOver, setDragOver] = useState(false);
   const [blankTitle, setBlankTitle] = useState(initialTitle ?? "");     // Blank (from-scratch) tab
   const [blankPrompt, setBlankPrompt] = useState(initialPrompt ?? "");
+  const [blankTemplate, setBlankTemplate] = useState<"canvas" | "doc">("canvas");  // Blank starting point
   // Optional miniapp id, shared by every tab. Left empty the server derives one from the source and
   // suffixes it on collision; typed, the server claims it exactly and 409s if it is taken.
   const [name, setName] = useState("");
@@ -162,7 +163,9 @@ export function Composer({
     const ue = up.limitError(); if (ue) { setError(ue); return; }
     setBusy(true); setError(""); up.setError("");
     try {
-      const res = await playBlankRoute.call(makeClient(apiBase), { body: { title: blankTitle.trim(), ...named(), ...up.payload() } });
+      // Omit the default "canvas" so a plain from-scratch game call is byte-identical to before the toggle.
+      const template = blankTemplate === "doc" ? { template: "doc" as const } : {};
+      const res = await playBlankRoute.call(makeClient(apiBase), { body: { title: blankTitle.trim(), ...named(), ...up.payload(), ...template } });
       // The description isn't baked server-side; it's auto-sent as the studio's first build prompt.
       onCreated(res.name, [capPreamble(caps), connectorPreamble(connectors), up.preamble(), blankPrompt.trim()].filter(Boolean).join("\n\n") || undefined);
     } catch (e) { setError((e as Error).message); setBusy(false); }
@@ -273,9 +276,14 @@ export function Composer({
       {kind === "blank" && (
         <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
           <p className="play-intro" style={{ margin: 0 }}>Start from scratch — no source context. Name it and describe what you want; the studio agent starts building from your description. Leave the description blank to build by chatting instead.</p>
+          <div className="play-tabs" style={{ alignItems: "center" }}>
+            <span className="play-intro" style={{ margin: 0 }}>Start as:</span>
+            <button type="button" className={`play-tab${blankTemplate === "canvas" ? " is-active" : ""}`} onClick={() => setBlankTemplate("canvas")}>Game</button>
+            <button type="button" className={`play-tab${blankTemplate === "doc" ? " is-active" : ""}`} onClick={() => setBlankTemplate("doc")}>Document</button>
+          </div>
           <input className="play-input" placeholder="title" value={blankTitle} onChange={(e) => setBlankTitle(e.target.value)} />
           <textarea className="play-input" style={{ minHeight: 120 }}
-            placeholder="describe the mini-game you want — sent as the first build prompt…" value={blankPrompt} onChange={(e) => setBlankPrompt(e.target.value)} />
+            placeholder={blankTemplate === "doc" ? "describe the document or tool you want — sent as the first build prompt…" : "describe the mini-game you want — sent as the first build prompt…"} value={blankPrompt} onChange={(e) => setBlankPrompt(e.target.value)} />
           <UploadsField u={up} />
           <button className="play-btn play-btn--primary" style={{ alignSelf: "flex-start" }} disabled={busy || !blankTitle.trim()} onClick={doBlank}>
             {busy ? "Creating…" : "Create miniapp"}
