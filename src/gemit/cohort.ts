@@ -34,6 +34,16 @@ export function percentileFor(composite: number, c?: Cohort | null): number | nu
   return typeof v === "number" ? v : null;
 }
 
+// "Top N%" for a composite is the inverse of the percentile: the share of the
+// cohort AT OR BELOW the composite is how good it is, so the share ABOVE it (the
+// "top" fraction) is 100 minus that. Single-sourced here so the card
+// (themeRpg.ts) and the share text (share.ts) can never compute this differently
+// from one another — both call this, neither re-derives `100 - pct` on its own.
+export function topPercentFor(composite: number, c?: Cohort | null): number | null {
+  const pct = percentileFor(composite, c);
+  return pct === null ? null : 100 - pct;
+}
+
 export function cohortLabel(c: Cohort): string {
   const [y, m] = c.asOf.split("-");
   const month = MONTHS[Number(m) - 1] ?? m;

@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: MIT
 // The cohort claim must be absent unless it is backed by a real, large-enough sample.
 import { describe, expect, it } from "vitest";
-import { COHORT, MIN_COHORT, type Cohort, cohortLabel, percentileFor } from "../gemit/cohort.js";
+import { COHORT, MIN_COHORT, type Cohort, cohortLabel, percentileFor, topPercentFor } from "../gemit/cohort.js";
 
 const table = (): Cohort => ({
   asOf: "2026-07-25",
@@ -38,6 +38,20 @@ describe("percentileFor", () => {
 
   it("ships with the claim switched off", () => {
     expect(COHORT).toBeNull();
+  });
+});
+
+describe("topPercentFor", () => {
+  it("returns null exactly when percentileFor does", () => {
+    expect(topPercentFor(79, null)).toBeNull();
+    expect(topPercentFor(79, undefined)).toBeNull();
+    expect(topPercentFor(79, { ...table(), n: MIN_COHORT - 1 })).toBeNull();
+  });
+
+  it("inverts the percentile: beating 78% of the cohort reads top 22%, not top 78%", () => {
+    expect(percentileFor(79, table())).toBe(78); // from the reading test above
+    expect(topPercentFor(79, table())).toBe(22);
+    expect(topPercentFor(79, table())).not.toBe(78);
   });
 });
 

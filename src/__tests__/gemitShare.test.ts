@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: MIT
 // Share packaging tests: the privacy strip (no skill/subagent names ship), the
 // gem-archive round-trip with a signed digest, and the share/X URLs.
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { buildGemitShare, gemitShareUrls, GEMIT_SHARE_VERSION, shareVariantOf, standingClause } from "../gemit/share.js";
 import { computeGemitData, type GemitData, type GemitScoredInput, type GemitSessionInput } from "../gemit/score.js";
 import { MIN_COHORT, type Cohort } from "../gemit/cohort.js";
@@ -146,5 +146,42 @@ describe("share text percentile", () => {
     expect(text).toContain("Lapidary");
     expect(text).toContain("79/100");
     expect(text).not.toMatch(/top \d+%/i);
+  });
+});
+
+describe("card/share standing parity", () => {
+  // Both the card (themeRpg.ts renderCard) and the share clause (standingClause,
+  // above) must compute "top N%" from the exact same source (cohort.ts's
+  // topPercentFor), not two independent `100 - pct` expressions that could drift.
+  // COHORT is mocked here — not the real, always-null export — so this is the one
+  // test in the suite that actually exercises the cohort-PRESENT rendering path
+  // for the card; module mocking is required because renderCard reads the
+  // module-level COHORT constant rather than taking one as a parameter.
+  it("renders the identical top-N% number in the card and in the share clause for the same (composite, cohort)", async () => {
+    const table = cohortTable();
+    vi.resetModules();
+    vi.doMock("../gemit/cohort.js", async (importOriginal) => {
+      const actual = await importOriginal<typeof import("../gemit/cohort.js")>();
+      return { ...actual, COHORT: table };
+    });
+    try {
+      const { renderRpgTheme } = await import("../gemit/themeRpg.js");
+      const { standingClause: mockedStandingClause } = await import("../gemit/share.js");
+      const { topPercentFor } = await import("../gemit/cohort.js");
+
+      const d = fixtureData(); // composite 79, identity table -> beats 79% -> top 21%
+      const shared = topPercentFor(d.composite, table);
+      expect(shared).toBe(21); // sanity: matches the earlier direction test
+
+      const html = renderRpgTheme(d);
+      const cardMatch = html.match(/Top <b>(\d+)%<\/b>/);
+      expect(cardMatch).not.toBeNull();
+      expect(Number(cardMatch![1])).toBe(shared);
+
+      expect(mockedStandingClause(d.composite, table)).toBe(`, top ${shared}%`);
+    } finally {
+      vi.doUnmock("../gemit/cohort.js");
+      vi.resetModules();
+    }
   });
 });

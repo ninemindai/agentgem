@@ -9,7 +9,7 @@
 // inline (no external URLs), dual-theme via :root[data-theme] tokens, with the
 // payload baked as a JSON island for future tooling.
 
-import { COHORT, cohortLabel, percentileFor } from "./cohort.js";
+import { COHORT, cohortLabel, topPercentFor } from "./cohort.js";
 import { COMPOSITE_WEIGHTS, SETUP_WEIGHTS, TIER_THRESHOLDS, type GemitData } from "./score.js";
 import { autoSolvePath, projectComposite, setupScoreFrom, tierFor } from "./themeRpgSim.js";
 import { STYLES } from "./theme/styles.js";
@@ -171,9 +171,9 @@ function renderCard(d: GemitData): string {
   const hook = nextTier
     ? `${ptsToNext} pt${ptsToNext === 1 ? "" : "s"} from ${nextTier}`
     : "Top tier";
-  const pct = percentileFor(d.composite, COHORT);
-  const cohort = pct !== null && COHORT
-    ? `<p class="cohort">Top <b>${100 - pct}%</b> &middot; ${escapeHtml(cohortLabel(COHORT))}</p>`
+  const topPct = topPercentFor(d.composite, COHORT);
+  const cohort = topPct !== null && COHORT
+    ? `<p class="cohort">Top <b>${topPct}%</b> &middot; ${escapeHtml(cohortLabel(COHORT))}</p>`
     : "";
   const { unlocked } = perksFor(d);
   const offset = (RING_C * (1 - d.composite / 100)).toFixed(1);
