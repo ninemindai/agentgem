@@ -10,6 +10,7 @@ import { describe, it, expect } from "vitest";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { REPORT_BUILDER_BRIEF, buildReportPrompt, renderReport, MAX_REPORT_HTML } from "@agentgem/insight";
+import { HOUSE_TOKENS, themeAdapter } from "@agentgem/model";
 
 const md = (): string => readFileSync(join(process.cwd(), "skills/agentgem-report/SKILL.md"), "utf8");
 
@@ -46,6 +47,16 @@ describe("buildReportPrompt", () => {
     expect(p.startsWith(REPORT_BUILDER_BRIEF)).toBe(true);
     expect(p).toContain('REPORT: "Context hygiene" (rubric context-hygiene, scope session)');
     expect(p).toContain('{"sessionsScanned":3}');
+  });
+
+  it("injects the document house-style spine verbatim, after the brief and before the facts", () => {
+    const p = buildReportPrompt({ facts: {}, meta: { rubricId: "r", title: "T", scope: "all" } });
+    // The exact tokens + document theme binding reach the agent as CSS, not as prose it must re-derive.
+    expect(p).toContain(HOUSE_TOKENS);
+    expect(p).toContain(themeAdapter("document"));
+    // Ordering: still starts with the brief (drift-mirror contract), and the spine precedes the FACTS.
+    expect(p.startsWith(REPORT_BUILDER_BRIEF)).toBe(true);
+    expect(p.indexOf(HOUSE_TOKENS)).toBeLessThan(p.indexOf("FACTS (JSON)"));
   });
 });
 
