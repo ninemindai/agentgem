@@ -33,21 +33,22 @@ export const STYLES = `
   .conferred { color: var(--muted); max-width: 44ch; margin: 14px auto 0; }
   h2 { font-size: 12.5px; letter-spacing: .22em; text-transform: uppercase; color: var(--muted); font-weight: 500; display: flex; align-items: center; gap: 12px; margin: 40px 0 16px; }
   h2::after { content: ""; height: 1px; background: var(--line); flex: 1; }
-  .stat { margin: 0 0 16px; }
-  .stat-head { display: flex; justify-content: space-between; align-items: baseline; }
-  .stat-name { font-size: 15.5px; }
-  .stat-val { font-size: 17px; }
-  .bar { height: 8px; margin-top: 7px; background: var(--panel); border: 1px solid var(--line); overflow: hidden; }
-  .bar i { display: block; height: 100%; width: var(--w); background: var(--gold); transform-origin: left; animation: fill 1s cubic-bezier(.25,1,.3,1) var(--d, .15s) backwards; }
-  .bar.low i { background: var(--accent); }
-  @keyframes fill { from { transform: scaleX(0); } }
-  .tg-note { color: var(--muted); font-size: 13px; margin: 0 0 14px; }
-  .tg-stat { margin: 0 0 18px; }
-  .tg-bar { position: relative; height: 18px; background: var(--panel); border: 1px solid var(--line); cursor: ew-resize; touch-action: none; }
-  .tg-bar:focus-visible { outline: 2px solid var(--gold); outline-offset: 2px; }
-  .tg-meas, .tg-proj { position: absolute; top: 0; left: 0; bottom: 0; display: block; }
+  .disc { margin: 0 0 16px; }
+  .disc-head { display: flex; justify-content: space-between; align-items: baseline; }
+  .disc-head b { font-size: 15.5px; font-weight: normal; }
+  .disc-head span { font-size: 17px; }
+  .track { height: 9px; margin-top: 7px; border-radius: 5px; background: var(--panel); border: 1px solid var(--line); overflow: hidden; position: relative; }
+  .track:focus-visible { outline: 2px solid var(--gold); outline-offset: 2px; }
+  .track{ cursor:default; }
+  #disciplines.whatif .track{ cursor:ew-resize; touch-action:none; }
+  .tg-meas, .tg-proj { position: absolute; top: 0; left: 0; bottom: 0; display: block; border-radius: 5px; }
   .tg-meas { width: var(--w); background: var(--line); }
-  .tg-proj { background: var(--gold); opacity: .85; transition: width .35s cubic-bezier(.25,1,.3,1); }
+  #disciplines:not(.whatif) .tg-meas{ display:none; }
+  .tg-proj { background: var(--gold); opacity: .85; animation: grow 1s cubic-bezier(.25,1,.3,1) var(--d) backwards; transition: width .35s cubic-bezier(.25,1,.3,1); }
+  .disc.low .tg-proj { background: var(--accent); opacity: 1; }
+  .wi{ flex:none; order:2; align-self:center; font-family: ui-monospace, Menlo, monospace; font-size: 11px; letter-spacing: .08em; text-transform: uppercase; padding: 4px 11px; border-radius: 99px; cursor: pointer; border: 1px solid var(--line); background: transparent; color: inherit; opacity: .75; }
+  .wi[aria-pressed="true"] { background: var(--accent); border-color: var(--accent); color: #fff; opacity: 1; }
+  h2::after{ order:1; }
   .tg-rank { margin: 14px 0 10px; border: 1px dashed var(--gold); width: fit-content; padding: 7px 14px; }
   #tg-solve { font: inherit; font-size: 13.5px; padding: 9px 16px; border: 1px solid var(--gold); background: transparent; color: var(--gold); cursor: pointer; letter-spacing: .04em; }
   #tg-solve:disabled { opacity: .5; cursor: default; }
@@ -83,7 +84,7 @@ export const STYLES = `
   .cell .l { font-size: 11.5px; letter-spacing: .07em; text-transform: uppercase; color: var(--muted); margin-top: 2px; }
   .provenance { margin-top: 40px; padding-top: 18px; border-top: 1px solid var(--line); font-size: 12.5px; color: var(--muted); line-height: 1.7; }
   @media (prefers-reduced-motion: reduce) {
-    .bar i, .stamp, .flip, #confetti i { animation: none; }
+    .tg-proj, .stamp, .flip, #confetti i { animation: none; }
     .tg-proj { transition: none; }
     ul.jutsu li { transition: none; }
   }

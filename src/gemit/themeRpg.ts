@@ -134,17 +134,18 @@ export function questsFor(d: GemitData): Quest[] {
   return quests;
 }
 
-const statBar = (label: string, value: number, low: boolean, i: number): string => `
-      <div class="stat">
-        <div class="stat-head"><span class="stat-name">${label}</span><span class="stat-val mono">${value}</span></div>
-        <div class="bar${low ? " low" : ""}"><i style="--w:${value}%;--d:${(0.15 + i * 0.12).toFixed(2)}s"></i></div>
-      </div>`;
-
-const tgStat = (label: string, axis: string, v: number): string => `
-      <div class="tg-stat" data-axis="${axis}">
-        <div class="stat-head"><span class="stat-name">${label}</span><span class="tg-val mono">${v}</span></div>
-        <div class="tg-bar" role="slider" tabindex="0" aria-label="Projected ${label}" aria-valuemin="${v}" aria-valuemax="100" aria-valuenow="${v}">
-          <i class="tg-meas" style="--w:${v}%"></i><i class="tg-proj" style="width:${v}%"></i>
+// One bar per discipline, in two states. Measured is the default fill; what-if turns the
+// same element into a slider whose projected fill sits over a ghost of the measured value.
+// The floor in setAxis (v >= meas[axis]) means projection can never read below measured.
+// aria-labelledby (not a duplicated aria-label string) so the visible label is the slider's
+// only accessible name — an inline "Projected <label>" would repeat the discipline name into
+// the markup a second time and break the "renders once" invariant this collapse exists to fix.
+const discBar = (label: string, axis: string, v: number, i: number): string => `
+      <div class="disc${v < 50 ? " low" : ""}" data-axis="${axis}">
+        <div class="disc-head"><b id="lbl-${axis}">${label}</b><span class="tg-val mono">${v}</span></div>
+        <div class="track" role="slider" tabindex="0" aria-labelledby="lbl-${axis}"
+             aria-valuemin="${v}" aria-valuemax="100" aria-valuenow="${v}">
+          <i class="tg-meas" style="--w:${v}%"></i><i class="tg-proj" style="width:${v}%;--d:${(0.2 + i * 0.12).toFixed(2)}s"></i>
         </div>
       </div>`;
 
@@ -241,21 +242,14 @@ ${RUNTIME_JS}</script>`;
     ${renderCard(data)}
     <div class="seam"><span>The Record Behind It</span></div>
 
-    <section>
-      <h2>The Three Disciplines</h2>
-      ${statBar("Context Discipline", data.ctx, data.ctx < 50, 0)}
-      ${statBar("Process Quality", data.proc, data.proc < 50, 1)}
-      ${statBar("Setup Maturity", data.setup, data.setup < 50, 2)}
-    </section>
-
-    <section id="training">
-      <h2>Training Grounds</h2>
-      <p class="tg-note">What if? Drag a bar or take on quests below &mdash; the measured score above never moves.</p>
-      ${tgStat("Context Discipline", "ctx", data.ctx)}
-      ${tgStat("Process Quality", "proc", data.proc)}
-      ${tgStat("Setup Maturity", "setup", data.setup)}
-      <p class="tg-rank mono">PROJECTED <span id="tg-comp">${data.composite}</span> / 100 &mdash; <span id="tg-tier">${tierName}</span></p>
-      <button id="tg-solve" type="button"${data.tierLevel >= 4 ? " disabled" : ""}>${data.tierLevel >= 4 ? "You&#39;re at the summit" : `Chart my path to ${TIER_NAMES[3]}`}</button>
+    <section id="disciplines">
+      <h2>The Three Disciplines <em id="disc-mode">measured</em>
+        <button class="wi" type="button" aria-pressed="false">What if?</button></h2>
+      ${discBar("Context Discipline", "ctx", data.ctx, 0)}
+      ${discBar("Process Quality", "proc", data.proc, 1)}
+      ${discBar("Setup Maturity", "setup", data.setup, 2)}
+      <p class="tg-rank mono" hidden>PROJECTED <span id="tg-comp">${data.composite}</span> / 100 &mdash; <span id="tg-tier">${tierName}</span></p>
+      <button id="tg-solve" type="button"${data.tierLevel >= 4 ? " disabled" : ""} hidden>${data.tierLevel >= 4 ? "You&#39;re at the summit" : `Chart my path to ${TIER_NAMES[3]}`}</button>
     </section>
 
     ${unlocked.length ? `<section><h2>Techniques Unlocked</h2><ul class="jutsu">${unlocked.map((p) => perkLi(p, false)).join("")}

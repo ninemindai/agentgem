@@ -102,7 +102,7 @@ describe("interactive layer", () => {
   it("renders training grounds sliders, quest log, and the sim script", () => {
     const html = renderRpgTheme(data());
     expect((html.match(/role="slider"/g) ?? []).length).toBe(3);
-    expect(html).toContain('id="training"');
+    expect(html).toContain('id="disciplines"');
     expect(html).toContain("Quest Log");
     expect(html).toContain("data-delta=");
     expect(html).toContain('id="confetti"');
@@ -122,6 +122,31 @@ describe("interactive layer", () => {
     const html = renderRpgTheme(data());
     expect(html).toContain('data-n="79"');
     expect(html).toContain("1 pt from Master Lapidary");
+  });
+});
+
+describe("the disciplines collapse", () => {
+  it("renders each discipline exactly once — no twin section", () => {
+    const html = renderRpgTheme(data());
+    expect((html.match(/Context Discipline/g) ?? []).length).toBe(1);
+    expect((html.match(/Process Quality/g) ?? []).length).toBe(1);
+    expect((html.match(/Setup Maturity/g) ?? []).length).toBe(1);
+    expect(html).not.toContain('id="training"');
+    expect(html).not.toContain("Training Grounds");
+  });
+
+  it("keeps three slider handles and the what-if toggle on one set of bars", () => {
+    const html = renderRpgTheme(data());
+    expect((html.match(/role="slider"/g) ?? []).length).toBe(3);
+    expect(html).toContain('class="wi"');
+    expect(html).toContain('aria-pressed="false"');
+  });
+
+  it("keeps the projection readout and the auto-solve button", () => {
+    const html = renderRpgTheme(data());
+    expect(html).toContain('id="tg-comp"');
+    expect(html).toContain('id="tg-tier"');
+    expect(html).toContain('id="tg-solve"');
   });
 });
 
