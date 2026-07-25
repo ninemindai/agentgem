@@ -63,18 +63,18 @@ export const RUNTIME_JS = `(function () {
   function setAxis(axis, v) {
     v = Math.max(meas[axis], Math.min(100, Math.round(v)));
     vals[axis] = v;
-    var box = document.querySelector('.tg-stat[data-axis="' + axis + '"]');
+    var box = document.querySelector('.disc[data-axis="' + axis + '"]');
     if (!box) return;
     box.querySelector(".tg-val").textContent = String(v);
-    var bar = box.querySelector(".tg-bar");
+    var bar = box.querySelector(".track");
     bar.setAttribute("aria-valuenow", String(v));
     bar.querySelector(".tg-proj").style.width = v + "%";
     recompute();
   }
 
-  Array.prototype.forEach.call(document.querySelectorAll(".tg-stat"), function (box) {
+  Array.prototype.forEach.call(document.querySelectorAll(".disc"), function (box) {
     var axis = box.getAttribute("data-axis");
-    var bar = box.querySelector(".tg-bar");
+    var bar = box.querySelector(".track");
     var dragging = false;
     var fromEvent = function (e) {
       var r = bar.getBoundingClientRect();
@@ -133,5 +133,21 @@ export const RUNTIME_JS = `(function () {
       try { navigator.clipboard.writeText(code.textContent).then(done, function () { selectNode(code); }); }
       catch (e) { selectNode(code); }
     });
+  });
+
+  var wi = document.querySelector(".wi");
+  var sect = document.getElementById("disciplines");
+  if (wi && sect) wi.addEventListener("click", function () {
+    var on = wi.getAttribute("aria-pressed") !== "true";
+    wi.setAttribute("aria-pressed", on ? "true" : "false");
+    sect.classList.toggle("whatif", on);
+    document.getElementById("disc-mode").textContent = on ? "projected" : "measured";
+    document.querySelector(".tg-rank").hidden = !on;
+    document.getElementById("tg-solve").hidden = !on;
+    if (!on) { setAxis("ctx", meas.ctx); setAxis("proc", meas.proc); setAxis("setup", meas.setup);
+      Array.prototype.forEach.call(document.querySelectorAll(".quests input[type=checkbox]"), function (cb) {
+        cb.checked = false; cb.closest("li").classList.remove("done");
+      });
+    }
   });
 })();`;
