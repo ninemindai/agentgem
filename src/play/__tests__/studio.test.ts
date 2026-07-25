@@ -68,6 +68,19 @@ describe("studio", () => {
     const { brief } = await blankStudio("Untitled");
     expect(brief.toLowerCase()).toContain("ask the user");
   });
+  it("blankStudio template:doc seeds a scrolling document, not a canvas game", async () => {
+    const { name, brief } = await blankStudio("My Readout", undefined, undefined, undefined, "doc");
+    const html = readFileSync(join(miniappsRoot(), name, "index.html"), "utf8");
+    expect(html).toContain("overflow:auto");    // document scrolls
+    expect(html).not.toContain("<canvas");       // not the canvas template
+    expect(html).toContain("AGENTGEM:GAME-LOGIC");
+    expect(brief.toLowerCase()).toContain("document");
+  });
+  it("blankStudio default (no template) is still the canvas game, unchanged", async () => {
+    const { name } = await blankStudio("A Game");
+    const html = readFileSync(join(miniappsRoot(), name, "index.html"), "utf8");
+    expect(html).toContain("<canvas");
+  });
 
   it("studioBrief reads meta and instructs editing the sealed html", async () => {
     const { name } = await seedStudio({ kind: "skill", skillName: "brainstorming" }, readers);

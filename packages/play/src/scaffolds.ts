@@ -67,6 +67,50 @@ export function minimalTemplate(title: string, subtitle: string): string {
 </body></html>`;
 }
 
+// A blank DOCUMENT starting point — the non-game Blank template. Where minimalTemplate is a full-window
+// canvas game, this is a scrolling, house-styled page the studio agent fills in: a report, a tool, a
+// readout. Same seal discipline (shim first, host-adapter theming, #game-data seam ready) and the same
+// editable region between the AGENTGEM:GAME-LOGIC markers. `title`/`subtitle` are user input baked
+// outside the markers, so htmlEscape each before it lands in the HTML.
+export function docTemplate(title: string, subtitle: string): string {
+  return `<!doctype html>
+<html lang="en"><head>${mcpAppClient()}<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>${htmlEscape(title)}</title>
+<style>
+  :root { color-scheme: light dark; }
+  ${HOUSE_TOKENS}
+  ${themeAdapter("host")}
+  ${HOUSE_PARTIALS.kpiRow}
+  ${HOUSE_PARTIALS.dataTable}
+  html,body { height:100%; margin:0;
+    background: var(--surface); color: var(--ink); font: var(--t-body)/1.6 var(--sans); }
+  #stage { position:fixed; inset:0; overflow:auto; }
+  #wrap { max-width:820px; margin:0 auto; padding:var(--sp-4) var(--sp-3); box-sizing:border-box; }
+  .eyebrow { font:500 var(--t-small) var(--mono); text-transform:uppercase; letter-spacing:.08em; opacity:.6; }
+  h1 { font:500 var(--t-display) var(--serif); letter-spacing:-.01em; margin:var(--sp-1) 0 var(--sp-2); }
+  .muted { opacity:.6; }
+</style></head>
+<body>
+  <div id="stage"><div id="wrap">
+    <div class="eyebrow">${htmlEscape(subtitle)}</div>
+    <h1>${htmlEscape(title)}</h1>
+    <div id="app"><p class="muted">Start building — describe what you want and the studio agent fills this in.</p></div>
+  </div></div>
+  <script>
+  (function () {
+    "use strict";
+    var dataEl = document.getElementById("game-data");
+    var DATA = dataEl ? JSON.parse(dataEl.textContent || "{}") : {};
+    // ==== AGENTGEM:GAME-LOGIC START ====
+    // A blank document. If a source is later baked into #game-data, read it from DATA and render into #app.
+    void DATA;
+    // ==== AGENTGEM:GAME-LOGIC END ====
+  })();
+  </script>
+</body></html>`;
+}
+
 // The replay scaffold RENDERS the session out of the box (stats + tool chart + a play/pause scrubbable
 // timeline) from the injected game-data, so a freshly-seeded replay is immediately meaningful — the
 // studio agent then themes/gamifies the block between the AGENTGEM:GAME-LOGIC markers. Defensive: with

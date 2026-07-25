@@ -1029,7 +1029,7 @@ void _storedGuard;
 export const PlayImportRequestSchema = z.object({ title: z.string().min(1), html: z.string().min(1), name: z.string().optional(), files: z.array(UploadFileSchema).optional() });
 // Create a miniapp from scratch — no source context. Seeds a blank sealed canvas + opens the studio;
 // `prompt` is optional creative direction handed to the studio agent.
-export const PlayBlankRequestSchema = z.object({ title: z.string().min(1), prompt: z.string().optional(), name: z.string().optional(), files: z.array(UploadFileSchema).optional() });
+export const PlayBlankRequestSchema = z.object({ title: z.string().min(1), prompt: z.string().optional(), name: z.string().optional(), files: z.array(UploadFileSchema).optional(), template: z.enum(["canvas", "doc"]).optional() });
 
 // Host-brokered feed for a replay miniapp: its source-session transcript ({meta, timeline}), fetched on
 // demand so the sealed bundle stays tiny. Only session-sourced miniapps have it (else 404).

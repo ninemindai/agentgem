@@ -83,7 +83,7 @@ export class PlayController {
   @post("/play/blank", { body: PlayBlankRequestSchema, response: PlayStudioResponseSchema })
   async blank(input: { body: z.infer<typeof PlayBlankRequestSchema> }): Promise<z.infer<typeof PlayStudioResponseSchema>> {
     try {
-      const { name } = await blankStudio(input.body.title, input.body.prompt, input.body.name, input.body.files);
+      const { name } = await blankStudio(input.body.title, input.body.prompt, input.body.name, input.body.files, input.body.template);
       return { name };
     } catch (e) { throw this.createError(e); }
   }
