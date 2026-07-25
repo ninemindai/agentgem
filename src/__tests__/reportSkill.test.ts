@@ -73,6 +73,14 @@ describe("buildReportPrompt", () => {
     expect(p.indexOf(REPORT_EXEMPLAR)).toBeLessThan(p.indexOf("FACTS (JSON)"));
   });
 
+  it("the exemplar framing re-asserts facts-only (compose, do not compute)", () => {
+    // Hardening from the multi-shape A/B: the exemplar's synthesis-forward style once derived a number
+    // (summed two factor counts) into prose. The framing must carry an explicit anti-derivation clause.
+    const p = buildReportPrompt({ facts: {}, meta: { rubricId: "r", title: "T", scope: "all" }, exemplar: true });
+    expect(p).toContain("Compose, do not compute");
+    expect(p).toMatch(/never sum, total, average/);
+  });
+
   it("exemplar is seam-correct: numbers are wired from #report-data, not typed into prose", () => {
     // The whole point of a safe exemplar: it demonstrates the anti-hallucination rule rather than
     // teaching around it. It reads from the JSON block and assigns via textContent.

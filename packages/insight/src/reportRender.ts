@@ -58,10 +58,18 @@ const HOUSE_STYLE_BLOCK =
 
 // Opt-in few-shot block. Framed so the agent copies the STRUCTURE and the #report-data wiring — not the
 // example's data or subject, which come from the FACTS below.
+//
+// The "compose, do not compute" clause is a HARDENING: multi-shape A/B evidence showed the exemplar's
+// synthesis-forward style could tip the agent into deriving a number (summing two factor counts into a
+// "149 instances" total) and typing it into prose — a facts-only violation the brief already forbids in
+// general, but which the exemplar's momentum overrode once. This clause re-asserts the rule right next
+// to the exemplar, targeting that specific failure.
 const EXEMPLAR_BLOCK =
   `## Worked example — imitate this STRUCTURE and its \`#report-data\` wiring (every number read from the ` +
   `embedded JSON via textContent, never typed into prose). Do NOT copy its numbers, subject or advice; ` +
-  `those come from your FACTS:\n\n` +
+  `those come from your FACTS. Compose, do not compute: state only values present in the FACTS — never ` +
+  `sum, total, average or otherwise derive a number the FACTS do not contain (e.g. do not add two factor ` +
+  `counts into a combined total). Name the single worst item rather than inventing an aggregate:\n\n` +
   REPORT_EXEMPLAR +
   `\n`;
 
