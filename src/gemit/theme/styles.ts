@@ -87,4 +87,81 @@ export const STYLES = `
     .tg-proj { transition: none; }
     ul.jutsu li { transition: none; }
   }
+
+  /* ============ THE CARD — fixed dark treatment, identical in both themes ======= */
+  /* Type/spacing scale the ported card rules below need, matching @agentgem/model's
+     HOUSE_TOKENS values verbatim ahead of the full house-token adoption (a later task
+     imports HOUSE_TOKENS directly and this block goes away). */
+  :root {
+    --serif: ui-serif, Georgia, "Times New Roman", serif;
+    --mono: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+    --t-body: 14px; --t-small: 11px;
+    --sp-1: 6px; --sp-2: 12px; --sp-3: 18px; --sp-4: 30px;
+    --radius: 8px;
+  }
+  .card{ --plate:#16181d; background:var(--plate); color:#ece7dc; border-radius:var(--radius);
+    padding:var(--sp-4) var(--sp-4) var(--sp-3); position:relative; overflow:hidden;
+    border:1px solid rgba(236,231,220,.09);
+    box-shadow:inset 0 1px 0 rgba(255,244,216,.10),0 1px 2px rgba(0,0,0,.28),0 12px 32px -12px rgba(0,0,0,.45); }
+  :root[data-theme="dark"] .card{ --plate:#20242c; border-color:rgba(236,231,220,.16);
+    box-shadow:inset 0 1px 0 rgba(255,244,216,.14),0 0 0 1px rgba(0,0,0,.5),0 16px 40px -16px rgba(0,0,0,.8); }
+  @media (prefers-color-scheme: dark) {
+    /* No explicit [data-theme="dark"] set: give system-dark visitors the same lifted
+       plate, unless they've explicitly opted into the light attribute. */
+    :root:not([data-theme="light"]) .card{ --plate:#20242c; border-color:rgba(236,231,220,.16);
+      box-shadow:inset 0 1px 0 rgba(255,244,216,.14),0 0 0 1px rgba(0,0,0,.5),0 16px 40px -16px rgba(0,0,0,.8); }
+  }
+  .card::before{content:"";position:absolute;inset:0;
+    background:radial-gradient(120% 90% at 82% -10%, rgba(201,100,66,.20), transparent 62%);
+    pointer-events:none}
+  .card .eyebrow{font:500 var(--t-small)/1.4 var(--mono);letter-spacing:.2em;
+    text-transform:uppercase;opacity:.62;margin:0 0 var(--sp-3)}
+  .crown{display:flex;gap:var(--sp-4);align-items:center}
+  .ring{flex:0 0 132px;position:relative;width:132px;height:132px}
+  .ring svg{width:132px;height:132px;transform:rotate(-90deg);display:block}
+  .ring .trk{fill:none;stroke:rgba(236,231,220,.14);stroke-width:9}
+  .ring .arc{fill:none;stroke:#d9a441;stroke-width:9;stroke-linecap:round;
+    stroke-dasharray:339.3;stroke-dashoffset:71.3;
+    animation:sweep 1.1s cubic-bezier(.25,1,.3,1) .2s backwards}
+  @keyframes sweep{from{stroke-dashoffset:339.3}}
+  .ring .num{position:absolute;inset:0;display:grid;place-content:center;text-align:center}
+  .ring .num b{display:block;font:600 42px/1 var(--mono);letter-spacing:-.02em}
+  .ring .num span{display:block;font:500 10px/1 var(--mono);letter-spacing:.16em;
+    opacity:.5;margin-top:5px}
+  .crown-txt{min-width:0}
+  /* color: FIRST and standalone — if the gradient fails to paint, text-fill-color
+     transparent would render the title invisible rather than merely unstyled. */
+  .tier{ font:600 clamp(38px,8vw,60px)/.95 var(--serif); letter-spacing:.02em;
+    text-transform:uppercase; color:#e8c87d; margin:0;
+    background-image:linear-gradient(96deg,#e8c87d 30%,#fff4d8 46%,#e8c87d 62%);
+    -webkit-background-clip:text; background-clip:text; -webkit-text-fill-color:transparent;
+    background-size:220% 100%; animation:shine 2.4s cubic-bezier(.4,0,.2,1) .5s 1 both; }
+  @keyframes shine{from{background-position:150% 0}to{background-position:-40% 0}}
+  .flavor{font:italic var(--t-body)/1.5 var(--serif);opacity:.66;margin:var(--sp-1) 0 0}
+  .hook{display:inline-block;margin:var(--sp-3) 0 0;padding:5px 12px;border-radius:99px;
+    background:rgba(217,164,65,.13);border:1px solid rgba(217,164,65,.34);
+    color:#e8c87d;font:600 12px/1.4 var(--mono);letter-spacing:.05em;text-transform:uppercase}
+  .cohort{margin:var(--sp-2) 0 0;font:500 var(--t-small)/1.5 var(--mono);
+    letter-spacing:.08em;text-transform:uppercase;opacity:.58}
+  .cohort b{color:#e8c87d;opacity:1}
+  .pips{display:grid;grid-template-columns:repeat(3,1fr);gap:var(--sp-3);
+    margin:var(--sp-4) 0 0;padding-top:var(--sp-3);border-top:1px solid rgba(236,231,220,.13)}
+  .pip span{display:block;font:500 10px/1.4 var(--mono);letter-spacing:.14em;
+    text-transform:uppercase;opacity:.55}
+  .pip b{display:block;font:600 21px/1.2 var(--mono);margin:3px 0 5px}
+  .pip i{display:block;height:4px;border-radius:2px;background:rgba(236,231,220,.14)}
+  .pip i::after{content:"";display:block;height:100%;border-radius:2px;background:#d9a441;
+    width:var(--w);animation:grow 1s cubic-bezier(.25,1,.3,1) var(--d) backwards}
+  .pip.low i::after{background:var(--accent)}
+  @keyframes grow{from{width:0}}
+  .strip{display:flex;justify-content:space-between;align-items:center;gap:var(--sp-2);
+    margin:var(--sp-3) 0 0;padding-top:var(--sp-2);border-top:1px solid rgba(236,231,220,.13);
+    font:500 var(--t-small)/1.5 var(--mono);letter-spacing:.1em;text-transform:uppercase;opacity:.62}
+  .gems{color:#e8c87d;opacity:.92;letter-spacing:.24em}
+
+  /* ============ SEAM ============ */
+  .seam{display:flex;align-items:center;gap:var(--sp-2);margin:var(--sp-4) 0 var(--sp-4)}
+  .seam::before,.seam::after{content:"";height:1px;background:var(--line);flex:1}
+  .seam span{font:500 var(--t-small) var(--mono);letter-spacing:.2em;
+    text-transform:uppercase;opacity:.45}
 `;

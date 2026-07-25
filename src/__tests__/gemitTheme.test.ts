@@ -4,6 +4,7 @@
 // HTML: zero external URLs, payload baked as a JSON island, every interpolated
 // string escaped, and an honest doorway (never a score) on insufficient data.
 import { describe, expect, it } from "vitest";
+import { COHORT } from "../gemit/cohort.js";
 import type { GemitData } from "../gemit/score.js";
 import { TIER_NAMES, perksFor, questsFor, renderRpgTheme } from "../gemit/themeRpg.js";
 
@@ -62,7 +63,7 @@ describe("renderRpgTheme", () => {
 
   it("says top tier for a Master Lapidary", () => {
     const html = renderRpgTheme(data({ composite: 88, tierLevel: 4 }));
-    expect(html).toContain("top tier");
+    expect(html).toContain("Top tier"); // the card's hook pill is Title Case, uppercased via CSS
     expect(html).toContain("Master Lapidary");
   });
 });
@@ -134,5 +135,41 @@ describe("perksFor", () => {
     expect(names).toContain("Clean Cut");       // streak 119
     expect(locked.map((p) => p.name)).toContain("Second Look"); // 24% verify
     expect(unlocked.length + locked.length).toBe(5);
+  });
+});
+
+describe("the card", () => {
+  it("renders tier, ring, hook and pips as one screenshot-shaped block", () => {
+    const html = renderRpgTheme(data());
+    expect(html).toContain('class="card"');
+    expect(html).toContain("Lapidary");
+    expect(html).toContain('data-n="79"');                  // ring count-up target
+    expect(html).toContain("1 pt from Master Lapidary");     // the hook
+    // Precise to the pip divs themselves ("pip" or "pip low") — a bare /class="pip/ also
+    // matches the wrapping `class="pips"` container and over-counts to 4.
+    expect((html.match(/class="pip(?: low)?"/g) ?? []).length).toBe(3);
+    expect(html).toContain("119-session streak");
+    expect(html).toContain("4/5 techniques");
+  });
+
+  it("omits the cohort band entirely while COHORT is null", () => {
+    expect(COHORT).toBeNull();                               // guards the premise
+    const html = renderRpgTheme(data());
+    expect(html).not.toContain("shared cards");
+    expect(html).not.toContain("class=\"cohort\"");
+    expect(html).not.toMatch(/top \d+%/i);
+  });
+
+  it("declares a solid tier colour before the gradient so it can never render invisible", () => {
+    const html = renderRpgTheme(data());
+    const tier = html.slice(html.indexOf(".tier{"), html.indexOf(".tier{") + 260);
+    expect(tier.indexOf("color:#")).toBeLessThan(tier.indexOf("background-image:"));
+    expect(tier).not.toMatch(/background:\s*linear-gradient/); // never the shorthand
+  });
+
+  it("shows no card at all on the doorway", () => {
+    const html = renderRpgTheme(data({ insufficient: true, qualifyingSessions: 2, composite: 0, tierLevel: 1 }));
+    expect(html).not.toContain('class="card"');
+    expect(html).toContain("No score yet");
   });
 });
