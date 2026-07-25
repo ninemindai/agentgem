@@ -252,3 +252,26 @@ describe("the card", () => {
     expect(rule).toMatch(/color:\s*inherit/);
   });
 });
+
+describe("house style adoption", () => {
+  it("builds on the shared token vocabulary rather than private colours", () => {
+    const html = renderRpgTheme(data());
+    expect(html).toContain("--surface:");
+    expect(html).toContain("--ink:");
+    expect(html).toContain("--serif:");
+    expect(html).toContain("--mono:");
+    expect(html).not.toContain("--panel2");   // retired private token
+  });
+
+  it("orders the dossier with the actionable section first", () => {
+    const html = renderRpgTheme(data());
+    // "The Record" alone would also match the seam's "The Record Behind It" copy that
+    // precedes both sections unconditionally — anchor on the actual heading instead.
+    expect(html.indexOf("Quest Log")).toBeLessThan(html.indexOf("Techniques Unlocked"));
+    expect(html.indexOf("Techniques Unlocked")).toBeLessThan(html.indexOf("<h2>The Record</h2>"));
+  });
+
+  it("still ships no external URL after adopting house tokens", () => {
+    expect(renderRpgTheme(data())).not.toMatch(/https?:\/\//);
+  });
+});
