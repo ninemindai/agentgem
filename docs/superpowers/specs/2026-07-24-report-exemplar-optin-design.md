@@ -49,6 +49,18 @@ re-declaring CSS, so it stays ~3.7KB and reinforces the block above it. `reportE
 string module (like `reportBrief.ts`), containing no backticks or `${…}` so it embeds cleanly in the
 template literal that wraps it.
 
+**Hardening — compose, do not compute (added after multi-shape A/B).** Rendering the exemplar across
+three report shapes (clean / aggregate / finding-heavy) showed the exemplar generalizes as a
+composition win — sharper truth-first thesis, a hero visualization the spine-only reports often skip,
+smaller output on every shape — but on the finding-heavy shape its synthesis-forward style tipped the
+agent into **deriving** a number (summing two factor counts into a "149 instances" total) and typing it
+into prose. The seam held mechanically (every number still routed through `#report-data`); the drift was
+the agent *additionally* stating a value not in the FACTS, which `REPORT_BUILDER_BRIEF`'s facts-only
+rule forbids. The `EXEMPLAR_BLOCK` framing now carries an explicit "compose, do not compute — never sum,
+total or average across the FACTS" clause targeting that failure, so the exemplar's momentum can no
+longer override the rule. This is what makes default-on defensible; without it, the exemplar traded
+composition for a facts-only regression.
+
 ## Files changed
 
 | File | Change |
