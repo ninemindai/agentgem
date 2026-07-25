@@ -11,6 +11,7 @@ import { exportGem, importGem } from "@agentgem/distribute";
 import type { CatalogManifest } from "@agentgem/contract";
 import type { GemitData } from "./score.js";
 import { renderRpgTheme, TIER_NAMES } from "./themeRpg.js";
+import { COHORT, percentileFor, type Cohort } from "./cohort.js";
 
 export const GEMIT_SHARE_VERSION = "1.0.0";
 const MARKETPLACE_BASE = "https://app.agentgem.ai"; // mirrors the Studio publish toast
@@ -55,9 +56,19 @@ export function buildGemitShare(args: {
   return { gemKey, version: GEMIT_SHARE_VERSION, html, archiveBase64: bytes.toString("base64"), manifest };
 }
 
+// "top N%" is the share of the cohort BELOW the composite — matches the card in
+// themeRpg.ts exactly so the card and the share text can never disagree. Pulled out
+// as its own function (rather than inlined in gemitShareUrls) so the cohort-present
+// path is directly testable with a hand-built table, not just the cohort-absent one.
+export function standingClause(composite: number, c?: Cohort | null): string {
+  const pct = percentileFor(composite, c);
+  return pct === null ? "" : `, top ${100 - pct}%`;
+}
+
 export function gemitShareUrls(gemKey: string, data: GemitData): { shareUrl: string; xIntentUrl: string } {
   const shareUrl = `${MARKETPLACE_BASE}/games/${gemKey}`;
   const tierName = TIER_NAMES[data.tierLevel - 1];
-  const text = `${tierName} — ${data.composite}/100 on agent steering. What's your level?\n${shareUrl}`;
+  const standing = standingClause(data.composite, COHORT);
+  const text = `${tierName} — ${data.composite}/100${standing} on agent steering. What's your level?\n${shareUrl}`;
   return { shareUrl, xIntentUrl: `https://x.com/intent/post?text=${encodeURIComponent(text)}` };
 }
