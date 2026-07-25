@@ -187,8 +187,22 @@ tested there, and moving them is churn without benefit.
 
 ## Testing
 
-Existing `gemitTheme.test.ts` must pass unchanged — it is the contract for
-self-containment, escaping, the JSON island, and the insufficient-data doorway.
+Existing `gemitTheme.test.ts` passes unchanged **except one assertion**. In
+`"renders training grounds sliders, quest log, and the sim script"`:
+
+```ts
+expect(html).toContain('id="training"');   // ← must change; the section is removed
+```
+
+Everything else in that file survives the redesign by construction and must keep
+passing: the three `role="slider"` handles (the collapsed bars keep the role), the
+`data-n` count-up span, `1 pt from Master Lapidary`, `id="confetti"`,
+`function autoSolvePath`, `GEMIT_CONST`, `prefers-reduced-motion`, hostile-string
+escaping, the JSON island round-trip, and the doorway's refusal to name a tier.
+
+That file is the contract for self-containment, escaping, the JSON island, and the
+insufficient-data doorway. Treat any *other* failure in it as a regression, not as a
+test to update.
 
 New coverage:
 
