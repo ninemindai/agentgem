@@ -34,7 +34,13 @@ ${themeAdapter("document")}
   .flavor { opacity: .6; font-style: italic; margin: 4px 0 0; }
   .composite { margin: 18px auto 0; width: fit-content; border: 1px solid var(--border); background: var(--surface-2); padding: 8px 16px; font-size: 14px; color: color-mix(in srgb, var(--ink) 60%, transparent); }
   .conferred { opacity: .6; max-width: 44ch; margin: 14px auto 0; }
-  h2 { font-size: 12.5px; letter-spacing: .22em; text-transform: uppercase; color: color-mix(in srgb, var(--ink) 60%, transparent); font-weight: 500; display: flex; align-items: center; gap: 12px; margin: 40px 0 16px; }
+  /* flex-wrap: wrap — the divider (::after, flex:1 basis:0) can't shrink below its own
+     zero basis, so on a narrow viewport the label text plus the fixed-width .wi button
+     already exceed the row's width before the divider even enters the picture, and the
+     row overflows the page horizontally. Wrapping lets the button drop to its own line
+     instead of forcing the row wider than its container; at normal widths the row still
+     never wraps because everything already fits on one line. */
+  h2 { font-size: 12.5px; letter-spacing: .22em; text-transform: uppercase; color: color-mix(in srgb, var(--ink) 60%, transparent); font-weight: 500; display: flex; flex-wrap: wrap; align-items: center; gap: 12px; margin: 40px 0 16px; }
   h2::after { content: ""; height: 1px; background: var(--border); flex: 1; }
   .disc { margin: 0 0 16px; }
   .disc-head { display: flex; justify-content: space-between; align-items: baseline; }
