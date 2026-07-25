@@ -75,25 +75,54 @@ Hierarchy at the document level, not just within sections.
 
 ### The card
 
-Contents, in weight order: tier name (stamped, `clamp(48px, 13vw, 88px)`), composite
+Contents, in weight order: tier name (stamped, `clamp(38px, 8vw, 60px)`), composite
 ring gauge with count-up, cohort band (conditional), hook line, three discipline pips,
 techniques `◈◈◈◈◇` and streak `⚡`.
 
 The ring is inline SVG with animated `stroke-dashoffset` — it reads at thumbnail size
-where a 8px-tall bar does not, and SVG is already in the house vocabulary
-(`HOUSE_PARTIALS.svgBar`).
+where an 8px-tall bar does not, and SVG is already in the house vocabulary
+(`HOUSE_PARTIALS.svgBar`). Verified: at 42% scale every card element stays legible.
 
 Sized so the card occupies roughly the first 1.91:1 crop at the 700px content width
 (min-height ~366px), which is the aspect both X unfurls and manual screenshots favour.
 
+**The card keeps a fixed dark plate in both themes.** A shared screenshot then looks
+identical regardless of the sender's theme, and the card reads as an object rather
+than a page section. This costs contrast on a dark page, where the plate merges with
+the background — so the dark binding lifts the plate and strengthens the edge:
+
+```css
+.card{ --plate:#16181d; border:1px solid rgba(236,231,220,.09);
+       box-shadow:inset 0 1px 0 rgba(255,244,216,.10), … }
+:root[data-theme="dark"] .card{ --plate:#20242c;
+       border-color:rgba(236,231,220,.16);
+       box-shadow:inset 0 1px 0 rgba(255,244,216,.14), 0 0 0 1px rgba(0,0,0,.5), … }
+```
+
+Verified in both themes before this spec was amended.
+
+**Gradient tier name needs a solid-colour fallback declared first.** The shine effect
+uses `background-clip:text` + `-webkit-text-fill-color:transparent`; if the gradient
+fails to paint, the title renders *invisible* rather than unstyled. Declare
+`color:#e8c87d` before `background-image`, and never fold the gradient into the
+`background` shorthand.
+
 ### The dossier
 
-Type roles adopted from `HOUSE_TOKENS`: `--serif` for display and section headings,
-`--sans` for body copy, `--mono` for every numeral. Today Georgia does all three jobs;
-splitting the roles is the single change that most modernizes the page.
+Type roles adopted from `HOUSE_TOKENS`: `--serif` for display, section headings **and
+body prose**, `--mono` for every numeral and label. `--sans` is used only for the
+small uppercase labels inside `.cell`.
+
+Serif body was chosen over sans after building both and comparing them rendered: sans
+reads as product telemetry, serif as a record of your work. `gemit` is a keepsake you
+post, not a dashboard you monitor, and the mono numerals supply enough contrast on
+their own. (The earlier draft of this spec recommended sans; the mockup overturned it.)
 
 Section weights, loudest first: Quest Log (the actionable part) → Disciplines →
 Techniques → The Record → provenance footer.
+
+The `What if?` toggle sits inline at the end of the `h2` rule, not floated beside the
+lede — `h2::after{order:1}` + `.wi{order:2;align-self:center}` puts it after the hairline.
 
 ### Training Grounds collapses into the stat bars
 
@@ -177,9 +206,10 @@ check — jsdom asserts behaviour, never appearance.
 
 ## Risks
 
-- **Register seam reads as two documents.** Mitigation: shared tokens and a single
-  frame border carry continuity across the seam.
-- **Ring gauge at small composites.** A 12/100 ring looks broken rather than low.
+- ~~Register seam reads as two documents.~~ Tested in the mockup: the eye stops at the
+  seam label and re-enters in the new register cleanly. Not a risk.
+- **Ring gauge at small composites.** A 12/100 ring looks broken rather than low. The
+  mockup only exercised 79 — a Prospector-tier card is untested.
   Mitigation: minimum visible arc, and the `.low` accent already used by the bars.
 - **Cohort never gets generated**, leaving dead code. Accepted: the gating branch is
   four lines and the alternative is shipping a false claim.
