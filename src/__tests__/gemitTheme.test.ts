@@ -280,4 +280,32 @@ describe("house style adoption", () => {
   it("still ships no external URL after adopting house tokens", () => {
     expect(renderRpgTheme(data())).not.toMatch(/https?:\/\//);
   });
+
+  // Text-only dimming must never be element-level `opacity` on a selector that also owns a
+  // border/background or an interactive/inherited-colour child — opacity composites the whole
+  // box and multiplies with a child's own opacity, washing out chrome that was never muted and
+  // compounding with the child's independent fade. Assert the property, not the exact
+  // `color-mix` string, so an equivalent future mechanism (a different alpha function, say)
+  // doesn't fail this spuriously.
+  it("dims text via colour, not container opacity, on the muted-to-dimmed selectors", () => {
+    const html = renderRpgTheme(data());
+    const ruleFor = (pattern: RegExp): string => {
+      const m = html.match(pattern);
+      if (!m) throw new Error(`rule not found for ${pattern}`);
+      return m[0];
+    };
+    for (const pattern of [/\bh2\s*\{[^}]*\}/, /\.composite\s*\{[^}]*\}/, /\.provenance\s*\{[^}]*\}/, /\.quests \.chip\.assumed\s*\{[^}]*\}/]) {
+      const rule = ruleFor(pattern);
+      expect(rule).toMatch(/color:/);
+      expect(rule).not.toMatch(/\bopacity:/);
+    }
+  });
+
+  it("gives .wi its own colour instead of inheriting a dimmed ancestor's, so only its own opacity applies", () => {
+    const html = renderRpgTheme(data());
+    const m = html.match(/\.wi\s*\{[^}]*\}/);
+    if (!m) throw new Error("base .wi rule not found");
+    expect(m[0]).not.toMatch(/color:\s*inherit/);
+    expect(m[0]).toMatch(/opacity:\s*\.75/);
+  });
 });
