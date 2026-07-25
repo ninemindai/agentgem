@@ -48,4 +48,11 @@ describe("AtifHealth", () => {
     const root = screen.getByText(/4\/4 imported/).closest(".watch-atif")!;
     expect(root.className).toContain("is-degraded");
   });
+
+  it("renders nothing when the payload omits groups entirely (malformed response)", async () => {
+    stub({ totalFiles: 3, imported: 3 });
+    const { container } = render(<AtifHealth apiBase="" />);
+    await flush();
+    expect(container.textContent).toBe("");
+  });
 });

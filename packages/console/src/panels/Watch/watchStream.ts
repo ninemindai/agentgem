@@ -46,7 +46,8 @@ export interface AtifHealth { totalFiles: number; imported: number; groups: Atif
 export async function fetchAtifHealth(apiBase: string): Promise<AtifHealth> {
   const r = await fetch(`${apiBase}/api/watch/atif-health`);
   if (!r.ok) throw new Error(`atif-health ${r.status}`);
-  return (await r.json()) as AtifHealth;
+  const data = (await r.json()) as Partial<AtifHealth>;
+  return { totalFiles: data.totalFiles ?? 0, imported: data.imported ?? 0, groups: data.groups ?? [] };
 }
 
 export function openWatchStream(
