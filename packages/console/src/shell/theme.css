@@ -2531,3 +2531,18 @@ button.scorecard-intent { line-height: 1.4; }
   margin: 0 0 8px; padding: 8px 12px; border-radius: 8px; font-size: 13px;
   color: var(--accent); border: 1px solid rgba(154,51,36,.4); background: #fbeee9;
 }
+
+/* Watch: ATIF drop-dir health panel (debug, above Active sessions) */
+.watch-atif { margin: 0 0 8px; border-radius: 8px; font-size: 13px; border: 1px solid var(--border, #ccc); overflow: hidden; }
+.watch-atif.is-rejection { border-color: rgba(154, 51, 36, .4); }
+.watch-atif-summary { display: block; width: 100%; text-align: left; padding: 8px 12px; cursor: pointer; border: 0; font: inherit; background: var(--surface, #fff); color: var(--ink, #222); }
+.watch-atif.is-rejection .watch-atif-summary { background: #fbeee9; color: var(--accent); }
+.watch-atif-caret { display: inline-block; width: 12px; }
+.watch-atif-groups { list-style: none; margin: 0; padding: 4px 12px 8px; }
+.watch-atif-group { padding: 6px 0; border-top: 1px solid var(--border, #ccc); }
+.watch-atif-code { font-weight: 600; display: flex; gap: 6px; align-items: center; flex-wrap: wrap; }
+.watch-atif-mark { font-weight: 700; }
+.watch-atif-gloss { opacity: .7; margin: 2px 0; }
+.watch-atif-files { display: flex; flex-wrap: wrap; gap: 6px; }
+.watch-atif-file { font-family: var(--mono, ui-monospace, monospace); font-size: 12px; }
+.watch-atif-more { opacity: .6; font-size: 12px; }

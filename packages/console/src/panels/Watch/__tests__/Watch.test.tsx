@@ -32,10 +32,20 @@ describe("sandboxDoc", () => {
 
 const SESSION = { id: "sess-1", file: "/w/.claude/projects/p/sess-1.jsonl", agent: "claude", project: "site", model: "claude-opus-4-8", msgs: 4, startMs: 0, endMs: 1, ageMs: 30000 };
 
+// Every test renders <Watch>, which also fires AtifHealth's own fetch to
+// /api/watch/atif-health — answer that with an empty (issue-free) payload so
+// it doesn't fall through to the sessions/attention branches below.
+function stubSessions(sessions: unknown[]) {
+  vi.stubGlobal("fetch", vi.fn(async (url: string) => ({
+    ok: true,
+    json: async () => (String(url).includes("atif-health") ? { totalFiles: 0, imported: 0, groups: [] } : { sessions }),
+  })) as unknown as typeof fetch);
+}
+
 describe("Watch panel", () => {
   it("lists sessions and streams an artifact into a sandboxed iframe on select", async () => {
     vi.stubGlobal("EventSource", FakeES as unknown as typeof EventSource);
-    vi.stubGlobal("fetch", vi.fn(async () => ({ ok: true, json: async () => ({ sessions: [SESSION] }) })) as unknown as typeof fetch);
+    stubSessions([SESSION]);
 
     render(<Watch apiBase="" />);
     const row = await screen.findByText("site");
@@ -56,7 +66,7 @@ describe("Watch panel", () => {
 
   it("highlights the selected session and doesn't inline-override the .is-active CSS", async () => {
     vi.stubGlobal("EventSource", FakeES as unknown as typeof EventSource);
-    vi.stubGlobal("fetch", vi.fn(async () => ({ ok: true, json: async () => ({ sessions: [SESSION] }) })) as unknown as typeof fetch);
+    stubSessions([SESSION]);
     render(<Watch apiBase="" />);
     const row = (await screen.findByText("site")).closest("button")!;
     expect(row.className).not.toContain("is-active");
@@ -69,14 +79,14 @@ describe("Watch panel", () => {
 
   it("shows an empty state when no sessions are active", async () => {
     vi.stubGlobal("EventSource", FakeES as unknown as typeof EventSource);
-    vi.stubGlobal("fetch", vi.fn(async () => ({ ok: true, json: async () => ({ sessions: [] }) })) as unknown as typeof fetch);
+    stubSessions([]);
     render(<Watch apiBase="" />);
     await waitFor(() => expect(screen.getByText(/No sessions active/)).toBeTruthy());
   });
 
   it("offers only Feed and Artifact tabs (the live Dashboard tab was retired for the History → Session lens)", async () => {
     vi.stubGlobal("EventSource", FakeES as unknown as typeof EventSource);
-    vi.stubGlobal("fetch", vi.fn(async () => ({ ok: true, json: async () => ({ sessions: [SESSION] }) })) as unknown as typeof fetch);
+    stubSessions([SESSION]);
     render(<Watch apiBase="" />);
     fireEvent.click(await screen.findByText("site"));
     expect(screen.getByRole("tab", { name: "Feed" })).toBeTruthy();
@@ -90,11 +100,15 @@ describe("Watch panel", () => {
     state: "pending", pendingKey: 4, pendingToolName: "Bash", stalledMs: 30000,
   };
 
-  // fetch stub answering both endpoints; localStorage cleared for pref isolation
+  // fetch stub answering sessions, attention, and atif-health; localStorage cleared for pref isolation
   function stubWatchFetch(sessions: unknown[], attention: unknown[]) {
     vi.stubGlobal("fetch", vi.fn(async (url: string) => ({
       ok: true,
-      json: async () => (String(url).includes("/attention") ? { sessions: attention } : { sessions }),
+      json: async () => {
+        const u = String(url);
+        if (u.includes("atif-health")) return { totalFiles: 0, imported: 0, groups: [] };
+        return u.includes("/attention") ? { sessions: attention } : { sessions };
+      },
     })) as unknown as typeof fetch);
   }
 

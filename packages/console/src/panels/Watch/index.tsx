@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { defineConsolePage } from "../../registry.js";
 import { fetchSessions, openWatchStream, type WatchSession, type ArtifactVersion } from "./watchStream.js";
 import { SessionFeed } from "./SessionFeed.js";
+import { AtifHealth } from "./AtifHealth.js";
 import { sandboxDoc } from "./sandboxDoc.js";
 import { readWatchAlertPrefs, writeWatchAlertPrefs, enrolledFiles, type WatchAlertPrefs } from "../../notify/watchAlertPrefs.js";
 import type { AttentionSessionSnap } from "../../notify/events.js";
@@ -93,6 +94,7 @@ export function Watch({ apiBase }: { apiBase: string }) {
   const [view, setView] = useState<"feed" | "artifact">("feed");
   const [attention, setAttention] = useState<Map<string, AttentionSessionSnap>>(new Map());
   const [alertPrefs, setAlertPrefs] = useState<WatchAlertPrefs>(readWatchAlertPrefs);
+  const [healthKey, setHealthKey] = useState(0);
 
   const loadSessions = () => {
     fetchSessions(apiBase).then(setSessions).catch(() => setSessions([]));
@@ -134,9 +136,10 @@ export function Watch({ apiBase }: { apiBase: string }) {
       <div style={{ display: "flex", gap: 16, alignItems: "flex-start", flexWrap: "wrap" }}>
         {/* Left: active sessions */}
         <div style={{ flex: "1 1 260px", minWidth: 240 }}>
+          <AtifHealth apiBase={apiBase} refreshKey={healthKey} />
           <div className="run-status" style={{ justifyContent: "space-between", marginBottom: 6 }}>
             <span style={{ fontWeight: 600 }}>Active sessions</span>
-            <button type="button" className="ledger-view" onClick={loadSessions}>Refresh</button>
+            <button type="button" className="ledger-view" onClick={() => { loadSessions(); setHealthKey((k) => k + 1); }}>Refresh</button>
             <label className="watch-all-alerts">
               <input
                 type="checkbox"
