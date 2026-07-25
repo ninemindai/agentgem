@@ -3,9 +3,43 @@
 // Share packaging tests: the privacy strip (no skill/subagent names ship), the
 // gem-archive round-trip with a signed digest, and the share/X URLs.
 import { describe, expect, it } from "vitest";
-import { buildGemitShare, gemitShareUrls, GEMIT_SHARE_VERSION, shareVariantOf } from "../gemit/share.js";
-import { computeGemitData, type GemitScoredInput, type GemitSessionInput } from "../gemit/score.js";
+import { buildGemitShare, gemitShareUrls, GEMIT_SHARE_VERSION, shareVariantOf, standingClause } from "../gemit/share.js";
+import { computeGemitData, type GemitData, type GemitScoredInput, type GemitSessionInput } from "../gemit/score.js";
+import { MIN_COHORT, type Cohort } from "../gemit/cohort.js";
 import { importGem } from "@agentgem/distribute";
+
+// Deterministic GemitData fixture (composite 79 -> tier 3 "Lapidary"), inlined from
+// gemitTheme.test.ts's data() so the percentile-direction assertions below have a
+// known composite/tier to check against, independent of the computeGemitData() fixture
+// above (which the rest of this file's tests already depend on for other shapes).
+function fixtureData(over: Partial<GemitData> = {}): GemitData {
+  return {
+    windowFrom: "2026-06-18", windowTo: "2026-07-18",
+    qualifyingSessions: 6405, scoredSessions: 119, projects: 44,
+    totalMsgs: 476112, tokensOut: 248446123,
+    ctx: 99, proc: 81, setup: 33, composite: 79, tierLevel: 3,
+    verdicts: { bounded: 119, mixed: 0, bloated: 0 },
+    labels: { disciplined: 43, loose: 7, chaotic: 5 },
+    verifyRatePct: 24, boundedStreak: 119,
+    firedFindings: [
+      { id: "repeated-tool-error", title: "Repeated tool errors", sessions: 17 },
+      { id: "no-verify-finish", title: "Unverified finish", sessions: 11 },
+      { id: "retry-storm", title: "Retry storm", sessions: 9 },
+      { id: "reread-churn", title: "Re-read churn", sessions: 3 },
+    ],
+    skillVariety: 12, subagentVariety: 8, skillSessionsPct: 62, subagentSessionsPct: 41,
+    topSkills: ["brainstorming"], topSubagents: ["Explore"],
+    insufficient: false,
+    ...over,
+  };
+}
+
+// Identity-mapped percentile table: cohort member at composite i sits at percentile i.
+const cohortTable = (n = 500): Cohort => ({
+  asOf: "2026-07-01",
+  n,
+  p: Array.from({ length: 101 }, (_, i) => i),
+});
 
 const NOW = Date.UTC(2026, 6, 19, 12);
 
@@ -86,5 +120,31 @@ describe("gemitShareUrls", () => {
     expect(xIntentUrl.startsWith("https://x.com/intent/post?text=")).toBe(true);
     expect(decodeURIComponent(xIntentUrl)).toContain(shareUrl);
     expect(decodeURIComponent(xIntentUrl)).toContain(`${data.composite}/100`);
+  });
+});
+
+describe("standingClause", () => {
+  it("returns empty string when the cohort is absent or below MIN_COHORT", () => {
+    expect(standingClause(79, null)).toBe("");
+    expect(standingClause(79, undefined)).toBe("");
+    expect(standingClause(79, cohortTable(MIN_COHORT - 1))).toBe("");
+  });
+
+  it("reads the correct direction: beating 79% of the cohort is 'top 21%', never 'top 79%'", () => {
+    // identity table => percentileFor(composite, ...) === composite (that share of the cohort scored below it)
+    expect(standingClause(79, cohortTable())).toBe(", top 21%");
+    expect(standingClause(79, cohortTable())).not.toBe(", top 79%");
+    // a strong scorer (beats 95%) must read a small top-N%, not a large one
+    expect(standingClause(95, cohortTable())).toBe(", top 5%");
+  });
+});
+
+describe("share text percentile", () => {
+  it("omits any percentile claim while the cohort is absent (real COHORT stays null)", () => {
+    const { xIntentUrl } = gemitShareUrls("me/gemit-2026-07-25", fixtureData());
+    const text = decodeURIComponent(new URL(xIntentUrl).searchParams.get("text")!);
+    expect(text).toContain("Lapidary");
+    expect(text).toContain("79/100");
+    expect(text).not.toMatch(/top \d+%/i);
   });
 });
