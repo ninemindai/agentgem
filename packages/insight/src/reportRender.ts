@@ -14,6 +14,7 @@ import {
 } from "./acpRecommender.js";
 import { extractHtml } from "./dashboardRender.js";
 import { REPORT_BUILDER_BRIEF } from "./reportBrief.js";
+import { REPORT_EXEMPLAR } from "./reportExemplar.js";
 import { HOUSE_TOKENS, themeAdapter, HOUSE_PARTIALS } from "@agentgem/model";
 import { createLogger, taskAgent } from "@agentgem/base";
 
@@ -33,6 +34,10 @@ export interface ReportRenderInput {
   connectFn?: AcpConnectFn;
   timeoutMs?: number;
   onDelta?: (chunk: string) => void;
+  /** Opt-in: prepend the few-shot REPORT_EXEMPLAR (a full worked report) so the agent imitates its
+   *  composition. Off by default — it adds ~3KB to every render. The controller flips it from
+   *  AGENTGEM_REPORT_EXEMPLAR. */
+  exemplar?: boolean;
 }
 export interface ReportRenderResult { html: string; ok: boolean; truncated?: boolean }
 
@@ -51,10 +56,20 @@ const HOUSE_STYLE_BLOCK =
   [HOUSE_TOKENS, themeAdapter("document"), HOUSE_PARTIALS.kpiRow, HOUSE_PARTIALS.dataTable, HOUSE_PARTIALS.svgBar].join("\n") +
   `\n`;
 
+// Opt-in few-shot block. Framed so the agent copies the STRUCTURE and the #report-data wiring — not the
+// example's data or subject, which come from the FACTS below.
+const EXEMPLAR_BLOCK =
+  `## Worked example — imitate this STRUCTURE and its \`#report-data\` wiring (every number read from the ` +
+  `embedded JSON via textContent, never typed into prose). Do NOT copy its numbers, subject or advice; ` +
+  `those come from your FACTS:\n\n` +
+  REPORT_EXEMPLAR +
+  `\n`;
+
 export function buildReportPrompt(input: ReportRenderInput): string {
   return (
     `${REPORT_BUILDER_BRIEF}\n` +
     `${HOUSE_STYLE_BLOCK}\n` +
+    (input.exemplar ? `${EXEMPLAR_BLOCK}\n` : "") +
     `REPORT: "${input.meta.title}" (rubric ${input.meta.rubricId}, scope ${input.meta.scope}). ` +
     `Use that title in the document's eyebrow — never a placeholder.\n\n` +
     `FACTS (JSON):\n${JSON.stringify(input.facts)}\n`

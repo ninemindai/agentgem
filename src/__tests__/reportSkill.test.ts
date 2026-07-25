@@ -9,7 +9,7 @@
 import { describe, it, expect } from "vitest";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
-import { REPORT_BUILDER_BRIEF, buildReportPrompt, renderReport, MAX_REPORT_HTML } from "@agentgem/insight";
+import { REPORT_BUILDER_BRIEF, REPORT_EXEMPLAR, buildReportPrompt, renderReport, MAX_REPORT_HTML } from "@agentgem/insight";
 import { HOUSE_TOKENS, themeAdapter } from "@agentgem/model";
 
 const md = (): string => readFileSync(join(process.cwd(), "skills/agentgem-report/SKILL.md"), "utf8");
@@ -57,6 +57,28 @@ describe("buildReportPrompt", () => {
     // Ordering: still starts with the brief (drift-mirror contract), and the spine precedes the FACTS.
     expect(p.startsWith(REPORT_BUILDER_BRIEF)).toBe(true);
     expect(p.indexOf(HOUSE_TOKENS)).toBeLessThan(p.indexOf("FACTS (JSON)"));
+  });
+
+  it("omits the few-shot exemplar by default (opt-in; preserves the spine-only shape)", () => {
+    const p = buildReportPrompt({ facts: {}, meta: { rubricId: "r", title: "T", scope: "all" } });
+    expect(p).not.toContain(REPORT_EXEMPLAR);
+  });
+
+  it("injects the exemplar only when exemplar:true, after the spine and before the facts", () => {
+    const p = buildReportPrompt({ facts: {}, meta: { rubricId: "r", title: "T", scope: "all" }, exemplar: true });
+    expect(p).toContain(REPORT_EXEMPLAR);
+    expect(p.startsWith(REPORT_BUILDER_BRIEF)).toBe(true);
+    expect(p).toContain(HOUSE_TOKENS);                                   // spine still present
+    expect(p.indexOf(HOUSE_TOKENS)).toBeLessThan(p.indexOf(REPORT_EXEMPLAR));
+    expect(p.indexOf(REPORT_EXEMPLAR)).toBeLessThan(p.indexOf("FACTS (JSON)"));
+  });
+
+  it("exemplar is seam-correct: numbers are wired from #report-data, not typed into prose", () => {
+    // The whole point of a safe exemplar: it demonstrates the anti-hallucination rule rather than
+    // teaching around it. It reads from the JSON block and assigns via textContent.
+    expect(REPORT_EXEMPLAR).toContain('id="report-data"');
+    expect(REPORT_EXEMPLAR).toContain('getElementById("report-data")');
+    expect(REPORT_EXEMPLAR).toContain(".textContent =");
   });
 });
 

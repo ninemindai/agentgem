@@ -203,6 +203,9 @@ export class RubricController {
           facts: payload,
           meta: { rubricId: rubric.id, title: rubric.title, scope: scope.kind },
           onDelta: (chunk) => emit({ type: "delta", text: chunk }),
+          // Opt-in few-shot exemplar (default off). Read at call time, not module load, so toggling
+          // the env var takes effect without a restart-cache — see reportExemplar.ts.
+          exemplar: process.env.AGENTGEM_REPORT_EXEMPLAR === "1",
         });
         if (!r.ok) { emit({ type: "failed", message: "report rendering failed — is the local coding agent available?" }); return; }
         emit({ type: "done", html: r.html, truncated: r.truncated ?? false });
