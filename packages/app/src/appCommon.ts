@@ -38,7 +38,7 @@ import { miniappDir, studioBrief, checkpointMiniapp, callConnectorTool, Connecto
 import { availableAgents, adapterRuntimeCtx, resolveLaunch, npmAdapterInstaller, createLogger } from "@agentgem/base";
 import { collectScorecard, defaultScorecardDeps } from "./gem/scorecard.js";
 import { buildGoldmineBrief, type GoldmineBriefInput,
-  openArtifactOutcomesStore, outcomeCredit } from "@agentgem/insight";
+  openArtifactOutcomesStore, outcomeCredit, scanAtifHealth } from "@agentgem/insight";
 import { agentgemHome } from "@agentgem/model";
 import { join as pathJoin } from "node:path";
 import { mkdirSync } from "node:fs";
@@ -278,6 +278,11 @@ export function finalizeCommonApp(app: RestApplication, server: Awaited<RestAppl
   // content only; the ?file= path is pinned to a transcript root by resolveTranscriptFile.
   server.expressApp.get("/api/watch/sessions", originGuard, (_req, res) =>
     res.json({ sessions: listActiveSessions() } as never));
+  // Watch ATIF health: which files in the ~/.agentgem/atif drop dir failed to
+  // import, grouped by reason. Read-only, basenames only (no absolute paths, no
+  // transcript content). Drives the Watch tab's drop-dir debug panel.
+  server.expressApp.get("/api/watch/atif-health", originGuard, async (_req, res) =>
+    res.json(await scanAtifHealth() as never));
   // Watch attention: which active sessions look blocked on the user — an unmatched
   // tool_call with a stalled transcript (permission prompt, or a long tool run; the
   // transcript can't tell). Polled by the console's NotificationsProvider.
