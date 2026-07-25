@@ -120,6 +120,17 @@ ${themeAdapter("document")}
   .card .eyebrow{font:500 var(--t-small)/1.4 var(--mono);letter-spacing:.2em;
     text-transform:uppercase;color:inherit;text-align:left;opacity:.62;margin:0 0 var(--sp-3)}
   .crown{display:flex;gap:var(--sp-4);align-items:center}
+  /* .ring never shrinks (flex:0 0 132px) and .tier's clamp() preferred value is 8vw —
+     viewport-relative, not relative to this row's own remaining width. Below the
+     viewport where the row was actually calibrated to fit (main's own 700px cap,
+     verified empirically: at 700px every tier name's scrollWidth == clientWidth),
+     the ring keeps its full 132px and crowds crown-txt into a column far too narrow
+     for even the clamp floor, and the tier name clips against .card{overflow:hidden}.
+     Stack instead of starving the text column — full card width is always enough. */
+  @media (max-width: 700px) {
+    .crown{flex-direction:column;text-align:center}
+    .crown-txt{width:100%}
+  }
   .ring{flex:0 0 132px;position:relative;width:132px;height:132px}
   .ring svg{width:132px;height:132px;transform:rotate(-90deg);display:block}
   .ring .trk{fill:none;stroke:rgba(236,231,220,.14);stroke-width:9}
@@ -137,8 +148,14 @@ ${themeAdapter("document")}
   .crown-txt{min-width:0}
   /* color: FIRST and standalone — if the gradient fails to paint, text-fill-color
      transparent would render the title invisible rather than merely unstyled. */
+  /* overflow-wrap: anywhere — a single unbreakable-word tier name has no space to
+     wrap at; on a narrow phone viewport even the clamp() floor (38px) can still be
+     wider than the card's available column, and with the default "normal" wrapping
+     that overflow clips silently against .card{overflow:hidden}. This only ever
+     engages when the word doesn't fit — at the sizes the card was designed for it's
+     inert and the name still renders on one line. */
   .tier{ font:600 clamp(38px,8vw,var(--tier-max,60px))/.95 var(--serif); letter-spacing:.02em;
-    text-transform:uppercase; color:#e8c87d; margin:0;
+    text-transform:uppercase; color:#e8c87d; margin:0; overflow-wrap:anywhere;
     background-image:linear-gradient(96deg,#e8c87d 30%,#fff4d8 46%,#e8c87d 62%);
     -webkit-background-clip:text; background-clip:text; -webkit-text-fill-color:transparent;
     background-size:220% 100%; animation:shine 2.4s cubic-bezier(.4,0,.2,1) .5s 1 both; }
