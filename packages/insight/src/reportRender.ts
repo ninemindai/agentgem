@@ -14,6 +14,7 @@ import {
 } from "./acpRecommender.js";
 import { extractHtml } from "./dashboardRender.js";
 import { REPORT_BUILDER_BRIEF } from "./reportBrief.js";
+import { HOUSE_TOKENS, themeAdapter, HOUSE_PARTIALS } from "@agentgem/model";
 import { createLogger, taskAgent } from "@agentgem/base";
 
 const log = createLogger("insight");
@@ -35,9 +36,25 @@ export interface ReportRenderInput {
 }
 export interface ReportRenderResult { html: string; ok: boolean; truncated?: boolean }
 
+// The exact CSS behind the brief's theming/typography prose: the shared token vocabulary, the
+// document-surface theme binding (data-theme + prefers-color-scheme), and the structural partials a
+// report uses (KPI row, data table, inline-SVG bars). Given to the agent verbatim so every
+// AgentGem-generated document shares one look instead of each render re-deriving it.
+//
+// Injected at RUNTIME rather than baked into REPORT_BUILDER_BRIEF on purpose: the brief is byte-mirrored
+// into skills/agentgem-report/SKILL.md under a drift guard, so baking the CSS in would force that
+// markdown to be regenerated on every houseStyle colour tweak. The constant stays prose; the agent gets
+// the bytes.
+const HOUSE_STYLE_BLOCK =
+  `## House style — put these exact CSS custom properties and rules in your \`<style>\`, and theme every ` +
+  `colour, font and metric through them (do not redefine or invent values):\n\n` +
+  [HOUSE_TOKENS, themeAdapter("document"), HOUSE_PARTIALS.kpiRow, HOUSE_PARTIALS.dataTable, HOUSE_PARTIALS.svgBar].join("\n") +
+  `\n`;
+
 export function buildReportPrompt(input: ReportRenderInput): string {
   return (
     `${REPORT_BUILDER_BRIEF}\n` +
+    `${HOUSE_STYLE_BLOCK}\n` +
     `REPORT: "${input.meta.title}" (rubric ${input.meta.rubricId}, scope ${input.meta.scope}). ` +
     `Use that title in the document's eyebrow — never a placeholder.\n\n` +
     `FACTS (JSON):\n${JSON.stringify(input.facts)}\n`
