@@ -255,9 +255,9 @@ ${RUNTIME_JS}</script>`;
       <button id="tg-solve" type="button"${data.tierLevel >= 4 ? " disabled" : ""} hidden>${data.tierLevel >= 4 ? "You&#39;re at the summit" : `Chart my path to ${TIER_NAMES[3]}`}</button>
     </section>
 
-    ${unlocked.length ? `<section><h2>Techniques Unlocked</h2><ul class="jutsu">${unlocked.map((p) => perkLi(p, false)).join("")}
-      </ul></section>` : ""}
     ${quests.length ? `<section><h2>Quest Log</h2><ul class="jutsu quests">${quests.map(questLi).join("")}
+      </ul></section>` : ""}
+    ${unlocked.length ? `<section><h2>Techniques Unlocked</h2><ul class="jutsu">${unlocked.map((p) => perkLi(p, false)).join("")}
       </ul></section>` : ""}
 
     <section>
