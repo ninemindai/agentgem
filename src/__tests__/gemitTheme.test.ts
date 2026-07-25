@@ -271,6 +271,12 @@ describe("house style adoption", () => {
     expect(html.indexOf("Techniques Unlocked")).toBeLessThan(html.indexOf("<h2>The Record</h2>"));
   });
 
+  it("declares --gold once so every var(--gold) reference in the dossier resolves", () => {
+    const html = renderRpgTheme(data());
+    expect(html).toContain("--gold:");
+    expect(html).toContain("var(--gold)");
+  });
+
   it("still ships no external URL after adopting house tokens", () => {
     expect(renderRpgTheme(data())).not.toMatch(/https?:\/\//);
   });
