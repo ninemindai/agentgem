@@ -17,6 +17,8 @@
 // no JSON excerpts. parseAtifMeta promises to keep no text (see atifImport.ts);
 // a diagnostics channel that leaked content would quietly break that promise.
 
+import { basename } from "node:path";
+
 /** Codes are derived from the failure paths this parser actually has. */
 export type AtifDiagnosticCode =
   // ── Whole-file rejections: the file is dropped from the scan entirely ──
@@ -93,4 +95,40 @@ export function summarizeDiagnostics(diags: AtifDiagnostics, maxPaths = 3): stri
     const verb = isFileRejection(code) ? "rejected" : "degraded";
     return `${code}: ${e.total} occurrence(s) across ${paths.length} ${verb} file(s) — ${shown}${more}`;
   });
+}
+
+export interface AtifHealthFile {
+  /** basename only — never an absolute path (privacy: see #538). */
+  name: string;
+  /** e.g. "step 2" for step-scoped codes; absent for whole-file rejections. */
+  detail?: string;
+}
+
+export interface AtifHealthGroup {
+  code: AtifDiagnosticCode;
+  /** isFileRejection(code): drives red (rejected) vs amber (degraded) in the UI. */
+  rejection: boolean;
+  /** Sum of per-diagnostic counts within this code. */
+  occurrences: number;
+  /** Distinct offending files, by basename (+ step detail). */
+  files: AtifHealthFile[];
+}
+
+/**
+ * Fold a flat diagnostics array into display-ready groups: one per code, paths
+ * reduced to basenames, rejections ordered before degradations. Pure — the FS
+ * scan that produces the input lives in ../sources/atif.ts.
+ */
+export function groupDiagnostics(diags: AtifDiagnostics): AtifHealthGroup[] {
+  const byCode = new Map<AtifDiagnosticCode, AtifHealthGroup>();
+  for (const d of diags) {
+    let g = byCode.get(d.code);
+    if (!g) { g = { code: d.code, rejection: isFileRejection(d.code), occurrences: 0, files: [] }; byCode.set(d.code, g); }
+    g.occurrences += d.count ?? 1;
+    const name = basename(d.path);
+    const detail = typeof d.stepId === "number" ? `step ${d.stepId}` : undefined;
+    if (!g.files.some((f) => f.name === name && f.detail === detail)) g.files.push({ name, detail });
+  }
+  // Rejections first (the file was dropped), then degradations. Number(true) - Number(false) = 1.
+  return [...byCode.values()].sort((a, b) => Number(b.rejection) - Number(a.rejection));
 }
