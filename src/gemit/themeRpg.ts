@@ -9,6 +9,7 @@
 // inline (no external URLs), dual-theme via :root[data-theme] tokens, with the
 // payload baked as a JSON island for future tooling.
 
+import { COHORT, cohortLabel, percentileFor } from "./cohort.js";
 import { COMPOSITE_WEIGHTS, SETUP_WEIGHTS, TIER_THRESHOLDS, type GemitData } from "./score.js";
 import { autoSolvePath, projectComposite, setupScoreFrom, tierFor } from "./themeRpgSim.js";
 import { STYLES } from "./theme/styles.js";
@@ -157,17 +158,53 @@ const questLi = (q: Quest): string => `
 const perkLi = (p: Perk, locked: boolean): string => `
         <li${locked ? ' class="locked"' : ""}><b>${escapeHtml(p.name)}${locked ? " · locked" : ""}</b>${escapeHtml(p.detail)}</li>`;
 
+const RING_C = 339.3; // 2πr, r=54
+
+function renderCard(d: GemitData): string {
+  const tierName = TIER_NAMES[d.tierLevel - 1];
+  const nextTier = d.tierLevel < 4 ? TIER_NAMES[d.tierLevel as 1 | 2 | 3] : null;
+  const ptsToNext = nextTier ? [50, 65, 80][d.tierLevel - 1] - d.composite : 0;
+  const hook = nextTier
+    ? `${ptsToNext} pt${ptsToNext === 1 ? "" : "s"} from ${nextTier}`
+    : "Top tier";
+  const pct = percentileFor(d.composite, COHORT);
+  const cohort = pct !== null && COHORT
+    ? `<p class="cohort">Top <b>${100 - pct}%</b> &middot; ${escapeHtml(cohortLabel(COHORT))}</p>`
+    : "";
+  const { unlocked } = perksFor(d);
+  const offset = (RING_C * (1 - d.composite / 100)).toFixed(1);
+  const pip = (label: string, v: number, i: number): string => `
+        <div class="pip${v < 50 ? " low" : ""}"><span>${label}</span><b class="mono">${v}</b>
+          <i style="--w:${v}%;--d:${(0.25 + i * 0.12).toFixed(2)}s"></i></div>`;
+
+  return `
+    <section class="card">
+      <p class="eyebrow">AgentGem &middot; Steering Assessment &middot; ${d.windowFrom} &rarr; ${d.windowTo}</p>
+      <div class="crown">
+        <div class="ring">
+          <svg viewBox="0 0 132 132" aria-hidden="true"><circle class="trk" cx="66" cy="66" r="54"/><circle class="arc" cx="66" cy="66" r="54" style="stroke-dashoffset:${offset}"/></svg>
+          <div class="num"><b class="mono count" data-n="${d.composite}">${d.composite}</b><span class="mono">/ 100</span></div>
+        </div>
+        <div class="crown-txt">
+          <h1 class="tier">${tierName}</h1>
+          <p class="flavor">${TIER_FLAVOR[d.tierLevel - 1]}</p>
+          ${cohort}
+          <span class="hook">${hook}</span>
+        </div>
+      </div>
+      <div class="pips">${pip("Context", d.ctx, 0)}${pip("Process", d.proc, 1)}${pip("Setup", d.setup, 2)}
+      </div>
+      <div class="strip">
+        <span class="gems">${"◈".repeat(unlocked.length)}${"◇".repeat(5 - unlocked.length)} <span>${unlocked.length}/5 techniques</span></span>
+        <span>&#9889; ${d.boundedStreak}-session streak</span>
+      </div>
+    </section>`;
+}
+
 export function renderRpgTheme(data: GemitData): string {
   const tierName = TIER_NAMES[data.tierLevel - 1];
   const { unlocked } = perksFor(data);
   const quests = questsFor(data);
-  // Next tier's threshold: [50, 65, 80] indexed by the CURRENT level (1→50, 2→65, 3→80).
-  const nextTier = data.tierLevel < 4 ? TIER_NAMES[data.tierLevel as 1 | 2 | 3] : null;
-  const ptsToNext = nextTier ? [50, 65, 80][data.tierLevel - 1] - data.composite : 0;
-  const rankSpan = `<span class="count" data-n="${data.composite}">${data.composite}</span>`;
-  const rankLine = nextTier
-    ? `RANK ${rankSpan} / 100 &mdash; ${ptsToNext} pt${ptsToNext === 1 ? "" : "s"} from ${nextTier}`
-    : `RANK ${rankSpan} / 100 &mdash; top tier`;
   const json = JSON.stringify(data).replace(/</g, "\\u003c");
   // The sim trio ships as its own source (plain tsc output — never minified); the doorway
   // stays script-free because GEMIT_CONST carries tier names the doorway must not show.
@@ -187,12 +224,8 @@ ${RUNTIME_JS}</script>`;
         (found ${data.qualifyingSessions}). Steer a few agent sessions and run
         <span class="mono">agentgem gemit</span> again &mdash; the sheet fills itself.</p>
     </header>` : `
-    <header class="hero">
-      <p class="eyebrow">AgentGem &middot; Steering Assessment &middot; ${data.windowFrom} &rarr; ${data.windowTo}</p>
-      <h1 class="rank stamp">${tierName}</h1>
-      <p class="flavor">${TIER_FLAVOR[data.tierLevel - 1]}</p>
-      <p class="composite mono">${rankLine}</p>
-    </header>
+    ${renderCard(data)}
+    <div class="seam"><span>The Record Behind It</span></div>
 
     <section>
       <h2>The Three Disciplines</h2>
