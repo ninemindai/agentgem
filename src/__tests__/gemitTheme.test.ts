@@ -99,7 +99,7 @@ describe("questsFor", () => {
 });
 
 describe("interactive layer", () => {
-  it("renders training grounds sliders, quest log, and the sim script", () => {
+  it("renders discipline sliders, quest log, and the sim script", () => {
     const html = renderRpgTheme(data());
     expect((html.match(/role="slider"/g) ?? []).length).toBe(3);
     expect(html).toContain('id="disciplines"');
@@ -111,7 +111,7 @@ describe("interactive layer", () => {
     expect(html).toContain("prefers-reduced-motion");
   });
 
-  it("keeps the doorway static: no script, no training grounds", () => {
+  it("keeps the doorway static: no script, no disciplines", () => {
     const html = renderRpgTheme(data({ insufficient: true, qualifyingSessions: 2, composite: 0, tierLevel: 1 }));
     expect(html).not.toContain("GEMIT_CONST");
     expect(html).not.toContain('id="training"');
@@ -147,6 +147,17 @@ describe("the disciplines collapse", () => {
     expect(html).toContain('id="tg-comp"');
     expect(html).toContain('id="tg-tier"');
     expect(html).toContain('id="tg-solve"');
+  });
+
+  it("every track's aria references resolve to an id that exists in the document", () => {
+    const html = renderRpgTheme(data());
+    const trackOpenTags = html.match(/<div class="track"[^>]*>/g) ?? [];
+    expect(trackOpenTags.length).toBe(3);
+    for (const tag of trackOpenTags) {
+      const ids = [...tag.matchAll(/aria-(?:labelledby|describedby)="([^"]+)"/g)].map((m) => m[1]);
+      expect(ids.length).toBe(2);
+      for (const id of ids) expect(html).toContain(`id="${id}"`);
+    }
   });
 });
 
