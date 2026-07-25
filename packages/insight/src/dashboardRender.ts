@@ -12,6 +12,7 @@ import {
 } from "./acpRecommender.js";
 import type { SessionEvent } from "./inspectSession.js";
 import type { AgentId } from "./observeAggregate.js";
+import { HOUSE_TOKENS, themeAdapter } from "@agentgem/model";
 import { createLogger, taskAgent } from "@agentgem/base";
 
 const log = createLogger("insight");
@@ -36,16 +37,24 @@ export interface RenderInput {
 }
 export interface RenderResult { html: string; ok: boolean; truncated?: boolean; }
 
-// The visual contract (anti-slop). Kept terse; the agent gets the palette + rules and
-// the compact exemplar so it matches the AgentGem console rather than a generic panel.
+// The house-style CSS the dashboard themes through: the shared token vocabulary + the fixed-surface
+// palette (this dashboard renders inside a host that supplies no CSS variables, so `fixed` bakes the
+// literal warm-ivory/near-black/terracotta values — the same ones this prompt used to hardcode).
+const DASH_STYLE_BLOCK =
+  `Put these exact CSS custom properties in your <style> and theme every colour, font and metric through them:\n` +
+  [HOUSE_TOKENS, themeAdapter("fixed")].join("\n");
+
+// The visual contract (anti-slop). Kept terse; the agent gets the token block + rules and the compact
+// exemplar so it matches the AgentGem console rather than a generic panel. The exemplar themes through
+// the tokens (var(--surface), var(--ink), var(--accent), …) so it reinforces the block above it.
 const EXEMPLAR =
-  `<section style="font-family:'Fraunces',Georgia,serif;background:#f1eadb;color:#20190f;padding:18px 20px">` +
+  `<section style="font-family:var(--serif);background:var(--surface);color:var(--ink);padding:18px 20px">` +
   `<h2 style="margin:0;font-size:16px">acme-web</h2>` +
-  `<p style="font-family:'Hanken Grotesk',sans-serif;color:#463d2c;font-size:13px;margin:2px 0 16px">Building the hero, then the build</p>` +
-  `<div style="border-left:3px solid #9a3324;background:#fbeee9;padding:8px 12px;border-radius:0 6px 6px 0;margin-bottom:16px">` +
-  `<div style="font:600 11px/1 sans-serif;letter-spacing:.07em;text-transform:uppercase;color:#9a3324">Now</div>` +
-  `<code style="font-family:ui-monospace,Menlo,monospace;font-size:13px">$ npm run build</code></div>` +
-  `<ul style="list-style:none;margin:0;padding:0;font-family:'Hanken Grotesk',sans-serif;font-size:13px">` +
+  `<p style="font-family:var(--sans);color:var(--ink);opacity:.65;font-size:13px;margin:2px 0 16px">Building the hero, then the build</p>` +
+  `<div style="border-left:3px solid var(--accent);background:var(--surface-2);padding:8px 12px;border-radius:0 6px 6px 0;margin-bottom:16px">` +
+  `<div style="font:600 11px/1 var(--sans);letter-spacing:.07em;text-transform:uppercase;color:var(--accent)">Now</div>` +
+  `<code style="font-family:var(--mono);font-size:13px">$ npm run build</code></div>` +
+  `<ul style="list-style:none;margin:0;padding:0;font-family:var(--sans);font-size:13px">` +
   `<li>Read index.html · done</li><li>Edit hero · done</li><li>Bash npm run build · running</li></ul></section>`;
 
 function buildPrompt(input: RenderInput): string {
@@ -63,9 +72,10 @@ function buildPrompt(input: RenderInput): string {
     `${input.final ? "SESSION EVENTS (JSON)" : "NEW EVENTS since it was rendered (JSON)"}:\n${events}\n\n` +
     `Return ONE self-contained HTML document that EVOLVES the previous dashboard in place to reflect the new events. ` +
     `Rules: inline <style> only, NO external resources (no CDN/fonts/img/scripts). ` +
-    `Match this palette and composition EXACTLY — do not invent a generic SaaS look:\n` +
-    `- surface #f1eadb, ink #20190f, ONE accent #9a3324 (terracotta), #2f6b3a only for done/success\n` +
-    `- serif headings, monospace for file paths and shell commands\n` +
+    `Match this composition EXACTLY — do not invent a generic SaaS look:\n` +
+    `${DASH_STYLE_BLOCK}\n` +
+    `- serif headings via var(--serif), var(--mono) for file paths and shell commands\n` +
+    `- var(--accent) for the current activity; var(--ok) only for done/success\n` +
     `- ONE visual anchor (current activity); a vertical timeline, NOT a card grid; no gradients, no drop shadows, no emoji\n` +
     `- COMPACT: must fit ~560px tall with no internal scrollbar. Summarize rather than grow.\n` +
     `EXAMPLE of the target look:\n${EXEMPLAR}\n\n` +
