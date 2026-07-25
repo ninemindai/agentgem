@@ -608,8 +608,8 @@ describe("materialize a2a server mode ({ a2aServer: true })", () => {
 // The buzz target projects a gem into a Buzz persona pack (github.com/block/buzz). Front matter is the
 // load-bearing contract with `buzz pack validate`: manifest id/name/version/personas, and each persona
 // carrying name/display_name/description. A generated pack passes the real `buzz pack validate` (checked
-// out-of-band). Compose-only like a2a: identity + instructions + skills map; MCP/hooks/channels/subagents
-// skip-report.
+// out-of-band). Compose-only like a2a: identity + instructions + skills + MCP map; subagents become
+// teammate personas (a multi-persona team pack, gem = orchestrator); hooks/channels skip-report.
 describe("buzz target (persona pack)", () => {
   const named = (name: string, artifacts: GemArtifact[]): Gem => ({ ...gem(artifacts), name });
 
@@ -657,11 +657,13 @@ describe("buzz target (persona pack)", () => {
     expect(JSON.stringify(files)).not.toContain("<redacted>"); // secret values never emitted
   });
 
-  it("skip-reports hooks, channels, and subagents with reasons", () => {
+  it("skip-reports hooks and channels; a subagent becomes a teammate persona (not skipped)", () => {
     const { files, skipped } = materialize(named("R", [hook(), subagent("sub")]), "buzz");
     const kinds = skipped.map((s) => s.type);
     expect(kinds).toContain("hook");
-    expect(kinds).toContain("subagent");
+    expect(kinds).not.toContain("subagent"); // subagents now map to personas, not skips
+    expect(files["agents/sub.persona.md"]).toBeDefined();
+    expect(JSON.parse(files[".plugin/plugin.json"]).personas).toContain("agents/sub.persona.md");
     expect(files[".mcp.json"]).toBeUndefined(); // no MCP → no .mcp.json, no mcp_config
     expect(JSON.parse(files[".plugin/plugin.json"]).mcp_config).toBeUndefined();
     for (const s of skipped) expect(s.reason).toMatch(/\S/);
@@ -671,6 +673,47 @@ describe("buzz target (persona pack)", () => {
     const { files } = materialize(named("My Gem!! v2", [instr("r", "Hi.")]), "buzz");
     expect(JSON.parse(files[".plugin/plugin.json"]).personas[0]).toBe("agents/my-gem-v2.persona.md");
     expect(files["agents/my-gem-v2.persona.md"]).toBeDefined();
+  });
+
+  it("maps subagents into a multi-persona team — orchestrator plus one persona per subagent", () => {
+    const g = named("Lead", [instr("r", "Coordinate the work."), subagent("Security", "Audit auth."), subagent("Architecture", "Review structure.")]);
+    const { files } = materialize(g, "buzz");
+    const personas = JSON.parse(files[".plugin/plugin.json"]).personas;
+    expect(personas).toEqual(["agents/lead.persona.md", "agents/security.persona.md", "agents/architecture.persona.md"]);
+    expect(files["agents/security.persona.md"]).toBeDefined();
+    expect(files["agents/architecture.persona.md"]).toBeDefined();
+  });
+
+  it("gives the orchestrator a team roster that @mentions each teammate for delegation", () => {
+    const g = named("Lead", [instr("r", "Coordinate."), subagent("Security", "Review auth and injection.")]);
+    const orch = materialize(g, "buzz").files["agents/lead.persona.md"];
+    expect(orch).toContain("## Your team");
+    expect(orch).toContain("@Security");
+  });
+
+  it("each teammate persona carries the required front matter and folds the subagent prompt into its body", () => {
+    const g = named("Lead", [subagent("Security", "You audit threat models.")]);
+    const persona = materialize(g, "buzz").files["agents/security.persona.md"];
+    const [, fm, body] = persona.split(/^---\n/m);
+    expect(fm).toContain("name: security");
+    expect(fm).toContain("display_name: Security");
+    expect(fm).toMatch(/description:\s*\S/);
+    expect(body).toContain("You audit threat models.");
+  });
+
+  it("a gem with no subagents stays a single-persona pack with no team section", () => {
+    const { files } = materialize(named("Solo", [instr("r", "Do the thing.")]), "buzz");
+    expect(JSON.parse(files[".plugin/plugin.json"]).personas).toEqual(["agents/solo.persona.md"]);
+    expect(files["agents/solo.persona.md"]).not.toContain("## Your team");
+  });
+
+  it("guards persona filename collisions — a subagent whose slug matches the gem is skip-reported, not clobbered", () => {
+    const g = named("Reviewer", [instr("r", "Lead the review."), subagent("Reviewer", "clobber body")]);
+    const { files, skipped } = materialize(g, "buzz");
+    expect(JSON.parse(files[".plugin/plugin.json"]).personas).toEqual(["agents/reviewer.persona.md"]);
+    expect(files["agents/reviewer.persona.md"]).toContain("Lead the review."); // orchestrator body preserved
+    expect(files["agents/reviewer.persona.md"]).not.toContain("clobber body");
+    expect(skipped).toContainEqual(expect.objectContaining({ type: "subagent", artifact: "Reviewer" }));
   });
 
   it("includes a buzz entry in compatibility()", () => {
