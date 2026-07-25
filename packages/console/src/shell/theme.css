@@ -2544,5 +2544,5 @@ button.scorecard-intent { line-height: 1.4; }
 .watch-atif-mark { font-weight: 700; }
 .watch-atif-gloss { opacity: .7; margin: 2px 0; }
 .watch-atif-files { display: flex; flex-wrap: wrap; gap: 6px; }
-.watch-atif-file { font-family: var(--mono, ui-monospace, monospace); font-size: 12px; }
+.watch-atif-file { font-family: var(--font-mono, ui-monospace, monospace); font-size: 12px; }
 .watch-atif-more { opacity: .6; font-size: 12px; }

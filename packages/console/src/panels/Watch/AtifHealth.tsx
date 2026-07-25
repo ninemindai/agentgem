@@ -28,7 +28,7 @@ export function AtifHealth({ apiBase, refreshKey }: { apiBase: string; refreshKe
     return () => { alive = false; };
   }, [apiBase, refreshKey]);
 
-  if (!health || health.groups.length === 0) return null;
+  if (!health || (health.groups?.length ?? 0) === 0) return null;
 
   const problemFiles = new Set(health.groups.flatMap((g) => g.files.map((f) => f.name))).size;
   const anyRejection = health.groups.some((g) => g.rejection);
