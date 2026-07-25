@@ -13,12 +13,18 @@
 
 import { createInterface } from "node:readline";
 
+// Must match src/gemit/cohort.ts MIN_COHORT. .mjs has no TS loader, so duplication
+// is unavoidable; keep them synchronized.
 const MIN_COHORT = 100;
 const scores = [];
 
 for await (const line of createInterface({ input: process.stdin })) {
-  const n = Number(line.trim());
-  if (Number.isInteger(n) && n >= 0 && n <= 100) scores.push(n);
+  const trimmed = line.trim();
+  // Only accept plain decimal integer literals 0-100: /^\d+$/ rejects blanks, hex (0x),
+  // exponent (1e2), leading +/-, and non-numeric text.
+  if (!/^\d+$/.test(trimmed)) continue;
+  const n = Number(trimmed);
+  if (n >= 0 && n <= 100) scores.push(n);
 }
 
 if (scores.length < MIN_COHORT) {
