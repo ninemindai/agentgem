@@ -114,8 +114,11 @@ export const STYLES = `
   .card::before{content:"";position:absolute;inset:0;
     background:radial-gradient(120% 90% at 82% -10%, rgba(201,100,66,.20), transparent 62%);
     pointer-events:none}
+  /* text-align and color must be set explicitly here — the bare .eyebrow rule (used by the
+     untouched doorway) still matches this element too and would otherwise win with its own
+     center alignment and muted grey, since .card .eyebrow leaves them unset. */
   .card .eyebrow{font:500 var(--t-small)/1.4 var(--mono);letter-spacing:.2em;
-    text-transform:uppercase;opacity:.62;margin:0 0 var(--sp-3)}
+    text-transform:uppercase;color:inherit;text-align:left;opacity:.62;margin:0 0 var(--sp-3)}
   .crown{display:flex;gap:var(--sp-4);align-items:center}
   .ring{flex:0 0 132px;position:relative;width:132px;height:132px}
   .ring svg{width:132px;height:132px;transform:rotate(-90deg);display:block}
@@ -125,13 +128,16 @@ export const STYLES = `
     animation:sweep 1.1s cubic-bezier(.25,1,.3,1) .2s backwards}
   @keyframes sweep{from{stroke-dashoffset:339.3}}
   .ring .num{position:absolute;inset:0;display:grid;place-content:center;text-align:center}
-  .ring .num b{display:block;font:600 42px/1 var(--mono);letter-spacing:-.02em}
+  /* color:inherit outranks the pre-existing base .count{color:var(--accent)} rule (0,2,1
+     specificity beats 0,1,0) — .count stays on the element for the runtime's count-up hook,
+     but the ring's headline number must read in the card's ink, not the low-pip warning red. */
+  .ring .num b{display:block;font:600 42px/1 var(--mono);letter-spacing:-.02em;color:inherit}
   .ring .num span{display:block;font:500 10px/1 var(--mono);letter-spacing:.16em;
     opacity:.5;margin-top:5px}
   .crown-txt{min-width:0}
   /* color: FIRST and standalone — if the gradient fails to paint, text-fill-color
      transparent would render the title invisible rather than merely unstyled. */
-  .tier{ font:600 clamp(38px,8vw,60px)/.95 var(--serif); letter-spacing:.02em;
+  .tier{ font:600 clamp(38px,8vw,var(--tier-max,60px))/.95 var(--serif); letter-spacing:.02em;
     text-transform:uppercase; color:#e8c87d; margin:0;
     background-image:linear-gradient(96deg,#e8c87d 30%,#fff4d8 46%,#e8c87d 62%);
     -webkit-background-clip:text; background-clip:text; -webkit-text-fill-color:transparent;

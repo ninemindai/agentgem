@@ -176,6 +176,20 @@ function renderCard(d: GemitData): string {
   const pip = (label: string, v: number, i: number): string => `
         <div class="pip${v < 50 ? " low" : ""}"><span>${label}</span><b class="mono">${v}</b>
           <i style="--w:${v}%;--d:${(0.25 + i * 0.12).toFixed(2)}s"></i></div>`;
+  // The crown-txt column has a hard ceiling around 338px (bounded by the card's own
+  // max-width, independent of viewport once it's wider than ~750px — verified empirically
+  // for all four TIER_NAMES, not derived analytically from font metrics). A single
+  // unbreakable word longer than ~6-7 chars (Prospector) overflows that ceiling at the full
+  // 60px cap and gets clipped by .card{overflow:hidden}, so scale the cap down from the
+  // LONGEST WORD's length, not the full name's length — multi-word names (Master Lapidary)
+  // wrap at the space and are then bounded by their longest word ("Lapidary", 8 chars) too,
+  // landing at the same safe size Lapidary itself uses. Coefficients calibrated by measuring
+  // scrollWidth vs. clientWidth in a real browser at each of the four tier names with ~6%
+  // headroom (see task-3-report.md): 6 chars ("Cutter") -> 60 (capped, comfortable margin),
+  // 8 chars ("Lapidary") -> 54, 10 chars ("Prospector") -> 42. Floor of 40px keeps even a
+  // hypothetical longer future name legible.
+  const longestWord = Math.max(...tierName.split(" ").map((w) => w.length));
+  const tierMax = Math.max(40, Math.min(60, 102 - 6 * longestWord));
 
   return `
     <section class="card">
@@ -186,7 +200,7 @@ function renderCard(d: GemitData): string {
           <div class="num"><b class="mono count" data-n="${d.composite}">${d.composite}</b><span class="mono">/ 100</span></div>
         </div>
         <div class="crown-txt">
-          <h1 class="tier">${tierName}</h1>
+          <h1 class="tier" style="--tier-max:${tierMax}px">${tierName}</h1>
           <p class="flavor">${TIER_FLAVOR[d.tierLevel - 1]}</p>
           ${cohort}
           <span class="hook">${hook}</span>

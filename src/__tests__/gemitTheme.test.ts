@@ -172,4 +172,47 @@ describe("the card", () => {
     expect(html).not.toContain('class="card"');
     expect(html).toContain("No score yet");
   });
+
+  it("scales the tier headline down for long unbreakable words instead of clipping", () => {
+    const cutter = renderRpgTheme(data({ tierLevel: 2, composite: 55 }));         // "Cutter", 6 chars
+    const lapidary = renderRpgTheme(data());                                     // "Lapidary", 8 chars
+    const prospector = renderRpgTheme(data({ tierLevel: 1, composite: 23 }));     // "Prospector", 10 chars
+    const masterLapidary = renderRpgTheme(data({ tierLevel: 4, composite: 92 })); // "Master Lapidary"
+    const tierMaxOf = (html: string): number => {
+      const m = html.match(/<h1 class="tier" style="--tier-max:(\d+)px">/);
+      if (!m) throw new Error("no --tier-max found on the tier heading");
+      return Number(m[1]);
+    };
+    // A single unbreakable 10-char word (Prospector) must shrink well below a short one
+    // (Cutter) — this is what keeps it from overflowing the crown-txt column.
+    expect(tierMaxOf(prospector)).toBeLessThan(tierMaxOf(cutter));
+    // Master Lapidary wraps at the space, so it's sized by its longest word ("Lapidary",
+    // 8 chars) — the same bucket as Lapidary alone, not shrunk further by the full 15-char
+    // string.
+    expect(tierMaxOf(masterLapidary)).toBe(tierMaxOf(lapidary));
+    // The CSS itself must read a per-render custom property for the clamp's max, not the old
+    // bare hardcoded "8vw,60px)" (a fallback of "var(--tier-max,60px)" is fine — it's never
+    // reached because renderCard always sets --tier-max inline).
+    const tierRule = cutter.slice(cutter.indexOf(".tier{"), cutter.indexOf(".tier{") + 260);
+    expect(tierRule).not.toContain("8vw,60px)");
+    expect(tierRule).toContain("var(--tier-max");
+  });
+
+  it("keeps the ring's headline number in the card's ink colour, not the low-score accent", () => {
+    const html = renderRpgTheme(data());
+    const start = html.indexOf(".ring .num b{");
+    const rule = html.slice(start, html.indexOf("}", start) + 1);
+    // Higher-specificity override on the ring's own number rule — the base .count rule (kept
+    // for the runtime's count-up hook) must not be left to paint this element on its own.
+    expect(rule).toMatch(/color:\s*inherit/);
+    expect(html).toContain('class="mono count"');
+  });
+
+  it("keeps the card's eyebrow left-aligned in the card's own ink, not centered in the doorway's muted grey", () => {
+    const html = renderRpgTheme(data());
+    const start = html.indexOf(".card .eyebrow{");
+    const rule = html.slice(start, html.indexOf("}", start) + 1);
+    expect(rule).toMatch(/text-align:\s*left/);
+    expect(rule).toMatch(/color:\s*inherit/);
+  });
 });
