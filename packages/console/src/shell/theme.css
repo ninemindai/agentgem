@@ -2537,6 +2537,8 @@ button.scorecard-intent { line-height: 1.4; }
 .watch-atif.is-rejection { border-color: rgba(154, 51, 36, .4); }
 .watch-atif-summary { display: block; width: 100%; text-align: left; padding: 8px 12px; cursor: pointer; border: 0; font: inherit; background: var(--surface, #fff); color: var(--ink, #222); }
 .watch-atif.is-rejection .watch-atif-summary { background: #fbeee9; color: var(--accent); }
+.watch-atif.is-degraded { border-color: rgba(169, 128, 63, .4); }
+.watch-atif.is-degraded .watch-atif-summary { color: var(--amber, #b8860b); }
 .watch-atif-caret { display: inline-block; width: 12px; }
 .watch-atif-groups { list-style: none; margin: 0; padding: 4px 12px 8px; }
 .watch-atif-group { padding: 6px 0; border-top: 1px solid var(--border, #ccc); }

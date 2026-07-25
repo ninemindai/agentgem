@@ -281,8 +281,10 @@ export function finalizeCommonApp(app: RestApplication, server: Awaited<RestAppl
   // Watch ATIF health: which files in the ~/.agentgem/atif drop dir failed to
   // import, grouped by reason. Read-only, basenames only (no absolute paths, no
   // transcript content). Drives the Watch tab's drop-dir debug panel.
-  server.expressApp.get("/api/watch/atif-health", originGuard, async (_req, res) =>
-    res.json(await scanAtifHealth() as never));
+  server.expressApp.get("/api/watch/atif-health", originGuard, async (_req, res) => {
+    try { res.json(await scanAtifHealth() as never); }
+    catch { res.json({ totalFiles: 0, imported: 0, groups: [] } as never); }
+  });
   // Watch attention: which active sessions look blocked on the user — an unmatched
   // tool_call with a stalled transcript (permission prompt, or a long tool run; the
   // transcript can't tell). Polled by the console's NotificationsProvider.
