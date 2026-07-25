@@ -1,6 +1,7 @@
 import { describe, it, expect } from "vitest";
 import { renderDashboard, extractHtml, MAX_HTML, type RenderInput } from "@agentgem/insight";
 import type { SessionEvent } from "@agentgem/insight";
+import { HOUSE_TOKENS, themeAdapter } from "@agentgem/model";
 
 // Like fakeConnect, but records the prompt the agent received (for asserting prompt content).
 function capturingConnect(sink: { prompt: string }, reply = "<html><body>x</body></html>") {
@@ -70,6 +71,12 @@ describe("renderDashboard", () => {
     await renderDashboard(base({ meta: { project: "acme-web", agent: "claude" }, connectFn: capturingConnect(sink) }));
     expect(sink.prompt).toContain("acme-web");
     expect(sink.prompt).toContain("claude");
+  });
+  it("gives the agent the shared house-style tokens + the fixed palette, not a hardcoded colour list", async () => {
+    const sink = { prompt: "" };
+    await renderDashboard(base({ connectFn: capturingConnect(sink) }));
+    expect(sink.prompt).toContain(HOUSE_TOKENS);
+    expect(sink.prompt).toContain(themeAdapter("fixed"));
   });
   it("truncates HTML over MAX_HTML and flags it (drives the endpoint's full-regenerate)", async () => {
     const huge = "<html><body>" + "x".repeat(MAX_HTML + 10_000) + "</body></html>";
