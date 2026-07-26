@@ -1302,7 +1302,7 @@ body::before {
 /* ── Home/reveal — broadsheet consent + streaming-reveal + ceremony surface ──
    Variant B ("Broadsheet") from the reviewed mockup: masthead + double rule,
    one Fraunces headline sentence, a hairline-ruled ledger row, one terracotta
-   CTA. Reuses the obs-*/scorecard-* tokens and shimmer keyframe already
+   CTA. Reuses the obs- and scorecard- tokens and shimmer keyframe already
    defined above — no new colors or typefaces. */
 .reveal { max-width: 880px; margin: 0 auto; padding: 8px 0 32px; }
 .reveal-masthead { display: flex; justify-content: space-between; align-items: baseline; padding: 4px 0 10px; }
