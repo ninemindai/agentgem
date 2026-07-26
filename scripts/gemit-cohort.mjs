@@ -10,6 +10,14 @@
 //
 // Prints the COHORT literal. Paste it over the `export const COHORT` line. Refuses to
 // emit anything below MIN_COHORT samples: a percentile from a small sample is noise.
+//
+// HAZARD before you paste this in: src/gemit/cohort.ts's topPercentFor() is unbounded.
+// A real table turns a middling composite into "top 88%" rendered in a report published
+// under the operator's own name — correct, but reads as sarcasm. Before this table ships,
+// add a clamp in topPercentFor() (floor the displayed fraction, or suppress the claim
+// below some percentile) that BOTH the card (themeRpg.ts) and the share text (share.ts)
+// pick up together — see the comment on topPercentFor for why it can't be fixed on just
+// one of those two call sites.
 
 import { createInterface } from "node:readline";
 
