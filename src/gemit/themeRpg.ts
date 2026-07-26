@@ -12,7 +12,7 @@
 import { COHORT, cohortLabel, topPercentFor } from "./cohort.js";
 import { COMPOSITE_WEIGHTS, SETUP_WEIGHTS, TIER_THRESHOLDS, type GemitData } from "./score.js";
 import { autoSolvePath, projectComposite, setupScoreFrom, tierFor } from "./themeRpgSim.js";
-import { STYLES } from "./theme/styles.js";
+import { RING_C, STYLES } from "./theme/styles.js";
 import { RUNTIME_JS } from "./theme/runtime.js";
 
 export const TIER_NAMES = ["Prospector", "Cutter", "Lapidary", "Master Lapidary"] as const;
@@ -161,8 +161,6 @@ const questLi = (q: Quest): string => `
 
 const perkLi = (p: Perk, locked: boolean): string => `
         <li${locked ? ' class="locked"' : ""}><b>${escapeHtml(p.name)}${locked ? " · locked" : ""}</b>${escapeHtml(p.detail)}</li>`;
-
-const RING_C = 339.3; // 2πr, r=54
 
 function renderCard(d: GemitData): string {
   const tierName = TIER_NAMES[d.tierLevel - 1];
