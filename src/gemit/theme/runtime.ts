@@ -30,6 +30,18 @@ export const RUNTIME_JS = `(function () {
   var meas = { ctx: D.ctx, proc: D.proc, setup: D.setup };
   var lastTier = tierFor(projectComposite(vals.ctx, vals.proc, vals.setup, W), TH);
 
+  // "Measured" is documented as read-only — the bars only become draggable once the
+  // What if? toggle has switched #disciplines into .whatif. isWhatIf() is the single
+  // choke point every user-triggered mutation path (drag, keyboard, quest checkbox)
+  // checks before touching vals/DOM, so none of them can move the displayed numbers,
+  // flip a tier, or fire confetti while the mode readout still says "measured". The
+  // toggle button itself is NOT gated by this — it's the one documented way to enter
+  // what-if — and setAxis() is left ungated too, since the toggle-off reset and the
+  // auto-solve tween both call it legitimately from *inside* an already-whatif (or
+  // just-left-whatif) transition.
+  var sect = document.getElementById("disciplines");
+  function isWhatIf() { return !!sect && sect.classList.contains("whatif"); }
+
   function confetti() {
     var host = document.getElementById("confetti");
     if (!host) return;
@@ -81,6 +93,7 @@ export const RUNTIME_JS = `(function () {
       setAxis(axis, 100 * (e.clientX - r.left) / r.width);
     };
     bar.addEventListener("pointerdown", function (e) {
+      if (!isWhatIf()) return;
       dragging = true;
       if (bar.setPointerCapture) bar.setPointerCapture(e.pointerId);
       fromEvent(e); e.preventDefault();
@@ -89,6 +102,7 @@ export const RUNTIME_JS = `(function () {
     bar.addEventListener("pointerup", function () { dragging = false; });
     bar.addEventListener("pointercancel", function () { dragging = false; });
     bar.addEventListener("keydown", function (e) {
+      if (!isWhatIf()) return;
       var step = e.shiftKey ? 5 : 1;
       if (e.key === "ArrowRight" || e.key === "ArrowUp") { setAxis(axis, vals[axis] + step); e.preventDefault(); }
       else if (e.key === "ArrowLeft" || e.key === "ArrowDown") { setAxis(axis, vals[axis] - step); e.preventDefault(); }
@@ -97,6 +111,9 @@ export const RUNTIME_JS = `(function () {
 
   Array.prototype.forEach.call(document.querySelectorAll(".quests input[type=checkbox]"), function (cb) {
     cb.addEventListener("change", function () {
+      // Blocked while measured: revert the checkbox rather than leaving it checked with
+      // no effect — a box that looks ticked but changed nothing is its own lie.
+      if (!isWhatIf()) { cb.checked = false; return; }
       var li = cb.closest("li");
       var axis = li.getAttribute("data-axis");
       var delta = +li.getAttribute("data-delta");
@@ -136,7 +153,6 @@ export const RUNTIME_JS = `(function () {
   });
 
   var wi = document.querySelector(".wi");
-  var sect = document.getElementById("disciplines");
   if (wi && sect) wi.addEventListener("click", function () {
     var on = wi.getAttribute("aria-pressed") !== "true";
     wi.setAttribute("aria-pressed", on ? "true" : "false");
