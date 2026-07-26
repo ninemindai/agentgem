@@ -39,6 +39,16 @@ export function percentileFor(composite: number, c?: Cohort | null): number | nu
 // "top" fraction) is 100 minus that. Single-sourced here so the card
 // (themeRpg.ts) and the share text (share.ts) can never compute this differently
 // from one another — both call this, neither re-derives `100 - pct` on its own.
+//
+// HAZARD, tracked but deliberately NOT fixed here: this fraction is unbounded. Once
+// a real cohort table lands (COHORT stops being null), a middling composite can
+// render "top 88%" in a report published under the operator's own name —
+// mathematically correct, reads as sarcasm about the person who just shared it.
+// Whoever lands the real table MUST add a clamp (floor the displayed fraction, or
+// suppress the claim below some percentile — copy decision, not just a number)
+// applied to this function so BOTH callers pick it up together. Never patch
+// themeRpg.ts's card or share.ts's standingClause alone; a clamp on only one side
+// reopens exactly the drift this single-sourcing was built to prevent.
 export function topPercentFor(composite: number, c?: Cohort | null): number | null {
   const pct = percentileFor(composite, c);
   return pct === null ? null : 100 - pct;
