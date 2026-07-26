@@ -4,6 +4,10 @@
 
 import { HOUSE_TOKENS, themeAdapter } from "@agentgem/model";
 
+// The ring's circumference (2*PI*r, r=54) — exported so themeRpg.ts can compute the same
+// arc's inline stroke-dashoffset from one number instead of a second hardcoded literal.
+export const RING_C = 339.3;
+
 export const STYLES = `${HOUSE_TOKENS}
 ${themeAdapter("document")}
   :root {
@@ -23,16 +27,14 @@ ${themeAdapter("document")}
   .mono { font-family: var(--mono); font-variant-numeric: tabular-nums; }
   /* Dim text via a computed alpha on --ink (color-mix), never element-level opacity, on any
      selector that also owns a border/background or has a child needing full strength (h2's
-     .wi button, .composite/.provenance's own border, .chip.assumed's inherited border) —
-     opacity composites the whole box and multiplies with a child's own opacity, which both
-     washes out chrome that was never muted and compounds with a child's independent fade. */
+     .wi button, .provenance's own border, .chip.assumed's inherited border) — opacity
+     composites the whole box and multiplies with a child's own opacity, which both washes
+     out chrome that was never muted and compounds with a child's independent fade. */
   main { max-width: 700px; margin: 40px auto 64px; padding: 0 20px; }
   .frame { border: 1px solid var(--border); outline: 1px solid var(--border); outline-offset: 6px; padding: clamp(24px, 6vw, 48px); background: var(--surface-2); }
   .eyebrow { font-family: var(--mono); font-size: 11px; letter-spacing: .26em; text-transform: uppercase; opacity: .6; text-align: center; margin: 0 0 6px; }
   .hero { text-align: center; }
   .rank { font-size: clamp(44px, 11vw, 76px); margin: 6px 0 0; letter-spacing: .06em; text-transform: uppercase; color: var(--gold); }
-  .flavor { opacity: .6; font-style: italic; margin: 4px 0 0; }
-  .composite { margin: 18px auto 0; width: fit-content; border: 1px solid var(--border); background: var(--surface-2); padding: 8px 16px; font-size: 14px; color: color-mix(in srgb, var(--ink) 60%, transparent); }
   .conferred { opacity: .6; max-width: 44ch; margin: 14px auto 0; }
   /* flex-wrap: wrap — the divider (::after, flex:1 basis:0) can't shrink below its own
      zero basis, so on a narrow viewport the label text plus the fixed-width .wi button
@@ -68,8 +70,6 @@ ${themeAdapter("document")}
   #tg-solve:hover:not(:disabled) { background: var(--gold); color: var(--surface); }
   .flip { display: inline-block; animation: flip .5s cubic-bezier(.25,1,.3,1); }
   @keyframes flip { from { transform: rotateX(90deg); } }
-  .stamp { animation: stamp .45s cubic-bezier(.25,1,.3,1) backwards; }
-  @keyframes stamp { from { transform: scale(1.15); opacity: 0; } }
   #confetti { position: fixed; inset: 0; pointer-events: none; overflow: hidden; }
   #confetti i { position: absolute; top: -14px; width: 8px; height: 12px; animation: fall 1.6s ease-in forwards; }
   @keyframes fall { to { transform: translateY(105vh) rotate(540deg); opacity: .2; } }
@@ -89,7 +89,6 @@ ${themeAdapter("document")}
   ul.jutsu li { background: var(--surface-2); border: 1px solid var(--border); border-left: 3px solid var(--gold); padding: 11px 15px; font-size: 14px; }
   ul.jutsu li b { color: var(--ink); display: block; font-size: 14.5px; }
   ul.jutsu li.locked { opacity: .55; border-left-style: dashed; }
-  ul.jutsu.train li { border-left-color: var(--accent); }
   .count { color: var(--accent); }
   .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 9px; }
   .cell { background: var(--surface-2); border: 1px solid var(--border); padding: 12px 14px; }
@@ -97,7 +96,7 @@ ${themeAdapter("document")}
   .cell .l { font-family: var(--sans); font-size: 11.5px; letter-spacing: .07em; text-transform: uppercase; opacity: .6; margin-top: 2px; }
   .provenance { margin-top: 40px; padding-top: 18px; border-top: 1px solid var(--border); font-size: 12.5px; color: color-mix(in srgb, var(--ink) 60%, transparent); line-height: 1.7; }
   @media (prefers-reduced-motion: reduce) {
-    .tg-proj, .stamp, .flip, #confetti i { animation: none; }
+    .tg-proj, .flip, #confetti i, .ring .arc, .tier, .pip i::after { animation: none; }
     .tg-proj { transition: none; }
     ul.jutsu li { transition: none; }
   }
@@ -141,9 +140,9 @@ ${themeAdapter("document")}
   .ring svg{width:132px;height:132px;transform:rotate(-90deg);display:block}
   .ring .trk{fill:none;stroke:rgba(236,231,220,.14);stroke-width:9}
   .ring .arc{fill:none;stroke:#d9a441;stroke-width:9;stroke-linecap:round;
-    stroke-dasharray:339.3;stroke-dashoffset:71.3;
+    stroke-dasharray:${RING_C};stroke-dashoffset:71.3;
     animation:sweep 1.1s cubic-bezier(.25,1,.3,1) .2s backwards}
-  @keyframes sweep{from{stroke-dashoffset:339.3}}
+  @keyframes sweep{from{stroke-dashoffset:${RING_C}}}
   .ring .num{position:absolute;inset:0;display:grid;place-content:center;text-align:center}
   /* color:inherit outranks the pre-existing base .count{color:var(--accent)} rule (0,2,1
      specificity beats 0,1,0) — .count stays on the element for the runtime's count-up hook,

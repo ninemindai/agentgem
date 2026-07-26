@@ -111,6 +111,48 @@ describe("interactive layer", () => {
     expect(html).toContain("prefers-reduced-motion");
   });
 
+  // Regression guard for a bug class the string-only assertion above cannot catch: a new
+  // animation added anywhere in the stylesheet but forgotten in the reduce block. Rather
+  // than pin the exact selector list (which churns every time a card animation is added),
+  // walk every flat CSS rule in the sheet, collect the selectors of any rule that declares
+  // a real (non-"none") animation, and assert each one is textually present inside the
+  // `prefers-reduced-motion: reduce` block. Flat-rule regex is safe here because CSS rule
+  // *bodies* never contain braces — only at-rule wrappers (@media, @keyframes) do, and
+  // those wrappers simply fail to match this pattern and get skipped.
+  it("covers every animated selector under prefers-reduced-motion, not just the string", () => {
+    const html = renderRpgTheme(data());
+    const styleMatch = html.match(/<style>([\s\S]*?)<\/style>/);
+    if (!styleMatch) throw new Error("no <style> block found");
+    // Strip comments first — the flat-rule regex below treats "any text between braces" as
+    // a selector, and a comment sitting just above a rule (there are several multi-line
+    // design-rationale ones in this sheet) has no braces of its own, so it would otherwise
+    // get swallowed into the selector text of the rule that follows it.
+    const css = styleMatch[1].replace(/\/\*[\s\S]*?\*\//g, "");
+
+    const reduceStart = css.indexOf("@media (prefers-reduced-motion: reduce)");
+    if (reduceStart === -1) throw new Error("no prefers-reduced-motion block found");
+    const braceStart = css.indexOf("{", reduceStart);
+    let depth = 0, i = braceStart;
+    for (; i < css.length; i++) {
+      if (css[i] === "{") depth++;
+      else if (css[i] === "}") { depth--; if (depth === 0) break; }
+    }
+    const reduceBlock = css.slice(braceStart + 1, i);
+
+    const animatedSelectors: string[] = [];
+    for (const m of css.matchAll(/([^{}]+)\{([^{}]*)\}/g)) {
+      const [, selector, decl] = m;
+      if (/\banimation:\s*(?!none\b)/.test(decl)) animatedSelectors.push(selector.trim());
+    }
+    // Sanity: the stylesheet must actually declare more than one animated rule, or this
+    // test would pass vacuously.
+    expect(animatedSelectors.length).toBeGreaterThanOrEqual(6);
+    for (const selector of animatedSelectors) {
+      expect(reduceBlock).toContain(selector);
+    }
+    expect(css).not.toContain(".stamp"); // dead: no markup targets it any more
+  });
+
   it("keeps the doorway static: no script, no disciplines", () => {
     const html = renderRpgTheme(data({ insufficient: true, qualifyingSessions: 2, composite: 0, tierLevel: 1 }));
     expect(html).not.toContain("GEMIT_CONST");
@@ -294,7 +336,7 @@ describe("house style adoption", () => {
       if (!m) throw new Error(`rule not found for ${pattern}`);
       return m[0];
     };
-    for (const pattern of [/\bh2\s*\{[^}]*\}/, /\.composite\s*\{[^}]*\}/, /\.provenance\s*\{[^}]*\}/, /\.quests \.chip\.assumed\s*\{[^}]*\}/]) {
+    for (const pattern of [/\bh2\s*\{[^}]*\}/, /\.provenance\s*\{[^}]*\}/, /\.quests \.chip\.assumed\s*\{[^}]*\}/]) {
       const rule = ruleFor(pattern);
       expect(rule).toMatch(/color:/);
       expect(rule).not.toMatch(/\bopacity:/);
