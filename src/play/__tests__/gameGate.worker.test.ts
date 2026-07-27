@@ -11,6 +11,33 @@ import { gameGate } from "@agentgem/play";
 
 const page = (script: string) => `<!doctype html><body><script>${script}</script></body>`;
 
+// Run one gate call in a SEPARATE PROCESS and return its result.
+//
+// Two tests need this for different reasons:
+//   - the rejection-policy test cannot set --unhandled-rejections in-process;
+//   - the allocation test must not do its allocating inside a vitest fork. It did once, and on a
+//     2-core CI runner with ~400 test files in parallel the fork was killed outright ("Worker
+//     exited unexpectedly"), taking this whole file's results with it while every assertion in it
+//     had passed. Bounding the smoke worker's heap does not bound the pressure the surrounding
+//     process feels; only another process does.
+//
+// The module URL is resolved here rather than passed as a bare specifier, so the child does not
+// depend on its cwd resolving the workspace package.
+async function gateInChildProcess(html: string, env: NodeJS.ProcessEnv = {}) {
+  const { execFile } = await import("node:child_process");
+  const { promisify } = await import("node:util");
+  const playUrl = import.meta.resolve("@agentgem/play");
+  const src = `
+    const { gameGate } = await import(${JSON.stringify(playUrl)});
+    console.log(JSON.stringify(await gameGate(${JSON.stringify(html)})));
+  `;
+  const { stdout } = await promisify(execFile)(process.execPath, ["--input-type=module", "--eval", src], {
+    env: { ...process.env, ...env },
+    maxBuffer: 16 * 1024 * 1024,
+  });
+  return JSON.parse(stdout.trim().split("\n").pop()!) as { ok: boolean; failures: string[] };
+}
+
 describe("gameGate — worker isolation", () => {
   it("kills a synchronous infinite loop and reports it, instead of hanging forever", async () => {
     const r = await gameGate(page("while(true){}"));
@@ -18,19 +45,16 @@ describe("gameGate — worker isolation", () => {
     expect(r.failures.some((f) => f.includes("did not finish"))).toBe(true);
   }, 20_000);
 
-  it("contains unbounded allocation without taking the host heap with it", async () => {
-    const before = process.memoryUsage().heapUsed;
-    // Allocate in ~40 MB slabs, not ~8 MB ones. Both trip the 128 MB worker ceiling, but small
-    // slabs spend seconds GC-thrashing just under the limit first, and that sustained pressure
-    // is enough to make a sibling test's child-process pipe fail with EPIPE when the whole suite
-    // runs in parallel. Big slabs hit the wall in a few allocations with almost no churn.
-    const r = await gameGate(page("const a=[];while(true){a.push(new Array(5e6).fill(7))}"));
+  it("contains unbounded allocation", async () => {
+    // Runs in a child process — see gateInChildProcess. Allocating inside the vitest fork killed
+    // the fork on CI. Slabs are ~40 MB, not ~8 MB: both trip the 128 MB ceiling, but small slabs
+    // GC-thrash under the limit for seconds first, and that pressure is what breaks neighbours.
+    const r = await gateInChildProcess(page("const a=[];while(true){a.push(new Array(5e6).fill(7))}"));
+    // Either the heap ceiling kills the worker ('exit'/'error') or the wall clock does ('timeout').
+    // Which one wins is a timing race; both are correct, and both must be a gate failure.
     expect(r.ok).toBe(false);
-    // Either the heap ceiling kills the worker ('exit') or the wall clock does ('timeout') —
-    // which one wins is a timing race and both are correct. What must hold is that the host's
-    // own heap is untouched.
-    expect(process.memoryUsage().heapUsed - before).toBeLessThan(64 * 1024 * 1024);
-  }, 20_000);
+    expect(r.failures.length).toBeGreaterThan(0);
+  }, 60_000);
 
   it("reports an async escape as a failure rather than crashing the host", async () => {
     // `NotAThing` is undefined inside the DOM, so the rejection escapes the awaited boot() the same
@@ -49,21 +73,11 @@ describe("gameGate — worker isolation", () => {
     // 'error' event is relying on a *policy*: flip this flag and the rejection only warns, the
     // worker posts ok:true, and a broken bundle is ADMITTED. That false pass is worse than the
     // crash the worker boundary exists to prevent, and it shipped once in this file's history.
-    const { execFile } = await import("node:child_process");
-    const { promisify } = await import("node:util");
-    const src = `
-      import { gameGate } from "@agentgem/play";
-      const r = await gameGate(\`<!doctype html><body><script>(async()=>{await 0;new NotAThing();})()</script></body>\`);
-      console.log(JSON.stringify(r));
-    `;
-    const { stdout } = await promisify(execFile)(
-      process.execPath,
-      ["--input-type=module", "--eval", src],
-      { cwd: process.cwd(), env: { ...process.env, NODE_OPTIONS: "--unhandled-rejections=warn" } },
-    );
-    const result = JSON.parse(stdout.trim().split("\n").pop()!);
-    expect(result.ok).toBe(false);
-  }, 30_000);
+    const r = await gateInChildProcess(page("(async()=>{await 0;new NotAThing();})()"), {
+      NODE_OPTIONS: "--unhandled-rejections=warn",
+    });
+    expect(r.ok).toBe(false);
+  }, 60_000);
 
   it("passes a legitimate bundle close to the size cap", async () => {
     // Guards the resourceLimits ceiling against being tightened until it rejects real content.
