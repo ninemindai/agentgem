@@ -111,6 +111,20 @@ const SMOKE_WORKER_SRC = `
 const { workerData, parentPort } = require("node:worker_threads");
 (async () => {
   const failures = [];
+  const msg = (e) => (e && e.message) ? e.message : String(e);
+
+  // Record async escapes IN THE WORKER rather than relying on Node turning an unhandled rejection
+  // into the parent's 'error' event. That default is policy, not a guarantee: under
+  // \`--unhandled-rejections=warn\` (settable via NODE_OPTIONS by whoever runs us) the rejection only
+  // warns, the worker then posts ok:true, and a bundle whose async boot() throws gets ADMITTED. A
+  // false pass is worse than the crash this whole file exists to prevent — the broken miniapp ships.
+  //
+  // This is the trap the pre-worker implementation used, moved to where it is safe. Mutating process
+  // listeners was only ever hazardous because it happened on a shared host; inside the worker these
+  // globals are ours alone, so there is nothing to clobber and nothing to restore.
+  process.on("unhandledRejection", (err) => failures.push("inline script crashed asynchronously: " + msg(err)));
+  process.on("uncaughtException", (err) => failures.push("inline script crashed asynchronously: " + msg(err)));
+
   try {
     const { JSDOM, VirtualConsole } = await import(workerData.jsdomHref);
     const vc = new VirtualConsole();
@@ -169,43 +183,92 @@ export async function gameGate(html: string, opts: GateOptions = {}): Promise<Ga
   const staticResult = staticGate(html, opts);
   if (!staticResult.ok) return staticResult; // short-circuit; don't execute a non-sealed bundle
 
-  const { Worker } = await import("node:worker_threads");
-  const { createRequire } = await import("node:module");
-  const { pathToFileURL } = await import("node:url");
-  const jsdomHref = pathToFileURL(createRequire(import.meta.url).resolve("jsdom")).href;
+  const errText = (err: unknown) => (err instanceof Error ? err.message : String(err));
+
+  // gameGate RESOLVES; it does not reject. saveMiniapp (miniapps.ts:127) awaits it with no try/catch
+  // and formats `gate.failures` on the next line, so a thrown setup error would surface there as a
+  // raw stack instead of an actionable gate message. Everything that can throw before the smoke
+  // starts — the dynamic imports, resolving jsdom, and constructing the Worker (which throws on
+  // thread-creation failure) — converts to a failure here.
+  let Worker: typeof import("node:worker_threads").Worker;
+  let jsdomHref: string;
+  try {
+    ({ Worker } = await import("node:worker_threads"));
+    const { createRequire } = await import("node:module");
+    const { pathToFileURL } = await import("node:url");
+    jsdomHref = pathToFileURL(createRequire(import.meta.url).resolve("jsdom")).href;
+  } catch (err) {
+    return { ok: false, failures: [`smoke could not start: ${errText(err)}`] };
+  }
 
   return await new Promise<GateResult>((resolve) => {
     // FOUR settle paths, and all four are load-bearing:
-    //   'message' — the smoke finished and reported;
-    //   'error'   — an async escape (the 2026-07-21 Path2D crash class) surfaces HERE, not on the
-    //               host's `uncaughtException`, which is what lets the old listener surgery go away;
-    //   'exit'    — a heap-limit kill fires NEITHER 'message' NOR 'error'; without this the worker
-    //               dies silently and we would wait out the full timeout, then misreport the cause;
+    //   'message' — the smoke finished and reported (including async escapes the worker trapped);
+    //   'error'   — the worker itself failed, e.g. ERR_WORKER_OUT_OF_MEMORY on the heap ceiling;
+    //   'exit'    — a hard kill fires NEITHER 'message' NOR 'error'; without this the worker dies
+    //               silently and we would wait out the full timeout, then misreport the cause;
     //   timeout   — a synchronous spin yields to nothing, so terminate() is the only way out.
     // Whichever fires first wins; `settle` guarantees exactly one resolution and always reclaims
     // the thread.
+    //
+    // `timer` and `worker` are declared before `settle` so it never closes over a binding that has
+    // not been initialized yet. Every call site today runs after both are assigned, but reading the
+    // reverse order requires proving that, and the guard is free.
     let settled = false;
-    const settle = (result: GateResult) => {
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    let worker: InstanceType<typeof Worker> | undefined;
+
+    // `awaitTermination` is only true for the spin path. Elsewhere the thread is already finished or
+    // unwinding, so waiting adds latency for nothing; a spinning worker is still burning a core, and
+    // returning before it is gone lets threads stack up across a registry-wide pass.
+    const settle = (result: GateResult, awaitTermination = false) => {
       if (settled) return;
       settled = true;
-      clearTimeout(timer);
-      void worker.terminate();
-      resolve(result);
+      if (timer) clearTimeout(timer);
+      const stopped = worker ? worker.terminate() : Promise.resolve(0);
+      if (awaitTermination) void stopped.then(() => resolve(result), () => resolve(result));
+      else resolve(result);
     };
 
-    const worker = new Worker(SMOKE_WORKER_SRC, {
-      eval: true,
-      workerData: { html, jsdomHref },
-      resourceLimits: SMOKE_RESOURCE_LIMITS,
-    });
+    try {
+      worker = new Worker(SMOKE_WORKER_SRC, {
+        eval: true,
+        workerData: { html, jsdomHref },
+        resourceLimits: SMOKE_RESOURCE_LIMITS,
+      });
+    } catch (err) {
+      resolve({ ok: false, failures: [`smoke could not start: ${errText(err)}`] });
+      return;
+    }
 
-    const timer = setTimeout(
-      () => settle({ ok: false, failures: [`smoke did not finish within ${SMOKE_TIMEOUT_MS}ms (infinite loop?)`] }),
+    timer = setTimeout(
+      () => settle({ ok: false, failures: [`smoke did not finish within ${SMOKE_TIMEOUT_MS}ms (infinite loop?)`] }, true),
       SMOKE_TIMEOUT_MS,
     );
 
     worker.on("message", (result: GateResult) => settle(result));
-    worker.on("error", (err: Error) => settle({ ok: false, failures: [`inline script crashed asynchronously: ${err?.message ?? String(err)}`] }));
-    worker.on("exit", (code) => settle({ ok: false, failures: [`smoke worker exited unexpectedly (code ${code}) — out of memory?`] }));
+    // Name the cause rather than guessing at it — these strings go back to the authoring agent as the
+    // self-repair loop's error signal, and "out of memory?" on a setup failure sends it after the
+    // wrong fix. V8 reports a breached resourceLimit as ERR_WORKER_OUT_OF_MEMORY.
+    worker.on("error", (err: NodeJS.ErrnoException) =>
+      settle({
+        ok: false,
+        failures: [
+          err?.code === "ERR_WORKER_OUT_OF_MEMORY"
+            ? `smoke exceeded the ${SMOKE_RESOURCE_LIMITS.maxOldGenerationSizeMb}MB memory ceiling (runaway allocation?)`
+            : `smoke worker failed: ${errText(err)}`,
+        ],
+      }),
+    );
+    worker.on("exit", (code) =>
+      settle({
+        ok: false,
+        failures: [
+          code === 0
+            ? "smoke worker exited without reporting a result"
+            : `smoke worker exited before reporting (code ${code})`,
+        ],
+      }),
+    );
   });
 }
