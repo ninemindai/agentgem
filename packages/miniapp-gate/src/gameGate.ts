@@ -126,13 +126,21 @@ const SMOKE_TIMEOUT_MS = 5_000;
 const SMOKE_RESOURCE_LIMITS = { maxOldGenerationSizeMb: 128, maxYoungGenerationSizeMb: 16 };
 
 // The worker body, as source text run with `{ eval: true }` — deliberately NOT a sibling .ts file.
-// A separate file cannot survive publish: `scripts/bundle-bins.mjs` inlines every `@agentgem/*`
-// package into the root entrypoints, so nothing under `packages/play/dist/` ships, and inlining also
+//
+// Reassess this if the packaging changes; the reason is no longer the obvious one. As a published
+// package with `files: ["dist"]`, THIS package could ship a sibling `smokeWorker.js` just fine, and
+// an npm consumer resolving it via `new Worker(new URL("./smokeWorker.js", import.meta.url))` would
+// work. The constraint comes from the OTHER consumer: AgentGem keeps this package a root
+// devDependency so `scripts/bundle-bins.mjs` compiles it INTO the CLI entrypoints, and that inlining
 // rewrites `import.meta.url` (the same mechanism behind the `client.js` double-boot guard documented
-// there). A `new Worker(new URL("./smokeWorker.js", import.meta.url))` would therefore resolve to a
-// path that does not exist on a consumer's install. Keeping the body inline has no such failure mode
-// and needs no new entry in that script's `entries` list. Cost: this string is not typechecked, so
-// keep it small and change it deliberately — `gameGate.worker.test.ts` covers its behavior.
+// there). In that build the sibling path resolves to a file that does not exist.
+//
+// So the inline string is what lets ONE implementation serve both consumers. If AgentGem ever moves
+// this package to a real `dependencies` entry (external, not inlined), the constraint disappears and
+// a typed sibling file becomes the better shape.
+//
+// Cost: this string is not typechecked, so keep it small and change it deliberately —
+// `gameGate.worker.test.ts` covers its behavior.
 //
 // jsdom is resolved by the PARENT (`require.resolve`) and passed in, because an eval'd worker has no
 // meaningful path of its own to resolve from.
