@@ -11,6 +11,9 @@
 //      `staticGate(html, opts)`), but nothing asserted it. Drop that argument and `allowNetwork`
 //      silently stops working on the async path while every staticGate test still passes.
 import { describe, it, expect } from "vitest";
+import { existsSync, readFileSync } from "node:fs";
+import { join } from "node:path";
+import { pathToFileURL } from "node:url";
 import { gameGate, staticGate, scannableCode, redactForBake } from "@ninemind/miniapp-gate";
 import { gameGate as playGameGate, redactForBake as playRedactForBake } from "@agentgem/play";
 
@@ -55,5 +58,42 @@ describe("gameGate threads GateOptions into the static pass", () => {
     const r = await gameGate(`<script src="https://cdn.example/x.js"></script>`, { allowNetwork: true });
     expect(r.ok).toBe(false);
     expect(r.failures.some((f) => f.includes("external"))).toBe(true);
+  });
+});
+
+// The describes above import through the pnpm workspace symlink, which resolves the SOURCE tree and
+// therefore proves nothing about what actually gets published. A wrong `exports` path, a `files` list
+// that omits dist, or a package that was simply never built would all sail past them. This is the
+// cheap half of a publish smoke: assert the manifest's declared entrypoints exist on disk as built
+// artifacts. (The expensive half — `pnpm pack` into a temp dir and install it — is tracked as a TODO;
+// it additionally catches workspace-protocol rewrite bugs, which this cannot see.)
+describe("@ninemind/miniapp-gate is publishable as declared", () => {
+  const pkgDir = join(process.cwd(), "packages", "miniapp-gate");
+  const manifest = JSON.parse(readFileSync(join(pkgDir, "package.json"), "utf8")) as {
+    files: string[];
+    exports: Record<string, { types: string; default: string }>;
+  };
+
+  it("ships dist", () => {
+    expect(manifest.files).toContain("dist");
+  });
+
+  it("every declared export path exists as a built file", () => {
+    const entry = manifest.exports["."];
+    expect(entry).toBeDefined();
+    for (const rel of [entry.types, entry.default]) {
+      const abs = join(pkgDir, rel);
+      // A missing file here means the tarball would install and then fail on first import.
+      expect(existsSync(abs), `${rel} declared in exports but not built at ${abs}`).toBe(true);
+    }
+  });
+
+  it("the built entrypoint really re-exports the gate surface", async () => {
+    // Import the BUILT artifact by path, not the package specifier — this is the file a consumer
+    // gets, so a dist that compiled but exports nothing useful fails here rather than in their app.
+    const built = await import(pathToFileURL(join(pkgDir, manifest.exports["."].default)).href);
+    expect(typeof built.gameGate).toBe("function");
+    expect(typeof built.staticGate).toBe("function");
+    expect(typeof built.redactForBake).toBe("function");
   });
 });
