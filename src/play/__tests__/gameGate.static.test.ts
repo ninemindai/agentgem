@@ -58,4 +58,37 @@ describe("staticGate", () => {
     expect(r.ok).toBe(false);
     expect(r.failures.some((f) => f.includes("size"))).toBe(true);
   });
+
+  // allowNetwork is HOST POLICY, not a weakening of the gate. AgentGem seals its bundles and leaves it
+  // off; a host that confines the bundle at runtime with a CSP connect-src allowlist turns it on, because there the browser enforces the single permitted origin and scanning
+  // source text for `fetch` would forbid the mechanism that host is built on.
+  describe("allowNetwork (host policy)", () => {
+    const netCall = `<script>fetch("https://host.example.com/mcp")</script>`;
+
+    it("rejects a network call by default — the sealed-host contract is unchanged", () => {
+      const r = staticGate(netCall);
+      expect(r.ok).toBe(false);
+      expect(r.failures.some((f) => f.includes("network"))).toBe(true);
+    });
+
+    it("admits the same bundle when the host opts in", () => {
+      expect(staticGate(netCall, { allowNetwork: true })).toEqual({ ok: true, failures: [] });
+    });
+
+    it("keeps the other three checks on — allowNetwork is not a bypass", () => {
+      // The distinction that matters: CSP would block these at runtime too, but only after the miniapp
+      // has already rendered silently broken. Failing at admission with a named reason is the point.
+      const external = staticGate(`<script src="https://cdn.example/x.js"></script>`, { allowNetwork: true });
+      expect(external.ok).toBe(false);
+      expect(external.failures.some((f) => f.includes("external"))).toBe(true);
+
+      const bare = staticGate(`<script type="module">import x from "lodash";</script>`, { allowNetwork: true });
+      expect(bare.ok).toBe(false);
+      expect(bare.failures.some((f) => f.includes("module import"))).toBe(true);
+
+      const big = staticGate(sealed + "<!--" + "x".repeat(2_000_000) + "-->", { allowNetwork: true, maxBytes: 1_000_000 });
+      expect(big.ok).toBe(false);
+      expect(big.failures.some((f) => f.includes("size"))).toBe(true);
+    });
+  });
 });

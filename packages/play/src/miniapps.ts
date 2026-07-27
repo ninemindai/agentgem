@@ -10,7 +10,7 @@ import { safePathSegment, CAP_TOOL, CAP_METHOD } from "@agentgem/model";
 import type { Gem, GameArtifact, GameGenre, GameSource, GameCapability, McpNeed } from "@agentgem/model";
 import { workspaceDir } from "@agentgem/base";
 import { writeGemArchive, writeArchiveDir } from "@agentgem/archive";
-import { gameGate } from "./gameGate.js";
+import { gameGate } from "@ninemind/miniapp-gate";
 import { assertPortable } from "./portability.js";
 import { ensureRepo, commitWithLock } from "./git.js";
 import { migrateMiniappHtml, ensureClientShim, type MigrateOutcome } from "./migrate.js";

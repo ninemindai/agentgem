@@ -15,7 +15,7 @@
 // is closed by convention, not by this module: MINIAPP_BUILDER_BRIEF requires literal tool-name strings.
 import type { GameCapability, McpNeed } from "@agentgem/model";
 import { TOOL_CAP, METHOD_CAP } from "@agentgem/model";
-import { scannableCode } from "./gameGate.js";
+import { scannableCode } from "@ninemind/miniapp-gate";
 
 export interface Reconciled {
   needs: GameCapability[];    // the reconciled truth: exactly what the code uses

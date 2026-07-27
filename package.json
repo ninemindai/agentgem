@@ -65,6 +65,7 @@
     "@nats-io/nkeys": "^2.0.3",
     "@nats-io/obj": "^3.4.0",
     "@nats-io/transport-node": "^3.4.0",
+    "@ninemind/miniapp-gate": "workspace:^",
     "dotenv": "^17.4.2",
     "jsdom": "^29",
     "tslib": "^2.8.1",

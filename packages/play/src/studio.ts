@@ -12,7 +12,7 @@ import { genreFor } from "./genres.js";
 import { scaffoldFor, minimalTemplate, docTemplate } from "./scaffolds.js";
 import { miniappDir, miniappsRoot, claimMiniappDir, miniappHtmlPath, assertNotBuiltin, MINIAPP_HTML, type MiniappMeta } from "./miniapps.js";
 import { ensureRepo, commitWithLock } from "./git.js";
-import { redactForBake } from "./redact.js";
+import { redactForBake } from "@ninemind/miniapp-gate";
 import { MINIAPP_BUILDER_BRIEF } from "./builderBrief.js";
 import { writeUploads, type UploadFile, type UploadResult } from "./uploads.js";
 

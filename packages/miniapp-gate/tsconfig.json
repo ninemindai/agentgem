@@ -20,6 +20,5 @@
     "incremental": true
   },
   "include": ["src/**/*"],
-  "exclude": ["dist", "node_modules"],
-  "references": [{ "path": "../miniapp-gate" }, { "path": "../model" }, { "path": "../base" }, { "path": "../archive" }, { "path": "../capture" }]
+  "exclude": ["dist", "node_modules"]
 }

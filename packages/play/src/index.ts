@@ -1,6 +1,6 @@
 // Copyright (c) 2026 NineMind, Inc.
 // SPDX-License-Identifier: MIT
-export { staticGate, gameGate, type GateResult, type GateOptions } from "./gameGate.js";
+export { staticGate, gameGate, type GateResult, type GateOptions } from "@ninemind/miniapp-gate";
 export { GENRES, genreFor, type GenreSpec } from "./genres.js";
 export { scaffoldFor, minimalTemplate, docTemplate } from "./scaffolds.js";
 export { extractSource, compactTurns, type GenerationInput, type SourceReaders } from "./sourceContext.js";
@@ -14,7 +14,7 @@ export { studioCwd, studioBrief, seedStudio, importStudio, blankStudio, slugify,
 export { writeUploads, sanitizeUploadName, type UploadFile, type UploadRole, type UploadCounts, type StoredUpload, type UploadResult } from "./uploads.js";
 export { readMiniappShare, writeMiniappShare, clearMiniappShare, type MiniappShare } from "./miniappShare.js";
 export { MINIAPP_BUILDER_BRIEF } from "./builderBrief.js";
-export { redactForBake } from "./redact.js";
+export { redactForBake } from "@ninemind/miniapp-gate";
 export { assertPortable, type PortabilityResult } from "./portability.js";
 export { resolveSessionRef, type SessionRef } from "./sessionRef.js";
 // Re-exported so packages/console — which depends on @agentgem/play, not @agentgem/model — can share
