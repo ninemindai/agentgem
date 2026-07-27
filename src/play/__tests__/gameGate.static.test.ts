@@ -59,9 +59,10 @@ describe("staticGate", () => {
     expect(r.failures.some((f) => f.includes("size"))).toBe(true);
   });
 
-  // allowNetwork is HOST POLICY, not a weakening of the gate. AgentGem seals its bundles and leaves it
-  // off; a host that confines the bundle at runtime with a CSP connect-src allowlist turns it on, because there the browser enforces the single permitted origin and scanning
-  // source text for `fetch` would forbid the mechanism that host is built on.
+  // allowNetwork is HOST POLICY, not a weakening of the gate. AgentGem seals its bundles and leaves
+  // it off; a host that confines the bundle at runtime with a CSP connect-src allowlist turns it on,
+  // because there the browser enforces the single permitted origin, and scanning source text for
+  // `fetch` would forbid the exact mechanism that host is built on.
   describe("allowNetwork (host policy)", () => {
     const netCall = `<script>fetch("https://host.example.com/mcp")</script>`;
 
