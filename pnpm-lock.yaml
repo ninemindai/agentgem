@@ -50,6 +50,9 @@ importers:
       '@nats-io/transport-node':
         specifier: ^3.4.0
         version: 3.4.0
+      '@ninemind/miniapp-gate':
+        specifier: workspace:^
+        version: link:packages/miniapp-gate
       dotenv:
         specifier: ^17.4.2
         version: 17.4.2
@@ -386,6 +389,16 @@ importers:
         specifier: workspace:*
         version: link:../recall
 
+  packages/miniapp-gate:
+    dependencies:
+      jsdom:
+        specifier: ^29
+        version: 29.1.1(@noble/hashes@2.2.0)
+    devDependencies:
+      '@types/jsdom':
+        specifier: ^28
+        version: 28.0.3
+
   packages/model:
     dependencies:
       yaml:
@@ -409,13 +422,16 @@ importers:
       '@modelcontextprotocol/sdk':
         specifier: ^1.29.0
         version: 1.29.0(zod@4.4.3)
-      jsdom:
-        specifier: ^29
-        version: 29.1.1(@noble/hashes@2.2.0)
+      '@ninemind/miniapp-gate':
+        specifier: workspace:^
+        version: link:../miniapp-gate
     devDependencies:
       '@types/jsdom':
         specifier: ^28
         version: 28.0.3
+      jsdom:
+        specifier: ^29
+        version: 29.1.1(@noble/hashes@2.2.0)
 
   packages/recall:
     dependencies:

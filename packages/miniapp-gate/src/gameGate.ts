@@ -1,5 +1,18 @@
 // Copyright (c) 2026 NineMind, Inc.
 // SPDX-License-Identifier: MIT
+//
+// SHARED BY TWO HOSTS. This file moved out of `@agentgem/play` so AgentGem and a second host can
+// run the same admission gate instead of maintaining two copies that drift. It was the natural
+// thing to share because it already imported nothing from `@agentgem/*` — the extraction changed
+// its address, not its dependencies.
+//
+// What is NOT shared is how a bundle reaches data. AgentGem seals its bundles (invariant I1: no
+// network, no origin); the other confines them at runtime with a CSP `connect-src` allowlist and a
+// scoped token. That difference is expressed as ONE option (`allowNetwork`), not as a fork, because
+// this file's job is to produce and admit a bundle — not to decide what the bundle is allowed to
+// talk to. Keep it that way: a second host-specific branch in here is the signal that something
+// belongs in the host instead.
+//
 // Server-side validation gate for generated game bundles. This is a best-effort ADMISSION HEURISTIC
 // and the self-repair loop's error signal — NOT a security boundary. The real network seal is the
 // runtime CSP sandbox (`default-src 'none'`) applied when a game is played (Plan 3); the static checks
@@ -30,6 +43,22 @@
 export interface GateResult { ok: boolean; failures: string[] }
 export interface GateOptions {
   maxBytes?: number; // default 1.5 MB — archives/shares well
+  // Skip the NETWORK_CALL scan. HOST POLICY, and NOT a weakening of the gate.
+  //
+  // Leave it off (the default) when the host seals its bundles: the scan is then one of the four
+  // things that make "sealed" checkable at admission time, and AgentGem depends on it.
+  //
+  // Turn it on when the host confines the bundle at RUNTIME instead — such a host serves
+  // every miniapp under `default-src 'none'; connect-src <one origin>` inside a null-origin iframe, so
+  // the browser enforces the single permitted destination on every request. There, scanning source
+  // text for the word `fetch` would forbid the exact mechanism the host is built on while catching
+  // nothing the CSP does not already stop — and `new Image().src = url` slips past the scan anyway.
+  // A browser-enforced allowlist is a strictly stronger control than a regex over source.
+  //
+  // The other three checks (size, EXTERNAL_ATTR, BARE_IMPORT) stay on for BOTH hosts. CSP would block
+  // those at runtime too, but only after the miniapp has already rendered silently broken; failing at
+  // admission with a named reason is better feedback and costs nothing.
+  allowNetwork?: boolean;
 }
 
 const DEFAULT_MAX_BYTES = 1_500_000;
@@ -81,7 +110,7 @@ export function staticGate(html: string, opts: GateOptions = {}): GateResult {
   if (BARE_IMPORT.test(code)) {
     failures.push("uses an external module import");
   }
-  if (NETWORK_CALL.test(code)) {
+  if (!opts.allowNetwork && NETWORK_CALL.test(code)) {
     failures.push("attempts a network call (fetch/XHR/WebSocket/…) — games must be sealed");
   }
 

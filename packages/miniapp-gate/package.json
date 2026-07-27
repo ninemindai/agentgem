@@ -1,0 +1,24 @@
+{
+  "name": "@ninemind/miniapp-gate",
+  "version": "0.1.0",
+  "description": "Admission gate and bake-time redaction for generated single-file miniapp bundles. Host-neutral: the smoke-load runs in a worker thread, so a hostile or merely broken bundle cannot take the host process down.",
+  "license": "MIT",
+  "type": "module",
+  "exports": { ".": { "types": "./dist/index.d.ts", "default": "./dist/index.js" } },
+  "files": ["dist"],
+  "publishConfig": { "access": "public" },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/ninemindai/agentgem.git",
+    "directory": "packages/miniapp-gate"
+  },
+  "homepage": "https://github.com/ninemindai/agentgem/tree/main/packages/miniapp-gate",
+  "bugs": { "url": "https://github.com/ninemindai/agentgem/issues" },
+  "scripts": { "build": "tsc -b" },
+  "dependencies": {
+    "jsdom": "^29"
+  },
+  "devDependencies": {
+    "@types/jsdom": "^28"
+  }
+}
