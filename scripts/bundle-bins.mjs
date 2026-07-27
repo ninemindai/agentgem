@@ -31,6 +31,19 @@ const pkg = JSON.parse(readFileSync(join(repo, "package.json"), "utf8"));
 // inlined, which breaks any package that resolves its own files at runtime
 // (jsdom's `require.resolve("./xhr-sync-worker.js")` is why `jsdom` is a root
 // dependency despite only `@agentgem/play` importing it).
+//
+// `@ninemind/miniapp-gate` is a ROOT devDependency ON PURPOSE, even though it is a
+// published package rather than a workspace-private one. Listing it under
+// `dependencies` would make it external here, and an external dep must already exist
+// on npm at install time — which would create a publish-ordering rule between the two
+// packages (publish the gate first, or every fresh `npm i -g agentgem` fails to
+// resolve). Keeping it a devDependency inlines it, exactly as it was inlined when the
+// gate's source lived inside `@agentgem/play`, so this tarball stays self-contained
+// and there is no release choreography. Other hosts still install the gate from npm
+// directly; that is an independent consumer path and is unaffected by this choice.
+// Move it to `dependencies` only as a deliberate decision to patch the gate without
+// republishing agentgem — and add a prepublish guard asserting the version is on npm
+// if you do.
 const external = Object.keys(pkg.dependencies ?? {});
 
 // A createRequire/__dirname banner so any bundled module that performs a CJS

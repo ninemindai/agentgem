@@ -301,6 +301,11 @@ landed with the 2026-07-20 eng-review fix PR.
 
 ## gameGate smoke: reuse a warm worker instead of spawning one per call
 
+**Where the code lives:** `packages/miniapp-gate/src/gameGate.ts` — the gate moved out of
+`@agentgem/play` into its own published package (PR #551). The caller that makes this hurt is
+still `packages/play/src/miniapps.ts`; `@agentgem/play` re-exports the gate, so its call sites
+did not change.
+
 **What:** Keep one long-lived smoke worker (or a `gateMany()` batch entry point) so jsdom
 is imported once per process rather than once per `gameGate()` call, respawning the worker
 after a spin or OOM kills it.

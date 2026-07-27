@@ -50,9 +50,6 @@ importers:
       '@nats-io/transport-node':
         specifier: ^3.4.0
         version: 3.4.0
-      '@ninemind/miniapp-gate':
-        specifier: workspace:^
-        version: link:packages/miniapp-gate
       dotenv:
         specifier: ^17.4.2
         version: 17.4.2
@@ -114,6 +111,9 @@ importers:
       '@agentgem/transfer':
         specifier: workspace:*
         version: link:packages/transfer
+      '@ninemind/miniapp-gate':
+        specifier: workspace:^
+        version: link:packages/miniapp-gate
       '@resvg/resvg-wasm':
         specifier: ^2.6.2
         version: 2.6.2
