@@ -44,6 +44,53 @@ describe("gameGate — worker isolation", () => {
     expect(await gameGate(page("document.body.textContent='ok'"))).toEqual({ ok: true, failures: [] });
   }, 20_000);
 
+  it("fails an async escape even under --unhandled-rejections=warn", async () => {
+    // The worker must trap the rejection itself. Relying on Node turning it into the parent's
+    // 'error' event is relying on a *policy*: flip this flag and the rejection only warns, the
+    // worker posts ok:true, and a broken bundle is ADMITTED. That false pass is worse than the
+    // crash the worker boundary exists to prevent, and it shipped once in this file's history.
+    const { execFile } = await import("node:child_process");
+    const { promisify } = await import("node:util");
+    const src = `
+      import { gameGate } from "@agentgem/play";
+      const r = await gameGate(\`<!doctype html><body><script>(async()=>{await 0;new NotAThing();})()</script></body>\`);
+      console.log(JSON.stringify(r));
+    `;
+    const { stdout } = await promisify(execFile)(
+      process.execPath,
+      ["--input-type=module", "--eval", src],
+      { cwd: process.cwd(), env: { ...process.env, NODE_OPTIONS: "--unhandled-rejections=warn" } },
+    );
+    const result = JSON.parse(stdout.trim().split("\n").pop()!);
+    expect(result.ok).toBe(false);
+  }, 30_000);
+
+  it("passes a legitimate bundle close to the size cap", async () => {
+    // Guards the resourceLimits ceiling against being tightened until it rejects real content.
+    // Data lives in an application/json block, which the static scan exempts.
+    const rows = Array.from({ length: 9000 }, (_, i) => ({ id: i, name: `entity-${i}`, note: "x".repeat(100) }));
+    const big = `<!doctype html><body><canvas id="c"></canvas>
+<script id="game-data" type="application/json">${JSON.stringify({ timeline: rows })}</script>
+<script>
+  const data = JSON.parse(document.getElementById("game-data").textContent);
+  const ctx = document.getElementById("c").getContext("2d");
+  let acc = 0; for (const r of data.timeline) { acc += r.id; ctx.fillRect(r.id % 100, 0, 1, 1); }
+  document.body.setAttribute("data-acc", String(acc));
+</script></body>`;
+    expect(Buffer.byteLength(big)).toBeGreaterThan(1_000_000); // meaningfully near the 1.5 MB cap
+    expect(await gameGate(big)).toEqual({ ok: true, failures: [] });
+  }, 20_000);
+
+  it("resolves rather than rejecting when the smoke cannot start", async () => {
+    // saveMiniapp (miniapps.ts:127) awaits gameGate with no try/catch and formats gate.failures on
+    // the next line. A rejection there surfaces as a raw stack instead of an actionable message, so
+    // "always resolves" is the contract, not an implementation detail.
+    await expect(gameGate(page("document.body.textContent='ok'"))).resolves.toHaveProperty("ok");
+    const r = await gameGate(page("document.body.textContent='ok'"));
+    expect(r).toHaveProperty("failures");
+    expect(Array.isArray(r.failures)).toBe(true);
+  }, 20_000);
+
   it("does not leave the host's process listeners mutated", async () => {
     // The previous implementation called process.removeAllListeners() around the smoke. A marker
     // listener must survive the gate untouched.
