@@ -298,3 +298,44 @@ to mirror.
 
 **Depends on / blocked by:** Nothing — issue-1 (resume firing) and issue-2 (shared hook)
 landed with the 2026-07-20 eng-review fix PR.
+
+## gameGate smoke: reuse a warm worker instead of spawning one per call
+
+**What:** Keep one long-lived smoke worker (or a `gateMany()` batch entry point) so jsdom
+is imported once per process rather than once per `gameGate()` call, respawning the worker
+after a spin or OOM kills it.
+
+**Why:** Moving the smoke into a worker (PR #550) traded per-call cost for containment.
+Measured on Node 24 / jsdom 29, 20 sequential calls on the same small bundle:
+
+| | total | per call |
+|---|---|---|
+| main-thread (pre-#550) | 395ms | 20ms |
+| worker (post-#550) | 5956ms | 298ms |
+
+Nearly all of the 278ms delta is jsdom being re-imported in a fresh worker; the old path
+paid that once and hit the ESM module cache after. Interactive Save is unaffected in
+practice (298ms behind a user action with a preview render after it). The path that hurts
+is `migrateAllMiniapps` (`packages/play/src/miniapps.ts:284`), which loops the whole
+registry and gates each entry at `:307` — N x 20ms becomes N x 298ms, so 50 miniapps goes
+from ~1s to ~15s and 200 from ~4s to ~60s.
+
+**Pros:** Recovers most of the regression on the registry-wide pass while keeping the
+containment that makes the worker worth having (spin, OOM, and async-escape isolation).
+
+**Cons:** Lifecycle management is the whole cost — respawn after terminate, and an argument
+for why residue from a previous bundle cannot affect the next smoke in a shared worker.
+A `gateMany()` batch API avoids the shared-state question but adds a second gate entry
+point that has to stay behaviorally identical to `gameGate()`, which is its own trap.
+
+**Context:** Do NOT solve this by reverting to the main thread. The worker is what makes
+three failure classes survivable, one of which has no in-process mitigation at all: a
+synchronous `while(true)` blocks the event loop so no handler runs, and in a server that
+stops health checks responding. See `gameGate.ts` §"THE SMOKE RUNS IN A WORKER THREAD" and
+the 2026-07-21 `new Path2D(...)` crash the file records. Benchmark method that matters:
+verify which code is loaded (`grep -c worker_threads` on the built file) before trusting a
+before/after number — an earlier measurement of this compared the new code against itself
+and reported no regression.
+
+**Depends on / blocked by:** Nothing. PR #550 landed the containment; this is pure
+optimization on top.
