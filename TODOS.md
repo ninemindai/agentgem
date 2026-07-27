@@ -344,3 +344,101 @@ and reported no regression.
 
 **Depends on / blocked by:** Nothing. PR #550 landed the containment; this is pure
 optimization on top.
+
+## `packages/play/src/__tests__/ember.test.ts` compiles but never runs
+
+**What:** Bring workspace-package tests into the vitest `include` list, or move the ones
+that matter under root `src/`. Then actually run `ember.test.ts` and fix whatever it says.
+
+**Why:** `vitest.config.ts:5` includes `dist/**/__tests__/**/*.test.js`,
+`packages/app/dist/**`, `packages/fabric/dist/**`, and `website/edge/**`. It does NOT
+include `packages/play/dist/**`. `ember.test.ts` therefore compiles to
+`packages/play/dist/__tests__/ember.test.js` on every build and is never executed. The
+suite has been reporting green without it for as long as the include list has looked like
+this.
+
+The second-order problem is worse than the dead test: anyone adding a test beside a
+workspace package gets a file that silently never runs, and nothing in the output says so.
+This was nearly repeated during PR #551 — the new `@ninemind/miniapp-gate` tests were
+placed under root `src/play/__tests__/` specifically to dodge it.
+
+**Pros:** Recovers real coverage (EMBER is a built-in miniapp served as a constant, so a
+regression there ships straight to users), and removes a trap that silently discards
+future tests.
+
+**Cons:** The test has not run in a while, so it may well be red — budget for fixing it,
+not just for wiring it up. Widening the glob to `packages/*/dist/**` also pulls in any
+other dormant test files at once, which is the same surprise in bulk.
+
+**Context:** Found during the /plan-eng-review of PR #551 while deciding where to put new
+tests. Verify the current state with `npx vitest run --reporter=basic 2>&1 | grep -ci ember`
+— it returns 0 today while `packages/play/dist/__tests__/ember.test.js` exists on disk.
+Note `packages/play` keeps `jsdom` + `@types/jsdom` as devDependencies purely so this file
+typechecks during `pnpm build`; that is the only reason those entries are still there.
+
+**Depends on / blocked by:** Nothing. Best done as its own PR — the wiring is one line, the
+fallout is not.
+
+## Publish smoke: `pnpm pack` + temp install for `@ninemind/miniapp-gate`
+
+**What:** Pack the package into a tarball, install it into a temp directory, and import it.
+Assert the entrypoint resolves and the gate surface is callable.
+
+**Why:** `src/play/__tests__/miniappGate.package.test.ts` covers the cheap half — `files`
+contains dist, every declared `exports` path exists as a built artifact, and the built
+entrypoint really re-exports the surface. It cannot cover the part that only a real
+install exercises:
+
+- `workspace:^` actually being rewritten to a real semver range at publish time;
+- a runtime dep present in the workspace but missing from the tarball;
+- install-time resolution failure on a consumer machine.
+
+This matters more than usual because `@ninemind/miniapp-gate` is the first package in this
+repo published for an external consumer. Everything else here is `private: true` or the
+root CLI, so no existing test has ever needed to care whether a tarball installs.
+
+**Pros:** Turns "the published package works" from an assumption into a check, before a
+second host depends on it.
+
+**Cons:** Slowest test in the suite by a wide margin (pack + install is seconds, not
+milliseconds), so it wants its own CI job or a tag rather than a place in the default run.
+
+**Context:** Raised by the Codex outside voice during the /plan-eng-review of PR #551, which
+correctly noted that importing through the pnpm workspace symlink resolves the SOURCE tree
+and therefore proves nothing about publishing. The cheap half landed in that PR; this is the
+half deliberately left out.
+
+**Depends on / blocked by:** Nothing.
+
+## Bundler: replace implicit externality with an explicit allowlist
+
+**What:** Stop deriving esbuild's `external` list from `Object.keys(pkg.dependencies)`
+(`scripts/bundle-bins.mjs:34`). Declare an explicit external/bundled allowlist, and add a
+test asserting the built bundle contains no forbidden bare imports.
+
+**Why:** Today, which package.json section a dependency sits in silently controls what the
+published CLI artifact looks like. Moving an entry between `dependencies` and
+`devDependencies` — an edit that reads as pure metadata — flips a module between
+compiled-in and externally-resolved, with no signal at review time and no test that would
+catch it.
+
+This is not hypothetical: PR #551 hit it in both directions. Adding
+`@ninemind/miniapp-gate` to `dependencies` made it external and quietly introduced a
+publish-ordering rule (external deps must already be on npm or a fresh install fails);
+moving it to `devDependencies` inlined it again. Both were one-line edits that looked
+like dependency housekeeping.
+
+**Pros:** Makes a load-bearing build decision explicit and reviewable, and a bundle
+assertion catches the failure at CI rather than at a user's `npm i -g`.
+
+**Cons:** The current scheme has worked for months and encodes a real invariant (a
+package that resolves its own files at runtime, like jsdom, must stay external). An
+allowlist has to preserve that or it trades a subtle failure for a louder one.
+
+**Context:** Raised by the Codex outside voice during the /plan-eng-review of PR #551. The
+existing comment block at `scripts/bundle-bins.mjs:24-46` documents the current rules and
+is the right place to start — it already explains why jsdom is a root dependency despite
+only `@agentgem/play` importing it.
+
+**Depends on / blocked by:** Nothing, but it is a change to the publish contract — worth
+doing when someone is already touching release tooling rather than on its own.
