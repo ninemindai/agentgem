@@ -7,7 +7,8 @@
 // boundary: reads usage, timestamps, model, type, cwd/id ONLY — never message
 // text (mirrors workflowScan.ts). Total functions: missing dirs / malformed
 // lines degrade to empty/skip, never throw.
-import { mkdirSync, readFileSync, readdirSync, renameSync, writeFileSync } from "node:fs";
+import { readdirSync } from "node:fs";
+import { mkdir, readFile, rename, writeFile } from "node:fs/promises";
 import { join, basename, dirname, isAbsolute } from "node:path";
 import { agentgemHome, normalizeProjectRoot } from "@agentgem/model";
 import { BUILTIN_SOURCES, type SourceSpec, clearParseCache, loadParseCacheFromDisk, saveParseCacheToDisk } from "./sources.js";
@@ -173,10 +174,10 @@ const scanCachePath = (): string => join(agentgemHome(), ".agentgem", "cache", "
 // disk tier is disabled for the rest of the process.
 let _diskDisabled = false;
 
-function readDiskScan(token: string): SessionStat[] | null {
+async function readDiskScan(token: string): Promise<SessionStat[] | null> {
   if (_diskDisabled) return null;
   try {
-    const raw = JSON.parse(readFileSync(scanCachePath(), "utf8")) as { v?: number; token?: string; stats?: SessionStat[] };
+    const raw = JSON.parse(await readFile(scanCachePath(), "utf8")) as { v?: number; token?: string; stats?: SessionStat[] };
     if (raw?.v !== 1 || raw.token !== token || !Array.isArray(raw.stats)) return null;
     return raw.stats;
   } catch {
@@ -184,14 +185,14 @@ function readDiskScan(token: string): SessionStat[] | null {
   }
 }
 
-function writeDiskScan(token: string, stats: SessionStat[]): void {
+async function writeDiskScan(token: string, stats: SessionStat[]): Promise<void> {
   if (_diskDisabled) return;
   try {
     const path = scanCachePath();
-    mkdirSync(dirname(path), { recursive: true });
+    await mkdir(dirname(path), { recursive: true });
     const tmp = `${path}.${process.pid}.tmp`;   // temp+rename: a reader never sees a partial file
-    writeFileSync(tmp, JSON.stringify({ v: 1, token, stats }));
-    renameSync(tmp, path);
+    await writeFile(tmp, JSON.stringify({ v: 1, token, stats }));
+    await rename(tmp, path);
   } catch {
     /* best-effort: an unwritable cache must never fail a scan */
   }
@@ -206,16 +207,16 @@ export async function scanSessionsCached(_nowMs?: number, dirs?: { claudeDir?: s
   const token = sessionScanToken();
   if (!refresh && _cache && _cache.token === token) return _cache.stats;
   if (!refresh) {
-    const fromDisk = readDiskScan(token);
+    const fromDisk = await readDiskScan(token);
     if (fromDisk) { _cache = { token, stats: fromDisk }; return fromDisk; }
   }
   // Default path only: hydrate the per-file parse cache before scanning so a re-scan
   // re-reads just the transcripts that moved, then persist it for the next process.
-  loadParseCacheFromDisk();
+  await loadParseCacheFromDisk();
   const stats = await scanSessions();
-  saveParseCacheToDisk();
+  await saveParseCacheToDisk();
   _cache = { token, stats };
-  writeDiskScan(token, stats);
+  await writeDiskScan(token, stats);
   return stats;
 }
 /** Test seam: drop the whole-scan cache (and the underlying per-file parse cache). */

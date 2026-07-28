@@ -19,7 +19,7 @@
 // rewrite that preserved every counter would go unnoticed, which does not happen to
 // append-only logs; the alternative (stat every transcript) costs an I/O round per session
 // to defend against a case the format precludes.
-import { mkdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
+import { mkdir, readFile, rename, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { agentgemHome } from "@agentgem/model";
 import type { GemitScoredInput } from "./score.js";
@@ -49,10 +49,12 @@ export interface CacheEntry { endMs: number; score: CachedScore }
 
 interface CacheFile { v: 1; entries: Record<string, CacheEntry> }
 
-/** Never throws: a missing, unreadable, or malformed cache is simply a cold one. */
-export function readScoreCache(): Map<string, CacheEntry> {
+/** Never throws: a missing, unreadable, or malformed cache is simply a cold one.
+ *  ASYNC on purpose — this runs inside the console server process, where a multi-MB
+ *  synchronous read would block the event loop for every other in-flight request. */
+export async function readScoreCache(): Promise<Map<string, CacheEntry>> {
   try {
-    const raw = JSON.parse(readFileSync(cachePath(), "utf8")) as CacheFile;
+    const raw = JSON.parse(await readFile(cachePath(), "utf8")) as CacheFile;
     if (raw?.v !== 1 || !raw.entries) return new Map();
     return new Map(Object.entries(raw.entries).filter(([, e]) => e?.score));
   } catch {
@@ -63,7 +65,7 @@ export function readScoreCache(): Map<string, CacheEntry> {
 /** Atomic (temp + rename) so a reader never observes a half-written file, and so the CLI and
  *  the console writing concurrently can at worst lose one process's additions — a later cache
  *  miss, never corruption. Never throws: failing to persist a cache must not fail a scan. */
-export function writeScoreCache(entries: Map<string, { endMs: number; score: CachedScore }>): void {
+export async function writeScoreCache(entries: Map<string, { endMs: number; score: CachedScore }>): Promise<void> {
   try {
     // Evict oldest-first by the session's own end time, so the sessions most likely to appear
     // in the next window are the ones that survive.
@@ -72,10 +74,10 @@ export function writeScoreCache(entries: Map<string, { endMs: number; score: Cac
       .slice(0, MAX_ENTRIES);
     const file: CacheFile = { v: 1, entries: Object.fromEntries(kept) };
     const path = cachePath();
-    mkdirSync(dirname(path), { recursive: true });
+    await mkdir(dirname(path), { recursive: true });
     const tmp = `${path}.${process.pid}.tmp`;
-    writeFileSync(tmp, JSON.stringify(file));
-    renameSync(tmp, path);
+    await writeFile(tmp, JSON.stringify(file));
+    await rename(tmp, path);
   } catch {
     /* best-effort: a cache that cannot be written just means the next run recomputes */
   }
