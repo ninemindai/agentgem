@@ -7,7 +7,7 @@ All notable changes to AgentGem are documented here. The format follows
 The npm core (`@ninemind/agentgem`) and the desktop app share a version number but
 are tagged separately: core releases are tagged `v*`, desktop releases `desktop-v*`.
 
-## [0.9.0] — `@ninemind/agentgem` (npm core) — Unreleased
+## [0.9.0] — `@ninemind/agentgem` (npm core) — 2026-07-27
 
 The focus release: AgentGem is a **local-first developer tool**. `npx agentgem`
 mines your coding-agent usage, distills reusable gems, materializes them to any
@@ -17,6 +17,65 @@ orgs/groups, hosted reviews, GitHub App), cloud deploy (Vercel / Cloudflare /
 managed backends), and the GitHub-repo gem registry are no longer part of this
 package — the marketplace client, `agentgem get`, publish-to-Explore,
 share-cards, and send/receive are unchanged.
+
+On top of that sweep, 193 commits land three more themes: the **chat surface
+grows a spine** (durable ACP sessions that resume, a type-while-busy queue, and
+a real Interrupt), **miniapps become authorable** (a shared house style, four
+genres, file uploads, and MCP connectors the author picks in the Composer), and
+**gemit gets its ceremonial card** — with the percentile claim held back until
+the cohort is real.
+
+### Added
+
+- **Agent sessions survive.** `openExisting` resumes an ACP session through a
+  capability-gated `session/resume` + `session/load`, falling back to a fresh
+  session when the adapter cannot. Adapters report a capability snapshot at
+  `initialize`, shut down through a stdin-end → `SIGTERM` → `SIGKILL` ladder, and
+  surface a bounded stderr tail as startup-failure evidence.
+- **Type while the agent is working.** Studio and the Chat tab queue messages
+  during a turn and flush them in order; **Interrupt** cancels the live turn
+  (`session/cancel`, `POST /api/chat/:id/cancel`) and streams surface the turn's
+  `stopReason`. Turns POST the message in the body and attach the stream by
+  `turnId`, so a dropped connection no longer loses the reply.
+- **A shared house style.** `@agentgem/model` exports design tokens with
+  per-surface theme adapters, adopted by the miniapp templates, the rubric
+  report, the session dashboard, and gemit — so generated surfaces read as one
+  system instead of four.
+- **Four miniapp genres**: `skill-tuner` (skill readout with clipboard egress),
+  `project-map` (analytical project readout), the retrofitted `session-heatmap`,
+  and a Blank miniapp that can start as a **document** rather than a canvas game.
+  A per-source template picker replaces the hardcoded session/genre fork, and a
+  genre whose `sourceKind` disagrees with the seeded source is rejected.
+- **Miniapp file uploads** — `POST /api/play/uploads` and `addUploadsToMiniapp`
+  add files to an existing miniapp atomically, without a commit, under a
+  cumulative ref cap.
+- **MCP connectors for miniapps in the Composer** — a searchable
+  `ConnectorPicker` (chips + combobox), a keyboarded `SourceList` with a
+  recent/ranked shortlist and Show-all expand, an options band with tabs, and a
+  Permissions disclosure. The `CapabilityStrip` shows declared `mcpNeeds` with
+  their install state.
+- **Repo Pulse** — a built-in, `mcpNeeds`-only demo miniapp, served from the
+  arcade listing with its own MCP manifest.
+- **gemit's ceremonial card** replaces the hero, backed by a serif dossier;
+  Training Grounds collapses into the discipline bars. A cohort percentile gate
+  keeps the standing claim **off until the cohort is real** — the card and the
+  share text derive the top-N% figure from one transform, so they cannot drift.
+- **ATIF drop-dir import health** — `scanAtifHealth` reports totals and grouped
+  issues, `groupDiagnostics` folds diagnostics into display groups,
+  `GET /api/watch/atif-health` serves them, and the console's Watch tab renders
+  a panel that fails closed (amber) on a malformed or degraded payload.
+- **The buzz persona-pack target** materializes a multi-persona team pack from
+  subagents, with value MCP servers wired in.
+- **`@agentgem/fabric`** (internal) — the in-process message fabric: addresses
+  and trust zones, envelopes and scopes, a kind registry, stream-vs-feed channel
+  declarations with bounded retention, a router (`handle`/`ask`/`send`), and
+  in-memory feed channels. The chat turn engine and MCP tool calls now ride it;
+  the security boundary stays in `PlayController`.
+- **`@ninemind/miniapp-gate`** — the miniapp admission gate, extracted into its
+  own package so the publishability check is one shared implementation.
+- An opt-in few-shot report exemplar behind `AGENTGEM_REPORT_EXEMPLAR`
+  (default off), hardened so the model cannot derive numbers from it.
+- A `ROOT_UI_MOUNT` seam for serving a custom SPA at `/`.
 
 ### Changed
 
@@ -29,6 +88,37 @@ share-cards, and send/receive are unchanged.
 - The console's Materialize panel gains **Run app** (render → install → build →
   start with live log tail); Get-more focuses on marketplace installs and `.gem`
   import.
+- The server library is extracted into `@agentgem/app`, and the shared spine is
+  bundled into `GemCoreComponent`; hosted-capability binding keys move to
+  `@agentgem/contract/bindings`.
+- ACP runner, chat, and the recommender share one turn façade (`promptRun` /
+  `turnEvents`); the update reducer moves from `run` to `base`. Errors go through
+  `normalizeAcpError` for uniform retryable/kind classification, and a turn that
+  times out **after its reply already streamed** is salvaged rather than lost.
+- The website leads local-first — new hero and cards, a community marketplace
+  section, an OSS + Enterprise editions page, and an Enterprise nav tab.
+- Studio's Interrupt sits beside Attach files in the composer.
+
+### Fixed
+
+- **Built-in miniapps are read-only** — chat, save, and uploads are guarded and
+  Studio opens read-only, so a shipped demo cannot be edited out from under the
+  arcade.
+- **The load smoke can no longer crash the server.** It runs in a worker thread
+  with `Path2D` stubs and async-escape containment, and never rejects.
+- `saveMiniapp` preserves server-owned `meta.uploads` (kept out of the gem), and
+  the miniapp is checkpointed *before* the done frame is emitted.
+- The consent card is a focused dialog whose Allow arms after 500ms.
+- Studio's queued flush reuses the live chat session — `chatIdRef` beats a stale
+  closure — and the stream attach loop detaches on client disconnect.
+- gemit: the dossier `h2` wraps instead of overflowing at narrow widths, the
+  crown stacks below 700px, opacity no longer washes out dossier chrome, the
+  discipline sliders get an accessible mode, what-if mutations are gated to
+  measured mode, and card animations honour reduce-motion.
+- The gemit skill's frontmatter is valid YAML — a colon in the description had
+  hidden it from skills.sh.
+- Marketplace: account-link recovery routes to the profile hub's Account tab, and
+  sign-out clears the page and names the provider in the collision banner.
 
 ### Removed
 
@@ -44,6 +134,17 @@ share-cards, and send/receive are unchanged.
 - Unused dependencies: `@aws-sdk/client-bedrock-agentcore-control`, `vercel`,
   `@electric-sql/pglite`, `pg`, `drizzle-orm`, `drizzle-zod`, `@agentback/drizzle`,
   `@anthropic-ai/sdk`.
+- The broken public Fly Deploy CI workflow.
+
+## [desktop-v0.9.0] — desktop app — 2026-07-27
+
+No desktop-specific changes this cycle — the shell, auto-update feed, and
+code-signing pipeline are unchanged from `desktop-v0.8.0`.
+
+This release embeds everything in core 0.9.0: the local-first sweep, resumable
+ACP sessions with a type-while-busy queue and Interrupt, the shared miniapp house
+style with four genres and file uploads, MCP connectors in the Composer, gemit's
+ceremonial card, and the ATIF drop-dir health panel.
 
 ## [0.8.0] — `@ninemind/agentgem` (npm core) — 2026-07-19
 
