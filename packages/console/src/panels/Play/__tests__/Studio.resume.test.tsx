@@ -182,8 +182,12 @@ describe("Studio resume", () => {
 
       render(<IdentityProvider apiBase=""><Studio apiBase="" name="demo5" agents={codex} agentId="codex" onAgentIdChange={() => {}} onBack={() => {}} /></IdentityProvider>);
 
-      await vi.advanceTimersByTimeAsync(0); // flush the mount effect's fetch chain
-      const stopBtn = screen.getByTitle("kill the agent session");
+      // Wait for the resumed session to render rather than assuming one 0ms tick drains the
+      // mount effect's fetch chain. That assumption held on Node 24 only when this file ran
+      // alongside its siblings — it failed in isolation there, and under Node 26 it failed
+      // outright, because how many microtasks a single tick drains is not a guarantee.
+      await vi.advanceTimersByTimeAsync(0);
+      const stopBtn = await vi.waitFor(() => screen.getByTitle("kill the agent session"));
       // Advance well past the old ~10-min cap; the spinner must still be live and Stop must still recover.
       await vi.advanceTimersByTimeAsync(15 * 60_000);
       expect(screen.getByText(/working…/i)).toBeTruthy();
