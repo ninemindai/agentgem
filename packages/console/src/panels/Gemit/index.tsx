@@ -35,7 +35,12 @@ export function GemitPage({ apiBase }: { apiBase: string }) {
   const [failed, setFailed] = useState(false);
   const [window_, setWindow] = useState<Awaited<ReturnType<typeof gemitWindowRoute.call>> | null>(null);
   const [elapsed, setElapsed] = useState(0);
-  const [includeUsage, setIncludeUsage] = useState(false);
+  // Defaults ON in the panel: the usage names are the most interesting half of the sheet,
+  // and here — unlike the CLI — the consent line sits directly under the checkbox and
+  // moves with it, so the wider payload is disclosed on screen before Publish is clicked.
+  // The CLI keeps the opposite default; `--include-usage` stays an explicit opt-in there,
+  // because a terminal flag has no always-visible disclosure to pair with it.
+  const [includeUsage, setIncludeUsage] = useState(true);
   const [publishing, setPublishing] = useState(false);
   const [result, setResult] = useState<Publish | null>(null);
 
