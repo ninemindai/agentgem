@@ -137,6 +137,27 @@ describe("computeGemitData", () => {
     expect(data.firedFindings).toEqual([{ id: "retry-storm", title: "Retry storm", sessions: 2 }]);
   });
 
+  // Counts SESSIONS per agent over the qualifying window, busiest first. Ties break by
+  // name so two runs over the same window produce byte-identical payloads.
+  it("aggregates coding agents by session count, busiest first, ties by name", () => {
+    const q = [
+      session({ agent: "codex" }), session({ agent: "codex" }),
+      session({ agent: "claude" }), session({ agent: "claude" }), session({ agent: "claude" }),
+      session({ agent: "amp" }), session({ agent: "zed" }),
+    ];
+    const data = computeGemitData(q, [], NOW);
+    expect(data.agents).toEqual([
+      { name: "claude", sessions: 3 },
+      { name: "codex", sessions: 2 },
+      { name: "amp", sessions: 1 },   // tied at 1 with zed -> alphabetical
+      { name: "zed", sessions: 1 },
+    ]);
+  });
+
+  it("reports no agents on the insufficient-data doorway", () => {
+    expect(computeGemitData([session(), session()], [], NOW).agents).toEqual([]);
+  });
+
   it("keeps codex sessions in qualifying/SETUP but out of CTX/PROC", () => {
     const claude = session({ endMs: NOW - DAY });
     const codex = session({ agent: "codex", endMs: NOW - DAY, skillNames: [] });

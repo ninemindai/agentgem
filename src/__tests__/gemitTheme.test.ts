@@ -25,6 +25,7 @@ function data(over: Partial<GemitData> = {}): GemitData {
     ],
     skillVariety: 12, subagentVariety: 8, skillSessionsPct: 62, subagentSessionsPct: 41,
     topSkills: ["brainstorming"], topSubagents: ["Explore"],
+    agents: [{ name: "claude", sessions: 90 }, { name: "cursor", sessions: 29 }],
     insufficient: false,
     ...over,
   };
@@ -321,6 +322,40 @@ describe("house style adoption", () => {
 
   it("still ships no external URL after adopting house tokens", () => {
     expect(renderRpgTheme(data())).not.toMatch(/https?:\/\//);
+  });
+});
+
+describe("renderRpgTheme usage section", () => {
+  it("lists coding agents with session counts, plus top skills and subagents", () => {
+    const html = renderRpgTheme(data());
+    expect(html).toContain("What You Reach For");
+    expect(html).toContain("Coding agents");
+    expect(html).toContain("claude");
+    expect(html).toContain("cursor");
+    expect(html).toContain("brainstorming");
+    expect(html).toContain("Explore");
+  });
+
+  // shareVariantOf blanks all three lists, so the shared card renders this section with
+  // nothing in it. It must vanish entirely rather than leaving a bare heading behind.
+  it("omits the whole section when every list is empty", () => {
+    const html = renderRpgTheme(data({ agents: [], topSkills: [], topSubagents: [] }));
+    expect(html).not.toContain("What You Reach For");
+    expect(html).not.toContain("Coding agents");
+  });
+
+  it("omits only the blocks that are empty, keeping the ones that are not", () => {
+    const html = renderRpgTheme(data({ topSkills: [], topSubagents: [] }));
+    expect(html).toContain("What You Reach For");
+    expect(html).toContain("Coding agents");
+    expect(html).not.toContain("Most-used skills");
+    expect(html).not.toContain("Most-used subagents");
+  });
+
+  it("escapes names rather than trusting them as markup", () => {
+    const html = renderRpgTheme(data({ topSkills: ['<img src=x onerror="alert(1)">'] }));
+    expect(html).not.toContain("<img src=x");
+    expect(html).toContain("&lt;img src=x");
   });
 });
 

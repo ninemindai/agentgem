@@ -43,6 +43,7 @@ function data(over: Partial<GemitData> = {}): GemitData {
     ],
     skillVariety: 12, subagentVariety: 8, skillSessionsPct: 62, subagentSessionsPct: 41,
     topSkills: ["brainstorming"], topSubagents: ["Explore"],
+    agents: [{ name: "claude", sessions: 90 }, { name: "cursor", sessions: 29 }],
     insufficient: false,
     ...over,
   };

@@ -70,6 +70,10 @@ export interface GemitData {
   subagentSessionsPct: number;
   topSkills: string[];
   topSubagents: string[];
+  /** Which coding agents drove the window, busiest first, with the session count each.
+   *  Derived from the `agent` already carried on every collected session — a fixed,
+   *  non-personal vocabulary ("claude", "cursor", …), unlike the skill/subagent names. */
+  agents: Array<{ name: string; sessions: number }>;
   insufficient: boolean;
 }
 
@@ -122,7 +126,7 @@ export function computeGemitData(
       labels: { disciplined: 0, loose: 0, chaotic: 0 },
       verifyRatePct: null, boundedStreak: 0, firedFindings: [],
       skillVariety: 0, subagentVariety: 0, skillSessionsPct: 0, subagentSessionsPct: 0,
-      topSkills: [], topSubagents: [],
+      topSkills: [], topSubagents: [], agents: [],
       insufficient: true,
     };
   }
@@ -193,6 +197,15 @@ export function computeGemitData(
   const top = (m: Map<string, number>, cap: number): string[] =>
     [...m.entries()].sort((a, b) => b[1] - a[1]).slice(0, cap).map(([name]) => name);
 
+  // Counts SESSIONS, not invocations — one row per agent that actually drove work in the
+  // window. Ties break by name so the order is deterministic across runs (the rest of this
+  // payload is, and the card is meant to be comparable).
+  const agentSessions = new Map<string, number>();
+  for (const s of qualifying) agentSessions.set(s.agent, (agentSessions.get(s.agent) ?? 0) + 1);
+  const agents = [...agentSessions.entries()]
+    .map(([name, sessions]) => ({ name, sessions }))
+    .sort((a, b) => b.sessions - a.sessions || a.name.localeCompare(b.name));
+
   const ctxR = Math.round(ctx);
   const procR = Math.round(proc);
   const composite = Math.round(COMPOSITE_WEIGHTS.ctx * ctxR + COMPOSITE_WEIGHTS.proc * procR + COMPOSITE_WEIGHTS.setup * setup);
@@ -203,7 +216,7 @@ export function computeGemitData(
     tierLevel: tierLevelFor(composite),
     verdicts, labels, verifyRatePct, boundedStreak, firedFindings,
     skillVariety, subagentVariety, skillSessionsPct, subagentSessionsPct,
-    topSkills: top(skillTotals, 12), topSubagents: top(subagentTotals, 8),
+    topSkills: top(skillTotals, 12), topSubagents: top(subagentTotals, 8), agents,
     insufficient: false,
   };
 }

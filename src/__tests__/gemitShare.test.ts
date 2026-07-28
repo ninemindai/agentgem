@@ -29,6 +29,7 @@ function fixtureData(over: Partial<GemitData> = {}): GemitData {
     ],
     skillVariety: 12, subagentVariety: 8, skillSessionsPct: 62, subagentSessionsPct: 41,
     topSkills: ["brainstorming"], topSubagents: ["Explore"],
+    agents: [{ name: "claude", sessions: 90 }, { name: "cursor", sessions: 29 }],
     insufficient: false,
     ...over,
   };
@@ -110,6 +111,15 @@ describe("buildGemitShare", () => {
     // the JSON island carries the stripped variant
     expect(built.html).toContain('"topSkills":[]');
     expect(built.html).toContain('"topSubagents":[]');
+  });
+
+  // Agent names are a fixed public vocabulary, not personal data — but the consent line
+  // the CLI prints promises "scores, counts, window dates" and nothing more. Until an
+  // opt-in widens that promise explicitly, agents stay out of the shipped card too.
+  it("ships no coding-agent names either, and no empty usage heading", () => {
+    expect(built.html).toContain('"agents":[]');
+    expect(built.html).not.toContain("What You Reach For");
+    expect(built.html).not.toContain("Coding agents");
   });
 });
 
