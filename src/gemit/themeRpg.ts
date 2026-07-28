@@ -217,6 +217,25 @@ function renderCard(d: GemitData): string {
     </section>`;
 }
 
+// What the operator actually reaches for. Every row here is name-bearing, and the shared
+// variant blanks all three lists (shareVariantOf), so each block renders only when it has
+// content and the whole section disappears when none do — no empty headings on the card.
+function usageSection(d: GemitData): string {
+  const chips = (names: string[]): string =>
+    names.map((n) => `<li>${escapeHtml(n)}</li>`).join("");
+  const blocks: string[] = [];
+  if (d.agents.length) blocks.push(`<div class="use-block"><h3>Coding agents</h3><ul class="chips">${
+    d.agents.map((a) => `<li>${escapeHtml(a.name)} <span>${fmt(a.sessions)}</span></li>`).join("")}</ul></div>`);
+  if (d.topSkills.length) blocks.push(`<div class="use-block"><h3>Most-used skills</h3><ul class="chips">${chips(d.topSkills)}</ul></div>`);
+  if (d.topSubagents.length) blocks.push(`<div class="use-block"><h3>Most-used subagents</h3><ul class="chips">${chips(d.topSubagents)}</ul></div>`);
+  if (!blocks.length) return "";
+  return `
+    <section class="usage">
+      <h2>What You Reach For</h2>
+      ${blocks.join("\n      ")}
+    </section>`;
+}
+
 export interface ShareLinks {
   /** The published card's public address on the marketplace. */
   shareUrl: string;
@@ -310,6 +329,7 @@ ${RUNTIME_JS}</script>`;
       </div>
     </section>
 
+    ${usageSection(data)}
     ${shareRegion(opts)}
 
     <footer class="provenance">

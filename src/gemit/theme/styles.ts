@@ -94,6 +94,11 @@ ${themeAdapter("document")}
   .cell { background: var(--surface-2); border: 1px solid var(--border); padding: 12px 14px; }
   .cell .n { font-size: 21px; }
   .cell .l { font-family: var(--sans); font-size: 11.5px; letter-spacing: .07em; text-transform: uppercase; opacity: .6; margin-top: 2px; }
+  .use-block { margin-bottom: 14px; }
+  .use-block h3 { font-family: var(--sans); font-size: 11px; letter-spacing: .09em; text-transform: uppercase; color: color-mix(in srgb, var(--ink) 58%, transparent); font-weight: 400; margin: 0 0 7px; }
+  ul.chips { list-style: none; padding: 0; margin: 0; display: flex; flex-wrap: wrap; gap: 6px; }
+  ul.chips li { font-family: var(--mono); font-size: 12px; padding: 4px 10px; border: 1px solid var(--border); background: var(--surface-2); color: var(--ink); }
+  ul.chips li span { color: var(--gold); margin-left: 4px; font-variant-numeric: tabular-nums; }
   .share-out p { font-size: 13.5px; color: color-mix(in srgb, var(--ink) 72%, transparent); margin: 0 0 11px; max-width: 60ch; }
   .share-url { word-break: break-all; }
   .share-url a { color: var(--accent); }

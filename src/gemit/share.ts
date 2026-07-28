@@ -20,7 +20,11 @@ const MARKETPLACE_BASE = "https://app.agentgem.ai"; // mirrors the Studio publis
 // not (the theme embeds the full payload as a JSON island). Variety COUNTS stay —
 // they are what the perks derive from.
 export function shareVariantOf(data: GemitData): GemitData {
-  return { ...data, topSkills: [], topSubagents: [] };
+  // `agents` joins the strip not because agent names are sensitive — they are a fixed
+  // public vocabulary — but because the consent line the CLI prints promises "scores,
+  // counts, window dates" and nothing else. Widening that is an opt-in, and an opt-in
+  // has to change the consent text in the same breath.
+  return { ...data, topSkills: [], topSubagents: [], agents: [] };
 }
 
 export function buildGemitShare(args: {
