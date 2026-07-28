@@ -7,6 +7,30 @@ All notable changes to AgentGem are documented here. The format follows
 The npm core (`@ninemind/agentgem`) and the desktop app share a version number but
 are tagged separately: core releases are tagged `v*`, desktop releases `desktop-v*`.
 
+## [0.10.2] — `@ninemind/agentgem` (npm core) — 2026-07-28
+
+Supersedes 0.10.1, which was tagged but **never published to npm**: its release-tag
+CI went red on the Node 26 matrix. Ships everything 0.10.1 contained, plus the fix
+for that, and with a green release tag. Nothing in the shipped package differs in
+substance — the failure was in the test harness, never in the code that ships.
+
+### Fixed
+
+- **The console suite passes on Node 26.** 149 of 1153 tests failed there while all
+  1153 passed on Node 24. jsdom installs **no Web Storage at all** under Node 26 —
+  `window.localStorage` and the global are both `undefined`, where both are real
+  objects on Node 24 — so every persisted preference, split size, consent grant and
+  studio-chat handoff blew up. (Node 26 defines its own `localStorage` accessor, but
+  it is inert without `--localstorage-file`; it is not the culprit.) `test-setup.ts`
+  now provides an in-memory `Storage` when the environment has none, alongside the
+  `ResizeObserver` / `scrollIntoView` / `EventSource` stubs already there for the
+  same reason. Inert on Node 24.
+- **A resume test no longer depends on how many microtasks one tick drains.**
+  Studio's "no give-up lock" test assumed a single `advanceTimersByTimeAsync(0)`
+  flushes the mount effect's fetch chain. That held on Node 24 only when the file
+  ran alongside its siblings — it failed in isolation there, and outright on
+  Node 26. It now waits for the rendered control instead.
+
 ## [0.10.1] — `@ninemind/agentgem` (npm core) — 2026-07-28
 
 Four commits behind 0.10.0, released the same day. The gemit report stops being a
@@ -247,6 +271,15 @@ the cohort is real.
   `@electric-sql/pglite`, `pg`, `drizzle-orm`, `drizzle-zod`, `@agentback/drizzle`,
   `@anthropic-ai/sdk`.
 - The broken public Fly Deploy CI workflow.
+
+## [desktop-v0.10.2] — desktop app — 2026-07-28
+
+No desktop-specific changes; supersedes the unpublished desktop-v0.10.1. Still worth
+noting for desktop users: because the desktop app *is* a running local console,
+`agentgem gemit` in a terminal now lands on its Gemit screen — with Publish and live
+share links — rather than on a static file.
+
+Embeds everything in core 0.10.2.
 
 ## [desktop-v0.10.1] — desktop app — 2026-07-28
 
