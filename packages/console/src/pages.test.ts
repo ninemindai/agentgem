@@ -13,7 +13,7 @@ describe("pages registry", () => {
     const g = phaseGroups(pages, "observe");
     expect(g.map((x) => x.category)).toEqual(["usage", "sessions", "projects", "setup"]);
     expect(g.map((x) => x.pages.map((p) => p.id))).toEqual([
-      ["overview", "benchmark"],
+      ["overview", "benchmark", "gemit"],
       ["watch", "sessions", "recall", "arcade", "dreaming", "chat"],
       ["mine", "optimize"],
       ["rubrics", "setup"],
@@ -58,7 +58,7 @@ describe("railModel over the real registry", () => {
       ["watch", "sessions", "recall", "dreaming"],
       ["curate", "setup", "play", "materialize", "chat", "rubric-library"],
       ["rubrics", "benchmark", "reviews", "optimize"],
-      ["sources", "arcade"],
+      ["sources", "arcade", "gemit"],
     ]);
   });
 

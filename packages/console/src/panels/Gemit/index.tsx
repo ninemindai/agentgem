@@ -178,6 +178,11 @@ export const gemitPage = defineConsolePage({
   phase: "observe",
   category: "usage",
   group: "share",
+  // Every other grouped page is hidden until the console unlocks, and Gemit has more
+  // reason than most: scoring needs 5 substantial sessions in the window, so on a cold
+  // console the screen could only ever show its own doorway. Omitting this also leaked
+  // a group into the LOCKED rail, which is meant to be foreground-only.
+  hiddenUntilUnlock: true,
   fullWidth: true,
   route: "#/gemit",
   component: GemitPage,
