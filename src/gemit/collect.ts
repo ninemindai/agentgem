@@ -13,6 +13,7 @@ import {
   type SessionStat, type SessionSummary,
 } from "@agentgem/insight";
 import { hygieneReportForFile } from "@agentgem/app/sessionHygieneCore";
+import { readScoreCache, scoreCacheKey, writeScoreCache, type CacheEntry, type CachedScore } from "./scoreCache.js";
 import {
   MIN_MSGS, SAMPLE_CAP, WINDOW_DAYS,
   type GemitScoredInput, type GemitSessionInput,
@@ -28,6 +29,11 @@ export interface CollectDeps {
   scan?: (dirs?: { claudeDir?: string }) => Promise<SessionStat[]>;
   summarize?: (id: string, agent: string, dirs?: { claudeDir?: string }) => Promise<SessionSummary | null>;
   hygieneFor?: (id: string, claudeDir?: string) => Promise<HygieneResult | null>;
+  /** Opt IN to the on-disk score cache. Default OFF so that injecting `summarize`/
+   *  `hygieneFor` means those stubs actually run — a default-on cache silently served real
+   *  cached rows to tests that had stubbed the work, which is how this defaulted wrong once
+   *  already. The two production call sites (the CLI and the console route) pass true. */
+  cache?: boolean;
 }
 
 async function defaultHygieneFor(id: string, claudeDir?: string): Promise<HygieneResult | null> {
@@ -103,15 +109,30 @@ export async function collectGemitInputs(
     .sort((a, b) => b.endMs - a.endMs);
   const qualifying = inWindow.map(toInput);
 
+  // The per-session derivation below is the whole cost of this function (~21s for a
+  // 150-session sample, every call, in every process). It is a pure function of the
+  // session's transcript, so it is cached on disk and shared across processes — see
+  // scoreCache.ts. Skipped entirely for a custom `dir`: that is the alternate-home path
+  // (tests, --dir), which must neither read nor pollute the real cache.
+  const useCache = !dir && deps.cache === true;
+  const cached = useCache ? readScoreCache() : new Map<string, CacheEntry>();
+  const fresh = new Map<string, CacheEntry>();
+
   const scored: GemitScoredInput[] = [];
   for (const s of inWindow.slice(0, SAMPLE_CAP)) {
+    const key = scoreCacheKey(s);
+    const hit = useCache ? cached.get(key) : undefined;
+    if (hit) {
+      scored.push({ session: toInput(s), ...hit.score });
+      fresh.set(key, hit); // carry it forward so it survives eviction
+      continue;
+    }
     const isClaude = s.agent === "claude";
     const [summary, hygiene] = await Promise.all([
       summarize(s.sessionId, s.agent, dirs),
       isClaude ? hygieneFor(s.sessionId, dir) : Promise.resolve(null),
     ]);
-    scored.push({
-      session: toInput(s),
+    const score: CachedScore = {
       hygieneScore: hygiene?.score ?? null,
       hygieneVerdict: hygiene?.verdict ?? null,
       processScore: summary?.process?.score ?? null,
@@ -121,7 +142,16 @@ export async function collectGemitInputs(
         ...(summary?.findings ?? []).map((f) => ({ id: f.id, title: f.title, count: f.count })),
       ],
       verifications: summary?.events?.verifications ?? null,
-    });
+    };
+    scored.push({ session: toInput(s), ...score });
+    if (useCache) fresh.set(key, { endMs: s.endMs, score });
+  }
+  // Merge what this run saw over what was already stored, so entries for sessions outside
+  // today's window are retained (the window slides; yesterday's rows come back tomorrow).
+  if (useCache) {
+    const merged = new Map<string, CacheEntry>(cached);
+    for (const [k, v] of fresh) merged.set(k, v);
+    writeScoreCache(merged);
   }
   return { qualifying, scored };
 }

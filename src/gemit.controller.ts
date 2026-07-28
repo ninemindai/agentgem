@@ -70,7 +70,9 @@ interface GemitDeps {
 const realDeps: GemitDeps = {
   score: async () => {
     const now = Date.now();
-    const { qualifying, scored } = await collectGemitInputs(undefined, now);
+    // cache:true — the per-session derivation is ~21s uncached and is shared on disk with
+    // the CLI, so a report right after `agentgem gemit` costs well under a second.
+    const { qualifying, scored } = await collectGemitInputs(undefined, now, { cache: true });
     return computeGemitData(qualifying, scored, now);
   },
   window: () => countGemitWindow(undefined, Date.now()),

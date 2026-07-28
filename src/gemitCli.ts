@@ -165,7 +165,9 @@ export async function runGemitCommand(argv: string[], deps: GemitCliDeps = {}): 
   });
 
   out("Scanning sessions (last 30 days)…");
-  const { qualifying, scored } = await collect(parsed.dir, nowMs);
+  // cache:true — reuse the on-disk per-session scores (shared with the console process).
+  // Ignored when --dir names an alternate home.
+  const { qualifying, scored } = await collect(parsed.dir, nowMs, { cache: true });
   const data = compute(qualifying, scored, nowMs);
 
   // agentgemHome() is the home ROOT (AGENTGEM_HOME override or ~); state lives under .agentgem.
