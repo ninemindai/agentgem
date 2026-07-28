@@ -10,7 +10,7 @@ import type { GameArtifact, Gem } from "@agentgem/model";
 import { exportGem, importGem } from "@agentgem/distribute";
 import type { CatalogManifest } from "@agentgem/contract";
 import type { GemitData } from "./score.js";
-import { renderRpgTheme, TIER_NAMES, type RpgRenderOpts, type ShareLinks } from "./themeRpg.js";
+import { GEMIT_CMD, renderRpgTheme, TIER_NAMES, type RpgRenderOpts, type ShareLinks } from "./themeRpg.js";
 import { COHORT, topPercentFor, type Cohort } from "./cohort.js";
 
 export const GEMIT_SHARE_VERSION = "1.0.0";
@@ -84,7 +84,13 @@ export function gemitShareUrls(gemKey: string, data: GemitData): ShareLinks {
   const shareUrl = `${MARKETPLACE_BASE}/games/${gemKey}`;
   const tierName = TIER_NAMES[data.tierLevel - 1];
   const standing = standingClause(data.composite, COHORT);
-  const text = `${tierName} — ${data.composite}/100${standing} on agent steering. What's your level?\n${shareUrl}`;
+  // The command sits between the hook and the URL, not after it: X unfurls a post's LAST
+  // link, so keeping shareUrl final preserves the card preview. GEMIT_CMD is the same
+  // constant the report and CLI use, so the invocation can never drift across surfaces —
+  // and it is npx-prefixed, which matters most here: a reader who has never installed
+  // anything is exactly who this line is for.
+  const text = `${tierName} — ${data.composite}/100${standing} on agent steering. What's your level?\n`
+    + `${GEMIT_CMD}\n${shareUrl}`;
   const u = encodeURIComponent(shareUrl);
   return {
     shareUrl,
