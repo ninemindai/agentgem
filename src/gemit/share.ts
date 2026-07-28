@@ -10,7 +10,7 @@ import type { GameArtifact, Gem } from "@agentgem/model";
 import { exportGem, importGem } from "@agentgem/distribute";
 import type { CatalogManifest } from "@agentgem/contract";
 import type { GemitData } from "./score.js";
-import { renderRpgTheme, TIER_NAMES } from "./themeRpg.js";
+import { renderRpgTheme, TIER_NAMES, type RpgRenderOpts, type ShareLinks } from "./themeRpg.js";
 import { COHORT, topPercentFor, type Cohort } from "./cohort.js";
 
 export const GEMIT_SHARE_VERSION = "1.0.0";
@@ -26,10 +26,13 @@ export function shareVariantOf(data: GemitData): GemitData {
 export function buildGemitShare(args: {
   data: GemitData;
   login: string;
-  render?: (d: GemitData) => string;
+  render?: (d: GemitData, opts?: RpgRenderOpts) => string;
 }): { gemKey: string; version: string; html: string; archiveBase64: string; manifest: CatalogManifest } {
   const shareData = shareVariantOf(args.data);
-  const html = (args.render ?? renderRpgTheme)(shareData);
+  // `sealed` — this copy is played inside the marketplace's `sandbox="allow-scripts"`
+  // frame, where an outbound link cannot navigate. Share affordances belong on the local
+  // report (which the CLI re-renders post-publish), never on the artifact that ships.
+  const html = (args.render ?? renderRpgTheme)(shareData, { sealed: true });
   const name = `gemit-${args.data.windowTo}`;
   const gemKey = `${args.login}/${name}`;
   const tierName = TIER_NAMES[args.data.tierLevel - 1];
@@ -66,10 +69,19 @@ export function standingClause(composite: number, c?: Cohort | null): string {
   return pct === null ? "" : `, top ${pct}%`;
 }
 
-export function gemitShareUrls(gemKey: string, data: GemitData): { shareUrl: string; xIntentUrl: string } {
+export function gemitShareUrls(gemKey: string, data: GemitData): ShareLinks {
   const shareUrl = `${MARKETPLACE_BASE}/games/${gemKey}`;
   const tierName = TIER_NAMES[data.tierLevel - 1];
   const standing = standingClause(data.composite, COHORT);
   const text = `${tierName} — ${data.composite}/100${standing} on agent steering. What's your level?\n${shareUrl}`;
-  return { shareUrl, xIntentUrl: `https://x.com/intent/post?text=${encodeURIComponent(text)}` };
+  const u = encodeURIComponent(shareUrl);
+  return {
+    shareUrl,
+    x: `https://x.com/intent/post?text=${encodeURIComponent(text)}`,
+    // LinkedIn and Facebook accept a URL and nothing else — both compose their preview
+    // from the /games OG card and silently drop any text parameter. The tier/score line
+    // therefore rides on X alone; there is no point threading `text` through these two.
+    linkedin: `https://www.linkedin.com/sharing/share-offsite/?url=${u}`,
+    facebook: `https://www.facebook.com/sharer/sharer.php?u=${u}`,
+  };
 }

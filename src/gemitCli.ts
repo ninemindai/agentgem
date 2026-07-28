@@ -12,7 +12,7 @@ import { dirname, join, resolve } from "node:path";
 import { agentgemHome } from "@agentgem/model";
 import { collectGemitInputs } from "./gemit/collect.js";
 import { computeGemitData, type GemitData } from "./gemit/score.js";
-import { renderRpgTheme, TIER_NAMES } from "./gemit/themeRpg.js";
+import { renderRpgTheme, TIER_NAMES, type RpgRenderOpts } from "./gemit/themeRpg.js";
 import { openInBrowser } from "./gemit/openBrowser.js";
 import { buildGemitShare, gemitShareUrls } from "./gemit/share.js";
 import { postGemPublish } from "@agentgem/app/gem/gemPublishClient";
@@ -75,7 +75,7 @@ export function parseGemitArgs(argv: string[]): GemitArgs | { error: string } {
 export interface GemitCliDeps {
   collect?: typeof collectGemitInputs;
   compute?: typeof computeGemitData;
-  render?: (data: GemitData) => string;
+  render?: (data: GemitData, opts?: RpgRenderOpts) => string;
   writeFile?: (path: string, content: string) => void;
   open?: (path: string) => void;
   out?: (line: string) => void;
@@ -148,6 +148,9 @@ export async function runGemitCommand(argv: string[], deps: GemitCliDeps = {}): 
     out(`  Scored ${data.scoredSessions} of ${data.qualifyingSessions} sessions across ${data.projects} projects.`);
   }
   out(`Report: ${outPath}`);
+  // Publishing shipped behind a flag nobody could see: a plain run used to end here, so
+  // operators reasonably concluded there was no way to share at all. Name the path.
+  if (!parsed.share && !data.insufficient) out("Publish & share: agentgem gemit --share");
 
   const isTTY = deps.isTTY ?? Boolean(process.stdout.isTTY);
 
@@ -189,8 +192,14 @@ export async function runGemitCommand(argv: string[], deps: GemitCliDeps = {}): 
       return 1;
     }
     const urls = gemitShareUrls(built.gemKey, data);
+    // Re-render the LOCAL report now that a real URL exists: the first write could only
+    // offer the copyable `--share` command, and that CTA is now stale. This copy is the
+    // one that gets opened below, so the buttons the operator lands on are live links.
+    write(outPath, render(data, { share: urls }));
     out(`Published: ${urls.shareUrl}`);
-    out(`Share on X: ${urls.xIntentUrl}`);
+    out(`  X:        ${urls.x}`);
+    out(`  LinkedIn: ${urls.linkedin}`);
+    out(`  Facebook: ${urls.facebook}`);
   }
 
   if (parsed.open && isTTY) (deps.open ?? openInBrowser)(outPath);

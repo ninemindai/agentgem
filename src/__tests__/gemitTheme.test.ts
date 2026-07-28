@@ -322,6 +322,59 @@ describe("house style adoption", () => {
   it("still ships no external URL after adopting house tokens", () => {
     expect(renderRpgTheme(data())).not.toMatch(/https?:\/\//);
   });
+});
+
+// The report is rendered for three different surfaces and only ONE of them may carry
+// share links. Getting this wrong is invisible to the eye — the buttons render fine and
+// simply do nothing — so it is pinned by tests rather than by a comment alone.
+describe("renderRpgTheme share surfaces", () => {
+  const links = {
+    shareUrl: "https://app.agentgem.ai/games/tester/gemit-2026-07-19",
+    x: "https://x.com/intent/post?text=hi",
+    linkedin: "https://www.linkedin.com/sharing/share-offsite/?url=hi",
+    facebook: "https://www.facebook.com/sharer/sharer.php?u=hi",
+  };
+
+  it("offers the copyable publish command when the report has not been published", () => {
+    const html = renderRpgTheme(data());
+    expect(html).toContain("agentgem gemit --share");
+    // reuses the existing .cmd-copy machinery rather than shipping a second copy handler
+    expect(html).toMatch(/<code>agentgem gemit --share<\/code><button type="button" class="cmd-copy">/);
+  });
+
+  it("swaps the command for real intent links once share links are supplied", () => {
+    const html = renderRpgTheme(data(), { share: links });
+    for (const url of [links.x, links.linkedin, links.facebook, links.shareUrl]) {
+      expect(html).toContain(url);
+    }
+    // the CTA is replaced, not appended — a published sheet must not still say "run --share"
+    expect(html).not.toContain("<code>agentgem gemit --share</code>");
+    // every outbound anchor opens away from the report and leaks no referrer
+    for (const m of html.matchAll(/<a href="https:\/\/(?:x\.com|www\.linkedin|www\.facebook)[^"]*"([^>]*)>/g)) {
+      expect(m[1]).toContain('target="_blank"');
+      expect(m[1]).toContain("noopener");
+    }
+  });
+
+  // THE load-bearing one. The marketplace plays a card in `sandbox="allow-scripts"` with
+  // no allow-popups and no allow-top-navigation, so a share link embedded in the shipped
+  // copy is silently unclickable. The sealed render must therefore carry no share region
+  // at all — a dead button is worse than no button.
+  it("emits no share affordance whatsoever in the sealed copy that ships as the card", () => {
+    const html = renderRpgTheme(data(), { sealed: true });
+    expect(html).not.toContain("agentgem gemit --share");
+    // assert on MARKUP, not the bare class name — the stylesheet is inlined verbatim on
+    // every surface, so `.share-bar`'s rule is present even where the section is not
+    expect(html).not.toContain('<section class="share-out">');
+    expect(html).not.toContain('class="share-bar"');
+    expect(html).not.toMatch(/https?:\/\//);
+  });
+
+  it("keeps the share region off the insufficient-data doorway, which has nothing to publish", () => {
+    const d = data({ insufficient: true, qualifyingSessions: 2, composite: 0, tierLevel: 1 });
+    expect(renderRpgTheme(d)).not.toContain("agentgem gemit --share");
+    expect(renderRpgTheme(d, { share: links })).not.toContain(links.x);
+  });
 
   // Text-only dimming must never be element-level `opacity` on a selector that also owns a
   // border/background or an interactive/inherited-colour child — opacity composites the whole

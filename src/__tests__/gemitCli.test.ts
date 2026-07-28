@@ -78,6 +78,19 @@ describe("runGemitCommand", () => {
     expect(h.opened).toEqual([h.writes[0].path]);
   });
 
+  // The reported bug: --share shipped in 0.9.0 but a plain run never named it, so the
+  // publish path read as nonexistent. Suppressed on the doorway (nothing to publish) and
+  // during --share itself (already doing it).
+  it("names the publish path on a scored run, and stays quiet when there is none", async () => {
+    const scored = deps();
+    await runGemitCommand(["--no-open"], scored.deps);
+    expect(scored.out.join("\n")).toContain("agentgem gemit --share");
+
+    const doorway = deps({ compute: () => fakeData({ insufficient: true }) });
+    await runGemitCommand(["--no-open"], doorway.deps);
+    expect(doorway.out.join("\n")).not.toContain("agentgem gemit --share");
+  });
+
   it("respects --no-open and non-TTY", async () => {
     const a = deps();
     await runGemitCommand(["--no-open"], a.deps);
@@ -130,6 +143,34 @@ describe("runGemitCommand", () => {
       const all = h.out.join("\n");
       expect(all).toContain("https://app.agentgem.ai/games/tester/gemit-2026-07-18");
       expect(all).toContain("x.com/intent/post");
+      expect(all).toContain("linkedin.com/sharing/share-offsite");
+      expect(all).toContain("facebook.com/sharer/sharer.php");
+    });
+
+    // The first write happens before a URL exists, so it can only advertise the command.
+    // Once publish returns, that CTA is stale — and it is the file the CLI then OPENS, so
+    // leaving it stale means the operator stares at "run --share" on an already-published
+    // sheet. The report must be rewritten in place with live links.
+    it("rewrites the local report with live intent links after publishing", async () => {
+      const h = shareDeps();
+      expect(await runGemitCommand(["--share", "--no-open"], h.deps)).toBe(0);
+      const local = h.writes.filter((w) => w.path.endsWith(".html") && !w.path.endsWith(".share.html"));
+      expect(local).toHaveLength(2);              // once before publish, once after
+      expect(local[0].content).toContain("agentgem gemit --share");
+      expect(local[1].content).not.toContain("<code>agentgem gemit --share</code>");
+      expect(local[1].content).toContain("x.com/intent/post");
+      expect(local[1].content).toContain("linkedin.com/sharing/share-offsite");
+    });
+
+    // Regression guard for the sandbox trap: the marketplace plays the card in
+    // `sandbox="allow-scripts"`, so links in the SHIPPED copy cannot navigate.
+    it("ships a card carrying no share links at all", async () => {
+      const h = shareDeps();
+      await runGemitCommand(["--share", "--no-open"], h.deps);
+      const card = h.writes.find((w) => w.path.endsWith(".share.html"))!;
+      expect(card.content).not.toContain("x.com/intent");
+      expect(card.content).not.toContain("agentgem gemit --share");
+      expect(card.content).not.toMatch(/https?:\/\//);
     });
 
     it("does not publish when the confirm prompt is declined", async () => {
