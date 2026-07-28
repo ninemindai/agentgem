@@ -11,12 +11,16 @@
       "default": "./dist/index.js"
     }
   },
-  "files": ["dist"],
+  "files": [
+    "dist"
+  ],
   "scripts": {
     "build": "tsc -b",
     "test": "vitest run"
   },
   "dependencies": {
+    "@noble/curves": "^2.2.0",
+    "@scure/base": "^2.2.0",
     "yaml": "^2"
   }
 }
