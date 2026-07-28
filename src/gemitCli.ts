@@ -12,7 +12,7 @@ import { dirname, join, resolve } from "node:path";
 import { agentgemHome } from "@agentgem/model";
 import { collectGemitInputs } from "./gemit/collect.js";
 import { computeGemitData, type GemitData } from "./gemit/score.js";
-import { renderRpgTheme, TIER_NAMES, type RpgRenderOpts } from "./gemit/themeRpg.js";
+import { GEMIT_CMD, renderRpgTheme, TIER_NAMES, type RpgRenderOpts } from "./gemit/themeRpg.js";
 import { openInBrowser } from "./gemit/openBrowser.js";
 import { buildGemitShare, gemitShareUrls } from "./gemit/share.js";
 import { postGemPublish } from "@agentgem/app/gem/gemPublishClient";
@@ -161,7 +161,7 @@ export async function runGemitCommand(argv: string[], deps: GemitCliDeps = {}): 
   out(`Report: ${outPath}`);
   // Publishing shipped behind a flag nobody could see: a plain run used to end here, so
   // operators reasonably concluded there was no way to share at all. Name the path.
-  if (!parsed.share && !data.insufficient) out("Publish & share: agentgem gemit --share");
+  if (!parsed.share && !data.insufficient) out(`Publish & share: ${GEMIT_CMD} --share`);
 
   const isTTY = deps.isTTY ?? Boolean(process.stdout.isTTY);
 

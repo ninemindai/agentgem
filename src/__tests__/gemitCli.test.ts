@@ -7,6 +7,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { parseGemitArgs, runGemitCommand } from "../gemitCli.js";
+import { GEMIT_CMD } from "../gemit/themeRpg.js";
 import type { GemitData } from "../gemit/score.js";
 
 const NOW = Date.UTC(2026, 6, 18);
@@ -160,7 +161,7 @@ describe("runGemitCommand", () => {
       const local = h.writes.filter((w) => w.path.endsWith(".html") && !w.path.endsWith(".share.html"));
       expect(local).toHaveLength(2);              // once before publish, once after
       expect(local[0].content).toContain("agentgem gemit --share");
-      expect(local[1].content).not.toContain("<code>agentgem gemit --share</code>");
+      expect(local[1].content).not.toContain(`<code>${GEMIT_CMD} --share</code>`);
       expect(local[1].content).toContain("x.com/intent/post");
       expect(local[1].content).toContain("linkedin.com/sharing/share-offsite");
     });
