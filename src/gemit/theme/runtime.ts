@@ -30,17 +30,38 @@ export const RUNTIME_JS = `(function () {
   var meas = { ctx: D.ctx, proc: D.proc, setup: D.setup };
   var lastTier = tierFor(projectComposite(vals.ctx, vals.proc, vals.setup, W), TH);
 
-  // "Measured" is documented as read-only — the bars only become draggable once the
-  // What if? toggle has switched #disciplines into .whatif. isWhatIf() is the single
-  // choke point every user-triggered mutation path (drag, keyboard, quest checkbox)
-  // checks before touching vals/DOM, so none of them can move the displayed numbers,
-  // flip a tier, or fire confetti while the mode readout still says "measured". The
-  // toggle button itself is NOT gated by this — it's the one documented way to enter
-  // what-if — and setAxis() is left ungated too, since the toggle-off reset and the
-  // auto-solve tween both call it legitimately from *inside* an already-whatif (or
-  // just-left-whatif) transition.
+  // "Measured" is documented as read-only — the bars only become draggable once
+  // #disciplines is in .whatif. isWhatIf() is the single choke point every user-triggered
+  // mutation path (drag, keyboard, quest checkbox) checks before touching vals/DOM, so
+  // none of them can move the displayed numbers, flip a tier, or fire confetti while the
+  // mode readout still says "measured".
+  //
+  // TWO paths may ENTER what-if: the toggle button, and ticking a quest. A quest tick IS
+  // the what-if gesture ("what if I did this?"), so blocking it and silently reverting the
+  // box read as a broken checkbox rather than a gated one — the box has no disabled state
+  // and no cursor change to say otherwise. It now enters the mode instead. The read-only
+  // invariant is preserved because setWhatIf(true) flips the readout BEFORE the delta is
+  // applied: numbers still never move while the page says "measured".
+  //
+  // setAxis() is left ungated, since the toggle-off reset and the auto-solve tween both
+  // call it legitimately from *inside* an already-whatif (or just-left-whatif) transition.
   var sect = document.getElementById("disciplines");
+  var wi = document.querySelector(".wi");
   function isWhatIf() { return !!sect && sect.classList.contains("whatif"); }
+
+  function setWhatIf(on) {
+    if (!wi || !sect) return;
+    wi.setAttribute("aria-pressed", on ? "true" : "false");
+    sect.classList.toggle("whatif", on);
+    document.getElementById("disc-mode").textContent = on ? "projected" : "measured";
+    document.querySelector(".tg-rank").hidden = !on;
+    document.getElementById("tg-solve").hidden = !on;
+    if (!on) { setAxis("ctx", meas.ctx); setAxis("proc", meas.proc); setAxis("setup", meas.setup);
+      Array.prototype.forEach.call(document.querySelectorAll(".quests input[type=checkbox]"), function (cb) {
+        cb.checked = false; cb.closest("li").classList.remove("done");
+      });
+    }
+  }
 
   function confetti() {
     var host = document.getElementById("confetti");
@@ -111,9 +132,10 @@ export const RUNTIME_JS = `(function () {
 
   Array.prototype.forEach.call(document.querySelectorAll(".quests input[type=checkbox]"), function (cb) {
     cb.addEventListener("change", function () {
-      // Blocked while measured: revert the checkbox rather than leaving it checked with
-      // no effect — a box that looks ticked but changed nothing is its own lie.
-      if (!isWhatIf()) { cb.checked = false; return; }
+      // Ticking a quest while measured ENTERS what-if rather than reverting the box.
+      // The mode readout flips first, so the delta below is never applied under a
+      // "measured" label — the projection stays honestly labelled either way.
+      if (!isWhatIf()) setWhatIf(true);
       var li = cb.closest("li");
       var axis = li.getAttribute("data-axis");
       var delta = +li.getAttribute("data-delta");
@@ -152,18 +174,7 @@ export const RUNTIME_JS = `(function () {
     });
   });
 
-  var wi = document.querySelector(".wi");
   if (wi && sect) wi.addEventListener("click", function () {
-    var on = wi.getAttribute("aria-pressed") !== "true";
-    wi.setAttribute("aria-pressed", on ? "true" : "false");
-    sect.classList.toggle("whatif", on);
-    document.getElementById("disc-mode").textContent = on ? "projected" : "measured";
-    document.querySelector(".tg-rank").hidden = !on;
-    document.getElementById("tg-solve").hidden = !on;
-    if (!on) { setAxis("ctx", meas.ctx); setAxis("proc", meas.proc); setAxis("setup", meas.setup);
-      Array.prototype.forEach.call(document.querySelectorAll(".quests input[type=checkbox]"), function (cb) {
-        cb.checked = false; cb.closest("li").classList.remove("done");
-      });
-    }
+    setWhatIf(wi.getAttribute("aria-pressed") !== "true");
   });
 })();`;
