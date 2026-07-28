@@ -50,13 +50,13 @@ describe("persisted parse cache", () => {
     const first = await import("../sources.js");
     // Populate the in-memory map by scanning, then persist it.
     await first.BUILTIN_SOURCES.find((s) => s.id === "claude")!.scanSessions!([claude]);
-    first.saveParseCacheToDisk();
+    await first.saveParseCacheToDisk();
     expect(existsSync(cachePath())).toBe(true);
 
     // A brand-new module instance is the moral equivalent of a new process.
     vi.resetModules();
     const second = await import("../sources.js");
-    second.loadParseCacheFromDisk();
+    await second.loadParseCacheFromDisk();
 
     // Nothing changed on disk, so a scan now serves both files from the hydrated cache.
     const stats = await second.BUILTIN_SOURCES.find((s) => s.id === "claude")!.scanSessions!([claude]);
@@ -69,7 +69,7 @@ describe("persisted parse cache", () => {
     const mod = await import("../sources.js");
     const claudeSpec = mod.BUILTIN_SOURCES.find((s) => s.id === "claude")!;
     const before = await claudeSpec.scanSessions!([claude]);
-    mod.saveParseCacheToDisk();
+    await mod.saveParseCacheToDisk();
 
     // 'b' grows; 'a' is untouched. Size changes, so only b's key is invalidated.
     transcript("b", 7);
@@ -86,7 +86,7 @@ describe("persisted parse cache", () => {
     transcript("a");
 
     const mod = await import("../sources.js");
-    expect(() => mod.loadParseCacheFromDisk()).not.toThrow();
+    await expect(mod.loadParseCacheFromDisk()).resolves.not.toThrow();
     const stats = await mod.BUILTIN_SOURCES.find((s) => s.id === "claude")!.scanSessions!([claude]);
     expect(stats).toHaveLength(1);
   });
@@ -98,12 +98,12 @@ describe("persisted parse cache", () => {
     transcript("a");
     const mod = await import("../sources.js");
     await mod.BUILTIN_SOURCES.find((s) => s.id === "claude")!.scanSessions!([claude]);
-    mod.saveParseCacheToDisk();
+    await mod.saveParseCacheToDisk();
     expect(existsSync(cachePath())).toBe(true);
 
     mod.clearParseCache();
-    mod.saveParseCacheToDisk();     // must not overwrite with an emptied map
-    mod.loadParseCacheFromDisk();   // must not re-hydrate
+    await mod.saveParseCacheToDisk();     // must not overwrite with an emptied map
+    await mod.loadParseCacheFromDisk();   // must not re-hydrate
     expect(existsSync(cachePath())).toBe(true); // the operator's file survives
   });
 });

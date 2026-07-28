@@ -110,7 +110,7 @@ describe("gemit score cache", () => {
   it("survives a corrupt cache file by recomputing", async () => {
     mkdirSync(join(home, ".agentgem", "cache"), { recursive: true });
     writeFileSync(join(home, ".agentgem", "cache", "gemit-scores.json"), "{not json");
-    expect(readScoreCache().size).toBe(0);
+    expect((await readScoreCache()).size).toBe(0);
 
     const calls: string[] = [];
     const out = await collectGemitInputs(undefined, NOW, deps([stat(1)], calls));
@@ -118,13 +118,13 @@ describe("gemit score cache", () => {
     expect(out.scored).toHaveLength(1);
   });
 
-  it("evicts oldest-first so a long-lived install stays bounded", () => {
+  it("evicts oldest-first so a long-lived install stays bounded", async () => {
     const entries = new Map(Array.from({ length: 1200 }, (_, i) => [
       `k${i}`, { endMs: i, score: { hygieneScore: 1, hygieneVerdict: null, processScore: null,
         processLabel: null, findings: [], verifications: null } },
     ] as const));
-    writeScoreCache(entries as never);
-    const back = readScoreCache();
+    await writeScoreCache(entries as never);
+    const back = await readScoreCache();
     expect(back.size).toBe(1000);
     expect(back.has("k1199")).toBe(true);  // newest kept
     expect(back.has("k0")).toBe(false);    // oldest evicted

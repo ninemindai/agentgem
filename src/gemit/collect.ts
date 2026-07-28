@@ -115,7 +115,7 @@ export async function collectGemitInputs(
   // scoreCache.ts. Skipped entirely for a custom `dir`: that is the alternate-home path
   // (tests, --dir), which must neither read nor pollute the real cache.
   const useCache = !dir && deps.cache === true;
-  const cached = useCache ? readScoreCache() : new Map<string, CacheEntry>();
+  const cached = useCache ? await readScoreCache() : new Map<string, CacheEntry>();
   const fresh = new Map<string, CacheEntry>();
 
   const scored: GemitScoredInput[] = [];
@@ -151,7 +151,7 @@ export async function collectGemitInputs(
   if (useCache) {
     const merged = new Map<string, CacheEntry>(cached);
     for (const [k, v] of fresh) merged.set(k, v);
-    writeScoreCache(merged);
+    await writeScoreCache(merged);
   }
   return { qualifying, scored };
 }
