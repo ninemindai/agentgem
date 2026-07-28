@@ -135,6 +135,13 @@ async function main(argv: string[]): Promise<void> {
     return;
   }
 
+  // `agentgem nostr link` — link the local Nostr key to your account (local fast-path, no browser).
+  if (argv[0] === "nostr") {
+    const { runNostrCommand } = await import("./nostr/linkLocal.js");
+    process.exitCode = await runNostrCommand(argv.slice(1));
+    return;
+  }
+
   // Downstream builds register extra subcommands here (empty in OSS). Consulted after
   // the built-in subcommands and before the default start-the-server path.
   const extra = await dispatchExtra(argv);
