@@ -94,6 +94,12 @@ ${themeAdapter("document")}
   .cell { background: var(--surface-2); border: 1px solid var(--border); padding: 12px 14px; }
   .cell .n { font-size: 21px; }
   .cell .l { font-family: var(--sans); font-size: 11.5px; letter-spacing: .07em; text-transform: uppercase; opacity: .6; margin-top: 2px; }
+  .share-out p { font-size: 13.5px; color: color-mix(in srgb, var(--ink) 72%, transparent); margin: 0 0 11px; max-width: 60ch; }
+  .share-url { word-break: break-all; }
+  .share-url a { color: var(--accent); }
+  .share-bar { display: flex; flex-wrap: wrap; gap: 8px; }
+  .share-bar a { font-family: var(--sans); font-size: 12.5px; letter-spacing: .05em; text-decoration: none; padding: 8px 15px; border: 1px solid var(--border); background: var(--surface-2); color: var(--ink); }
+  .share-bar a:hover { border-color: var(--gold); color: var(--gold); }
   .provenance { margin-top: 40px; padding-top: 18px; border-top: 1px solid var(--border); font-size: 12.5px; color: color-mix(in srgb, var(--ink) 60%, transparent); line-height: 1.7; }
   @media (prefers-reduced-motion: reduce) {
     .tg-proj, .flip, #confetti i, .ring .arc, .tier, .pip i::after { animation: none; }

@@ -217,7 +217,49 @@ function renderCard(d: GemitData): string {
     </section>`;
 }
 
-export function renderRpgTheme(data: GemitData): string {
+export interface ShareLinks {
+  /** The published card's public address on the marketplace. */
+  shareUrl: string;
+  x: string;
+  linkedin: string;
+  facebook: string;
+}
+
+export interface RpgRenderOpts {
+  /** Real intent links. Set only for the LOCAL report, and only after a publish has
+   *  actually returned a URL — before that there is nothing to link to. */
+  share?: ShareLinks;
+  /** True for the copy packaged as the shipped gem artifact. The marketplace plays a
+   *  card inside `sandbox="allow-scripts"` with neither `allow-popups` nor
+   *  `allow-top-navigation`, so ANY link in that copy is silently unclickable. The
+   *  sealed render therefore carries no share region at all: a button that looks live
+   *  and does nothing is worse than no button. */
+  sealed?: boolean;
+}
+
+// Three surfaces, one renderer. Local-unpublished gets a copyable command, local-published
+// gets real links, and the sealed card gets neither — see RpgRenderOpts.sealed for why.
+function shareRegion(opts: RpgRenderOpts): string {
+  if (opts.sealed) return "";
+  const a = (href: string, label: string): string =>
+    `<a href="${escapeHtml(href)}" target="_blank" rel="noopener noreferrer">${label}</a>`;
+  if (opts.share) return `
+    <section class="share-out">
+      <h2>Published</h2>
+      <p class="share-url mono">${a(opts.share.shareUrl, escapeHtml(opts.share.shareUrl))}</p>
+      <div class="share-bar">${a(opts.share.x, "Share on X")}${a(opts.share.linkedin, "LinkedIn")}${a(opts.share.facebook, "Facebook")}
+      </div>
+    </section>`;
+  return `
+    <section class="share-out">
+      <h2>Share This Sheet</h2>
+      <p>Publish an unlisted card &mdash; only scores, counts and window dates travel.
+        Never your skills, subagents, project names or transcripts.</p>
+      <span class="cmd-line"><code>agentgem gemit --share</code><button type="button" class="cmd-copy">Copy</button></span>
+    </section>`;
+}
+
+export function renderRpgTheme(data: GemitData, opts: RpgRenderOpts = {}): string {
   const tierName = TIER_NAMES[data.tierLevel - 1];
   const { unlocked } = perksFor(data);
   const quests = questsFor(data);
@@ -267,6 +309,8 @@ ${RUNTIME_JS}</script>`;
         <div class="cell"><div class="n">${fmt(data.tokensOut)}</div><div class="l">tokens out</div></div>
       </div>
     </section>
+
+    ${shareRegion(opts)}
 
     <footer class="provenance">
       Scored on the ${data.scoredSessions} most recent substantial sessions of

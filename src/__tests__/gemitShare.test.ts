@@ -115,11 +115,26 @@ describe("buildGemitShare", () => {
 
 describe("gemitShareUrls", () => {
   it("builds the marketplace game URL and an X intent URL that embeds it", () => {
-    const { shareUrl, xIntentUrl } = gemitShareUrls("tester/gemit-2026-07-19", data);
+    const { shareUrl, x } = gemitShareUrls("tester/gemit-2026-07-19", data);
     expect(shareUrl).toBe("https://app.agentgem.ai/games/tester/gemit-2026-07-19");
-    expect(xIntentUrl.startsWith("https://x.com/intent/post?text=")).toBe(true);
-    expect(decodeURIComponent(xIntentUrl)).toContain(shareUrl);
-    expect(decodeURIComponent(xIntentUrl)).toContain(`${data.composite}/100`);
+    expect(x.startsWith("https://x.com/intent/post?text=")).toBe(true);
+    expect(decodeURIComponent(x)).toContain(shareUrl);
+    expect(decodeURIComponent(x)).toContain(`${data.composite}/100`);
+  });
+
+  // LinkedIn's share-offsite and Facebook's sharer both take a URL and nothing else —
+  // they render from the /games OG card and drop any text parameter. So the assertion
+  // here is deliberately narrow: the card URL must survive encoding intact. It is the
+  // ONLY thing those two networks carry.
+  it("passes the card URL url-encoded to LinkedIn and Facebook", () => {
+    const { shareUrl, linkedin, facebook } = gemitShareUrls("tester/gemit-2026-07-19", data);
+    expect(linkedin).toBe(
+      `https://www.linkedin.com/sharing/share-offsite/?url=${encodeURIComponent(shareUrl)}`);
+    expect(facebook).toBe(
+      `https://www.facebook.com/sharer/sharer.php?u=${encodeURIComponent(shareUrl)}`);
+    // the slash in "tester/gemit-..." must be escaped, or the receiving parser truncates
+    expect(linkedin).toContain("tester%2Fgemit-2026-07-19");
+    expect(facebook).toContain("tester%2Fgemit-2026-07-19");
   });
 });
 
@@ -141,8 +156,8 @@ describe("standingClause", () => {
 
 describe("share text percentile", () => {
   it("omits any percentile claim while the cohort is absent (real COHORT stays null)", () => {
-    const { xIntentUrl } = gemitShareUrls("me/gemit-2026-07-25", fixtureData());
-    const text = decodeURIComponent(new URL(xIntentUrl).searchParams.get("text")!);
+    const { x } = gemitShareUrls("me/gemit-2026-07-25", fixtureData());
+    const text = decodeURIComponent(new URL(x).searchParams.get("text")!);
     expect(text).toContain("Lapidary");
     expect(text).toContain("79/100");
     expect(text).not.toMatch(/top \d+%/i);
