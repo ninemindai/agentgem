@@ -2548,3 +2548,32 @@ button.scorecard-intent { line-height: 1.4; }
 .watch-atif-files { display: flex; flex-wrap: wrap; gap: 6px; }
 .watch-atif-file { font-family: var(--font-mono, ui-monospace, monospace); font-size: 12px; }
 .watch-atif-more { opacity: .6; font-size: 12px; }
+
+/* ============================ Gemit ============================ */
+/* Mirrors .play-btn / .rubric-report-frame rather than inventing values — the panel is a
+   toolbar over a sealed report frame, the same shape the Play and Rubrics screens use. */
+.gemit-status { color: var(--ink-soft); font-size: 13px; margin: 10px 0; }
+.gemit-bar { display: flex; flex-wrap: wrap; gap: 12px; align-items: center; justify-content: space-between;
+  padding: 12px 14px; background: var(--paper-2); border: 1px solid var(--line); border-radius: 7px; }
+.gemit-bar__who strong { font-size: 15px; }
+.gemit-bar__sub { display: block; color: var(--muted); font: 11.5px/1.6 var(--font-mono); margin-top: 2px; }
+.gemit-bar__act { display: flex; gap: 8px; flex-wrap: wrap; }
+.gemit-btn { font: 600 12.5px var(--font-ui); letter-spacing: .02em; padding: 8px 15px; border-radius: var(--radius);
+  border: 1px solid var(--line); background: var(--raised); color: var(--ink); cursor: pointer; text-decoration: none;
+  display: inline-block; transition: .14s; }
+.gemit-btn:hover:not(:disabled) { border-color: var(--muted); }
+.gemit-btn:disabled { opacity: .5; cursor: default; }
+.gemit-btn--go { background: var(--accent); border-color: var(--accent); color: #fff; }
+.gemit-btn--go:hover:not(:disabled) { background: var(--accent-2); border-color: var(--accent-2); }
+.gemit-consent { margin: 10px 0; font-size: 13px; }
+.gemit-consent label { display: flex; gap: 8px; align-items: center; cursor: pointer; }
+.gemit-consent__what { color: var(--muted); font-size: 12px; margin: 6px 0 0; max-width: 78ch; }
+.gemit-published { display: flex; flex-wrap: wrap; gap: 10px 16px; align-items: center; margin: 12px 0;
+  padding: 12px 14px; background: var(--paper-2); border: 1px solid var(--line); border-radius: 7px; }
+.gemit-published a { color: var(--accent); }
+.gemit-share { display: flex; gap: 8px; flex-wrap: wrap; }
+.gemit-frame { width: 100%; height: 72vh; margin-top: 12px; border: 1px solid var(--line); border-radius: 7px; background: #fff; }
+.gemit-progress { height: 4px; background: var(--paper-2); border: 1px solid var(--line); border-radius: 999px; overflow: hidden; max-width: 420px; }
+.gemit-progress i { display: block; height: 100%; background: var(--accent); transition: width .9s linear; }
+.gemit-elapsed { font: 11.5px var(--font-mono); color: var(--muted); }
+.gemit-note { color: var(--muted); font-size: 12px; margin: 10px 0 0; max-width: 78ch; }

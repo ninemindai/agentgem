@@ -1183,4 +1183,36 @@ export const playMcpCandidateToolsRoute = defineRoute("GET", "/api/play/mcp/cand
   response: z.object({ tools: z.array(z.object({ name: z.string(), description: z.string().optional() })) }),
 });
 
+// Gemit — mirrors src/gemit.controller.ts. `html` arrives sealed (no share affordance
+// inside the document): the panel frames it in sandbox="allow-scripts" where a link could
+// not navigate anyway, and owns the real share buttons in its own React chrome.
+export const gemitReportRoute = defineRoute("GET", "/api/gemit/report", {
+  response: z.object({
+    html: z.string(),
+    insufficient: z.boolean(),
+    tier: z.string(),
+    composite: z.number(),
+    ctx: z.number(), proc: z.number(), setup: z.number(),
+    qualifyingSessions: z.number(), scoredSessions: z.number(), projects: z.number(),
+    windowFrom: z.string(), windowTo: z.string(),
+    bound: z.boolean(), login: z.string().nullable(),
+  }),
+});
+// Sub-second: enumerate-and-filter only, so the panel can say "scoring 150 of 5,873"
+// instead of showing an unlabelled spinner while /report walks every session.
+export const gemitWindowRoute = defineRoute("GET", "/api/gemit/window", {
+  response: z.object({ qualifyingSessions: z.number(), willScore: z.number() }),
+});
+export const gemitPublishRoute = defineRoute("POST", "/api/gemit/publish", {
+  body: z.object({ includeUsage: z.boolean() }),
+  response: z.object({
+    published: z.boolean(),
+    reason: z.string().nullable(),
+    shareUrl: z.string().nullable(),
+    x: z.string().nullable(),
+    linkedin: z.string().nullable(),
+    facebook: z.string().nullable(),
+  }),
+});
+
 export const makeClient = (apiBase: string): Client => createClient({ baseURL: apiBase });

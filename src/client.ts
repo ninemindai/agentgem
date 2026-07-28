@@ -16,6 +16,7 @@ import type { RestApplication } from "@agentback/rest";
 import { buildCommonApp, finalizeCommonApp, installGracefulShutdown, warmEnabled } from "@agentgem/app/appCommon";
 import { BenchmarkProxyController } from "@agentgem/app/benchmark.proxy.controller";
 import { AgentTasksController } from "@agentgem/app/agentTasks.controller";
+import { GemitController } from "./gemit.controller.js";
 import { startWarmSchedule } from "@agentgem/app/warm/schedule";
 import { readState } from "@agentgem/app/home/state";
 
@@ -28,6 +29,9 @@ export async function createClientApp(port: number): Promise<RestApplication> {
   // Settings for background agent tasks (report/distill/recommend/judge model+agent defaults) —
   // these tasks run locally in client mode too, so the picker must exist here as well.
   app.restController(AgentTasksController);
+  // The console's Gemit screen. Root-package controller (unlike the two above) because the
+  // gemit module it drives lives in this package and @agentgem/app must not depend on it.
+  app.restController(GemitController);
   // Same global originGuard + /healthz + console-serving + SSE routes as the server entry
   // (Task 5), registered after the controller step like createApp does with mountAggregator.
   finalizeCommonApp(app, server);

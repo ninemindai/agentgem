@@ -20,12 +20,13 @@ import { chatPage } from "./panels/Chat/index.js";
 import { watchPage } from "./panels/Watch/index.js";
 import { playPage } from "./panels/Play/index.js";
 import { arcadePage } from "./panels/Arcade/index.js";
+import { gemitPage } from "./panels/Gemit/index.js";
 import { reviewsPage } from "./panels/Reviews/index.js";
 import { extraPages } from "./extraPages.js";
 
 // Yours / Received / Get-more are folded into the single tabbed `gemsPage` (Variant B);
 // their component bodies are reused inside packages/console/src/panels/Gems/Gems.tsx.
-export const corePages: ConsolePage[] = [observePage, sessionsPage, recallPage, setupPage, watchPage, rubricsPage, dreamingPage, benchmarkPage, optimizePage, minePage, curatePage, materializePage, gemsPage, reviewsPage, sourcesPage, rubricLibraryPage, settingsPage, memoryPage, chatPage, playPage, arcadePage];
+export const corePages: ConsolePage[] = [observePage, sessionsPage, recallPage, setupPage, watchPage, rubricsPage, dreamingPage, benchmarkPage, optimizePage, minePage, curatePage, materializePage, gemsPage, reviewsPage, sourcesPage, rubricLibraryPage, settingsPage, memoryPage, chatPage, playPage, arcadePage, gemitPage];
 
 // The composed list the shell renders. corePages is the built-in set; extraPages
 // is empty here and swapped by a downstream build's esbuild onResolve plugin (see extraPages.ts).
