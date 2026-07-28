@@ -45,6 +45,9 @@ function deps(over: Record<string, unknown> = {}) {
       err: (l: string) => err.push(l),
       isTTY: true,
       nowMs: NOW,
+      // Pinned, because the real one probes http://127.0.0.1:4317 — without this the suite
+      // passes or fails depending on whether the developer happens to have the app running.
+      detectConsole: async () => null,
       ...over,
     },
   };
@@ -93,6 +96,30 @@ describe("runGemitCommand", () => {
     const doorway = deps({ compute: () => fakeData({ insufficient: true }) });
     await runGemitCommand(["--no-open"], doorway.deps);
     expect(doorway.out.join("\n")).not.toContain("agentgem gemit --share");
+  });
+
+  // A file:// report can never publish — signing needs the producer keypair, which a browser
+  // document cannot read — so when the app is running it is the better landing place.
+  describe("where it opens", () => {
+    it("opens the app's Gemit screen when a local console answers", async () => {
+      const h = deps({ detectConsole: async () => "http://127.0.0.1:4317" });
+      await runGemitCommand([], h.deps);
+      expect(h.opened).toEqual(["http://127.0.0.1:4317/#/gemit"]);
+      expect(h.out.join("\n")).toContain("Opening in the app: http://127.0.0.1:4317/#/gemit");
+    });
+
+    it("falls back to the file when no app is running", async () => {
+      const h = deps({ detectConsole: async () => null });
+      await runGemitCommand([], h.deps);
+      expect(h.opened).toEqual([h.writes[0].path]);
+      expect(h.out.join("\n")).not.toContain("Opening in the app");
+    });
+
+    it("still opens nothing under --no-open, app or not", async () => {
+      const h = deps({ detectConsole: async () => "http://127.0.0.1:4317" });
+      await runGemitCommand(["--no-open"], h.deps);
+      expect(h.opened).toEqual([]);
+    });
   });
 
   it("respects --no-open and non-TTY", async () => {

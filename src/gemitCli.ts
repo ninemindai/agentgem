@@ -27,6 +27,8 @@ Options:
   --out <file>     Report path (default: <agentgem-home>/reports/gemit-<date>.html)
   --theme <name>   Report theme (rpg)
   --no-open        Don't open the report in the browser
+                   (opens the app's Gemit screen when the local app is
+                   running — it can publish and share; otherwise the file)
   --share          Publish the report as an unlisted card on app.agentgem.ai
   --include-usage  With --share: also ship your coding agents and your
                    most-used skill/subagent names (off by default)
@@ -98,6 +100,8 @@ export interface GemitCliDeps {
   publish?: typeof postGemPublish;
   /** Interactive y/N prompt; only called on a TTY when --yes is absent. */
   confirm?: (question: string) => Promise<boolean>;
+  /** Base URL of a running local console, or null. Decides file:// vs the app's screen. */
+  detectConsole?: () => Promise<string | null>;
 }
 
 async function defaultEnsureBound(out: (l: string) => void): Promise<string | null> {
@@ -111,6 +115,23 @@ async function defaultEnsureBound(out: (l: string) => void): Promise<string | nu
   out(`  2. enter code: ${dc.userCode}`);
   const res = await completeDeviceBind(cfg, { deviceCode: dc.deviceCode, interval: dc.interval });
   return res.bound ? res.login : null;
+}
+
+// Is a local console listening? A `file://` report can never publish — signing needs the
+// producer keypair, which a browser document cannot read — so when the app IS running it is
+// the strictly better place to land: same card, plus a Publish button and live share links.
+// Best-effort and fast: a short timeout, and any failure just means "no app".
+export async function detectConsole(
+  fetchImpl: typeof fetch = fetch,
+  port: string | number = process.env.PORT ?? 4317,
+): Promise<string | null> {
+  const base = `http://127.0.0.1:${port}`;
+  try {
+    const res = await fetchImpl(`${base}/healthz`, { signal: AbortSignal.timeout(700) });
+    return res.ok ? base : null;
+  } catch {
+    return null; // not running, wrong port, or refused — the file is the fallback either way
+  }
 }
 
 async function defaultConfirm(question: string): Promise<boolean> {
@@ -217,6 +238,19 @@ export async function runGemitCommand(argv: string[], deps: GemitCliDeps = {}): 
     out(`  Facebook: ${urls.facebook}`);
   }
 
-  if (parsed.open && isTTY) (deps.open ?? openInBrowser)(outPath);
+  // Prefer the app when it is running. The file is still written and its path still printed —
+  // it is the durable local artifact — but the app's screen is the one that can actually
+  // publish and share, so landing there beats landing on a document whose only offer is a
+  // command to copy. It re-scores on arrival (it cannot trust numbers posted by a browser),
+  // which the panel reports with live session counts.
+  if (parsed.open && isTTY) {
+    const base = await (deps.detectConsole ?? detectConsole)();
+    if (base) {
+      out(`Opening in the app: ${base}/#/gemit`);
+      (deps.open ?? openInBrowser)(`${base}/#/gemit`);
+    } else {
+      (deps.open ?? openInBrowser)(outPath);
+    }
+  }
   return 0;
 }
