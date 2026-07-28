@@ -7,6 +7,47 @@ All notable changes to AgentGem are documented here. The format follows
 The npm core (`@ninemind/agentgem`) and the desktop app share a version number but
 are tagged separately: core releases are tagged `v*`, desktop releases `desktop-v*`.
 
+## [0.10.3] — `@ninemind/agentgem` (npm core) — 2026-07-28
+
+A performance release. Scoring your window used to re-do all of its work on every
+run, in every process: `agentgem gemit` with the app open scanned once in the CLI
+(~35s) and then again in the console (~21s) for byte-identical results. Three caches
+now make that work happen once.
+
+Measured on a 9,099-session machine:
+
+| | before | after |
+|---|---|---|
+| a transcript changed (an agent is running — the normal case) | 12.5s | **0.99s** |
+| nothing changed | 12.5s | **0.22s** |
+| the console's report, in a fresh process | 21.6s | **0.068s** |
+
+A first run on a cold machine still costs the full scan (~33s); the caches make the
+*second* and every later run cheap.
+
+### Changed
+
+- **Per-session scores are cached on disk** and shared across processes, keyed by the
+  session's identity plus the counters the scan already produced — so keying costs no
+  extra I/O, and any append to an append-only transcript moves the key.
+- **The session enumeration is persisted**, reusing the transcript token the in-memory
+  cache already used. A disk hit is exactly as fresh as a memory hit would have been.
+- **The per-file parse cache is persisted**, which is what makes a re-scan incremental
+  across processes: one session appended means one transcript re-parsed, not 9,099.
+
+  These live under `~/.agentgem/cache/` (a few MB for a large history) and are
+  disposable — deleting them costs one slow run, nothing else. Every failure path
+  (missing, malformed, unwritable) degrades to recomputation: a cache that cannot be
+  used never fails a scan. A custom `--dir` neither reads nor writes them.
+
+### Fixed
+
+- **The desktop app's packaged core no longer runs on a stale jsdom.** The runtime
+  pins for `express`, `cors` and `jsdom` were hardcoded in the packaging script and
+  two had rotted — jsdom sat at `^24` while the repo had moved to `^29`, because a
+  version living inside a `JSON.stringify` in a build script is invisible to a
+  dependency sweep. They are now derived rather than restated.
+
 ## [0.10.2] — `@ninemind/agentgem` (npm core) — 2026-07-28
 
 Supersedes 0.10.1, which was tagged but **never published to npm**: its release-tag
@@ -271,6 +312,19 @@ the cohort is real.
   `@electric-sql/pglite`, `pg`, `drizzle-orm`, `drizzle-zod`, `@agentback/drizzle`,
   `@anthropic-ai/sdk`.
 - The broken public Fly Deploy CI workflow.
+
+## [desktop-v0.10.3] — desktop app — 2026-07-28
+
+- **The packaged core's runtime pins are derived, not hardcoded.** `express`, `cors`
+  and `jsdom` are installed next to the bundle because they are reached through
+  runtime requires esbuild cannot inline; their ranges were restated in the packaging
+  script and drifted. The app was running the miniapp load-smoke on a jsdom two major
+  versions behind the repo, whose `engines` predates the Node the app requires.
+- The desktop app is a running local console, so it also benefits from the caching
+  above: `agentgem gemit` in a terminal lands on its Gemit screen in well under a
+  second instead of re-scanning everything.
+
+Embeds everything in core 0.10.3.
 
 ## [desktop-v0.10.2] — desktop app — 2026-07-28
 
