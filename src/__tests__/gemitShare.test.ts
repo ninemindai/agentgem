@@ -4,6 +4,7 @@
 // gem-archive round-trip with a signed digest, and the share/X URLs.
 import { describe, expect, it, vi } from "vitest";
 import { buildGemitShare, gemitShareUrls, GEMIT_SHARE_VERSION, shareVariantOf, standingClause } from "../gemit/share.js";
+import { GEMIT_CMD } from "../gemit/themeRpg.js";
 import { computeGemitData, type GemitData, type GemitScoredInput, type GemitSessionInput } from "../gemit/score.js";
 import { MIN_COHORT, type Cohort } from "../gemit/cohort.js";
 import { importGem } from "@agentgem/distribute";
@@ -145,6 +146,28 @@ describe("gemitShareUrls", () => {
     expect(x.startsWith("https://x.com/intent/post?text=")).toBe(true);
     expect(decodeURIComponent(x)).toContain(shareUrl);
     expect(decodeURIComponent(x)).toContain(`${data.composite}/100`);
+  });
+
+  // The post has to carry the invocation, not just the brag: a reader who has never
+  // installed anything is exactly who it is aimed at. npx-prefixed for the same reason the
+  // report's commands are, and single-sourced from GEMIT_CMD so the two cannot drift.
+  it("puts the npx command in the X text, before the URL so the card still unfurls", () => {
+    const { shareUrl, x } = gemitShareUrls("tester/gemit-2026-07-19", data);
+    const text = decodeURIComponent(new URL(x).searchParams.get("text")!);
+    expect(text).toContain(GEMIT_CMD);
+    expect(GEMIT_CMD.startsWith("npx ")).toBe(true);
+    // X unfurls the LAST link in a post, so the card URL must stay final
+    expect(text.trimEnd().endsWith(shareUrl)).toBe(true);
+    expect(text.indexOf(GEMIT_CMD)).toBeLessThan(text.indexOf(shareUrl));
+  });
+
+  // X counts any link as 23 chars regardless of length. Over the limit it silently
+  // truncates the prefill, which would eat the command — the one line that matters.
+  it("leaves the post inside X's 280-character limit, links counted as 23", () => {
+    const { shareUrl, x } = gemitShareUrls("a-fairly-long-github-handle/gemit-2026-07-19", data);
+    const text = decodeURIComponent(new URL(x).searchParams.get("text")!);
+    const weighted = text.replace(shareUrl, "x".repeat(23)).length;
+    expect(weighted).toBeLessThanOrEqual(280);
   });
 
   // LinkedIn's share-offsite and Facebook's sharer both take a URL and nothing else —
