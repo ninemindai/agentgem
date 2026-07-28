@@ -130,6 +130,21 @@ export const RUNTIME_JS = `(function () {
     });
   });
 
+  // The <label> only wraps the title line — roughly a 24px strip of a ~130px row — so a
+  // click anywhere else (the remedy text, the meter, the padding) hit nothing at all.
+  // Forward the whole row to the checkbox, minus the parts that own their clicks: the
+  // label already toggles natively (forwarding it too would double-toggle straight back),
+  // and the copy button and <code> must copy/select a command without ticking the quest.
+  Array.prototype.forEach.call(document.querySelectorAll(".quests li"), function (li) {
+    li.addEventListener("click", function (e) {
+      if (e.target.closest("label, button, code, a")) return;
+      var box = li.querySelector("input[type=checkbox]");
+      if (!box) return;
+      box.checked = !box.checked;
+      box.dispatchEvent(new Event("change", { bubbles: true }));
+    });
+  });
+
   Array.prototype.forEach.call(document.querySelectorAll(".quests input[type=checkbox]"), function (cb) {
     cb.addEventListener("change", function () {
       // Ticking a quest while measured ENTERS what-if rather than reverting the box.

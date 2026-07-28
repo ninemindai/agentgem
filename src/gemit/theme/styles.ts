@@ -77,6 +77,11 @@ ${themeAdapter("document")}
   ul.jutsu li:hover { transform: translateY(-1px); }
   .quests label { cursor: pointer; display: flex; gap: 8px; align-items: baseline; }
   .quests li.done { border-left-color: var(--gold); opacity: .75; }
+  /* the whole row toggles the quest, so the whole row has to read as clickable — the
+     children that own their own clicks opt back out */
+  .quests li { cursor: pointer; }
+  .quests li:hover { border-left-color: var(--gold); }
+  .quests li code { cursor: text; }
   .quests .chip { font-family: var(--mono); font-size: 11px; color: var(--gold); border: 1px solid var(--border); padding: 1px 7px; margin-left: 8px; font-weight: 400; }
   .quests .chip.assumed { color: color-mix(in srgb, var(--ink) 60%, transparent); }
   .meter { display: inline-block; width: 90px; height: 6px; background: var(--surface-2); border: 1px solid var(--border); vertical-align: middle; margin: 6px 6px 6px 0; }

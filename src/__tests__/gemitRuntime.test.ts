@@ -134,6 +134,49 @@ describe("RUNTIME_JS: a quest tick enters what-if", () => {
     for (const s of seen) if (s.proc !== "81") expect(s.mode).toBe("projected");
   });
 
+  // The earlier fix was verified with cb.click(), which targets the input directly and
+  // sails straight past the real problem: the <label> wraps only the title line, so ~81%
+  // of a ~130px quest row was dead to clicks. These drive the click at the ROW, the way a
+  // person does, rather than at the element the handler happens to be attached to.
+  it("toggles when the click lands on the row body, not just the title", () => {
+    const doc = mount();
+    const li = doc.querySelector(".quests li")!;
+    const cb = li.querySelector("input[type=checkbox]") as HTMLInputElement;
+    // the remedy paragraph — below the label, squarely in what used to be dead space
+    const remedy = li.querySelector("p, .meter-label, .remedy") ?? li;
+    remedy.dispatchEvent(new dom!.window.MouseEvent("click", { bubbles: true, cancelable: true }));
+
+    expect(cb.checked).toBe(true);
+    expect(li.classList.contains("done")).toBe(true);
+    expect(doc.getElementById("disc-mode")!.textContent).toBe("projected");
+  });
+
+  it("does not double-toggle when the click lands on the label itself", () => {
+    const doc = mount();
+    const li = doc.querySelector(".quests li")!;
+    const cb = li.querySelector("input[type=checkbox]") as HTMLInputElement;
+    // jsdom fires the native label->input activation; the row handler must not also fire,
+    // or the two toggles cancel and the quest looks dead again
+    (li.querySelector("label") as HTMLElement).dispatchEvent(
+      new dom!.window.MouseEvent("click", { bubbles: true, cancelable: true }));
+    expect(cb.checked).toBe(true);
+  });
+
+  // Copying the command out of a quest must not also tick it — the button and the <code>
+  // own their clicks.
+  it("leaves the quest untouched when the copy button or the command is clicked", () => {
+    const doc = mount();
+    const withCmd = [...doc.querySelectorAll(".quests li")].find((l) => l.querySelector(".cmd-copy"));
+    if (!withCmd) return; // fixture has no command-bearing quest; nothing to protect
+    const cb = withCmd.querySelector("input[type=checkbox]") as HTMLInputElement;
+    for (const sel of [".cmd-copy", "code"]) {
+      (withCmd.querySelector(sel) as HTMLElement).dispatchEvent(
+        new dom!.window.MouseEvent("click", { bubbles: true, cancelable: true }));
+      expect(cb.checked).toBe(false);
+    }
+    expect(doc.getElementById("disc-mode")!.textContent).toBe("measured");
+  });
+
   // Unticking is the inverse and must not toggle the MODE off — only the delta comes back
   // out. Leaving what-if stays the toggle button's job.
   it("unticking removes the delta but leaves what-if on", () => {
