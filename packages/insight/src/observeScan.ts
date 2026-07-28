@@ -7,9 +7,9 @@
 // boundary: reads usage, timestamps, model, type, cwd/id ONLY — never message
 // text (mirrors workflowScan.ts). Total functions: missing dirs / malformed
 // lines degrade to empty/skip, never throw.
-import { readdirSync } from "node:fs";
-import { join, basename, isAbsolute } from "node:path";
-import { normalizeProjectRoot } from "@agentgem/model";
+import { mkdirSync, readFileSync, readdirSync, renameSync, writeFileSync } from "node:fs";
+import { join, basename, dirname, isAbsolute } from "node:path";
+import { agentgemHome, normalizeProjectRoot } from "@agentgem/model";
 import { BUILTIN_SOURCES, type SourceSpec, clearParseCache } from "./sources.js";
 import { transcriptToken } from "./analysisCache.js";
 // The pure aggregation half (SessionStat + aggregateObserve + payload types) lives
@@ -157,6 +157,45 @@ function sessionScanToken(): string {
 }
 
 let _cache: { token: string; stats: SessionStat[] } | null = null;
+
+// Second tier: the same {token, stats} pair, persisted. The in-memory cache is per-process,
+// so every fresh `agentgem gemit` and every console restart paid the full scan again —
+// measured 12.5s for 9,099 sessions, while the serialized stats are 2.92 MB and parse in
+// 7ms. Persisting turns that into ~10ms and lets the CLI and the console share one scan.
+//
+// The validity contract is UNCHANGED: the same transcript token gates both tiers, so a disk
+// hit is exactly as fresh as a memory hit would have been. Only the default path is stored,
+// matching the in-memory rule that custom dirs are never cached.
+const scanCachePath = (): string => join(agentgemHome(), ".agentgem", "cache", "session-scan.json");
+
+// clearScanCache() is a test seam meaning "make the next scan real". Deleting the operator's
+// file to achieve that would be a destructive side-effect of running tests, so instead the
+// disk tier is disabled for the rest of the process.
+let _diskDisabled = false;
+
+function readDiskScan(token: string): SessionStat[] | null {
+  if (_diskDisabled) return null;
+  try {
+    const raw = JSON.parse(readFileSync(scanCachePath(), "utf8")) as { v?: number; token?: string; stats?: SessionStat[] };
+    if (raw?.v !== 1 || raw.token !== token || !Array.isArray(raw.stats)) return null;
+    return raw.stats;
+  } catch {
+    return null; // missing, unreadable or malformed — just a cold cache
+  }
+}
+
+function writeDiskScan(token: string, stats: SessionStat[]): void {
+  if (_diskDisabled) return;
+  try {
+    const path = scanCachePath();
+    mkdirSync(dirname(path), { recursive: true });
+    const tmp = `${path}.${process.pid}.tmp`;   // temp+rename: a reader never sees a partial file
+    writeFileSync(tmp, JSON.stringify({ v: 1, token, stats }));
+    renameSync(tmp, path);
+  } catch {
+    /* best-effort: an unwritable cache must never fail a scan */
+  }
+}
 /** Cached scan for the request path, keyed by a transcript token (not a timer): a
  *  fresh cache serves instantly and unchanged transcripts never trigger a re-scan,
  *  so the default screen stays warm across idle gaps. `refresh` (?refresh=true) forces
@@ -166,12 +205,17 @@ export async function scanSessionsCached(_nowMs?: number, dirs?: { claudeDir?: s
   if (dirs) return scanSessions(dirs);                       // custom dirs are never cached
   const token = sessionScanToken();
   if (!refresh && _cache && _cache.token === token) return _cache.stats;
+  if (!refresh) {
+    const fromDisk = readDiskScan(token);
+    if (fromDisk) { _cache = { token, stats: fromDisk }; return fromDisk; }
+  }
   const stats = await scanSessions();
   _cache = { token, stats };
+  writeDiskScan(token, stats);
   return stats;
 }
 /** Test seam: drop the whole-scan cache (and the underlying per-file parse cache). */
-export function clearScanCache(): void { _cache = null; clearParseCache(); }
+export function clearScanCache(): void { _cache = null; _diskDisabled = true; clearParseCache(); }
 
 /** True when the default-path scan cache matches the current transcripts. Lets the
  *  background warmer report hit-vs-warmed without re-scanning. */
