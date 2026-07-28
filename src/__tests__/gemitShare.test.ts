@@ -116,6 +116,21 @@ describe("buildGemitShare", () => {
   // Agent names are a fixed public vocabulary, not personal data — but the consent line
   // the CLI prints promises "scores, counts, window dates" and nothing more. Until an
   // opt-in widens that promise explicitly, agents stay out of the shipped card too.
+  it("keeps every usage list, and renders the section, under includeUsage", () => {
+    const kept = shareVariantOf(fixtureData(), { includeUsage: true });
+    expect(kept.topSkills).toEqual(["brainstorming"]);
+    expect(kept.topSubagents).toEqual(["Explore"]);
+    expect(kept.agents).toHaveLength(2);
+
+    const b = buildGemitShare({ data: fixtureData(), login: "tester", includeUsage: true });
+    expect(b.html).toContain("What You Reach For");
+    expect(b.html).toContain("brainstorming");
+    expect(b.html).toContain("claude");
+    // widening usage must not drag anything else along: the card is still link-free,
+    // because the sandbox constraint is orthogonal to the privacy one
+    expect(b.html).not.toMatch(/https?:\/\//);
+  });
+
   it("ships no coding-agent names either, and no empty usage heading", () => {
     expect(built.html).toContain('"agents":[]');
     expect(built.html).not.toContain("What You Reach For");

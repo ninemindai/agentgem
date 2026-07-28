@@ -19,20 +19,27 @@ const MARKETPLACE_BASE = "https://app.agentgem.ai"; // mirrors the Studio publis
 // The local report may name the operator's skills/subagents; the shared copy must
 // not (the theme embeds the full payload as a JSON island). Variety COUNTS stay —
 // they are what the perks derive from.
-export function shareVariantOf(data: GemitData): GemitData {
+export function shareVariantOf(data: GemitData, opts: { includeUsage?: boolean } = {}): GemitData {
   // `agents` joins the strip not because agent names are sensitive — they are a fixed
   // public vocabulary — but because the consent line the CLI prints promises "scores,
-  // counts, window dates" and nothing else. Widening that is an opt-in, and an opt-in
-  // has to change the consent text in the same breath.
+  // counts, window dates" and nothing else.
+  //
+  // includeUsage widens exactly this, and only when the operator asked for it on the
+  // command line. Project names and transcripts are NOT reachable from here under any
+  // flag — they never enter GemitData in the first place, so the remaining half of that
+  // promise is structural rather than a policy this function could relax.
+  if (opts.includeUsage) return { ...data };
   return { ...data, topSkills: [], topSubagents: [], agents: [] };
 }
 
 export function buildGemitShare(args: {
   data: GemitData;
   login: string;
+  /** Operator opted in (--include-usage) to shipping coding agents + skill/subagent names. */
+  includeUsage?: boolean;
   render?: (d: GemitData, opts?: RpgRenderOpts) => string;
 }): { gemKey: string; version: string; html: string; archiveBase64: string; manifest: CatalogManifest } {
-  const shareData = shareVariantOf(args.data);
+  const shareData = shareVariantOf(args.data, { includeUsage: args.includeUsage });
   // `sealed` — this copy is played inside the marketplace's `sandbox="allow-scripts"`
   // frame, where an outbound link cannot navigate. Share affordances belong on the local
   // report (which the CLI re-renders post-publish), never on the artifact that ships.
