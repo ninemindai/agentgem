@@ -62,6 +62,26 @@ function toInput(s: SessionStat): GemitSessionInput {
   };
 }
 
+// The window totals alone, without the slow part. collectGemitInputs spends nearly all its
+// time in the per-session summarize/hygiene loop below; enumerating and filtering only
+// needs the scan, which this shares via the same cache. Splitting it out lets a UI say
+// "scoring 150 of 5,870" instead of showing an unlabelled spinner for ~30s.
+//
+// Measured on a 5,870-session window: ~11s COLD (the scan cache has to be built) but
+// ~0.07-0.2s once warm. So a caller must still handle the cold case gracefully — this is
+// "much faster than scoring", not "instant".
+export async function countGemitWindow(
+  dir: string | undefined,
+  nowMs: number,
+  deps: CollectDeps = {},
+): Promise<{ qualifyingSessions: number; willScore: number }> {
+  const scan = deps.scan ?? ((dirs) => scanSessionsCached(nowMs, dirs));
+  const stats = await scan(dir ? { claudeDir: dir } : undefined);
+  const cutoff = nowMs - WINDOW_DAYS * 24 * 3600 * 1000;
+  const n = stats.filter((s) => s.endMs >= cutoff && s.endMs <= nowMs && s.msgs >= MIN_MSGS).length;
+  return { qualifyingSessions: n, willScore: Math.min(n, SAMPLE_CAP) };
+}
+
 export async function collectGemitInputs(
   dir: string | undefined,
   nowMs: number,
