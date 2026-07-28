@@ -7,6 +7,41 @@ All notable changes to AgentGem are documented here. The format follows
 The npm core (`@ninemind/agentgem`) and the desktop app share a version number but
 are tagged separately: core releases are tagged `v*`, desktop releases `desktop-v*`.
 
+## [0.10.1] — `@ninemind/agentgem` (npm core) — 2026-07-28
+
+Four commits behind 0.10.0, released the same day. The gemit report stops being a
+dead end for the thing people want to do with it, a Nostr key can be linked without
+a browser extension, and the console's 1150-test suite finally runs in CI.
+
+### Added
+
+- **`agentgem nostr link`** — link your Nostr npub to your account without a NIP-07
+  browser extension. The host holds both the account-bound session (from
+  `agentgem bind`) and the local Nostr secret, so it drives the same account
+  endpoints and signs the challenge with the local nsec. Co-location removes the
+  browser, not the consent: it is an explicit command, never a side-effect of
+  provisioning.
+
+### Changed
+
+- **`agentgem gemit` opens the app's Gemit screen when the local app is running.**
+  A `file://` report can never publish — signing needs the producer keypair, which
+  a browser document cannot read — so all it can offer is a command to copy. When
+  something answers on `127.0.0.1:$PORT/healthz`, the CLI opens `#/gemit` instead,
+  where Publish and the share links actually work. The report file is still written
+  and its path still printed, `--no-open` still opens nothing, and the chosen target
+  is printed so it is never ambiguous. The app re-scores on arrival, because it
+  cannot trust numbers posted by a browser.
+
+### Fixed
+
+- **`packages/console` is now gated by CI.** `pnpm test` runs the root config, which
+  covers `dist/__tests__` only, so the console's 1153 tests ran in neither repo — a
+  registry regression reached `main` through that gap and was caught days later by a
+  downstream sync. Adding the suite first required fixing why it exited non-zero:
+  jsdom has no `EventSource`, six panels open one, and the crash lands *after* the
+  awaiting test passes, so every assertion was green while the run failed.
+
 ## [0.10.0] — `@ninemind/agentgem` (npm core) — 2026-07-28
 
 The sharing release. `agentgem gemit` could already publish a card — it shipped in
@@ -212,6 +247,15 @@ the cohort is real.
   `@electric-sql/pglite`, `pg`, `drizzle-orm`, `drizzle-zod`, `@agentback/drizzle`,
   `@anthropic-ai/sdk`.
 - The broken public Fly Deploy CI workflow.
+
+## [desktop-v0.10.1] — desktop app — 2026-07-28
+
+No desktop-specific changes. Worth noting for desktop users specifically: because
+the desktop app *is* a running local console, `agentgem gemit` in a terminal now
+lands on its Gemit screen — with Publish and live share links — rather than on a
+static file.
+
+Embeds everything in core 0.10.1.
 
 ## [desktop-v0.10.0] — desktop app — 2026-07-28
 
