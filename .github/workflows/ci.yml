@@ -54,3 +54,13 @@ jobs:
       # tsc-compiled @agentgem/* dist to resolve, so order matters.
       - run: pnpm build
       - run: pnpm test
+      # `pnpm test` is `tsc -b && vitest run` on the ROOT config, which only covers
+      # dist/__tests__ — packages/console's 1150+ tests ran nowhere, in either repo. A
+      # registry regression reached main that way (gemitPage leaking into the locked rail,
+      # fixed in #563), caught days later by an unrelated downstream sync rather than here.
+      #
+      # Run via --filter so the package is the cwd: decrypt.test.ts resolves the server's
+      # seal.ts through process.cwd(), so invoking vitest with --root from the repo root
+      # silently fails to load it.
+      - run: pnpm --filter @agentgem/console typecheck
+      - run: pnpm --filter @agentgem/console test
