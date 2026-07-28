@@ -17,6 +17,13 @@ import { RUNTIME_JS } from "./theme/runtime.js";
 
 export const TIER_NAMES = ["Prospector", "Cutter", "Lapidary", "Master Lapidary"] as const;
 
+// The invocation shown to operators, single-sourced so the report and the CLI cannot
+// drift apart. `npx -y` is the only form that works for everyone: the report is normally
+// produced by `npx @ninemind/agentgem gemit`, so whoever reads it usually has no
+// `agentgem` on PATH at all — a bare `agentgem gemit --share` is a copy-paste that fails
+// with "command not found" for precisely the reader most likely to try it.
+export const GEMIT_CMD = "npx -y @ninemind/agentgem gemit";
+
 const TIER_FLAVOR = [
   "You're finding the veins.",
   "Clean breaks, most days.",
@@ -274,7 +281,7 @@ function shareRegion(opts: RpgRenderOpts): string {
       <h2>Share This Sheet</h2>
       <p>Publish an unlisted card &mdash; only scores, counts and window dates travel.
         Never your skills, subagents, project names or transcripts.</p>
-      <span class="cmd-line"><code>agentgem gemit --share</code><button type="button" class="cmd-copy">Copy</button></span>
+      <span class="cmd-line"><code>${GEMIT_CMD} --share</code><button type="button" class="cmd-copy">Copy</button></span>
     </section>`;
 }
 
@@ -299,7 +306,7 @@ ${RUNTIME_JS}</script>`;
       <h1 class="rank">No score yet</h1>
       <p class="conferred">Fewer than 5 substantial sessions in the last 30 days
         (found ${data.qualifyingSessions}). Steer a few agent sessions and run
-        <span class="mono">agentgem gemit</span> again &mdash; the sheet fills itself.</p>
+        <span class="mono">${GEMIT_CMD}</span> again &mdash; the sheet fills itself.</p>
     </header>` : `
     ${renderCard(data)}
     <div class="seam"><span>The Record Behind It</span></div>

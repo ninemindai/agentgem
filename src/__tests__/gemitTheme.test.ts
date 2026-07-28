@@ -6,7 +6,7 @@
 import { describe, expect, it } from "vitest";
 import { COHORT } from "../gemit/cohort.js";
 import type { GemitData } from "../gemit/score.js";
-import { TIER_NAMES, perksFor, questsFor, renderRpgTheme } from "../gemit/themeRpg.js";
+import { GEMIT_CMD, TIER_NAMES, perksFor, questsFor, renderRpgTheme } from "../gemit/themeRpg.js";
 
 function data(over: Partial<GemitData> = {}): GemitData {
   return {
@@ -370,11 +370,28 @@ describe("renderRpgTheme share surfaces", () => {
     facebook: "https://www.facebook.com/sharer/sharer.php?u=hi",
   };
 
+  // The report is normally produced by `npx @ninemind/agentgem gemit`, so its reader
+  // typically has NO `agentgem` binary on PATH. Every command the sheet offers to run must
+  // therefore be npx-prefixed — a bare `agentgem …` is a copy-paste that dies with
+  // "command not found" for exactly the person most likely to try it.
+  it("only ever offers npx-prefixed commands, never a bare agentgem binary", () => {
+    expect(GEMIT_CMD.startsWith("npx -y @ninemind/agentgem")).toBe(true);
+    for (const html of [
+      renderRpgTheme(data()),
+      renderRpgTheme(data({ insufficient: true, qualifyingSessions: 2 })),
+    ]) {
+      const cmds = [...html.matchAll(/<(?:code|span class="mono")>([^<]*agentgem[^<]*)<\//g)].map((m) => m[1].trim());
+      // guards against the assertion below going vacuous if the markup ever changes shape
+      expect(cmds.length).toBeGreaterThan(0);
+      for (const c of cmds) expect(c.startsWith("npx ")).toBe(true);
+    }
+  });
+
   it("offers the copyable publish command when the report has not been published", () => {
     const html = renderRpgTheme(data());
     expect(html).toContain("agentgem gemit --share");
     // reuses the existing .cmd-copy machinery rather than shipping a second copy handler
-    expect(html).toMatch(/<code>agentgem gemit --share<\/code><button type="button" class="cmd-copy">/);
+    expect(html).toContain(`<code>${GEMIT_CMD} --share</code><button type="button" class="cmd-copy">`);
   });
 
   it("swaps the command for real intent links once share links are supplied", () => {
@@ -383,7 +400,7 @@ describe("renderRpgTheme share surfaces", () => {
       expect(html).toContain(url);
     }
     // the CTA is replaced, not appended — a published sheet must not still say "run --share"
-    expect(html).not.toContain("<code>agentgem gemit --share</code>");
+    expect(html).not.toContain(`<code>${GEMIT_CMD} --share</code>`);
     // every outbound anchor opens away from the report and leaks no referrer
     for (const m of html.matchAll(/<a href="https:\/\/(?:x\.com|www\.linkedin|www\.facebook)[^"]*"([^>]*)>/g)) {
       expect(m[1]).toContain('target="_blank"');
