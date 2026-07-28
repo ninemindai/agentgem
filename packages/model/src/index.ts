@@ -13,6 +13,7 @@ export * from "./targets.js";
 export * from "./mcpProxy.js";
 export * from "./binPath.js";
 export * from "./identity.js";
+export * from "./nostrIdentity.js";
 export * from "./inputError.js";
 export * from "./resolveDir.js";
 export * from "./gitRoot.js";
