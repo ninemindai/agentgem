@@ -7,6 +7,25 @@ All notable changes to AgentGem are documented here. The format follows
 The npm core (`@ninemind/agentgem`) and the desktop app share a version number but
 are tagged separately: core releases are tagged `v*`, desktop releases `desktop-v*`.
 
+## [0.10.4] — `@ninemind/agentgem` (npm core) — 2026-07-28
+
+Supersedes 0.10.3, which was tagged but never published to npm. Everything in
+0.10.3 — the three caches and the desktop runtime-pin fix — plus one refactor.
+
+### Changed
+
+- **The disk caches use async fs.** They run inside the console server process, so
+  they no longer do synchronous file I/O on a request path. No behaviour change:
+  same temp+rename atomicity, same degrade-to-recompute on every failure path.
+
+  Recorded honestly, because it is easy to misread as an optimisation: it is not
+  one. Measured on the real 4.53 MB parse cache, `writeFileSync` blocked ~1.0ms and
+  `readFileSync` ~1.7ms, while `await writeFile` is *slower* in wall-clock (~4.8ms,
+  threadpool overhead). The dominant cost is JSON serialization at ~22.8ms, which is
+  CPU and blocks either way. This lands on the principle, not on a measurement that
+  demanded it. If that ~23ms ever matters, the fix is moving serialization off-thread
+  or storing a format that needs no full parse.
+
 ## [0.10.3] — `@ninemind/agentgem` (npm core) — 2026-07-28
 
 A performance release. Scoring your window used to re-do all of its work on every
@@ -312,6 +331,11 @@ the cohort is real.
   `@electric-sql/pglite`, `pg`, `drizzle-orm`, `drizzle-zod`, `@agentback/drizzle`,
   `@anthropic-ai/sdk`.
 - The broken public Fly Deploy CI workflow.
+
+## [desktop-v0.10.4] — desktop app — 2026-07-28
+
+No desktop-specific changes; supersedes the unpublished desktop-v0.10.3, whose
+runtime-pin fix and caching work this carries. Embeds everything in core 0.10.4.
 
 ## [desktop-v0.10.3] — desktop app — 2026-07-28
 
