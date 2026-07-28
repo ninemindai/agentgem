@@ -10,7 +10,7 @@
 import { mkdirSync, readFileSync, readdirSync, renameSync, writeFileSync } from "node:fs";
 import { join, basename, dirname, isAbsolute } from "node:path";
 import { agentgemHome, normalizeProjectRoot } from "@agentgem/model";
-import { BUILTIN_SOURCES, type SourceSpec, clearParseCache } from "./sources.js";
+import { BUILTIN_SOURCES, type SourceSpec, clearParseCache, loadParseCacheFromDisk, saveParseCacheToDisk } from "./sources.js";
 import { transcriptToken } from "./analysisCache.js";
 // The pure aggregation half (SessionStat + aggregateObserve + payload types) lives
 // in observeAggregate.ts so the browser can share it; re-export so existing
@@ -209,7 +209,11 @@ export async function scanSessionsCached(_nowMs?: number, dirs?: { claudeDir?: s
     const fromDisk = readDiskScan(token);
     if (fromDisk) { _cache = { token, stats: fromDisk }; return fromDisk; }
   }
+  // Default path only: hydrate the per-file parse cache before scanning so a re-scan
+  // re-reads just the transcripts that moved, then persist it for the next process.
+  loadParseCacheFromDisk();
   const stats = await scanSessions();
+  saveParseCacheToDisk();
   _cache = { token, stats };
   writeDiskScan(token, stats);
   return stats;

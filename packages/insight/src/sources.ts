@@ -5,10 +5,10 @@
 // outbound TargetSpec. FS-touching + returns SessionStat, so it lives here (Node), not in the
 // pure @agentgem/model. The DI extension point (SourceRegistry) is app-layer (see src/gem/sourceRegistry.ts).
 import { readFile, stat } from "node:fs/promises";
-import { readdirSync, existsSync } from "node:fs";
-import { join, basename } from "node:path";
+import { mkdirSync, readdirSync, existsSync, readFileSync, renameSync, writeFileSync } from "node:fs";
+import { join, basename, dirname } from "node:path";
 import { homedir } from "node:os";
-import { resolveDirs, makeProjectRootNormalizer } from "@agentgem/model";
+import { agentgemHome, resolveDirs, makeProjectRootNormalizer } from "@agentgem/model";
 import type { AgentBinding, GemArtifact } from "@agentgem/model";
 import { mapPool } from "@agentgem/base";
 import type { AgentId, SessionStat } from "./observeAggregate.js";
@@ -75,8 +75,50 @@ const READ_CONCURRENCY = 16;
 // by a size cap so it can't grow without limit as old transcripts come and go.
 const _parseCache = new Map<string, { mtimeMs: number; size: number; stat: SessionStat | null }>();
 const PARSE_CACHE_CAP = 20_000;
-/** Test seam: drop the incremental parse cache. */
-export function clearParseCache(): void { _parseCache.clear(); }
+/** Test seam: drop the incremental parse cache. Also disables the disk tier for the rest of
+ *  the process — a seam meaning "make the next parse real" must not be defeated by a file,
+ *  and must not delete the operator's cache to achieve that. */
+export function clearParseCache(): void { _parseCache.clear(); _parseDiskDisabled = true; }
+
+// Persisted tier for the parse cache. The in-memory map above already makes a re-scan
+// incremental — only files whose (mtime, size) moved are re-read — but it dies with the
+// process, so a fresh `agentgem gemit` re-parsed all 9,099 transcripts even though one had
+// changed. Persisting it makes the incrementality survive across processes, which is what
+// makes a re-scan on an ACTIVE machine cheap: one session appended, one file re-parsed.
+//
+// Loaded and saved only by the default-path scan (see observeScan.ts) — a custom-dir scan
+// must neither read nor write the operator's cache. Keys are absolute paths, so entries from
+// different roots could never collide even if they did.
+let _parseDiskDisabled = false;
+const parseCachePath = (): string => join(agentgemHome(), ".agentgem", "cache", "session-parse.json");
+
+interface ParseCacheFile { v: 1; entries: Record<string, { mtimeMs: number; size: number; stat: SessionStat | null }> }
+
+/** Merge the persisted entries in. Never throws: an unusable cache is simply a cold one. */
+export function loadParseCacheFromDisk(): void {
+  if (_parseDiskDisabled || _parseCache.size > 0) return;   // memory wins; never re-read mid-process
+  try {
+    const raw = JSON.parse(readFileSync(parseCachePath(), "utf8")) as ParseCacheFile;
+    if (raw?.v !== 1 || !raw.entries) return;
+    for (const [path, e] of Object.entries(raw.entries)) {
+      if (typeof e?.mtimeMs === "number" && typeof e.size === "number") _parseCache.set(path, e);
+    }
+  } catch { /* cold */ }
+}
+
+/** Persist the current map. Atomic (temp + rename) and best-effort: failing to save a cache
+ *  must never fail a scan. */
+export function saveParseCacheToDisk(): void {
+  if (_parseDiskDisabled) return;
+  try {
+    const path = parseCachePath();
+    mkdirSync(dirname(path), { recursive: true });
+    const file: ParseCacheFile = { v: 1, entries: Object.fromEntries(_parseCache) };
+    const tmp = `${path}.${process.pid}.tmp`;
+    writeFileSync(tmp, JSON.stringify(file));
+    renameSync(tmp, path);
+  } catch { /* best-effort */ }
+}
 
 async function scanJsonl(files: string[], parse: (t: string, p: string, normalize?: (cwd: string) => string) => SessionStat | null): Promise<SessionStat[]> {
   // One normalizer per scan: thousands of transcripts share a handful of cwds, so

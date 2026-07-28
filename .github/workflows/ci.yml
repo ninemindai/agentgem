@@ -64,3 +64,6 @@ jobs:
       # silently fails to load it.
       - run: pnpm --filter @agentgem/console typecheck
       - run: pnpm --filter @agentgem/console test
+      # Same gap, same fix: packages/insight has its own vitest config (src/**/*.test.ts)
+      # and is not reachable from the root include either, so its 75+ tests ran nowhere.
+      - run: pnpm --filter @agentgem/insight test
