@@ -6,6 +6,36 @@
 // plain string (not serialized TS) because it touches the DOM. Count-up + bar-fill mean
 // early screenshots show low numbers — same pre-delay caveat as the PR-1 stat bars.
 export const RUNTIME_JS = `(function () {
+  // Tell an embedding host how tall we actually are. The marketplace plays a published
+  // card in a fixed-height frame, so the Quest Log sits below a fold inside a nested
+  // scroller — a host that listens to this can size to content and leave the page as the
+  // only scroller instead.
+  //
+  // Deliberately NOT a bespoke message: this is the same MCP Apps notification the miniapp
+  // client already emits (packages/play/src/mcpAppClient.ts), so a host that already
+  // handles miniapp sizing handles this card for free. Inert when unembedded, and harmless
+  // when nobody is listening — postMessage to an indifferent parent is a no-op.
+  if (window.parent && window.parent !== window) {
+    var reportSize = function () {
+      var h = document.documentElement.scrollHeight, w = window.innerWidth;
+      // The very first observation can land before layout settles and measure 0x0. A host
+      // that trusted it would size the frame to nothing and hide the card, so never send a
+      // degenerate size — the ResizeObserver will fire again with the real one.
+      if (!h || !w) return;
+      try {
+        window.parent.postMessage({
+          jsonrpc: "2.0", method: "ui/notifications/size-changed",
+          params: { width: w, height: h },
+        }, "*");
+      } catch (e) { /* sealed or gone — nothing to do */ }
+    };
+    // The sheet's height changes as the count-up settles and what-if reveals rows, so a
+    // one-shot measurement would under-report. Observe, and report once up front for hosts
+    // that render before any mutation happens.
+    try { new ResizeObserver(reportSize).observe(document.documentElement); } catch (e) { /* no RO */ }
+    reportSize();
+  }
+
   var dataEl = document.getElementById("gemit-data");
   if (!dataEl) return;
   var D = JSON.parse(dataEl.textContent);

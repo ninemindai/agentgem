@@ -63,6 +63,40 @@ function mount(over: Partial<GemitData> = {}) {
 // the count-up/confetti/tween paths run exactly as they do for a non-reduced-motion
 // visitor. That's what these tests want: confetti assertions need reduced === false.
 
+// The published card is played in a fixed-height frame, so its Quest Log sits below a
+// fold inside a nested scroller. Reporting our height lets a host size to content — but
+// only if we speak the notification hosts already implement, hence the drift guard.
+describe("RUNTIME_JS: height reporting to an embedding host", () => {
+  it("emits the MCP Apps size notification, guarded to embedded documents", () => {
+    const html = renderRpgTheme(data());
+    expect(html).toContain("ui/notifications/size-changed");
+    expect(html).toContain("window.parent !== window");   // no-op when opened directly
+    expect(html).toContain("document.documentElement.scrollHeight");
+  });
+
+  // Caught in a real sandboxed frame: the first observation can land before layout settles
+  // and measure 0x0. A host that trusted it would size the frame to nothing and hide the
+  // card entirely — a worse failure than the fixed height this exists to fix.
+  it("never reports a degenerate 0 size", () => {
+    expect(renderRpgTheme(data())).toContain("if (!h || !w) return;");
+  });
+
+  // The SHIPPED card is the one in a fixed frame, so this must survive the sealed render.
+  it("keeps the reporter in the sealed copy that ships as the card", () => {
+    expect(renderRpgTheme(data(), { sealed: true })).toContain("ui/notifications/size-changed");
+  });
+
+  // Drift guard: a bespoke message would need bespoke host support. Assert the card uses
+  // the SAME method string the miniapp client emits, so any host that already sizes
+  // miniapps sizes this card for free.
+  it("uses the identical notification the miniapp client already emits", async () => {
+    const { mcpAppClient } = await import("@agentgem/play");
+    const method = "ui/notifications/size-changed";
+    expect(mcpAppClient()).toContain(method);
+    expect(renderRpgTheme(data())).toContain(method);
+  });
+});
+
 describe("RUNTIME_JS: measured mode is read-only", () => {
   it("a bar keyboard interaction does not mutate the value, mode, or fire confetti", () => {
     const doc = mount();
