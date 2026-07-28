@@ -28,6 +28,8 @@ Options:
   --theme <name>   Report theme (rpg)
   --no-open        Don't open the report in the browser
   --share          Publish the report as an unlisted card on app.agentgem.ai
+  --include-usage  With --share: also ship your coding agents and your
+                   most-used skill/subagent names (off by default)
   --yes, -y        Skip the pre-publish confirmation
   -h, --help       Show this help
 
@@ -35,7 +37,9 @@ Scores the last 30 days (context discipline · process quality · setup maturity
 with the same deterministic detectors the console uses. Local only — nothing
 leaves this machine unless you pass --share, which uploads ONLY the rendered
 report (scores, counts, window dates — no skill/subagent names, no project
-names, no transcripts) after showing you exactly what ships.`;
+names, no transcripts) after showing you exactly what ships. Adding
+--include-usage also ships your coding agents and most-used skill/subagent
+names; project names and transcripts never ship under any flag.`;
 
 export interface GemitArgs {
   dir?: string;
@@ -45,17 +49,19 @@ export interface GemitArgs {
   help: boolean;
   share: boolean;
   yes: boolean;
+  includeUsage: boolean;
 }
 
 const THEMES = ["rpg"];
 
 export function parseGemitArgs(argv: string[]): GemitArgs | { error: string } {
-  const args: GemitArgs = { theme: "rpg", open: true, help: false, share: false, yes: false };
+  const args: GemitArgs = { theme: "rpg", open: true, help: false, share: false, yes: false, includeUsage: false };
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i];
     if (a === "-h" || a === "--help") args.help = true;
     else if (a === "--no-open") args.open = false;
     else if (a === "--share") args.share = true;
+    else if (a === "--include-usage") args.includeUsage = true;
     else if (a === "-y" || a === "--yes") args.yes = true;
     else if (a === "--dir" || a === "--out" || a === "--theme") {
       const v = argv[i + 1];
@@ -68,6 +74,11 @@ export function parseGemitArgs(argv: string[]): GemitArgs | { error: string } {
   }
   if (!THEMES.includes(args.theme)) {
     return { error: `unknown theme '${args.theme}' (available: ${THEMES.join(", ")})` };
+  }
+  // Alone it does nothing — the local report always shows usage. Rejecting beats silently
+  // accepting a flag the operator believes widened (or restricted) something.
+  if (args.includeUsage && !args.share) {
+    return { error: "--include-usage only applies with --share" };
   }
   return args;
 }
@@ -168,14 +179,18 @@ export async function runGemitCommand(argv: string[], deps: GemitCliDeps = {}): 
       err("gemit: publishing requires a GitHub bind (agentgem bind).");
       return 1;
     }
-    const built = buildGemitShare({ data, login });
+    const built = buildGemitShare({ data, login, includeUsage: parsed.includeUsage });
     const sharePath = outPath.replace(/\.html$/, "") + ".share.html";
     write(sharePath, built.html);
     out("");
     out("Ready to publish an UNLISTED card (visible only via its link):");
     out(`  ${built.manifest.description}`);
     out(`  Card: ${built.gemKey} v${built.version} — exact file that ships: ${sharePath}`);
-    out("  Ships: scores, counts, window dates. Never: skill/subagent names, projects, transcripts.");
+    // The consent line moves WITH the flag. A widening that leaves the old promise on
+    // screen is worse than no disclosure — the operator would be reading a false one.
+    out(parsed.includeUsage
+      ? "  Ships: scores, counts, window dates, your coding agents, and your most-used skill/subagent names. Never: projects, transcripts."
+      : "  Ships: scores, counts, window dates. Never: coding agents, skill/subagent names, projects, transcripts.");
     if (!parsed.yes) {
       const okay = await (deps.confirm ?? defaultConfirm)("Publish? [y/N] ");
       if (!okay) {

@@ -51,17 +51,20 @@ function deps(over: Record<string, unknown> = {}) {
 
 describe("parseGemitArgs", () => {
   it("parses defaults and flags", () => {
-    expect(parseGemitArgs([])).toEqual({ theme: "rpg", open: true, help: false, share: false, yes: false });
+    expect(parseGemitArgs([])).toEqual({ theme: "rpg", open: true, help: false, share: false, yes: false, includeUsage: false });
     expect(parseGemitArgs(["--dir", "/x", "--out", "r.html", "--no-open"])).toEqual({
-      theme: "rpg", open: false, help: false, share: false, yes: false, dir: "/x", out: "r.html",
+      theme: "rpg", open: false, help: false, share: false, yes: false, includeUsage: false, dir: "/x", out: "r.html",
     });
     expect(parseGemitArgs(["--share", "--yes"])).toMatchObject({ share: true, yes: true });
+    expect(parseGemitArgs(["--share", "--include-usage"])).toMatchObject({ share: true, includeUsage: true });
     expect(parseGemitArgs(["-y"])).toMatchObject({ yes: true });
     expect(parseGemitArgs(["-h"])).toMatchObject({ help: true });
   });
   it("rejects unknown themes, options, and missing values", () => {
     expect(parseGemitArgs(["--theme", "vaporwave"])).toMatchObject({ error: expect.stringContaining("vaporwave") });
     expect(parseGemitArgs(["--wat"])).toMatchObject({ error: expect.stringContaining("--wat") });
+    // alone it would silently do nothing — the local report always shows usage
+    expect(parseGemitArgs(["--include-usage"])).toMatchObject({ error: expect.stringContaining("--include-usage") });
     expect(parseGemitArgs(["--dir"])).toMatchObject({ error: expect.stringContaining("--dir") });
   });
 });
@@ -160,6 +163,27 @@ describe("runGemitCommand", () => {
       expect(local[1].content).not.toContain("<code>agentgem gemit --share</code>");
       expect(local[1].content).toContain("x.com/intent/post");
       expect(local[1].content).toContain("linkedin.com/sharing/share-offsite");
+    });
+
+    // The widening is opt-in, and its disclosure has to move with it. A flag that ships
+    // more while the screen still reads "Never: skill/subagent names" would be a false
+    // promise — worse than no disclosure at all.
+    it("ships usage names and says so, only under --include-usage", async () => {
+      const off = shareDeps();
+      await runGemitCommand(["--share", "--no-open"], off.deps);
+      const offCard = off.writes.find((w) => w.path.endsWith(".share.html"))!;
+      expect(offCard.content).not.toContain("secret-skill");
+      expect(off.out.join("\n")).toContain("Never: coding agents, skill/subagent names");
+
+      const on = shareDeps();
+      await runGemitCommand(["--share", "--include-usage", "--no-open"], on.deps);
+      const onCard = on.writes.find((w) => w.path.endsWith(".share.html"))!;
+      expect(onCard.content).toContain("secret-skill");
+      expect(onCard.content).toContain("secret-agent");
+      const said = on.out.join("\n");
+      expect(said).toContain("your most-used skill/subagent names");
+      expect(said).not.toContain("Never: coding agents"); // the old promise is gone, not stacked
+      expect(said).toContain("Never: projects, transcripts.");
     });
 
     // Regression guard for the sandbox trap: the marketplace plays the card in
