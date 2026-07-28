@@ -7,6 +7,83 @@ All notable changes to AgentGem are documented here. The format follows
 The npm core (`@ninemind/agentgem`) and the desktop app share a version number but
 are tagged separately: core releases are tagged `v*`, desktop releases `desktop-v*`.
 
+## [0.10.0] — `@ninemind/agentgem` (npm core) — 2026-07-28
+
+The sharing release. `agentgem gemit` could already publish a card — it shipped in
+0.9.0 — but a plain run never said so, ending at `Report: <path>`, so the publish
+path read as if it did not exist. 14 commits make sharing a thing you can find,
+finish, and understand: the CLI names the path, the report grows a share region,
+the console grows a **Gemit screen** that scores and publishes without leaving the
+app, and everything the report offers you to run is `npx`-prefixed — because the
+reader of a report produced by `npx @ninemind/agentgem gemit` has no `agentgem`
+binary on their PATH.
+
+Alongside that, the quest log became genuinely clickable (it wasn't), what you
+actually reach for is now on the card behind an explicit opt-in, and the identity
+layer grew a second, separate keypair for the Nostr-facing surface.
+
+### Added
+
+- **The publish path has a name.** A scored `agentgem gemit` run now prints
+  `Publish & share: npx -y @ninemind/agentgem gemit --share`, suppressed on the
+  insufficient-data doorway and during `--share` itself.
+- **LinkedIn and Facebook** alongside X. `gemitShareUrls` returns
+  `{shareUrl, x, linkedin, facebook}`. Both new networks accept a URL and nothing
+  else — they compose their preview from the `/games` OG card and drop any text —
+  so the tier/score line still rides on X alone.
+- **A share region in the report**: a copyable command before publishing, real
+  intent links after. The CLI re-renders the local report post-publish so the file
+  it opens carries live links rather than a stale call to action.
+- **The X post carries the invocation**, not just the score — the reader most
+  likely to act on it is the one who has installed nothing. Placed before the URL
+  so the card still unfurls, and length-budgeted (X weights any link at 23 chars).
+- **"What You Reach For"** — coding agents with session counts, most-used skills,
+  and most-used subagents. `topSkills`/`topSubagents` were computed since the
+  first gemit release but never rendered; `agents` is a new aggregate.
+- **`--include-usage`** opts into shipping those names on the published card. The
+  consent line moves *with* the flag rather than beside it — a widening that left
+  the old promise on screen would be a false one.
+- **A Gemit screen in the local console** (`#/gemit`): score the window, read the
+  card in a sealed frame, publish it, and share it without leaving the app. A
+  button inside the generated HTML is impossible — publishing signs the manifest
+  with the local producer keypair, which a `file://` document can never read — so
+  the affordance lives where a server already runs. Progress names the work
+  ("Scoring 150 of 5,870 qualifying sessions") via a `/window` route that
+  enumerates without scoring.
+- **The card reports its height** to an embedding host using the MCP Apps
+  `ui/notifications/size-changed` notification the miniapp client already emits,
+  so a host that sizes miniapps sizes this card for free.
+- **Nostr (secp256k1) identity** — `loadOrCreateNostrIdentity` alongside the
+  ed25519 attestation identity: a BIP-340 Schnorr keypair with npub/nsec (NIP-19),
+  NIP-01 event signing and verification. A **separate** key on a different curve;
+  the two never interconvert. Same file hardening (0600, symlink-guarded,
+  `O_NOFOLLOW`, race-safe), since the secret is a bearer credential.
+
+### Changed
+
+- **Every command the report offers is `npx`-prefixed**, single-sourced through
+  one `GEMIT_CMD` constant shared by the report, the doorway and the CLI. The old
+  `agentgem gemit --share` died with "command not found" for precisely the reader
+  most likely to copy it.
+- **The console's usage opt-in defaults on**, where the consent line sits directly
+  beneath the checkbox and moves with it. The CLI keeps the opposite default:
+  `--include-usage` stays an explicit opt-in because a terminal flag has no
+  always-visible disclosure to pair with it.
+- The published card is rendered **sealed** — no share affordance at all. The
+  marketplace plays it in `sandbox="allow-scripts"` with neither `allow-popups`
+  nor `allow-top-navigation`, so any link there is silently unclickable, and a
+  dead button is worse than no button.
+
+### Fixed
+
+- **The quest log responds to clicks.** Ticking a quest was blocked and silently
+  reverted unless "What if?" was already on, which read as broken rather than
+  gated; it now enters the mode. And the tick was only reachable on a 528×24
+  `<label>` inside a 562×129 row — roughly 81% of every quest was dead to clicks.
+  The whole row now toggles, minus the copy button and command, which own theirs.
+- **Gemit joins the console rail like its siblings** (`hiddenUntilUnlock`), which
+  also stops a group leaking into the locked rail — that rail is foreground-only.
+
 ## [0.9.0] — `@ninemind/agentgem` (npm core) — 2026-07-27
 
 The focus release: AgentGem is a **local-first developer tool**. `npx agentgem`
@@ -135,6 +212,15 @@ the cohort is real.
   `@electric-sql/pglite`, `pg`, `drizzle-orm`, `drizzle-zod`, `@agentback/drizzle`,
   `@anthropic-ai/sdk`.
 - The broken public Fly Deploy CI workflow.
+
+## [desktop-v0.10.0] — desktop app — 2026-07-28
+
+No desktop-specific changes this cycle. The app gains the release's console work
+by embedding it: the **Gemit screen** (`#/gemit`) — score your last 30 days, read
+the card, publish it, and share it to X / LinkedIn / Facebook without leaving the
+app — plus the console rail fix that keeps Gemit hidden until the console unlocks.
+
+Embeds everything in core 0.10.0.
 
 ## [desktop-v0.9.0] — desktop app — 2026-07-27
 
