@@ -73,26 +73,79 @@ describe("RUNTIME_JS: measured mode is read-only", () => {
     expect(doc.getElementById("confetti")!.children.length).toBe(0);
   });
 
-  it("a quest checkbox change does not mutate the value or fire confetti, and reverts the box", () => {
+  it("the projection readout and auto-solve button stay hidden while only bars are touched", () => {
     const doc = mount();
+    const track = doc.querySelector('.disc[data-axis="ctx"] .track') as HTMLElement;
+    track.dispatchEvent(new dom!.window.KeyboardEvent("keydown", { key: "ArrowRight", bubbles: true, cancelable: true }));
+    expect(doc.querySelector(".tg-rank")!.hasAttribute("hidden")).toBe(true);
+    expect(doc.getElementById("tg-solve")!.hasAttribute("hidden")).toBe(true);
+  });
+});
+
+// A quest tick used to be blocked-and-reverted while measured. That made the checkbox
+// read as broken: it has no disabled state and no cursor change, so the only feedback
+// was the tick vanishing. Ticking a quest IS the what-if gesture, so it now enters the
+// mode. The read-only invariant survives — see the "measured" assertion below.
+describe("RUNTIME_JS: a quest tick enters what-if", () => {
+  it("switches the mode, applies the delta, and marks the quest done from measured", () => {
+    const doc = mount();
+    expect(doc.getElementById("disc-mode")!.textContent).toBe("measured"); // precondition
+
     const cb = doc.querySelector(".quests input[type=checkbox]") as HTMLInputElement;
     const li = cb.closest("li")!;
     cb.checked = true;
     cb.dispatchEvent(new dom!.window.Event("change", { bubbles: true }));
-    expect(cb.checked).toBe(false); // guard reverts it — no "checked but did nothing" ghost state
-    expect(li.classList.contains("done")).toBe(false);
-    expect(doc.querySelector('.disc[data-axis="proc"] .tg-val')!.textContent).toBe("81");
-    expect(doc.getElementById("disc-mode")!.textContent).toBe("measured");
-    expect(doc.getElementById("confetti")!.children.length).toBe(0);
+
+    expect(cb.checked).toBe(true);                       // the tick sticks — no ghost revert
+    expect(li.classList.contains("done")).toBe(true);
+    expect(doc.getElementById("disc-mode")!.textContent).toBe("projected");
+    expect(doc.querySelector(".wi")!.getAttribute("aria-pressed")).toBe("true");
+    expect(doc.querySelector('.disc[data-axis="proc"] .tg-val')!.textContent).toBe("85"); // 81 + 4
+    expect(doc.querySelector(".tg-rank")!.hasAttribute("hidden")).toBe(false);
+    expect(doc.getElementById("tg-solve")!.hasAttribute("hidden")).toBe(false);
   });
 
-  it("the projection readout and auto-solve button stay hidden throughout", () => {
+  // The load-bearing invariant the old block-and-revert existed to protect: a number must
+  // never move while the page still says "measured". Entering the mode first preserves it.
+  // Intercepts the write itself rather than observing after the fact: MutationObserver
+  // callbacks are async microtasks in jsdom and would not have run before the assertions.
+  // This records the mode readout at the exact instant each value write lands.
+  it("never leaves a moved number labelled 'measured'", () => {
+    const doc = mount();
+    const procVal = doc.querySelector('.disc[data-axis="proc"] .tg-val')!;
+    const seen: Array<{ mode: string; proc: string }> = [];
+    let raw = procVal.textContent!;
+    Object.defineProperty(procVal, "textContent", {
+      configurable: true,
+      get: () => raw,
+      set: (v: string) => {
+        raw = v;
+        seen.push({ mode: doc.getElementById("disc-mode")!.textContent!, proc: v });
+      },
+    });
+
+    const cb = doc.querySelector(".quests input[type=checkbox]") as HTMLInputElement;
+    cb.checked = true;
+    cb.dispatchEvent(new dom!.window.Event("change", { bubbles: true }));
+
+    expect(seen.length).toBeGreaterThan(0);            // the write actually happened
+    expect(seen.some((s) => s.proc !== "81")).toBe(true); // and it actually moved
+    for (const s of seen) if (s.proc !== "81") expect(s.mode).toBe("projected");
+  });
+
+  // Unticking is the inverse and must not toggle the MODE off — only the delta comes back
+  // out. Leaving what-if stays the toggle button's job.
+  it("unticking removes the delta but leaves what-if on", () => {
     const doc = mount();
     const cb = doc.querySelector(".quests input[type=checkbox]") as HTMLInputElement;
     cb.checked = true;
     cb.dispatchEvent(new dom!.window.Event("change", { bubbles: true }));
-    expect(doc.querySelector(".tg-rank")!.hasAttribute("hidden")).toBe(true);
-    expect(doc.getElementById("tg-solve")!.hasAttribute("hidden")).toBe(true);
+    cb.checked = false;
+    cb.dispatchEvent(new dom!.window.Event("change", { bubbles: true }));
+
+    expect(doc.querySelector('.disc[data-axis="proc"] .tg-val')!.textContent).toBe("81");
+    expect(doc.getElementById("disc-mode")!.textContent).toBe("projected");
+    expect(cb.closest("li")!.classList.contains("done")).toBe(false);
   });
 });
 
