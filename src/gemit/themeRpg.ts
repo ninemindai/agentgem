@@ -102,20 +102,52 @@ export function questsFor(d: GemitData): Quest[] {
     Math.max(1, setupScoreFrom({ ...d, ...patch }, SETUP_WEIGHTS) - setupNow);
   const quests: Quest[] = [];
   const boundedPct = d.scoredSessions ? Math.round((100 * d.verdicts.bounded) / d.scoredSessions) : 0;
+
+  // COVERAGE quests, generated from the score itself rather than from locked perks.
+  //
+  // SETUP is 70% coverage (does a session reach for a skill / a subagent at ALL) and only
+  // 30% variety (how many distinct ones exist). The perk thresholds below are variety-only,
+  // so an operator who has installed plenty can unlock both setup perks, receive NO setup
+  // quest, and still score in the thirties — the report names a weakness and then offers
+  // nothing to do about it. That is a real report: 61 skills, 7 subagents, both variety
+  // terms maxed, skills reached for in 5% of sessions, setup 33, zero setup quests.
+  //
+  // Targets are the next meaningful step, not perfection: coverage is the dominant term, so
+  // a modest move is worth more than maxing either variety cap.
+  const coverage = (
+    id: string, title: string, now: number, target: number, patch: Partial<GemitData>,
+    remedy: string, unit: string,
+  ): void => {
+    if (!canExact || now >= target) return;
+    const delta = exactDelta(patch);
+    if (delta < 1) return;
+    quests.push({ id, title, axis: "setup", delta, exact: true, remedy,
+      meter: { now, target, label: `${now}/${target}% ${unit}` } });
+  };
+
+  coverage("setup-skill-coverage", "Reach for a skill more often",
+    d.skillSessionsPct ?? 0, 25, { skillSessionsPct: 25 },
+    `You have ${d.skillVariety} skill${d.skillVariety === 1 ? "" : "s"} available and invoke one in ` +
+    `${d.skillSessionsPct ?? 0}% of sessions. Installing more moves this least; using what you have moves it most.`,
+    "of sessions use a skill");
+
+  coverage("setup-subagent-coverage", "Delegate to a subagent more often",
+    d.subagentSessionsPct ?? 0, 20, { subagentSessionsPct: 20 },
+    `Subagents appear in ${d.subagentSessionsPct ?? 0}% of your sessions. Hand off exploration, review and ` +
+    "bulk reads — the work multiplies without the context window paying for it.",
+    "of sessions delegate");
   for (const p of locked) {
     if (p.name === "Shadow Clones") quests.push({
       id: "perk-shadow-clones", title: "Unlock Shadow Clones", axis: "setup",
       delta: canExact ? exactDelta({ subagentVariety: 5 }) : 3, exact: canExact,
       remedy: "Adopt more subagent types — delegate exploration, review, and bulk reads.",
       meter: { now: d.subagentVariety, target: 5, label: `${d.subagentVariety}/5 subagent types` },
-      cmd: "npx -y @ninemind/agentgem",
     });
     else if (p.name === "Scroll Mastery") quests.push({
       id: "perk-scroll-mastery", title: "Unlock Scroll Mastery", axis: "setup",
       delta: canExact ? exactDelta({ skillVariety: 8 }) : 3, exact: canExact,
       remedy: "Install and invoke more skills — the book fights better than improvisation.",
       meter: { now: d.skillVariety, target: 8, label: `${d.skillVariety}/8 skills` },
-      cmd: "npx -y @ninemind/agentgem",
     });
     else if (p.name === "Second Look") quests.push({
       id: "perk-second-look", title: "Unlock Second Look", axis: "proc", delta: 4, exact: false,

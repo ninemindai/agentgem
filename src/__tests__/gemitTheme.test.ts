@@ -99,6 +99,53 @@ describe("questsFor", () => {
   });
 });
 
+
+// SETUP is 70% coverage and 30% variety, but quests derived only from locked perks, and the
+// perks measure variety alone. An operator with plenty installed could unlock both setup
+// perks, get NO setup quest, and still score in the thirties: the report named a weakness
+// and then offered nothing to do about it. Taken from a real payload — 61 skills, 7
+// subagents, both variety terms maxed, skills reached for in 5% of sessions, setup 33.
+describe("setup coverage quests", () => {
+  const maxedVariety = (over: Partial<GemitData> = {}) => data({
+    skillVariety: 61, subagentVariety: 7,          // both variety caps exceeded
+    skillSessionsPct: 5, subagentSessionsPct: 4,   // but almost nothing reaches for them
+    ...over,
+  });
+
+  it("offers setup quests even when every setup perk is already unlocked", () => {
+    const qs = questsFor(maxedVariety());
+    const setup = qs.filter((q) => q.axis === "setup");
+    expect(setup.length).toBeGreaterThan(0);
+    expect(setup.map((q) => q.id)).toContain("setup-skill-coverage");
+  });
+
+  it("weights the dominant term: skill coverage beats subagent coverage", () => {
+    const byId = Object.fromEntries(questsFor(maxedVariety()).map((q) => [q.id, q]));
+    expect(byId["setup-skill-coverage"].delta)
+      .toBeGreaterThan(byId["setup-subagent-coverage"].delta);
+  });
+
+  it("states the gap in the operator's own numbers, and is exact rather than assumed", () => {
+    const q = questsFor(maxedVariety()).find((x) => x.id === "setup-skill-coverage")!;
+    expect(q.exact).toBe(true);                       // recomputed, not guessed
+    expect(q.meter).toEqual({ now: 5, target: 25, label: "5/25% of sessions use a skill" });
+    expect(q.remedy).toContain("61 skill");           // names what they already have
+  });
+
+  it("stays quiet once coverage is past the target, so it cannot nag a strong operator", () => {
+    const qs = questsFor(maxedVariety({ skillSessionsPct: 40, subagentSessionsPct: 30 }));
+    expect(qs.filter((q) => q.axis === "setup")).toEqual([]);
+  });
+
+  // The old setup quests shipped `npx -y @ninemind/agentgem`, which says "open the app"
+  // rather than what to do. A user reported exactly that confusion.
+  it("no longer tells the operator to launch the console as the remedy", () => {
+    for (const q of questsFor(data({ skillVariety: 2, subagentVariety: 1 }))) {
+      if (q.axis === "setup") expect(q.cmd).toBeUndefined();
+    }
+  });
+});
+
 describe("interactive layer", () => {
   it("renders discipline sliders, quest log, and the sim script", () => {
     const html = renderRpgTheme(data());
