@@ -42,6 +42,26 @@ export function listFiles(dir: string, suffix: string): string[] {
   return out;
 }
 
+// No agent transcript can predate the agents that write them, so anything older than this
+// is corruption: a zeroed default, an absent field stamped at the Unix epoch, or a foreign
+// file that merely happens to carry a `timestamp` key.
+//
+// It has to be REJECTED rather than merely tolerated, because startMs/endMs are
+// Math.min/Math.max reductions over every record — one bad row does not nudge an average,
+// it becomes the boundary of the session, and then of the whole history. A single
+// epoch-stamped record shipped "20664 days" (exactly epoch-to-today) to the reveal's usage
+// ledger while sessions/tokens/engaged-time all stayed believable, because those are sums.
+const MIN_PLAUSIBLE_TS_MS = Date.UTC(2023, 0, 1);
+
+/** A record's timestamp in ms, or null when absent, unparseable, or implausible.
+ *  `Date.parse` is far too permissive to be its own validity test — it maps "0" to the
+ *  year 2000 and "1970-01-01" to 0, and `!Number.isNaN()` accepts both. */
+function plausibleTsMs(raw: unknown): number | null {
+  if (typeof raw !== "string") return null;
+  const ts = Date.parse(raw);
+  return Number.isNaN(ts) || ts < MIN_PLAUSIBLE_TS_MS ? null : ts;
+}
+
 // --- per-session usage capture (tools / skills / subagents), folded into the scan walk ---
 const bump = (rec: Record<string, number>, key: string | undefined): void => {
   if (key) rec[key] = (rec[key] ?? 0) + 1;
@@ -86,8 +106,8 @@ export function parseClaudeTranscript(text: string, path: string, normalize: Nor
     const type = rec.type as string | undefined;
     if (typeof rec.cwd === "string") cwd = rec.cwd;
     if (typeof rec.gitBranch === "string" && rec.gitBranch) gitBranch = rec.gitBranch;
-    const ts = typeof rec.timestamp === "string" ? Date.parse(rec.timestamp) : NaN;
-    if (!Number.isNaN(ts)) { startMs = Math.min(startMs, ts); endMs = Math.max(endMs, ts); tsList.push(ts); }
+    const ts = plausibleTsMs(rec.timestamp);
+    if (ts !== null) { startMs = Math.min(startMs, ts); endMs = Math.max(endMs, ts); tsList.push(ts); }
     if (type === "user" || type === "assistant") msgs++;
     const msg = rec.message as Record<string, unknown> | undefined;
     // Fix 2: skip the <synthetic> sentinel — it is not a real model name.
@@ -112,7 +132,20 @@ export function parseClaudeTranscript(text: string, path: string, normalize: Nor
       }
     }
   }
-  if (!sessionId || endMs < startMs) return null;
+  // A conversation needs at least one user/assistant turn. This is what separates a real
+  // transcript from a foreign .jsonl: the scan walks EVERY *.jsonl under ~/.claude/projects
+  // (unlike the Codex and Gemini sources, which prefix-filter their own stores), and that
+  // tree is the one third-party tooling actually writes into — a hook's
+  // skill-injections.jsonl, a workflow run's journal.jsonl. Those carry a `timestamp` key
+  // per row, so they used to parse into phantom sessions that inflated the session count
+  // and fed arbitrary timestamps into the startMs/endMs extrema behind the reveal's "N days".
+  //
+  // Deliberately a CONTENT test, not a filename allowlist: matching `<uuid>.jsonl` plus
+  // `agent-<hex>.jsonl` (the two real shapes) would go stale the moment Claude renames
+  // anything, and silently drop real sessions — a far worse failure than counting a
+  // phantom. Measured over a 8,731-file store, this separates the two sets exactly:
+  // all 8,729 transcripts have turns, both foreign files have none.
+  if (!sessionId || endMs < startMs || msgs === 0) return null;
   return { agent: "claude", sessionId, project: projectLabel(cwd, normalize), cwd, model, gitBranch, startMs, endMs, engagedMs: engagedMsFromTimestamps(tsList), msgs, tokensIn, tokensOut, tokensCache, ...usageFields(tools, skills, subagents) };
 }
 
@@ -123,8 +156,8 @@ export function parseCodexTranscript(text: string, path: string, normalize: Norm
   let total: Record<string, number> | null = null;   // cumulative; keep the last seen
   const tools: Record<string, number> = {};
   for (const rec of jsonLines(text)) {
-    const ts = typeof rec.timestamp === "string" ? Date.parse(rec.timestamp) : NaN;
-    if (!Number.isNaN(ts)) { startMs = Math.min(startMs, ts); endMs = Math.max(endMs, ts); tsList.push(ts); }
+    const ts = plausibleTsMs(rec.timestamp);
+    if (ts !== null) { startMs = Math.min(startMs, ts); endMs = Math.max(endMs, ts); tsList.push(ts); }
     const payload = rec.payload as Record<string, unknown> | undefined;
     if (rec.type === "session_meta" && payload) {
       if (typeof payload.id === "string") sessionId = payload.id;
