@@ -77,6 +77,39 @@ describe("HomeController.summary", () => {
     expect(out.gate.claudeBelowGate).toBe(true); // 2 < 10
   });
 
+  // The reveal's usage ledger renders spanDays as "N days". Because it is
+  // (max endMs - min startMs), it is the ONLY stat on that ledger derived from extrema
+  // rather than a sum — so one corrupt record poisons it alone while sessions/tokens/
+  // activeMs stay believable. A Unix-epoch timestamp shipped "20664 days" to users.
+  it("a Unix-epoch record in one transcript does not blow spanDays up to epoch-to-today", async () => {
+    claudeSession("proj-a", "s1", { startIso: "2026-07-01T00:00:00Z", endIso: "2026-07-01T00:10:00Z" });
+    // A second transcript carrying a corrupt epoch stamp alongside real ones.
+    const dir = join(home, ".claude", "projects", "proj-a");
+    writeFileSync(join(dir, "0f9c1a2b-3d4e-5f60-7a81-92b3c4d5e6f7.jsonl"), [
+      JSON.stringify({ type: "user", timestamp: "1970-01-01T00:00:00.000Z", cwd: "/home/u/proj-a", message: { content: "hi" } }),
+      JSON.stringify({ type: "user", timestamp: "2026-07-03T00:00:00Z", cwd: "/home/u/proj-a", message: { content: "hi" } }),
+      JSON.stringify({ type: "assistant", timestamp: "2026-07-03T00:05:00Z", message: { model: "claude-opus-4-8", content: [{ type: "text", text: "ok" }] } }),
+    ].join("\n") + "\n");
+
+    const out = await new HomeController().summary();
+    expect(out.usage.sessions).toBe(2);           // the transcript is still a session...
+    expect(out.usage.spanDays).toBe(2);           // ...but dated 2026-07-01 -> 2026-07-03
+  });
+
+  it("does not count a plugin's own .jsonl log in the projects tree as a session", async () => {
+    claudeSession("proj-a", "s1", { startIso: "2026-07-01T00:00:00Z", endIso: "2026-07-01T00:10:00Z" });
+    // A real example: a hook that logs skill injections next to the transcripts. Every
+    // record has a `timestamp`, so it used to parse cleanly into a phantom session.
+    writeFileSync(join(home, ".claude", "projects", "proj-a", "skill-injections.jsonl"), [
+      JSON.stringify({ timestamp: "2026-03-28T05:45:09.357Z", event: "inject", matchedSkills: [] }),
+      JSON.stringify({ timestamp: "2026-03-28T05:46:09.357Z", event: "inject", matchedSkills: [] }),
+    ].join("\n") + "\n");
+
+    const out = await new HomeController().summary();
+    expect(out.usage.sessions).toBe(1);
+    expect(out.claudeSessions).toBe(1);
+  });
+
   it("flips claudeBelowGate at the 9→10 Claude-session boundary", async () => {
     for (let i = 0; i < CLAUDE_GATE_MIN_SESSIONS - 1; i++) {
       claudeSession("proj-b", `s${i}`, { startIso: `2026-07-01T00:0${i}:00Z`, endIso: `2026-07-01T00:0${i}:30Z` });
