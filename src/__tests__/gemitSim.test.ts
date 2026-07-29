@@ -85,4 +85,22 @@ describe("setupScoreFrom mirrors score.ts", () => {
     expect(d.subagentSessionsPct).toBe(20);
     expect(setupScoreFrom(d, SETUP_WEIGHTS)).toBe(d.setup);
   });
+
+  // The point above pins one profile. Variety is now a curve rather than a ratio, so sweep
+  // the magnitudes too — including well past the retired caps of 10 skills / 5 subagents,
+  // where a stale linear copy would sit at a flat 100 and still agree with nothing.
+  it("agrees across the range, not just at one point", () => {
+    const mk = (i: number, skills: string[], subs: string[]): GemitSessionInput => ({
+      sessionId: `s${i}`, agent: "claude", endMs: Date.UTC(2026, 6, 19) - (i + 1) * 3600_000, msgs: 20,
+      tokensOut: 100, skillNames: skills, subagentNames: subs, projectKey: "p",
+    });
+    const name = (n: number): string[] => Array.from({ length: n }, (_, k) => `t${k}`);
+    for (const [skills, subs] of [[1, 0], [4, 2], [12, 6], [30, 9], [61, 7]]) {
+      // 10 sessions, every one carrying the tools, so the percents stay exact at 100%.
+      const qualifying = Array.from({ length: 10 }, (_, i) => mk(i, name(skills), name(subs)));
+      const d = computeGemitData(qualifying, [], Date.UTC(2026, 6, 19));
+      expect(d.skillVariety).toBe(skills);
+      expect(setupScoreFrom(d, SETUP_WEIGHTS)).toBe(d.setup);
+    }
+  });
 });

@@ -10,6 +10,8 @@
 // module-level refs, no closures; they MAY call each other by name (revived into
 // one shared scope). setupScoreFrom is render-time only (not serialized).
 
+import { SKILL_VARIETY_CAP, SUBAGENT_VARIETY_CAP, varietyScore } from "./score.js";
+
 export interface SimWeights { ctx: number; proc: number; setup: number }
 
 export function projectComposite(ctx: number, proc: number, setup: number, w: SimWeights): number {
@@ -53,8 +55,13 @@ export interface SetupFieldsShape { skillSessionsPct: number; subagentSessionsPc
 
 // Mirrors score.ts's SETUP formula from the payload's aggregate fields; exact when the
 // percents are exact (cross-checked against computeGemitData in gemitSim.test.ts).
+// Imports are safe HERE only because setupScoreFrom is not serialized into the page — simSrc
+// carries projectComposite / tierFor / autoSolvePath alone, and those stay self-contained.
+// Sharing varietyScore with score.ts is deliberate: a second copy of the curve would drift,
+// and a drifted copy makes every quest's "+N" a lie.
 export function setupScoreFrom(f: SetupFieldsShape, sw: SetupWeightsShape): number {
   return Math.round(100 * Math.min(1,
     sw.sessions * (f.skillSessionsPct / 100) + sw.subSessions * (f.subagentSessionsPct / 100) +
-    sw.variety * Math.min(1, f.skillVariety / 10) + sw.subVariety * Math.min(1, f.subagentVariety / 5)));
+    sw.variety * varietyScore(f.skillVariety, SKILL_VARIETY_CAP) +
+    sw.subVariety * varietyScore(f.subagentVariety, SUBAGENT_VARIETY_CAP)));
 }
