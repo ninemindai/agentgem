@@ -25,6 +25,15 @@ export interface SkillArtifact {
   source: string;
   content: string;
   trigger?: TriggerContract;
+  // Sibling files a progressive-disclosure skill depends on (references/*.md,
+  // scripts/*.mjs), each path RELATIVE to the skill directory and never
+  // containing "..". A SKILL.md that says "read references/loop.md" is worse than
+  // useless without them — it instructs the agent to open a file that isn't there.
+  files?: { path: string; content: string }[];
+  // True when `files` is known-incomplete: a bound was hit, a sibling was a type
+  // we don't carry, or the listing failed so completeness couldn't be confirmed.
+  // Never silently drop — a partial bundle must announce itself.
+  filesTruncated?: boolean;
 }
 
 // A Claude Code subagent — a `.claude/agents/<name>.md` definition (frontmatter +
