@@ -11,6 +11,22 @@
  *  the type stays `string` so the pure aggregation layer needs no registry dependency. */
 export type AgentId = string;
 
+/** Idle-gap cap for engaged-time: a single gap between two consecutive records
+ *  contributes at most this. Strips human-away stretches while still counting
+ *  genuine work up to the cap. */
+export const ENGAGED_GAP_CAP_MS = 5 * 60_000; // 5 minutes
+
+/** Engaged (compute) time for one session: the sum of gaps between consecutive
+ *  record timestamps, each capped at `capMs`. Input need not be sorted. A long
+ *  idle gap therefore adds only `capMs`, not its full span. */
+export function engagedMsFromTimestamps(timestamps: number[], capMs = ENGAGED_GAP_CAP_MS): number {
+  if (timestamps.length < 2) return 0;
+  const t = timestamps.slice().sort((a, b) => a - b);
+  let sum = 0;
+  for (let i = 1; i < t.length; i++) sum += Math.min(t[i] - t[i - 1], capMs);
+  return sum;
+}
+
 export interface SessionStat {
   agent: AgentId;
   sessionId: string;
@@ -20,6 +36,10 @@ export interface SessionStat {
   gitBranch: string | null; // top-level gitBranch from Claude records; null for Codex
   startMs: number;
   endMs: number;
+  // Engaged (compute) time in ms — sum of capped record-to-record gaps
+  // (ENGAGED_GAP_CAP_MS). Optional: older/foreign stats omit it, and consumers
+  // fall back to the wall-clock span (endMs - startMs) when absent.
+  engagedMs?: number;
   msgs: number;
   tokensIn: number;         // fresh input (cache excluded)
   tokensOut: number;        // output (+ reasoning for codex)
