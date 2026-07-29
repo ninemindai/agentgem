@@ -6,7 +6,7 @@ import { mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
-import { parseGemitArgs, runGemitCommand } from "../gemitCli.js";
+import { bindPrompt, parseGemitArgs, readConfirmAnswer, runGemitCommand } from "../gemitCli.js";
 import { GEMIT_CMD } from "../gemit/themeRpg.js";
 import type { GemitData } from "../gemit/score.js";
 
@@ -70,6 +70,49 @@ describe("parseGemitArgs", () => {
     // alone it would silently do nothing — the local report always shows usage
     expect(parseGemitArgs(["--include-usage"])).toMatchObject({ error: expect.stringContaining("--include-usage") });
     expect(parseGemitArgs(["--dir"])).toMatchObject({ error: expect.stringContaining("--dir") });
+  });
+});
+
+// The console offers a "Copy code & open GitHub" button. The CLI printed instructions and
+// then went quiet for five minutes, which is how a real user wandered off and timed out.
+describe("bindPrompt", () => {
+  const dc = { verificationUri: "https://github.com/login/device", userCode: "5BBE-1972" };
+
+  it("opens the verification page on a TTY, and still prints the code", () => {
+    const p = bindPrompt(dc, true);
+    expect(p.open).toBe(dc.verificationUri);
+    // The code must survive on screen: a refused opener or a browserless box loses nothing.
+    expect(p.lines.join("\n")).toContain("5BBE-1972");
+    expect(p.lines.join("\n")).toContain("Opening https://github.com/login/device");
+  });
+
+  it("never opens a browser off a TTY, and tells the operator to open it themselves", () => {
+    const p = bindPrompt(dc, false);
+    expect(p.open).toBeNull();
+    expect(p.lines.join("\n")).toContain("Open https://github.com/login/device");
+    expect(p.lines.join("\n")).toContain("5BBE-1972");
+  });
+
+  it("says the wait is bounded and that the report is already safe", () => {
+    const said = bindPrompt(dc, true).lines.join("\n");
+    expect(said).toContain("up to 5 minutes");
+    expect(said).toContain("report is already saved");
+  });
+});
+
+describe("readConfirmAnswer", () => {
+  it("accepts the obvious yeses and noes, case and whitespace insensitive", () => {
+    for (const y of ["y", "Y", "yes", " YES ", "Yes"]) expect(readConfirmAnswer(y)).toBe(true);
+    for (const n of ["n", "N", "no", " No "]) expect(readConfirmAnswer(n)).toBe(false);
+  });
+
+  // The field bug: a keystroke buffered during the multi-minute device-flow wait was consumed
+  // as the answer, and "not yes" was read as "no" — a silent Not published and a wasted re-run.
+  // Ambiguous input must mean "ask again", never "decline on the operator's behalf".
+  it("treats a stray or empty answer as unanswered, not as no", () => {
+    for (const stray of ["", "  ", "\n", "yy", "sure", "1", "q"]) {
+      expect(readConfirmAnswer(stray)).toBeNull();
+    }
   });
 });
 
@@ -213,6 +256,55 @@ describe("runGemitCommand", () => {
       expect(said).not.toContain("Never: coding agents"); // the old promise is gone, not stacked
       expect(said).toContain("Never: projects, transcripts.");
     });
+
+
+  // Reported from the field: the bind timed out and the CLI printed a Node stack trace, which
+  // reads like a crash rather than "you didn't finish signing in". The report is already on
+  // disk at that point, so the operator must be told the scan wasn't wasted.
+  describe("bind failures are outcomes, not crashes", () => {
+    it("reports a failed bind without throwing, and points at the report it already wrote", async () => {
+      const h = shareDeps({ ensureBound: async () => null });
+      const code = await runGemitCommand(["--share", "--no-open"], h.deps);
+      expect(code).toBe(1);
+      const said = h.err.join("\n");
+      expect(said).toContain("needs a GitHub bind");
+      expect(said).toContain(h.writes[0].path);   // the report survives the failure
+      expect(said).not.toMatch(/\bat async\b/);   // never a stack trace
+      expect(h.published).toHaveLength(0);
+    });
+  });
+
+  // Also from the field: keystrokes made during the multi-minute device-flow wait sit in the
+  // terminal buffer and are consumed the instant the prompt opens. Treating an unrecognised
+  // answer as "no" turned that into a silent "Not published." and a wasted re-run.
+  describe("the publish confirm distinguishes 'no' from a stray keystroke", () => {
+    const answering = (...replies: string[]) => {
+      const seen: string[] = [];
+      return {
+        seen,
+        confirm: async (q: string) => {
+          seen.push(q);
+          const next = replies.shift() ?? "";
+          if (/^y(es)?$/i.test(next)) return true;
+          if (/^n(o)?$/i.test(next)) return false;
+          return undefined as unknown as boolean; // caller re-asks
+        },
+      };
+    };
+
+    it("publishes when the operator says yes", async () => {
+      const h = shareDeps({ confirm: async () => true });
+      expect(await runGemitCommand(["--share", "--no-open"], h.deps)).toBe(0);
+      expect(h.published).toHaveLength(1);
+    });
+
+    it("does not publish when the operator says no", async () => {
+      const h = shareDeps({ confirm: async () => false });
+      expect(await runGemitCommand(["--share", "--no-open"], h.deps)).toBe(0);
+      expect(h.published).toHaveLength(0);
+      expect(h.out.join("\n")).toContain("Not published");
+    });
+  });
 
     // Regression guard for the sandbox trap: the marketplace plays the card in
     // `sandbox="allow-scripts"`, so links in the SHIPPED copy cannot navigate.
