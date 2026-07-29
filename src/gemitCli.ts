@@ -104,17 +104,52 @@ export interface GemitCliDeps {
   detectConsole?: () => Promise<string | null>;
 }
 
-async function defaultEnsureBound(out: (l: string) => void): Promise<string | null> {
+/** What the operator sees when a bind is needed, and whether we open the page for them.
+ *  The console's ConnectGitHub button copies the code and opens the browser; the CLI used to
+ *  print instructions and go silent for five minutes, which is how a real user wandered off
+ *  and hit the timeout. Pure, so the decision is testable without a network or a terminal. */
+export function bindPrompt(
+  dc: { verificationUri: string; userCode: string },
+  isTTY: boolean,
+): { lines: string[]; open: string | null } {
+  const lines = [
+    "Publishing needs a one-time GitHub bind (once, then never again):",
+    "",
+    `    code:  ${dc.userCode}`,
+    "",
+    isTTY
+      ? `  Opening ${dc.verificationUri} — paste the code there and authorize.`
+      : `  Open ${dc.verificationUri} and enter that code.`,
+    "  Waiting up to 5 minutes. Ctrl-C to stop; your report is already saved.",
+  ];
+  // Never launch a browser off a TTY: that is CI, a pipe, or the desktop host, where an
+  // opener is either useless or actively wrong.
+  return { lines, open: isTTY ? dc.verificationUri : null };
+}
+
+export async function defaultEnsureBound(
+  out: (l: string) => void,
+  isTTY = Boolean(process.stdout.isTTY),
+  openBrowser: (t: string) => void = openInBrowser,
+): Promise<string | null> {
   const { readBindingStatus, bindConfig, startDeviceBind, completeDeviceBind } = await import("@agentgem/app/bind/bindCore");
   const st = readBindingStatus();
   if (st.bound && st.login) return st.login;
   const cfg = bindConfig();
   const dc = await startDeviceBind(cfg);
-  out("Publishing needs a one-time GitHub bind:");
-  out(`  1. open ${dc.verificationUri}`);
-  out(`  2. enter code: ${dc.userCode}`);
-  const res = await completeDeviceBind(cfg, { deviceCode: dc.deviceCode, interval: dc.interval });
-  return res.bound ? res.login : null;
+  const prompt = bindPrompt(dc, isTTY);
+  prompt.lines.forEach(out);
+  if (prompt.open) openBrowser(prompt.open);
+  try {
+    const res = await completeDeviceBind(cfg, { deviceCode: dc.deviceCode, interval: dc.interval });
+    return res.bound ? res.login : null;
+  } catch (e) {
+    // pollForToken throws on the 5-minute deadline, on access_denied, and on an expired
+    // code. Letting that escape printed a Node stack trace for the ordinary case of
+    // "didn't finish signing in yet", which reads like a crash rather than a timeout.
+    out(`Bind not completed: ${e instanceof Error ? e.message.replace(/^device flow: /, "") : String(e)}`);
+    return null;
+  }
 }
 
 // Is a local console listening? A `file://` report can never publish — signing needs the
@@ -134,11 +169,32 @@ export async function detectConsole(
   }
 }
 
+// Anything the operator typed during an earlier blocking step — notably the multi-minute
+// device-flow wait — is still sitting in the terminal buffer when this prompt opens, and
+// readline consumes it as the answer. Treating an unrecognised answer as "no" turned that
+// stray keystroke into a silent "Not published.", so the whole scan had to be re-run. An
+// answer that is not clearly yes or no now re-asks instead of deciding for the operator.
+/** yes / no / "say that again". Split out from the prompt loop so the rule that a stray
+ *  newline is NOT a "no" is directly testable, without a terminal. */
+export function readConfirmAnswer(raw: string): boolean | null {
+  const a = raw.trim();
+  if (/^y(es)?$/i.test(a)) return true;
+  if (/^n(o)?$/i.test(a)) return false;
+  return null;
+}
+
 async function defaultConfirm(question: string): Promise<boolean> {
   const { createInterface } = await import("node:readline/promises");
   const rl = createInterface({ input: process.stdin, output: process.stdout });
-  try { return /^y(es)?$/i.test((await rl.question(question)).trim()); }
-  finally { rl.close(); }
+  try {
+    for (let attempt = 0; attempt < 3; attempt++) {
+      const answer = readConfirmAnswer(await rl.question(question));
+      if (answer !== null) return answer;
+      // Empty (a buffered newline) or unrecognised: say so and ask again.
+      rl.write("Please answer y or n.\n");
+    }
+    return false; // three unusable answers: fail closed, since publishing is the risky side
+  } finally { rl.close(); }
 }
 
 export async function runGemitCommand(argv: string[], deps: GemitCliDeps = {}): Promise<number> {
@@ -197,9 +253,13 @@ export async function runGemitCommand(argv: string[], deps: GemitCliDeps = {}): 
       err("gemit: --share needs a terminal to confirm (or pass --yes).");
       return 2;
     }
-    const login = await (deps.ensureBound ?? defaultEnsureBound)(out);
+    const login = await (deps.ensureBound ?? ((o: (l: string) => void) => defaultEnsureBound(o, isTTY, deps.open ?? openInBrowser)))(out);
     if (!login) {
-      err("gemit: publishing requires a GitHub bind (agentgem bind).");
+      // The report is already written at this point, so say so: the scan is not wasted and
+      // a re-run picks up the cached scores rather than re-scanning from scratch.
+      err("gemit: publishing needs a GitHub bind. Your report is still at:");
+      err(`  ${outPath}`);
+      err("Re-run `npx -y @ninemind/agentgem gemit --share` when you're ready to finish signing in.");
       return 1;
     }
     const built = buildGemitShare({ data, login, includeUsage: parsed.includeUsage });
