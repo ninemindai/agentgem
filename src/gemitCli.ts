@@ -109,7 +109,7 @@ export interface GemitCliDeps {
  *  print instructions and go silent for five minutes, which is how a real user wandered off
  *  and hit the timeout. Pure, so the decision is testable without a network or a terminal. */
 export function bindPrompt(
-  dc: { verificationUri: string; userCode: string },
+  dc: { verificationUri: string; userCode: string; expiresInSec: number },
   isTTY: boolean,
 ): { lines: string[]; open: string | null } {
   const lines = [
@@ -120,11 +120,48 @@ export function bindPrompt(
     isTTY
       ? `  Opening ${dc.verificationUri} — paste the code there and authorize.`
       : `  Open ${dc.verificationUri} and enter that code.`,
-    "  Waiting up to 5 minutes. Ctrl-C to stop; your report is already saved.",
+    `  Waiting up to ${Math.round(dc.expiresInSec / 60)} minutes. Ctrl-C to stop; your report is already saved.`,
   ];
   // Never launch a browser off a TTY: that is CI, a pipe, or the desktop host, where an
   // opener is either useless or actively wrong.
   return { lines, open: isTTY ? dc.verificationUri : null };
+}
+
+/** Periodic proof of life while we wait, because the gap between "here is your code" and
+ *  either success or a timeout was otherwise completely silent — which is how a real user
+ *  concluded nothing was happening, walked away, and came back to a timeout.
+ *
+ *  The cadence is deliberately uneven. A tick fires per poll (every 5s), and printing all of
+ *  them over a 15-minute budget is 180 lines of near-identical text — silence replaced by
+ *  spam. One line at 30s catches the person about to give up early, then every two minutes is
+ *  enough to prove the process is alive: about eight lines for a full wait.
+ *
+ *  Only the first line carries the URL. Every line carries the code, since that is the part
+ *  the operator has to act on and the original instructions have scrolled away by then.
+ *
+ *  Returns the callback rather than taking a clock, so a test can drive it with synthetic
+ *  elapsed values and assert the cadence directly. */
+export function bindHeartbeat(
+  dc: { verificationUri: string; userCode: string },
+  out: (l: string) => void,
+): (p: { elapsedSec: number; remainingSec: number }) => void {
+  const FIRST_AFTER_SEC = 30;
+  const THEN_EVERY_SEC = 120;
+  let lastAt = 0;
+  let said = 0;
+  return ({ elapsedSec, remainingSec }) => {
+    // Never announce "0s left" and then immediately time out.
+    if (remainingSec <= 0) return;
+    if (elapsedSec - lastAt < (said === 0 ? FIRST_AFTER_SEC : THEN_EVERY_SEC)) return;
+    lastAt = elapsedSec;
+    said += 1;
+    const m = Math.floor(remainingSec / 60);
+    const s = remainingSec % 60;
+    const left = m > 0 ? `${m}m ${String(s).padStart(2, "0")}s` : `${s}s`;
+    out(said === 1
+      ? `  … still waiting for GitHub — ${left} left. Code ${dc.userCode} at ${dc.verificationUri}`
+      : `  … still waiting — ${left} left. Code ${dc.userCode}`);
+  };
 }
 
 export async function defaultEnsureBound(
@@ -141,10 +178,15 @@ export async function defaultEnsureBound(
   prompt.lines.forEach(out);
   if (prompt.open) openBrowser(prompt.open);
   try {
-    const res = await completeDeviceBind(cfg, { deviceCode: dc.deviceCode, interval: dc.interval });
+    const res = await completeDeviceBind(cfg, {
+      deviceCode: dc.deviceCode, interval: dc.interval,
+      // A CLI can afford to wait for the code's real expiry; the console route cannot, and
+      // deliberately keeps the shorter in-request default. See pollForToken.
+      budgetSec: dc.expiresInSec, onPending: bindHeartbeat(dc, out),
+    });
     return res.bound ? res.login : null;
   } catch (e) {
-    // pollForToken throws on the 5-minute deadline, on access_denied, and on an expired
+    // pollForToken throws when the budget runs out, on access_denied, and on an expired
     // code. Letting that escape printed a Node stack trace for the ordinary case of
     // "didn't finish signing in yet", which reads like a crash rather than a timeout.
     out(`Bind not completed: ${e instanceof Error ? e.message.replace(/^device flow: /, "") : String(e)}`);

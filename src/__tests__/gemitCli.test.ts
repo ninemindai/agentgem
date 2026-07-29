@@ -6,7 +6,7 @@ import { mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
-import { bindPrompt, parseGemitArgs, readConfirmAnswer, runGemitCommand } from "../gemitCli.js";
+import { bindPrompt, parseGemitArgs, readConfirmAnswer, runGemitCommand, bindHeartbeat } from "../gemitCli.js";
 import { GEMIT_CMD } from "../gemit/themeRpg.js";
 import type { GemitData } from "../gemit/score.js";
 
@@ -75,8 +75,60 @@ describe("parseGemitArgs", () => {
 
 // The console offers a "Copy code & open GitHub" button. The CLI printed instructions and
 // then went quiet for five minutes, which is how a real user wandered off and timed out.
-describe("bindPrompt", () => {
+describe("bindHeartbeat", () => {
   const dc = { verificationUri: "https://github.com/login/device", userCode: "5BBE-1972" };
+  const drive = (ticks: Array<[number, number]>): string[] => {
+    const lines: string[] = [];
+    const tick = bindHeartbeat(dc, (l) => lines.push(l));
+    for (const [elapsedSec, remainingSec] of ticks) tick({ elapsedSec, remainingSec });
+    return lines;
+  };
+
+  it("stays quiet through the first half-minute", () => {
+    // A poll every 5s must not mean a line every 5s; someone who authorizes in 15 seconds
+    // should see no heartbeat at all.
+    expect(drive([[5, 895], [10, 890], [15, 885], [20, 880], [25, 875]])).toEqual([]);
+  });
+
+  const fullWait = (): Array<[number, number]> => {
+    const ticks: Array<[number, number]> = [];
+    for (let e = 5; e <= 900; e += 5) ticks.push([e, 900 - e]);
+    return ticks;
+  };
+
+  it("speaks once at 30s, then only every two minutes", () => {
+    // A full wait is ~180 polls. Printing each replaces silence with spam, so the whole
+    // 15 minutes must come out in single digits.
+    const lines = drive(fullWait());
+    expect(lines).toHaveLength(8);
+    expect(lines[0]).toContain("14m 30s left");
+    expect(lines[1]).toContain("12m 30s left"); // two minutes later, not thirty seconds
+  });
+
+  it("carries the URL only on the first line, and the code on all of them", () => {
+    const lines = drive(fullWait());
+    expect(lines.filter((l) => l.includes("https://github.com/login/device"))).toHaveLength(1);
+    expect(lines.every((l) => l.includes("5BBE-1972"))).toBe(true);
+  });
+
+  it("reprints the code, because the original instructions have scrolled away by then", () => {
+    const [line] = drive([[30, 870]]);
+    expect(line).toContain("5BBE-1972");
+    expect(line).toContain("https://github.com/login/device");
+    expect(line).toContain("14m 30s left");
+  });
+
+  it("says nothing once the budget is spent, rather than announcing 0s and dying", () => {
+    expect(drive([[900, 0]])).toEqual([]);
+  });
+
+  it("drops the minutes once under one", () => {
+    expect(drive([[870, 30]])[0]).toContain("30s left");
+  });
+});
+
+describe("bindPrompt", () => {
+  const dc = { verificationUri: "https://github.com/login/device", userCode: "5BBE-1972", expiresInSec: 900 };
 
   it("opens the verification page on a TTY, and still prints the code", () => {
     const p = bindPrompt(dc, true);
@@ -95,8 +147,14 @@ describe("bindPrompt", () => {
 
   it("says the wait is bounded and that the report is already safe", () => {
     const said = bindPrompt(dc, true).lines.join("\n");
-    expect(said).toContain("up to 5 minutes");
+    // The advertised wait tracks the code's real expiry rather than a hardcoded 5 minutes,
+    // which used to under-promise: we gave up while GitHub still honoured the code.
+    expect(said).toContain("up to 15 minutes");
     expect(said).toContain("report is already saved");
+  });
+
+  it("advertises whatever GitHub actually granted, not a fixed number", () => {
+    expect(bindPrompt({ ...dc, expiresInSec: 300 }, true).lines.join("\n")).toContain("up to 5 minutes");
   });
 });
 

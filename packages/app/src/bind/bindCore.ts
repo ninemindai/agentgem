@@ -66,11 +66,21 @@ export interface CompleteDeps {
 
 export async function completeDeviceBind(
   cfg: BindConfig,
-  args: { deviceCode: string; interval?: number },
+  args: {
+    deviceCode: string; interval?: number;
+    /** How long to keep polling. Omitted keeps pollForToken's short in-request default, which
+     *  is what the console route wants; the CLIs pass the code's real expiry. */
+    budgetSec?: number;
+    onPending?: (p: { elapsedSec: number; remainingSec: number }) => void;
+  },
   deps: CompleteDeps = {},
 ): Promise<{ bound: true; provider: string; login: string; accountId: string; avatarUrl?: string; sessionToken?: string; expiresAt?: string } | { bound: false; rejected: string }> {
   if (!cfg.clientId || !cfg.base) return { bound: false, rejected: "not-configured" };
-  const token = await (deps.poll ?? pollForToken)(cfg.clientId, args.deviceCode, { intervalSec: args.interval ?? 5 });
+  const token = await (deps.poll ?? pollForToken)(cfg.clientId, args.deviceCode, {
+    intervalSec: args.interval ?? 5,
+    ...(args.budgetSec === undefined ? {} : { budgetSec: args.budgetSec }),
+    ...(args.onPending === undefined ? {} : { onPending: args.onPending }),
+  });
   const id = deps.identity ?? loadOrCreateIdentity();
   const signedAt = deps.now ?? Date.now();
   const signature = id.sign(bindSigningPayload(id.publicKey, token, signedAt));
