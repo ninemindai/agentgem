@@ -14,6 +14,24 @@
 export interface ScrubbedStep {
   verb: string;
   arg: string;
+  /**
+   * A finer verb, present only when `verb` hides which script ran.
+   *
+   * `bashVerb` is deliberately low-cardinality so that procedure RECURRENCE is detectable —
+   * `python3 a.py` and `python3 b.py` must collapse to the same token for an n-gram to find a
+   * repeated shape. That is right for detection and wrong for NAMING: a consumer reporting the
+   * procedure back to a human ("run finalize_svg.py, then svg_to_pptx.py") cannot tell those two
+   * steps apart, so every script-driven pipeline reads as `Bash:python3 -> Bash:python3`.
+   *
+   * `verbDetail` carries `Bash:<script basename>` for exactly that case, leaving `verb` untouched
+   * so no existing consumer changes behaviour. Opt in where naming matters; keep using `verb`
+   * where recurrence matters.
+   *
+   * PRIVACY: this retains nothing new. The basename is a projection of the command that `arg`
+   * already keeps verbatim (de-homed and token-scrubbed), so it is a different view of retained
+   * data, not an additional class of it.
+   */
+  verbDetail?: string;
 }
 
 // Token-level secret detection. redact.ts redacts the WHOLE value and can lean on
@@ -103,6 +121,25 @@ function bashVerb(command: string): string {
   return `Bash:${argv0}${sub}`;
 }
 
+// Runners whose argv0 tells you nothing about the work: the script is the verb. `bashVerb`
+// can't use the 2nd token here because a path fails its clean-lowercase-word test (by design —
+// that guard is what stops paths and flags from inflating the verb).
+const SCRIPT_RUNNER_RE = /^(python3?|node|npx|bun|deno|bash|sh|zsh|uvx|ruby|perl)$/;
+const SCRIPT_ARG_RE = /(^|[\s/])([\w.-]+\.(?:py|mjs|cjs|js|ts|tsx|sh|rb|pl))(\s|$)/;
+
+// `Bash:<script basename>` when the coarse verb collapsed a script runner, else undefined.
+// Basename only: a directory path would re-introduce the location detail dehomePaths exists to
+// blunt, and the basename is what names a step.
+function bashVerbDetail(command: string): string | undefined {
+  const toks = command.trim().split(/\s+/).filter(Boolean);
+  if (!toks.length) return undefined;
+  const argv0 = (toks[0].split("/").pop() || toks[0]).replace(/[;|&]+$/, "");
+  if (!SCRIPT_RUNNER_RE.test(argv0)) return undefined;
+  const m = SCRIPT_ARG_RE.exec(command);
+  const base = m?.[2]?.split("/").pop();
+  return base ? `Bash:${base}` : undefined;
+}
+
 function str(input: unknown, key: string): string {
   const v = (input as Record<string, unknown> | null)?.[key];
   return typeof v === "string" ? v : "";
@@ -115,7 +152,8 @@ export function scrubStep(tool: string, input: unknown): ScrubbedStep {
   switch (tool) {
     case "Bash": {
       const command = str(input, "command");
-      return { verb: bashVerb(command), arg: scrubText(command) };
+      const detail = bashVerbDetail(command);
+      return { verb: bashVerb(command), arg: scrubText(command), ...(detail ? { verbDetail: detail } : {}) };
     }
     // Edit/Write/NotebookEdit: keep the path; DROP old_string/new_string/content.
     case "Edit":
