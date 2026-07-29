@@ -7,7 +7,7 @@
 // These assertions are deliberately made against fixed inputs in a temp home. End-to-end
 // equality cannot be asserted on a live machine: two *cold* scans of a developer's real
 // ~/.claude disagree with each other, because agent sessions append while you measure.
-import { mkdtempSync, mkdirSync, rmSync, writeFileSync, existsSync } from "node:fs";
+import { mkdtempSync, mkdirSync, rmSync, writeFileSync, existsSync, statSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -105,5 +105,28 @@ describe("persisted parse cache", () => {
     await mod.saveParseCacheToDisk();     // must not overwrite with an emptied map
     await mod.loadParseCacheFromDisk();   // must not re-hydrate
     expect(existsSync(cachePath())).toBe(true); // the operator's file survives
+  });
+
+  it("rejects a v1 parse-cache file so pre-engagedMs stats are re-parsed", async () => {
+    // Craft a v1 entry that WOULD be a cache hit (matching mtime/size) but whose
+    // cached stat predates engagedMs and carries a sentinel msgs. If the loader
+    // still accepted v1, the scan would serve the stale stat; it must not.
+    transcript("a");
+    const file = join(claude, "a.jsonl");
+    const { mtimeMs, size } = statSync(file);
+    const staleStat = {
+      agent: "claude", sessionId: "a", project: "proj", cwd: "/tmp/proj", model: null,
+      gitBranch: null, startMs: 1, endMs: 2, msgs: 999, tokensIn: 0, tokensOut: 0, tokensCache: 0,
+    };
+    mkdirSync(join(home, ".agentgem", "cache"), { recursive: true });
+    writeFileSync(cachePath(), JSON.stringify({ v: 1, entries: { [file]: { mtimeMs, size, stat: staleStat } } }));
+
+    const mod = await import("../sources.js");
+    await mod.loadParseCacheFromDisk();
+    const stats = await mod.BUILTIN_SOURCES.find((s) => s.id === "claude")!.scanSessions!([claude]);
+
+    // v1 rejected -> re-parsed from the real transcript: real msgs (not 999) and engagedMs present.
+    expect(stats[0].msgs).not.toBe(999);
+    expect(typeof stats[0].engagedMs).toBe("number");
   });
 });
