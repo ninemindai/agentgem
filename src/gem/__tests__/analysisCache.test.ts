@@ -10,7 +10,7 @@ describe("transcriptToken", () => {
     const dir = mkdtempSync(join(tmpdir(), "tok-"));
     const f = join(dir, "s.jsonl");
     writeFileSync(f, "{}");
-    expect(transcriptToken([f]).startsWith("v3:")).toBe(true);
+    expect(transcriptToken([f]).startsWith("v4:")).toBe(true);
   });
 
   it("changes when a transcript is updated", () => {
