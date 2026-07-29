@@ -21,6 +21,43 @@ import type { ArtifactOutcomeRow } from "./artifactOutcomes.js";
 
 const SCHEMA_VERSION = "1";
 
+// Every schema version this build can read. A bump means appending the new version here AND
+// writing the DDL that gets an existing file from the old shape to the new one (see
+// addColumnIfMissing) — an unlisted version is refused rather than silently opened.
+const KNOWN_SCHEMA_VERSIONS: ReadonlySet<string> = new Set([SCHEMA_VERSION]);
+
+/**
+ * Add a column to an existing table if it isn't already there. SQLite has no
+ * `ADD COLUMN IF NOT EXISTS`, so this checks `pragma table_info` first. Returns true when it
+ * added the column, false when it was already present (so it is safe to call on every open).
+ *
+ * This is the paired-ALTER discipline the enterprise aggregator learned the hard way:
+ * `CREATE TABLE IF NOT EXISTS` is TABLE-level, so a column added inside the CREATE never
+ * reaches a database that already had the table. Fresh DBs get it and stay green, which is
+ * exactly why the drift is invisible in tests and only shows on a long-lived file.
+ */
+export function addColumnIfMissing(
+  db: { prepare(sql: string): { all(): unknown[]; run(): unknown }; exec(sql: string): unknown },
+  table: string,
+  column: string,
+  decl: string,
+): boolean {
+  // SQLite cannot bind IDENTIFIERS, so these three have to be interpolated. Today every caller
+  // passes a literal from this file, but the helper is exported — validate so it is safe by
+  // construction rather than by convention.
+  if (!IDENT_RE.test(table)) throw new Error(`unsafe table identifier '${table}'`);
+  if (!IDENT_RE.test(column)) throw new Error(`unsafe column identifier '${column}'`);
+  if (!DECL_RE.test(decl)) throw new Error(`unsafe column declaration '${decl}'`);
+  const cols = db.prepare(`pragma table_info(${table})`).all() as { name: string }[];
+  if (cols.some((c) => c.name === column)) return false;
+  db.exec(`ALTER TABLE ${table} ADD COLUMN ${column} ${decl}`);
+  return true;
+}
+
+const IDENT_RE = /^[A-Za-z_][A-Za-z0-9_]*$/;
+// A type plus optional simple modifiers — "REAL", "TEXT NOT NULL", "INTEGER DEFAULT 0".
+const DECL_RE = /^[A-Za-z][A-Za-z0-9_ ]*$/;
+
 export function defaultArtifactOutcomesDbPath(): string {
   return join(agentgemHome(), ".agentgem", "artifact-outcomes.db");
 }
@@ -55,8 +92,21 @@ export function openArtifactOutcomesStore(dataDir?: string): ArtifactOutcomesSto
 
   db.exec(`CREATE TABLE IF NOT EXISTS meta (key TEXT PRIMARY KEY, value TEXT);`);
   const ver = (db.prepare("SELECT value FROM meta WHERE key='schema_version'").get() as { value: string } | undefined)?.value;
+  // A bump must MIGRATE IN PLACE — this store must never drop artifact_outcomes (the other two
+  // local stores can, because their rows re-derive from bytes; these are paid LLM judgments).
+  // Since there is no migration mechanism yet, an UNKNOWN version is refused loudly instead of
+  // stamped-and-continued. Silently continuing is the column-drift bug: the CREATE below is
+  // table-level, so an existing table keeps its old columns while this build reads new ones.
+  // When a v2 arrives: add it to KNOWN_SCHEMA_VERSIONS and do the addColumnIfMissing work here.
+  if (ver !== undefined && !KNOWN_SCHEMA_VERSIONS.has(ver)) {
+    db.close();   // release the handle — the caller cannot use this store
+    throw new Error(
+      `artifact-outcomes schema version '${ver}' is not readable by this build ` +
+      `(known: ${[...KNOWN_SCHEMA_VERSIONS].join(", ")}). Refusing to open rather than risk ` +
+      `misreading it; the file is left untouched. Upgrade AgentGem, or move ${file} aside.`,
+    );
+  }
   if (ver !== SCHEMA_VERSION) {
-    // A future bump migrates in place — it must NOT drop artifact_outcomes.
     db.prepare("INSERT INTO meta(key,value) VALUES('schema_version',?1) ON CONFLICT(key) DO UPDATE SET value=?1").run(SCHEMA_VERSION);
   }
   db.exec(`
