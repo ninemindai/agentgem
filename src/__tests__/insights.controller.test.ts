@@ -16,12 +16,16 @@ afterEach(() => setInsightsComputeForTests(null));
 // A minimal computeInsights double: fires the progress callbacks the route maps,
 // then resolves with a minimal payload. Cast past the rich InsightsPayload shape
 // the route never inspects beyond report/degraded/signalSummary.
-function fakeCompute(events: Array<[string, Record<string, unknown>?]>, deltas: string[]) {
+function fakeCompute(
+  events: Array<[string, Record<string, unknown>?]>,
+  deltas: string[],
+  judgeCoverage: { eligible: number; judged: number; sampled: boolean } = { eligible: 2, judged: 2, sampled: false },
+) {
   return (async (_root: string, opts: { progress?: { onPhase?: (p: string, e?: Record<string, unknown>) => void; onDelta?: (t: string) => void } }) => {
     for (const [phase, extra] of events) opts.progress?.onPhase?.(phase, extra);
     for (const d of deltas) opts.progress?.onDelta?.(d);
     return {
-      payload: { report: { ok: true }, facets: [], findings: [], detectorSummary: [], degraded: false, signalSummary: { sessionsScanned: 2, spanDays: 1, notes: null } },
+      payload: { report: { ok: true }, facets: [], findings: [], detectorSummary: [], degraded: false, signalSummary: { sessionsScanned: 2, spanDays: 1, notes: null, judgeCoverage } },
       cached: false,
       updatedAt: 123,
     } as unknown as InsightsResult;
@@ -45,6 +49,17 @@ describe("InsightsController.stream (streamOf route)", () => {
     for (const e of events) expect(InsightsEvent.safeParse(e).success).toBe(true);
     expect(events[1]).toMatchObject({ type: "phase", phase: "scanned", transcripts: 3, sessions: 2 });
     expect(events[3]).toMatchObject({ type: "done", degraded: false, scanned: 2, updatedAt: 123 });
+  });
+
+  it("carries the judge's sampling coverage on the done event (schema-valid)", async () => {
+    setInsightsComputeForTests(fakeCompute([["scanned", { sessions: 2 }]], [], { eligible: 1395, judged: 30, sampled: true }));
+
+    const events = await drain(new InsightsController().stream({ query: { root: "/proj" } }));
+    const done = events.at(-1);
+
+    // must survive the wire schema, not just be attached to the object
+    expect(InsightsEvent.safeParse(done).success).toBe(true);
+    expect(done).toMatchObject({ type: "done", judgeCoverage: { eligible: 1395, judged: 30, sampled: true } });
   });
 
   it("records the run lifecycle in an injected ReportRegistry (reattach support)", async () => {

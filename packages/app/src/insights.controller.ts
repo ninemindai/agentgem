@@ -88,6 +88,7 @@ export class InsightsController {
           degraded: payload.degraded,
           cached,
           scanned: payload.signalSummary.sessionsScanned,
+          judgeCoverage: payload.signalSummary.judgeCoverage,
           updatedAt,
         });
         track?.done();

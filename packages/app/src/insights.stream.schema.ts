@@ -41,6 +41,15 @@ const DoneEvent = z.object({
   degraded: z.boolean(),
   cached: z.boolean(), // true = served from cache (a cacheOnly peek hit, or a warm compute)
   scanned: z.number().optional(),
+  // How much of the eligible universe the judge actually saw. `scanned` counts a
+  // DIFFERENT population, so sampling cannot be derived from it — the client needs
+  // this to avoid presenting a capped judgement as a whole-project conclusion.
+  // Optional: a cacheOnly peek resolves before any judge pass runs.
+  judgeCoverage: z.object({
+    eligible: z.number(),
+    judged: z.number(),
+    sampled: z.boolean(),
+  }).optional(),
   updatedAt: z.number().nullable(),
 });
 const FailedEvent = z.object({ type: z.literal("failed"), message: z.string() });

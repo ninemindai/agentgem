@@ -93,6 +93,31 @@ describe("judgeSessions", () => {
     expect(facets.map((f) => f.sessionId).sort()).toEqual(["s4", "s5"]); // the two most recent
   });
 
+  it("reports coverage when the cap bites, so a report can never imply full scope", async () => {
+    const sessions = [1, 2, 3, 4, 5].map((n) => ({
+      steps: [], sessionId: `s${n}`, transcript: `s${n}.jsonl`, atMs: n * 100,
+      missionHint: { task: `task ${n}`, outcome: "done" },
+    }));
+    const { coverage } = await judgeSessions(signalWith(sessions), {
+      maxSessions: 2,
+      connectFn: fakeConnect(JSON.stringify({ facets: [] })),
+    });
+    expect(coverage).toEqual({ eligible: 5, judged: 2, sampled: true });
+  });
+
+  it("reports sampled:false when every eligible session was judged", async () => {
+    const { coverage } = await judgeSessions(SIG, { connectFn: fakeConnect(JSON.stringify({ facets: [] })) });
+    expect(coverage).toEqual({ eligible: 2, judged: 2, sampled: false });
+  });
+
+  it("reports zero coverage when no session carries a mission", async () => {
+    const noMission = signalWith([sess("a", null)]);
+    const { coverage } = await judgeSessions(noMission, {
+      connectFn: async () => { throw new Error("should not be called"); },
+    });
+    expect(coverage).toEqual({ eligible: 0, judged: 0, sampled: false });
+  });
+
   it("defaults the cap to DEFAULT_MAX_JUDGE", async () => {
     const sessions = Array.from({ length: DEFAULT_MAX_JUDGE + 10 }, (_, i) => ({
       steps: [], sessionId: `s${i}`, transcript: `s${i}.jsonl`, atMs: i * 100,
