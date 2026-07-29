@@ -21,6 +21,7 @@
 import type { WorkflowSignal, SessionSequence } from "./workflowScan.js";
 import type { DetectorFinding, DetectorSeverity } from "./detectors.js";
 import type { LlmCriterion } from "./rubrics.js";
+import type { JudgeCoverage } from "./judgeSession.js";
 import {
   type AcpConnectFn, type AcpCtx, type AcpSessionHandle,
   analysisWorkspace, currentTestConnectFn, defaultConnectFn,
@@ -138,10 +139,11 @@ export async function judgeCriteria(
   signal: WorkflowSignal,
   criteria: LlmCriterion[],
   opts: { connectFn?: AcpConnectFn; timeoutMs?: number; maxSessions?: number; chunkSize?: number; onDelta?: (chunk: string) => void } = {},
-): Promise<{ findings: DetectorFinding[]; degraded: boolean }> {
-  if (!criteria.length) return { findings: [], degraded: false };
+): Promise<{ findings: DetectorFinding[]; degraded: boolean; coverage: JudgeCoverage }> {
+  const noCoverage: JudgeCoverage = { eligible: 0, judged: 0, sampled: false };
+  if (!criteria.length) return { findings: [], degraded: false, coverage: noCoverage };
   const judgeable = (signal.sequences?.sessions ?? []).filter((s) => s.steps.length > 0);
-  if (!judgeable.length) return { findings: [], degraded: false };
+  if (!judgeable.length) return { findings: [], degraded: false, coverage: noCoverage };
 
   const max = opts.maxSessions ?? DEFAULT_MAX_CRITERION_SESSIONS;
   const chunkSize = Math.max(1, opts.chunkSize ?? CRITERION_CHUNK_SIZE);
@@ -157,5 +159,13 @@ export async function judgeCriteria(
     findings.push(...r.findings);
     if (r.degraded) degraded = true;
   }
-  return { findings, degraded };
+  // Mirrors judgeSessions: the cap is a second, silent way criteria go
+  // unevaluated. Callers must not present a criterion all-clear as covering
+  // sessions this pass never looked at.
+  const coverage: JudgeCoverage = {
+    eligible: judgeable.length,
+    judged: selected.length,
+    sampled: selected.length < judgeable.length,
+  };
+  return { findings, degraded, coverage };
 }

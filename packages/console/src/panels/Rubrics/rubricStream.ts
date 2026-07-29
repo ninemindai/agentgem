@@ -28,6 +28,9 @@ export interface RubricReportView {
   hygiene?: HygieneVerdictView;
   perSession?: { sessionId: string; transcript: string; factors: RubricFactorView[]; hygiene?: HygieneVerdictView }[];
   perSessionTruncated?: boolean;
+  // How much of the eligible universe the LLM criteria saw. Absent when the rubric
+  // has no criteria (cheap factors always run over every session).
+  judgeCoverage?: { eligible: number; judged: number; sampled: boolean };
 }
 
 // Panel-facing union: `report` typed as the view the panel renders. The wire

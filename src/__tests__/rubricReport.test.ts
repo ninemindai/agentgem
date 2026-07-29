@@ -79,7 +79,7 @@ describe("evaluateRubric — LLM criteria (Phase 2, injected judge)", () => {
   it("evaluates the criterion via the injected judge and reports it as a factor (not skipped)", async () => {
     const judge = async () => ({
       findings: [{ detectorId: "verified-real-case", sessionId: "A", transcript: "A.jsonl", atMs: 1, severity: "warn" as const, detail: "Verified the real case? — 1 step(s)", evidence: { msgIndices: [0] } } satisfies DetectorFinding],
-      degraded: false,
+      degraded: false, coverage: { eligible: 1, judged: 1, sampled: false },
     });
     const r = await evaluateRubric(signalOf([A]), withCrit, { ...PROJECT, judge });
     expect(r.skippedFactors).toEqual([]);   // criterion is resolved now, not skipped
@@ -88,8 +88,31 @@ describe("evaluateRubric — LLM criteria (Phase 2, injected judge)", () => {
     expect(r.degraded).toBe(false);
   });
 
+  // Sampling is a second, silent way criteria go unevaluated. `clean` already
+  // refuses the all-clear when the agent failed; it must refuse it when the cap
+  // dropped eligible sessions too, for exactly the same reason.
+  it("is not clean when the judge sampled — the unjudged sessions could each trip a criterion", async () => {
+    const judge = async () => ({
+      findings: [] as DetectorFinding[], degraded: false,
+      coverage: { eligible: 214, judged: 30, sampled: true },
+    });
+    const r = await evaluateRubric(signalOf([B]), withCrit, { ...PROJECT, judge });
+    expect(r.degraded).toBe(false);        // the agent worked fine — this is NOT that failure
+    expect(r.clean).toBe(false);           // but 184 eligible sessions were never checked
+    expect(r.judgeCoverage).toEqual({ eligible: 214, judged: 30, sampled: true });
+  });
+
+  it("stays clean when the judge covered every eligible session", async () => {
+    const judge = async () => ({
+      findings: [] as DetectorFinding[], degraded: false,
+      coverage: { eligible: 1, judged: 1, sampled: false },
+    });
+    const r = await evaluateRubric(signalOf([B]), withCrit, { ...PROJECT, judge });
+    expect(r.clean).toBe(true);
+  });
+
   it("marks the report degraded (and not clean) when the judge degrades — cheap findings still shown", async () => {
-    const judge = async () => ({ findings: [] as DetectorFinding[], degraded: true });
+    const judge = async () => ({ findings: [] as DetectorFinding[], degraded: true, coverage: { eligible: 1, judged: 1, sampled: false } });
     const r = await evaluateRubric(signalOf([A]), withCrit, { ...PROJECT, judge });
     expect(r.degraded).toBe(true);
     expect(r.clean).toBe(false);   // criteria unevaluated → can't claim all-clear

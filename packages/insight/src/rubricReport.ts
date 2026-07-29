@@ -14,6 +14,7 @@ import { DETECTORS, summarizeFindings } from "./detectors.js";
 import { loadRuleDetectors } from "./detectorRules.js";
 import { type Rubric, type RubricScope, type RubricScopeKind, type LlmCriterion, rubricGranularity, scopeAllowed } from "./rubrics.js";
 import { judgeCriteria } from "./criterionJudge.js";
+import type { JudgeCoverage } from "./judgeSession.js";
 import type { AcpConnectFn } from "./acpRecommender.js";
 import { hygieneScore, assessesHygiene, type HygieneVerdict } from "./contextHygiene.js";
 
@@ -37,6 +38,10 @@ export interface RubricReport {
   // picture. Capped at PER_SESSION_CAP with `perSessionTruncated` when there are more.
   perSession?: { sessionId: string; transcript: string; factors: DetectorSummary[]; hygiene?: HygieneVerdict }[];
   perSessionTruncated?: boolean;
+  // How much of the eligible universe the LLM criteria actually saw. Absent when
+  // the rubric has no criteria (nothing was judged, so nothing was sampled).
+  // Cheap factors always run over every session — only criteria are capped.
+  judgeCoverage?: JudgeCoverage;
 }
 
 // Max per-session rows returned; beyond this, perSessionTruncated is set (no silent cap).
@@ -118,12 +123,12 @@ export async function evaluateRubric(signal: WorkflowSignal, rubric: Rubric, opt
   }
 
   const cheapFindings = runSpecs(signal, cheapSpecs);
-  const { findings: llmFindings, degraded } = usedCriteria.length
+  const { findings: llmFindings, degraded, coverage: judgeCoverage } = usedCriteria.length
     ? await (opts.judge ?? judgeCriteria)(signal, usedCriteria, {
         connectFn: opts.connectFn, timeoutMs: opts.timeoutMs,
         maxSessions: opts.maxSessions, chunkSize: opts.chunkSize, onDelta: opts.onDelta,
       })
-    : { findings: [] as DetectorFinding[], degraded: false };
+    : { findings: [] as DetectorFinding[], degraded: false, coverage: undefined };
 
   const allFindings = [...cheapFindings, ...llmFindings];
   const allSpecs = [...cheapSpecs, ...usedCriteria.map(criterionSpec)];
@@ -139,9 +144,12 @@ export async function evaluateRubric(signal: WorkflowSignal, rubric: Rubric, opt
     ...(assessesHygiene(factors) ? { hygiene: hygieneScore(factors) } : {}),
     sessionsScanned: signal.sessions?.scanned ?? (signal.sequences?.sessions?.length ?? 0),
     // Not "clean" when degraded: criteria weren't evaluated, so we can't claim all-clear.
-    clean: allFindings.length === 0 && !degraded,
+    // Same for sampled: the cap left eligible sessions unjudged, and any one of them
+    // could trip a criterion. A findings-free SAMPLE is not an all-clear.
+    clean: allFindings.length === 0 && !degraded && !judgeCoverage?.sampled,
     degraded,
     skippedFactors,
+    ...(judgeCoverage ? { judgeCoverage } : {}),
   };
 
   if (kind === "session" || rubricGranularity(rubric) === "session") {

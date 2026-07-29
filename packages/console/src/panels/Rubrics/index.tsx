@@ -43,6 +43,7 @@ export function RubricReportCard({ report }: { report: RubricReportView }) {
   const total = report.factors.length;
   const actionable = report.factors.filter((f) => f.count > 0).length;
   const affected = report.perSession?.length ?? 0;
+  const cov = report.judgeCoverage;
   return (
     <div className="insights-report">
       {/* Verdict line — advice-first: what needs action, not a score. */}
@@ -50,8 +51,21 @@ export function RubricReportCard({ report }: { report: RubricReportView }) {
         <strong>{report.rubricId}</strong> · {report.scope} · {report.sessionsScanned} session{report.sessionsScanned === 1 ? "" : "s"} ·{" "}
         {report.clean
           ? <span className="rub-clean">clean — all {total} check{total === 1 ? "" : "s"} passed</span>
-          : <span className="rub-needs">{actionable} of {total} check{total === 1 ? "" : "s"} need action</span>}
+          : actionable > 0
+            ? <span className="rub-needs">{actionable} of {total} check{total === 1 ? "" : "s"} need action</span>
+            // Nothing fired, but `clean` was withheld — criteria went unevaluated
+            // (agent down, or the cap sampled). Saying "0 of N need action" would
+            // read as a pass; saying "clean" would overstate what was checked.
+            : <span className="rub-needs">{cov?.sampled
+                ? `no findings in the ${cov.judged} of ${cov.eligible} sessions checked`
+                : "no findings — but some checks did not run"}</span>}
       </p>
+      {cov?.sampled && (
+        <p className="insights-hint">
+          LLM criteria were evaluated on the {cov.judged} most-recent of {cov.eligible} eligible sessions — an
+          unchecked session could still trip one. Cheap factors ran over all {report.sessionsScanned}.
+        </p>
+      )}
       {report.hygiene && (
         <p className={"hyg-verdict is-" + report.hygiene.verdict}>
           <span className="hyg-word">{report.hygiene.verdict}</span> <span className="hyg-score">{report.hygiene.score}</span>
