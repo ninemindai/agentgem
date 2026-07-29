@@ -71,7 +71,7 @@ export function Dashboard({ data, range, onRange, filter, onFilter, pending, onR
           <Stat label="sessions" value={String(data.pulse.sessions)} />
           <Stat label="messages" value={String(data.pulse.msgs)} />
           <Stat label="tokens" value={fmtTokens(data.pulse.tokens)} />
-          <Stat label="active" value={fmtDuration(data.pulse.activeMs)} />
+          <Stat label="engaged" value={fmtDuration(data.pulse.activeMs)} />
         </div>
 
         {empty ? (
