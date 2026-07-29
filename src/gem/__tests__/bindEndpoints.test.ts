@@ -17,7 +17,7 @@ function jsonFetch(body: unknown): typeof fetch {
 
 const fakeIdentity = { publicKey: "ed25519:FAKEKEY==", sign: (_data: string) => "FAKESIG==" };
 
-const fakeCode = { deviceCode: "dc", userCode: "ABCD-1234", verificationUri: "https://github.com/login/device", interval: 5 };
+const fakeCode = { deviceCode: "dc", userCode: "ABCD-1234", verificationUri: "https://github.com/login/device", interval: 5, expiresInSec: 900 };
 
 describe("/bind/start", () => {
   it("falls back to the default hosted client ID when env is unset", async () => {

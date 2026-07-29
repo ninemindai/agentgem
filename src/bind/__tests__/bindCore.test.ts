@@ -96,7 +96,7 @@ describe("startDeviceBind", () => {
 
   it("calls requestCode with clientId", async () => {
     const calls: string[] = [];
-    const fakeCode = { deviceCode: "dc", userCode: "UC", verificationUri: "https://example.com", interval: 5 };
+    const fakeCode = { deviceCode: "dc", userCode: "UC", verificationUri: "https://example.com", interval: 5, expiresInSec: 900 };
     const requestCode = async (cid: string) => { calls.push(cid); return fakeCode; };
     const result = await startDeviceBind({ clientId: "myclientid" }, { requestCode });
     expect(calls).toEqual(["myclientid"]);
@@ -108,6 +108,34 @@ describe("completeDeviceBind", () => {
   it("returns not-configured when clientId missing", async () => {
     const result = await completeDeviceBind({}, { deviceCode: "dc" });
     expect(result).toEqual({ bound: false, rejected: "not-configured" });
+  });
+
+  // The CLI's whole fix depends on these two reaching pollForToken. A conditional spread that
+  // silently dropped them would leave the CLI advertising a 15-minute wait it never takes.
+  it("forwards the caller's budget and heartbeat to the poller", async () => {
+    const seen: Array<Record<string, unknown>> = [];
+    const tick = (): void => {};
+    await completeDeviceBind(
+      { clientId: "cid", base: "http://agg.local" },
+      { deviceCode: "dc", interval: 7, budgetSec: 900, onPending: tick },
+      { poll: (async (_c: string, _d: string, o?: Record<string, unknown>) => { seen.push(o ?? {}); return "tok"; }) as never,
+        identity: fakeIdentity, fetchImpl: jsonFetch({ bound: true, provider: "github", login: "a", accountId: "1" }) },
+    );
+    expect(seen[0]).toMatchObject({ intervalSec: 7, budgetSec: 900, onPending: tick });
+  });
+
+  // Omitting them must leave pollForToken on its short in-request default, which is what the
+  // console's POST /bind/complete relies on — an HTTP request cannot wait fifteen minutes.
+  it("passes no budget when the caller gives none, so the HTTP route keeps its short default", async () => {
+    const seen: Array<Record<string, unknown>> = [];
+    await completeDeviceBind(
+      { clientId: "cid", base: "http://agg.local" },
+      { deviceCode: "dc" },
+      { poll: (async (_c: string, _d: string, o?: Record<string, unknown>) => { seen.push(o ?? {}); return "tok"; }) as never,
+        identity: fakeIdentity, fetchImpl: jsonFetch({ bound: true, provider: "github", login: "a", accountId: "1" }) },
+    );
+    expect(seen[0]).not.toHaveProperty("budgetSec");
+    expect(seen[0]).not.toHaveProperty("onPending");
   });
 
   it("POSTs to aggregator and writes binding.json on {bound:true}", async () => {
