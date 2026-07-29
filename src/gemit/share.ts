@@ -13,7 +13,10 @@ import type { GemitData } from "./score.js";
 import { GEMIT_CMD, renderRpgTheme, TIER_NAMES, type RpgRenderOpts, type ShareLinks } from "./themeRpg.js";
 import { COHORT, topPercentFor, type Cohort } from "./cohort.js";
 
-export const GEMIT_SHARE_VERSION = "1.0.0";
+// Bumped to 1.1.0 when SETUP's variety terms moved to a log curve (see score.ts). The
+// numbers on a card are immutable once published, so this is the only thing that records
+// which formula produced them.
+export const GEMIT_SHARE_VERSION = "1.1.0";
 const MARKETPLACE_BASE = "https://app.agentgem.ai"; // mirrors the Studio publish toast
 
 // The local report may name the operator's skills/subagents; the shared copy must

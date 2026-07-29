@@ -3,6 +3,7 @@
 // Golden tests for the gemit scoring core: pure inputs → exact card payload.
 import { describe, expect, it } from "vitest";
 import {
+  SKILL_VARIETY_CAP, SUBAGENT_VARIETY_CAP, varietyScore,
   computeGemitData, tierLevelFor, COMPOSITE_WEIGHTS, MIN_SESSIONS, SETUP_WEIGHTS,
   type GemitScoredInput, type GemitSessionInput,
 } from "../gemit/score.js";
@@ -77,6 +78,45 @@ describe("session-share payload fields", () => {
   });
 });
 
+
+// SETUP's variety terms used to be `min(1, count / cap)` with caps of 10 skills and 5
+// subagents. Linear is the wrong shape (3 -> 10 skills is a change in how you work; 30 -> 37
+// is noise) and the caps were low enough that a real operator with 61 skills and 7 subagents
+// pinned BOTH terms at 100%, so 30% of the score stopped saying anything.
+describe("varietyScore", () => {
+  it("rewards the first tools most and tapers after", () => {
+    const first = varietyScore(2, SKILL_VARIETY_CAP) - varietyScore(1, SKILL_VARIETY_CAP);
+    const later = varietyScore(21, SKILL_VARIETY_CAP) - varietyScore(20, SKILL_VARIETY_CAP);
+    expect(first).toBeGreaterThan(later * 4);
+  });
+
+  it("no longer pins at the old caps, so breadth keeps discriminating", () => {
+    expect(varietyScore(10, SKILL_VARIETY_CAP)).toBeLessThan(1);   // old formula: exactly 1
+    expect(varietyScore(5, SUBAGENT_VARIETY_CAP)).toBeLessThan(1); // old formula: exactly 1
+    expect(varietyScore(25, SKILL_VARIETY_CAP)).toBe(1);
+    expect(varietyScore(61, SKILL_VARIETY_CAP)).toBe(1);           // bounded above
+  });
+
+  it("is monotonic and zero at zero", () => {
+    expect(varietyScore(0, SKILL_VARIETY_CAP)).toBe(0);
+    let prev = 0;
+    for (const n of [1, 2, 3, 5, 8, 13, 21]) {
+      const v = varietyScore(n, SKILL_VARIETY_CAP);
+      expect(v).toBeGreaterThan(prev);
+      prev = v;
+    }
+  });
+
+  // Coverage is 70% of SETUP. Owning every tool and never reaching for one must still score
+  // badly, or the metric rewards hoarding.
+  it("cannot rescue a score when nothing is ever used", () => {
+    const hoarder = computeGemitData(
+      Array.from({ length: 10 }, (_, i) => session({ sessionId: `h${i}`, skillNames: [], subagentNames: [] })),
+      [], NOW);
+    expect(hoarder.setup).toBeLessThan(35);
+  });
+});
+
 describe("computeGemitData", () => {
   it("returns insufficient below the session floor, without throwing", () => {
     const few = Array.from({ length: MIN_SESSIONS - 1 }, () => session());
@@ -109,10 +149,14 @@ describe("computeGemitData", () => {
     expect(data.insufficient).toBe(false);
     expect(data.ctx).toBe(90);   // mean(100, 80) — equal weights
     expect(data.proc).toBe(80);  // mean(90, 70)
-    // SETUP: 0.45*(4/8) + 0.25*(2/8) + 0.15*(2/10) + 0.15*(1/5) = 0.3475 → 35
-    expect(data.setup).toBe(35);
-    // composite: 0.4*90 + 0.4*80 + 0.2*35 = 75 → tier 3
-    expect(data.composite).toBe(75);
+    // SETUP: coverage 0.45*(4/8) + 0.25*(2/8) = 0.2875, then variety on a log curve —
+    // 0.15*(log1p(2)/log1p(25)) + 0.15*(log1p(1)/log1p(8)) = 0.0506 + 0.0473 = 0.0979.
+    // Total 0.3854 → 39. Was 35 under the old linear `min(1, n/10)` and `min(1, n/5)`;
+    // this profile has few tools, and the log curve is deliberately kinder at the low end.
+    expect(data.setup).toBe(39);
+    // composite: 0.4*90 + 0.4*80 + 0.2*39 = 75.8 → 76, still tier 3. Moves with SETUP by
+    // design: composite is a weighted mean, so rescoring a term rescores the whole.
+    expect(data.composite).toBe(76);
     expect(data.tierLevel).toBe(3);
     expect(data.projects).toBe(2);
     expect(data.verdicts).toEqual({ bounded: 1, mixed: 1, bloated: 0 });

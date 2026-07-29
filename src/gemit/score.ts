@@ -18,6 +18,31 @@ export const TIER_THRESHOLDS = [50, 65, 80] as const;
 export const COMPOSITE_WEIGHTS = { ctx: 0.4, proc: 0.4, setup: 0.2 } as const;
 export const SETUP_WEIGHTS = { sessions: 0.45, subSessions: 0.25, variety: 0.15, subVariety: 0.15 } as const;
 
+/** Where a variety term stops earning. Not a hard ceiling — see varietyScore. */
+export const SKILL_VARIETY_CAP = 25;
+export const SUBAGENT_VARIETY_CAP = 8;
+
+/** Breadth of tooling, on a log curve.
+ *
+ *  This was `min(1, count / cap)` with caps of 10 skills and 5 subagents, which is wrong in
+ *  both directions. Linearly, the step from 3 skills to 10 counts the same as 30 to 37 — but
+ *  the first is a change in how you work and the second is noise. And a cap of 10 made
+ *  everyone past 10 skills identical — not just the outliers, but most real users, which is
+ *  where a breadth signal most needs to discriminate.
+ *
+ *  A log curve fixes both: early tools are worth a lot, later ones taper, and the term now
+ *  runs out only at genuinely broad usage. It is also more generous than the old formula
+ *  below 5, which is the right direction — adopting your first two skills should visibly pay.
+ *  Someone at 61 skills still tops out, and should: that is real breadth, not a measurement
+ *  failure. What changed is that 10 no longer looks the same as 25.
+ *
+ *  This rescores everyone. Already-published cards keep their original numbers, because a
+ *  card is immutable once shipped. */
+export function varietyScore(count: number, cap: number): number {
+  if (count <= 0) return 0;
+  return Math.min(1, Math.log1p(count) / Math.log1p(cap));
+}
+
 export interface GemitSessionInput {
   sessionId: string;
   agent: string;
@@ -192,7 +217,8 @@ export function computeGemitData(
   const subagentSessionsPct = Math.round((100 * subagentSessions) / n);
   const setup = Math.round(100 * Math.min(1,
     SETUP_WEIGHTS.sessions * (skillSessions / n) + SETUP_WEIGHTS.subSessions * (subagentSessions / n) +
-    SETUP_WEIGHTS.variety * Math.min(1, skillVariety / 10) + SETUP_WEIGHTS.subVariety * Math.min(1, subagentVariety / 5)));
+    SETUP_WEIGHTS.variety * varietyScore(skillVariety, SKILL_VARIETY_CAP) +
+    SETUP_WEIGHTS.subVariety * varietyScore(subagentVariety, SUBAGENT_VARIETY_CAP)));
 
   const top = (m: Map<string, number>, cap: number): string[] =>
     [...m.entries()].sort((a, b) => b[1] - a[1]).slice(0, cap).map(([name]) => name);
