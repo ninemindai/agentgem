@@ -23,6 +23,35 @@ describe("InsightsReportCard", () => {
     expect(screen.getByText("Worth publishing")).toBeTruthy();
   });
 
+  // The scope note must fire on the JUDGE CAP, not on "some session wasn't
+  // missioned" — the old `scanned > judged` proxy conflated the two and cried
+  // wolf on every report with an unmissioned session.
+  describe("scope note", () => {
+    const base: InsightsReportView = {
+      totals: { sessions: 30, mostly: 30, partially: 0, not: 0 },
+      outcomes_summary: "30 session(s).",
+      narrative: "n",
+      by_model: [], friction: [], publish_candidates: [],
+    };
+
+    it("states the eligible denominator when the judge cap bit", () => {
+      render(<InsightsReportCard report={base} scanned={1395} judgeCoverage={{ eligible: 214, judged: 30, sampled: true }} />);
+      // 214 (eligible), NOT 1395 (scanned) — scanned is the wrong denominator.
+      expect(screen.getByText(/30 most-recent of 214 sessions with a stated goal/)).toBeTruthy();
+    });
+
+    it("stays silent when every eligible session was judged, even with unjudged scanned sessions", () => {
+      const all: InsightsReportView = { ...base, totals: { ...base.totals, sessions: 12 } };
+      render(<InsightsReportCard report={all} scanned={1395} judgeCoverage={{ eligible: 12, judged: 12, sampled: false }} />);
+      expect(screen.queryByText(/most-recent of/)).toBeNull();
+    });
+
+    it("falls back to the scanned-vs-judged proxy when coverage is absent (pre-#582 cached reports)", () => {
+      render(<InsightsReportCard report={base} scanned={1395} />);
+      expect(screen.getByText(/30 most-recent of 1395 sessions scanned/)).toBeTruthy();
+    });
+  });
+
   it("sorts the Worth-publishing candidates by goal when the header is clicked", () => {
     const report: InsightsReportView = {
       totals: { sessions: 2, mostly: 2, partially: 0, not: 0 },

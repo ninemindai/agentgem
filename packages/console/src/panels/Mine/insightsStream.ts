@@ -23,16 +23,25 @@ export interface InsightsReportView {
 
 // Panel-facing union: `report` is typed as the view the charts consume. The wire
 // schema below keeps `report` opaque (z.unknown()); the bridge casts once.
+/** How much of the eligible universe the judge saw. Optional on the wire: a
+ *  cacheOnly peek resolves before any judge pass, and cached payloads written
+ *  before coverage was reported have no value to send. */
+export interface JudgeCoverageView { eligible: number; judged: number; sampled: boolean }
+
 export type InsightsEvent =
   | { type: "phase"; phase: string; transcripts?: number; sessions?: number }
   | { type: "delta"; text: string }
-  | { type: "done"; report: InsightsReportView; degraded: boolean; cached: boolean; scanned?: number; updatedAt: number | null }
+  | { type: "done"; report: InsightsReportView; degraded: boolean; cached: boolean; scanned?: number; judgeCoverage?: JudgeCoverageView; updatedAt: number | null }
   | { type: "failed"; message: string };
 
 const InsightsWireEvent = z.discriminatedUnion("type", [
   z.object({ type: z.literal("phase"), phase: z.string(), transcripts: z.number().optional(), sessions: z.number().optional() }),
   z.object({ type: z.literal("delta"), text: z.string() }),
-  z.object({ type: z.literal("done"), report: z.unknown(), degraded: z.boolean(), cached: z.boolean(), scanned: z.number().optional(), updatedAt: z.number().nullable() }),
+  z.object({
+    type: z.literal("done"), report: z.unknown(), degraded: z.boolean(), cached: z.boolean(), scanned: z.number().optional(),
+    judgeCoverage: z.object({ eligible: z.number(), judged: z.number(), sampled: z.boolean() }).optional(),
+    updatedAt: z.number().nullable(),
+  }),
   z.object({ type: z.literal("failed"), message: z.string() }),
 ]);
 
