@@ -33,7 +33,13 @@ const SourceQuery = z.object({ source: z.string().min(1) });
 const AgentsQuery = z.object({ source: z.string().min(1), division: z.string().min(1) });
 const AgentQuery = z.object({ source: z.string().min(1), path: z.string().min(1) });
 const ImportBody = z.object({ source: z.string().min(1), path: z.string().min(1) }).strict();
-const InstallResult = z.object({ ok: z.boolean(), skill: z.string(), dir: z.string() });
+// `files`/`filesTruncated` report the sibling bundle: how many progressive-disclosure files
+// landed next to SKILL.md, and whether that bundle is known-incomplete. A partial install must
+// say so — a SKILL.md whose references are missing sends the agent at files that do not exist.
+const InstallResult = z.object({
+  ok: z.boolean(), skill: z.string(), dir: z.string(),
+  files: z.number(), filesTruncated: z.boolean().optional(),
+});
 
 const DivisionSchema = z.object({ key: z.string(), label: z.string(), icon: z.string().optional(), color: z.string().optional() });
 const DivisionsResult = z.object({ divisions: z.array(DivisionSchema) });
@@ -113,7 +119,7 @@ export class SourcesController {
   // built into a Gem, and published. This is a LOCAL-machine action (mirrors Discover's install).
   @post("/install", { body: ImportBody, response: InstallResult })
   async install(input: { body: z.infer<typeof ImportBody> }): Promise<z.infer<typeof InstallResult>> {
-    const { ok, skill, dir } = await installAgencySkill(input.body.source, input.body.path);
-    return { ok, skill, dir };
+    const { ok, skill, dir, files, filesTruncated } = await installAgencySkill(input.body.source, input.body.path);
+    return { ok, skill, dir, files, ...(filesTruncated ? { filesTruncated } : {}) };
   }
 }

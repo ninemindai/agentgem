@@ -16,6 +16,7 @@ import {
   importSkillsSkill,
   assertSkillsPath,
   SKILLS_PATH_RE,
+  MAX_BUNDLE_FILES,
 } from "@agentgem/distribute";
 
 const ASK_MATT = `---
@@ -164,5 +165,124 @@ describe("skills-layout network helpers over a fake Http", () => {
 
   it("throws a clear error on a missing path", async () => {
     await expect(importSkillsSkill("skills/engineering/nope/SKILL.md", CFG, fakeHttp())).rejects.toThrow(/→ 404/);
+  });
+});
+
+// ── Skill bundles: a progressive-disclosure skill's SKILL.md points at sibling
+// files (references/*.md, scripts/*.mjs). Importing only SKILL.md leaves those
+// links dangling, which is worse than useless — the body instructs the agent to
+// read files that were never fetched.
+describe("importSkillsSkill — sibling file bundle", () => {
+  const SKILL = `---\nname: triangulate\ndescription: d\n---\nRead references/loop.md.\n`;
+  const BUNDLE_TREE = [
+    { path: "skills/eng/triangulate/SKILL.md", type: "blob" },
+    { path: "skills/eng/triangulate/references/loop.md", type: "blob" },
+    { path: "skills/eng/triangulate/references/deep/extra.md", type: "blob" },
+    { path: "skills/eng/triangulate/scripts/run.mjs", type: "blob" },
+    { path: "skills/eng/triangulate/logo.png", type: "blob" },       // binary — not bundled
+    { path: "skills/eng/triangulate/references", type: "tree" },     // not a blob
+    { path: "skills/eng/other/SKILL.md", type: "blob" },             // a DIFFERENT skill
+    { path: "skills/eng/other/references/nope.md", type: "blob" },   // must not leak in
+  ];
+  const BUNDLE_CONTENTS: Record<string, unknown> = {
+    "skills/eng/triangulate/SKILL.md": { content: b64(SKILL), encoding: "base64" },
+    "skills/eng/triangulate/references/loop.md": { content: b64("# loop"), encoding: "base64" },
+    "skills/eng/triangulate/references/deep/extra.md": { content: b64("# extra"), encoding: "base64" },
+    "skills/eng/triangulate/scripts/run.mjs": { content: b64("export const x = 1;"), encoding: "base64" },
+    "skills/eng/triangulate/logo.png": { content: b64("\x89PNG"), encoding: "base64" },
+    "skills/eng/other/references/nope.md": { content: b64("# nope"), encoding: "base64" },
+  };
+  function bundleHttp(tree = BUNDLE_TREE): Http {
+    return async (url) => {
+      if (url.includes("/git/trees/")) return { status: 200, text: async () => JSON.stringify({ tree }) };
+      const m = url.match(/\/contents\/([^?]*)\?/);
+      const path = decodeURIComponent(m ? m[1] : "");
+      if (!(path in BUNDLE_CONTENTS)) return { status: 404, text: async () => `no route for '${path}'` };
+      return { status: 200, text: async () => JSON.stringify(BUNDLE_CONTENTS[path]) };
+    };
+  }
+
+  it("bundles sibling text files with paths relative to the skill dir", async () => {
+    const s = await importSkillsSkill("skills/eng/triangulate/SKILL.md", CFG, bundleHttp());
+    expect(s.files?.map((f) => f.path).sort()).toEqual([
+      "references/deep/extra.md", "references/loop.md", "scripts/run.mjs",
+    ]);
+    expect(s.files?.find((f) => f.path === "references/loop.md")?.content).toBe("# loop");
+  });
+
+  it("never bundles the SKILL.md itself (it is written from `content`)", async () => {
+    const s = await importSkillsSkill("skills/eng/triangulate/SKILL.md", CFG, bundleHttp());
+    expect(s.files?.some((f) => f.path === "SKILL.md")).toBe(false);
+  });
+
+  it("never leaks files from a sibling skill's directory", async () => {
+    const s = await importSkillsSkill("skills/eng/triangulate/SKILL.md", CFG, bundleHttp());
+    expect(JSON.stringify(s.files)).not.toContain("nope");
+  });
+
+  it("marks the bundle incomplete when a non-text sibling is skipped", async () => {
+    const s = await importSkillsSkill("skills/eng/triangulate/SKILL.md", CFG, bundleHttp());
+    expect(s.filesTruncated).toBe(true);   // logo.png was skipped — say so, never silently
+  });
+
+  it("is complete (no truncation flag) when every sibling was bundled", async () => {
+    const noBinary = BUNDLE_TREE.filter((e) => !e.path.endsWith(".png") && !e.path.startsWith("skills/eng/other"));
+    const s = await importSkillsSkill("skills/eng/triangulate/SKILL.md", CFG, bundleHttp(noBinary));
+    expect(s.filesTruncated).toBeFalsy();
+    expect(s.files).toHaveLength(3);
+  });
+
+  it("bounds the bundle by file count and says so", async () => {
+    const many = [
+      { path: "skills/eng/triangulate/SKILL.md", type: "blob" },
+      ...Array.from({ length: MAX_BUNDLE_FILES + 3 }, (_, i) => ({ path: `skills/eng/triangulate/references/r${i}.md`, type: "blob" })),
+    ];
+    for (let i = 0; i < MAX_BUNDLE_FILES + 3; i++) BUNDLE_CONTENTS[`skills/eng/triangulate/references/r${i}.md`] = { content: b64(`# r${i}`), encoding: "base64" };
+    const s = await importSkillsSkill("skills/eng/triangulate/SKILL.md", CFG, bundleHttp(many));
+    expect(s.files).toHaveLength(MAX_BUNDLE_FILES);
+    expect(s.filesTruncated).toBe(true);
+  });
+
+  it("still imports the skill when the bundle listing fails (bundle is an enhancement)", async () => {
+    const http: Http = async (url) => {
+      if (url.includes("/git/trees/")) return { status: 500, text: async () => "boom" };
+      const m = url.match(/\/contents\/([^?]*)\?/);
+      const path = decodeURIComponent(m ? m[1] : "");
+      return { status: 200, text: async () => JSON.stringify(BUNDLE_CONTENTS[path]) };
+    };
+    const s = await importSkillsSkill("skills/eng/triangulate/SKILL.md", CFG, http);
+    expect(s.name).toBe("triangulate");
+    expect(s.content).toContain("Read references/loop.md");
+    expect(s.filesTruncated).toBe(true);   // we could not confirm completeness
+  });
+});
+
+// `.agents/skills/` and `.claude/skills/` are the two standard on-disk skill roots — our own
+// installer writes to ~/.agents/skills/<name>. Excluding them as "dotdirs" hid every skill in
+// repos that follow the convention (QoderAI/better-harness keeps all four of its skills there).
+// Other dotdirs (.github, .vscode) stay excluded: those are repo tooling, not skills.
+describe("listSkillMd — standard dot-prefixed skill roots", () => {
+  const DOT_TREE = [
+    { path: ".agents/skills/triangulate/SKILL.md", type: "blob" },
+    { path: ".claude/skills/reviewer/SKILL.md", type: "blob" },
+    { path: ".github/workflows/thing/SKILL.md", type: "blob" },   // tooling — still excluded
+    { path: ".vscode/foo/SKILL.md", type: "blob" },               // tooling — still excluded
+    { path: "skills/normal/SKILL.md", type: "blob" },
+  ];
+  const http: Http = async (url) => {
+    if (url.includes("/git/trees/")) return { status: 200, text: async () => JSON.stringify({ tree: DOT_TREE }) };
+    return { status: 404, text: async () => "x" };
+  };
+
+  it("includes .agents/ and .claude/ skills but still excludes tooling dotdirs", async () => {
+    expect(await listSkillMd(CFG, http)).toEqual([
+      ".agents/skills/triangulate/SKILL.md",
+      ".claude/skills/reviewer/SKILL.md",
+      "skills/normal/SKILL.md",
+    ]);
+  });
+
+  it("accepts a dot-rooted skill path through the input guard", () => {
+    expect(assertSkillsPath(".agents/skills/triangulate/SKILL.md")).toBe(".agents/skills/triangulate/SKILL.md");
   });
 });

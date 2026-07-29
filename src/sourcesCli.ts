@@ -22,7 +22,10 @@ export async function runSourcesCommand(argv: string[]): Promise<number> {
       console.log(r.content);
       console.error(`(dry-run) would install '${r.skill}' -> ${r.dir}/SKILL.md`);
     } else {
-      console.log(`installed '${r.skill}' -> ${r.dir}/SKILL.md`);
+      const bundle = r.files ? ` + ${r.files} bundled file${r.files === 1 ? "" : "s"}` : "";
+      console.log(`installed '${r.skill}' -> ${r.dir}/SKILL.md${bundle}`);
+      // Never let a partial bundle pass as complete.
+      if (r.filesTruncated) console.error("warning: the reference bundle is incomplete — some files were not fetched.");
     }
     return 0;
   } catch (e) {

@@ -4,6 +4,9 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 
 const skillName = vi.hoisted(() => ({ current: "ai-engineer" }));
+// Bundle fixture for the sibling-files tests; undefined for every other test so the
+// pre-existing single-file expectations are untouched.
+const skillFiles = vi.hoisted(() => ({ current: undefined as { path: string; content: string }[] | undefined }));
 // `assertSourcePath` is left as the REAL implementation (via importOriginal) so the path-guard
 // tests below exercise the actual kind-dispatch regexes, not a re-implementation of them here.
 // Only the source lookup / network import are faked.
@@ -17,14 +20,15 @@ vi.mock("@agentgem/distribute", async (importOriginal) => {
       return undefined;
     },
     cfgForCuratedSource: () => ({}),
-    importSourceSkill: async () => ({ type: "skill", name: skillName.current, source: "agency-agents", content: "SKILL_BODY" }),
+    importSourceSkill: async () => ({ type: "skill", name: skillName.current, source: "agency-agents", content: "SKILL_BODY",
+      ...(skillFiles.current ? { files: skillFiles.current } : {}) }),
   };
 });
 
 import { installAgencySkill } from "@agentgem/app/sourcesCore";
 
 let home: string;
-beforeEach(() => { home = mkdtempSync(join(tmpdir(), "agsrc-")); skillName.current = "ai-engineer"; });
+beforeEach(() => { home = mkdtempSync(join(tmpdir(), "agsrc-")); skillName.current = "ai-engineer"; skillFiles.current = undefined; });
 
 describe("installAgencySkill", () => {
   it("writes SKILL.md under <home>/.agents/skills/<name>", async () => {
@@ -71,5 +75,43 @@ describe("installAgencySkill", () => {
     it("rejects a traversal path for a skills-layout source", async () => {
       await expect(installAgencySkill("skills-source", "../etc/SKILL.md", { home })).rejects.toThrow(/Invalid skill path/);
     });
+  });
+});
+
+// A progressive-disclosure skill is only usable if the files its SKILL.md points at
+// land next to it. The GitHub tree is untrusted input for a filesystem write, so the
+// paths are re-checked here even though the importer already filtered them.
+describe("installAgencySkill — sibling file bundle", () => {
+  it("writes bundled files under the skill dir, creating nested dirs", async () => {
+    skillFiles.current = [
+      { path: "references/loop.md", content: "# loop" },
+      { path: "references/deep/extra.md", content: "# extra" },
+      { path: "scripts/run.mjs", content: "export const x = 1;" },
+    ];
+    await installAgencySkill("skills-source", "skills/eng/triangulate/SKILL.md", { home });
+    const base = join(home, ".agents", "skills", "ai-engineer");
+    expect(readFileSync(join(base, "SKILL.md"), "utf8")).toBe("SKILL_BODY");
+    expect(readFileSync(join(base, "references", "loop.md"), "utf8")).toBe("# loop");
+    expect(readFileSync(join(base, "references", "deep", "extra.md"), "utf8")).toBe("# extra");
+    expect(readFileSync(join(base, "scripts", "run.mjs"), "utf8")).toBe("export const x = 1;");
+  });
+
+  it("dry-run writes no bundled files", async () => {
+    skillFiles.current = [{ path: "references/loop.md", content: "# loop" }];
+    await installAgencySkill("skills-source", "skills/eng/triangulate/SKILL.md", { home, dryRun: true });
+    expect(existsSync(join(home, ".agents", "skills", "ai-engineer"))).toBe(false);
+  });
+
+  it("refuses a bundle path that would escape the skill dir", async () => {
+    skillFiles.current = [{ path: "../../../etc/pwned.md", content: "x" }];
+    await expect(installAgencySkill("skills-source", "skills/eng/triangulate/SKILL.md", { home }))
+      .rejects.toThrow(/Unsafe bundle path/);
+    expect(existsSync(join(home, ".agents", "skills", "ai-engineer", "SKILL.md"))).toBe(false);
+  });
+
+  it("reports how many bundled files were written", async () => {
+    skillFiles.current = [{ path: "references/a.md", content: "a" }, { path: "references/b.md", content: "b" }];
+    const r = await installAgencySkill("skills-source", "skills/eng/triangulate/SKILL.md", { home });
+    expect(r.files).toBe(2);
   });
 });

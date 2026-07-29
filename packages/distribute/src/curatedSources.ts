@@ -70,6 +70,17 @@ export const CURATED_SOURCES: CuratedSource[] = [
     homepage: "https://github.com/addyosmani/agent-skills",
   },
   {
+    id: "qoderai-better-harness",
+    label: "QoderAI/better-harness",
+    description:
+      "Review workflows for AI coding agents: spec triangulation, skill review, change traceability. (4 skills)",
+    repo: "QoderAI/better-harness",
+    ref: "main",
+    kind: "skills-layout",
+    license: "MIT",
+    homepage: "https://github.com/QoderAI/better-harness",
+  },
+  {
     id: "heygen-com-hyperframes",
     label: "heygen-com/hyperframes",
     description:
