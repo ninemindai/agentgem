@@ -95,7 +95,7 @@ function LedgerRow({ display, projectsScanned }: { display: number[]; projectsSc
       <div className="reveal-ledger">
         <span className="reveal-ledger-item">mined from <b>{sessions}</b> sessions</span>
         <span className="reveal-ledger-item"><b>{days}</b> days</span>
-        <span className="reveal-ledger-item"><b>{hours}</b> active hours</span>
+        <span className="reveal-ledger-item"><b>{hours}</b> engaged hours</span>
         <span className="reveal-ledger-item"><b>{fmtTokens(tokens)}</b> tokens</span>
       </div>
       {projectsScanned > 0 && (

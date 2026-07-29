@@ -5,6 +5,7 @@ import { mkdirSync, writeFileSync, readFileSync, existsSync, mkdtempSync, rmSync
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { clearScanCache, writeAnalysisCache } from "@agentgem/insight";
+import { ENGAGED_GAP_CAP_MS } from "@agentgem/insight/observeAggregate";
 import { SCORECARD_CACHE_ROOT } from "@agentgem/app/gem/scorecard";
 import { HomeController, CLAUDE_GATE_MIN_SESSIONS } from "@agentgem/app/home.controller";
 import { useHermeticHome } from "./support/hermeticHome.js";
@@ -67,7 +68,9 @@ describe("HomeController.summary", () => {
     expect(out.usage.tokensIn).toBe(300);
     expect(out.usage.tokensOut).toBe(70);
     expect(out.usage.tokensCache).toBe(15);
-    expect(out.usage.activeMs).toBe(10 * 60_000 + 5 * 60_000);
+    // Each session is a single user->assistant gap, so engagedMs = that one gap capped
+    // at ENGAGED_GAP_CAP_MS (5min) — not the raw wall-clock span.
+    expect(out.usage.activeMs).toBe(Math.min(10 * 60_000, ENGAGED_GAP_CAP_MS) + Math.min(5 * 60_000, ENGAGED_GAP_CAP_MS));
     expect(out.usage.spanDays).toBe(2); // 2026-07-01T00:00 -> 2026-07-03T00:05, rounds to 2
     expect(out.claudeSessions).toBe(2);
     expect(out.gate.usageEmpty).toBe(false);

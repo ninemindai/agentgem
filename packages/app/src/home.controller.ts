@@ -81,7 +81,7 @@ export class HomeController {
       tokensIn += s.tokensIn;
       tokensOut += s.tokensOut;
       tokensCache += s.tokensCache;
-      activeMs += Math.max(0, s.endMs - s.startMs);
+      activeMs += s.engagedMs ?? Math.max(0, s.endMs - s.startMs);
       firstMs = Math.min(firstMs, s.startMs);
       lastMs = Math.max(lastMs, s.endMs);
       if (s.agent === "claude") claudeSessions++;
