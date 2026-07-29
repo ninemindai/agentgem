@@ -18,7 +18,9 @@ function cachePath(): string { return join(agentgemHome(), ".agentgem", "analysi
 // content-blind). v2 = the payload now carries the `distilled` track, so v1 entries
 // (which lack it) must not be served (proposal §8). v3 = the payload now carries
 // the `reflections` track, so v2 entries (which lack it) must not be served.
-const TOKEN_VERSION = "v3";
+// v4 = SessionStat now carries `engagedMs`; v3 entries (which lack it, and whose
+// pulse.activeMs was the old span-sum) must not be served.
+const TOKEN_VERSION = "v4";
 
 /** A cheap validity token: version + transcript count + newest mtime. New/updated session → new token. */
 export function transcriptToken(paths: string[]): string {

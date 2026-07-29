@@ -92,14 +92,14 @@ export function clearParseCache(): void { _parseCache.clear(); _parseDiskDisable
 let _parseDiskDisabled = false;
 const parseCachePath = (): string => join(agentgemHome(), ".agentgem", "cache", "session-parse.json");
 
-interface ParseCacheFile { v: 1; entries: Record<string, { mtimeMs: number; size: number; stat: SessionStat | null }> }
+interface ParseCacheFile { v: 2; entries: Record<string, { mtimeMs: number; size: number; stat: SessionStat | null }> }
 
 /** Merge the persisted entries in. Never throws: an unusable cache is simply a cold one. */
 export async function loadParseCacheFromDisk(): Promise<void> {
   if (_parseDiskDisabled || _parseCache.size > 0) return;   // memory wins; never re-read mid-process
   try {
     const raw = JSON.parse(await readFile(parseCachePath(), "utf8")) as ParseCacheFile;
-    if (raw?.v !== 1 || !raw.entries) return;
+    if (raw?.v !== 2 || !raw.entries) return;
     for (const [path, e] of Object.entries(raw.entries)) {
       if (typeof e?.mtimeMs === "number" && typeof e.size === "number") _parseCache.set(path, e);
     }
@@ -113,7 +113,7 @@ export async function saveParseCacheToDisk(): Promise<void> {
   try {
     const path = parseCachePath();
     await mkdir(dirname(path), { recursive: true });
-    const file: ParseCacheFile = { v: 1, entries: Object.fromEntries(_parseCache) };
+    const file: ParseCacheFile = { v: 2, entries: Object.fromEntries(_parseCache) };
     const tmp = `${path}.${process.pid}.tmp`;
     await writeFile(tmp, JSON.stringify(file));
     await rename(tmp, path);
