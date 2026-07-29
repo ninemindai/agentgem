@@ -76,17 +76,28 @@ async function judgeBatch(
   }
 }
 
+/** How much of the eligible universe this pass actually judged. `degraded` says
+ *  the agent failed; this says the cap bit — a different, silent way for a
+ *  report to overstate its scope. Consumers must surface `sampled`. */
+export interface JudgeCoverage {
+  eligible: number;   // missioned sessions available to judge
+  judged: number;     // sessions actually sent to the judge (capped, most-recent first)
+  sampled: boolean;   // judged < eligible — conclusions do NOT cover the project
+}
+
 /**
  * Judge the most-recent missioned sessions in `signal`, in chunks so each agent
  * call stays small + reliable. Never throws. degraded:true if ANY chunk's agent
  * call failed (that chunk's sessions get deterministic facets; the rest succeed).
+ * `coverage` reports the maxSessions cap so callers never imply full scope.
  */
 export async function judgeSessions(
   signal: WorkflowSignal,
   opts: { connectFn?: AcpConnectFn; timeoutMs?: number; maxSessions?: number; chunkSize?: number; onDelta?: (chunk: string) => void } = {},
-): Promise<{ facets: SessionFacet[]; degraded: boolean }> {
+): Promise<{ facets: SessionFacet[]; degraded: boolean; coverage: JudgeCoverage }> {
   const allMissioned = (signal.sequences?.sessions ?? []).filter((s) => s.missionHint);
-  if (!allMissioned.length) return { facets: [], degraded: false };   // nothing to judge — agent never invoked
+  // nothing to judge — agent never invoked
+  if (!allMissioned.length) return { facets: [], degraded: false, coverage: { eligible: 0, judged: 0, sampled: false } };
 
   const max = opts.maxSessions ?? DEFAULT_MAX_JUDGE;
   const chunkSize = Math.max(1, opts.chunkSize ?? JUDGE_CHUNK_SIZE);
@@ -104,5 +115,10 @@ export async function judgeSessions(
     facets.push(...r.facets);
     if (r.degraded) degraded = true;
   }
-  return { facets, degraded };
+  const coverage: JudgeCoverage = {
+    eligible: allMissioned.length,
+    judged: selected.length,
+    sampled: selected.length < allMissioned.length,
+  };
+  return { facets, degraded, coverage };
 }

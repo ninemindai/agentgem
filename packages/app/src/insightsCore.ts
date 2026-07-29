@@ -15,7 +15,7 @@ import {
   computeCached, type CacheHit,
   type DetectorFinding, type DetectorSummary,
   openArtifactOutcomesStore, buildArtifactOutcomeRows,
-  type ArtifactOutcomesStore, type WorkflowSignal, type SessionFacet,
+  type ArtifactOutcomesStore, type WorkflowSignal, type SessionFacet, type JudgeCoverage,
 } from "@agentgem/insight";
 
 /** Persist the {artifact, session, outcome} triples for a judged pass. Isolated
@@ -44,7 +44,10 @@ export interface InsightsPayload {
   findings: DetectorFinding[];
   detectorSummary: DetectorSummary[];
   degraded: boolean;
-  signalSummary: { sessionsScanned: number; spanDays: number; notes: unknown };
+  // judgeCoverage: how much of the eligible universe the judge actually saw.
+  // sessionsScanned counts a DIFFERENT population (all scanned sessions), so a
+  // reader cannot derive sampling from it — it has to be reported explicitly.
+  signalSummary: { sessionsScanned: number; spanDays: number; notes: unknown; judgeCoverage: JudgeCoverage };
 }
 export interface InsightsProgress {
   onPhase?(phase: string, extra?: Record<string, unknown>): void;
@@ -85,7 +88,8 @@ export async function computeInsights(
     cacheOnly: opts.cacheOnly,
     // Cache miss + cached-only caller (the dream harvest) — empty report without
     // judging/synthesizing, so the harvest never spends LLM.
-    onCacheOnlyMiss: () => ({ report: synthesizeInsights([]), facets: [], findings: [], detectorSummary: [], degraded: false, signalSummary: { sessionsScanned: 0, spanDays: 0, notes: null } }),
+    // Nothing was scanned or judged on this path, so coverage is honestly zero.
+    onCacheOnlyMiss: () => ({ report: synthesizeInsights([]), facets: [], findings: [], detectorSummary: [], degraded: false, signalSummary: { sessionsScanned: 0, spanDays: 0, notes: null, judgeCoverage: { eligible: 0, judged: 0, sampled: false } } }),
     compute: async () => {
       const signal = scanWorkflow(paths, scanInv, { retainSequences: true });
       p?.onPhase?.("scanned", { transcripts: paths.length, sessions: signal.sessions.scanned });
@@ -96,7 +100,7 @@ export async function computeInsights(
       const detectorSummary = summarizeFindings(findings, [...DETECTORS, ...ruleSpecs]);
 
       p?.onPhase?.("judging");
-      const { facets, degraded: judgeDegraded } = await (opts.judge ?? judgeSessions)(signal, { onDelta: (chunk) => p?.onDelta?.(chunk) });
+      const { facets, degraded: judgeDegraded, coverage: judgeCoverage } = await (opts.judge ?? judgeSessions)(signal, { onDelta: (chunk) => p?.onDelta?.(chunk) });
 
       // Persist proven-use triples (best-effort — never break insights on a store error).
       try {
@@ -115,7 +119,7 @@ export async function computeInsights(
       return {
         report, facets, findings, detectorSummary,
         degraded: judgeDegraded || narr.degraded,
-        signalSummary: { sessionsScanned: signal.sessions.scanned, spanDays: signal.sessions.spanDays, notes: signal.notes },
+        signalSummary: { sessionsScanned: signal.sessions.scanned, spanDays: signal.sessions.spanDays, notes: signal.notes, judgeCoverage },
       };
     },
   });
