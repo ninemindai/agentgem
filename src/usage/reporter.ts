@@ -97,7 +97,7 @@ export function usageDaysFromStats(stats: SessionStat[], sinceMs: number, scopeO
     row.tokensIn += s.tokensIn;
     row.tokensOut += s.tokensOut;
     row.tokensCache += s.tokensCache;
-    row.activeMs += Math.max(0, s.endMs - s.startMs);
+    row.activeMs += s.engagedMs ?? Math.max(0, s.endMs - s.startMs);
     byKey.set(key, row);
   }
   return [...byKey.values()].sort((a, b) => a.date.localeCompare(b.date) || a.scope.localeCompare(b.scope));

@@ -30,6 +30,12 @@ describe("usageDaysFromStats", () => {
     expect(rows[0]).toMatchObject({ sessions: 2, msgs: 8, tokensIn: 200, activeMs: 120_000 });
     expect(rows[1]).toMatchObject({ sessions: 1, tokensIn: 7 });
   });
+  it("uses engagedMs over the raw span when present", () => {
+    const rows = usageDaysFromStats([
+      stat({ startMs: T0, endMs: T0 + 3_600_000, engagedMs: 42_000 }),
+    ], 0);
+    expect(rows[0]).toMatchObject({ activeMs: 42_000 });
+  });
   it("drops sessions older than the window and negative durations", () => {
     const rows = usageDaysFromStats([
       stat({ endMs: T0 - (REPORT_WINDOW_DAYS + 1) * DAY }),
