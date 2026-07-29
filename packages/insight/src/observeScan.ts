@@ -17,6 +17,7 @@ import { transcriptToken } from "./analysisCache.js";
 // in observeAggregate.ts so the browser can share it; re-export so existing
 // `@agentgem/insight` consumers of these names keep resolving.
 import type { SessionStat } from "./observeAggregate.js";
+import { engagedMsFromTimestamps } from "./observeAggregate.js";
 export type { SessionStat, ObserveRange, ObserveFilter, ObservePayload, AgentId } from "./observeAggregate.js";
 export { aggregateObserve } from "./observeAggregate.js";
 
@@ -79,13 +80,14 @@ export function parseClaudeTranscript(text: string, path: string, normalize: Nor
   const sessionId = basename(path).replace(/\.jsonl$/, "");
   let cwd: string | null = null, model: string | null = null, gitBranch: string | null = null;
   let startMs = Infinity, endMs = -Infinity, msgs = 0, tokensIn = 0, tokensOut = 0, tokensCache = 0;
+  const tsList: number[] = [];
   const tools: Record<string, number> = {}, skills: Record<string, number> = {}, subagents: Record<string, number> = {};
   for (const rec of jsonLines(text)) {
     const type = rec.type as string | undefined;
     if (typeof rec.cwd === "string") cwd = rec.cwd;
     if (typeof rec.gitBranch === "string" && rec.gitBranch) gitBranch = rec.gitBranch;
     const ts = typeof rec.timestamp === "string" ? Date.parse(rec.timestamp) : NaN;
-    if (!Number.isNaN(ts)) { startMs = Math.min(startMs, ts); endMs = Math.max(endMs, ts); }
+    if (!Number.isNaN(ts)) { startMs = Math.min(startMs, ts); endMs = Math.max(endMs, ts); tsList.push(ts); }
     if (type === "user" || type === "assistant") msgs++;
     const msg = rec.message as Record<string, unknown> | undefined;
     // Fix 2: skip the <synthetic> sentinel — it is not a real model name.
@@ -111,17 +113,18 @@ export function parseClaudeTranscript(text: string, path: string, normalize: Nor
     }
   }
   if (!sessionId || endMs < startMs) return null;
-  return { agent: "claude", sessionId, project: projectLabel(cwd, normalize), cwd, model, gitBranch, startMs, endMs, msgs, tokensIn, tokensOut, tokensCache, ...usageFields(tools, skills, subagents) };
+  return { agent: "claude", sessionId, project: projectLabel(cwd, normalize), cwd, model, gitBranch, startMs, endMs, engagedMs: engagedMsFromTimestamps(tsList), msgs, tokensIn, tokensOut, tokensCache, ...usageFields(tools, skills, subagents) };
 }
 
 export function parseCodexTranscript(text: string, path: string, normalize: Normalizer = normalizeProjectRoot): SessionStat | null {
   let sessionId = "", cwd: string | null = null, model: string | null = null;
   let startMs = Infinity, endMs = -Infinity, msgs = 0;
+  const tsList: number[] = [];
   let total: Record<string, number> | null = null;   // cumulative; keep the last seen
   const tools: Record<string, number> = {};
   for (const rec of jsonLines(text)) {
     const ts = typeof rec.timestamp === "string" ? Date.parse(rec.timestamp) : NaN;
-    if (!Number.isNaN(ts)) { startMs = Math.min(startMs, ts); endMs = Math.max(endMs, ts); }
+    if (!Number.isNaN(ts)) { startMs = Math.min(startMs, ts); endMs = Math.max(endMs, ts); tsList.push(ts); }
     const payload = rec.payload as Record<string, unknown> | undefined;
     if (rec.type === "session_meta" && payload) {
       if (typeof payload.id === "string") sessionId = payload.id;
@@ -142,7 +145,7 @@ export function parseCodexTranscript(text: string, path: string, normalize: Norm
   const input = total?.input_tokens ?? 0, cached = total?.cached_input_tokens ?? 0;
   const tokensIn = Math.max(0, input - cached);
   const tokensOut = (total?.output_tokens ?? 0) + (total?.reasoning_output_tokens ?? 0);
-  return { agent: "codex", sessionId, project: projectLabel(cwd, normalize), cwd, model, gitBranch: null, startMs, endMs, msgs, tokensIn, tokensOut, tokensCache: cached, ...usageFields(tools, {}, {}) };
+  return { agent: "codex", sessionId, project: projectLabel(cwd, normalize), cwd, model, gitBranch: null, startMs, endMs, engagedMs: engagedMsFromTimestamps(tsList), msgs, tokensIn, tokensOut, tokensCache: cached, ...usageFields(tools, {}, {}) };
 }
 
 // Files the default-path scan reads, across every enumerable source. This is the
