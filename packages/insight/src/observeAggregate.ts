@@ -142,7 +142,7 @@ export function aggregateObserve(stats: SessionStat[], range: ObserveRange, nowM
     m.sessions++; m.tokens += tokensOf(s);
     byModel.set(modelKey, m);
 
-    pTokens += tokensOf(s); pMsgs += s.msgs; pActive += Math.max(0, s.endMs - s.startMs);
+    pTokens += tokensOf(s); pMsgs += s.msgs; pActive += s.engagedMs ?? Math.max(0, s.endMs - s.startMs);
   }
 
   const byProj = new Map<string | null, ObservePayload["byProject"][number]>();
