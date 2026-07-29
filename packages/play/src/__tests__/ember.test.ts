@@ -56,7 +56,7 @@ describe("EMBER built-in miniapp", () => {
     dom.window.close();
   });
 
-  it("declares copy-command and copies /compact on a live clean-cut BANK", () => {
+  it("declares copy-command and copies /compact on a live clean-cut BANK", async () => {
     expect(EMBER_META.needs).toContain("copy-command");
     expect(EMBER_HTML).toContain("copyCommand");
     const dom = new JSDOM(EMBER_HTML, { runScripts: "dangerously", pretendToBeVisual: true, url: "https://localhost/" });
@@ -71,6 +71,15 @@ describe("EMBER built-in miniapp", () => {
     w.__emberFeed!({ type: "hygiene", cap: 200000, curveTail: [{ turn: 10, msgIndex: 20, ctxTokens: 60000, cacheCreation: 0, outTokens: 0 }] });
     (w.document.getElementById("bank") as HTMLElement).click();
     expect(copied).toContain("/compact");
+
+    // copyCommand() resolves, and EMBER's .then() shows the success toast — that continuation is a
+    // MICROTASK, so it has not run yet. Flush before close(): closing first tore the window down
+    // under the queued callback, and `document` inside the script's $() became undefined
+    // (unhandled TypeError, assertions still green). Asserting the toast makes the flush
+    // load-bearing rather than a sleep — this is the copy-success path, previously unverified.
+    await new Promise((r) => setTimeout(r, 0));
+    expect(w.document.getElementById("toast")!.innerHTML).toContain("copied");
+
     dom.window.close();
   });
 });
