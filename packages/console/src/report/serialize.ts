@@ -51,22 +51,30 @@ ul { padding-left: 1.2em; }
 </style></head><body><h1>${escapeHtml(title)}</h1>${body}</body></html>`;
 }
 
-import type { InsightsReportView } from "../panels/Mine/insightsStream.js";
+import type { InsightsReportView, JudgeCoverageView } from "../panels/Mine/insightsStream.js";
 import type { AnalyzeCandidate } from "../panels/Curate/analyzeStream.js";
 
-export function insightsToBlocks(report: InsightsReportView, scanned?: number | null): ReportBlock[] {
+export function insightsToBlocks(
+  report: InsightsReportView, scanned?: number | null, judgeCoverage?: JudgeCoverageView | null,
+): ReportBlock[] {
   const blocks: ReportBlock[] = [];
   const t = report.totals;
   if (report.narrative) blocks.push({ kind: "para", text: report.narrative });
   if (report.outcomes_summary) blocks.push({ kind: "para", text: report.outcomes_summary });
 
-  const capped = scanned != null && scanned > t.sessions;
+  // Same scope rule as the on-screen card: claim a sample only when the judge cap
+  // actually bit, against the eligible denominator. The scanned-vs-judged proxy is
+  // the fallback for cached payloads written before coverage was reported.
+  const capped = judgeCoverage ? judgeCoverage.sampled : scanned != null && scanned > t.sessions;
+  const scopeNote = !capped ? ""
+    : judgeCoverage
+      ? ` (most-recent ${judgeCoverage.judged} of ${judgeCoverage.eligible} sessions with a stated goal)`
+      : ` (most-recent ${t.sessions} of ${scanned} scanned)`;
   blocks.push({
     kind: "para",
     text:
       `${t.sessions} session${t.sessions === 1 ? "" : "s"} judged — ` +
-      `${t.mostly} mostly, ${t.partially} partially, ${t.not} not.` +
-      (capped ? ` (most-recent ${t.sessions} of ${scanned} scanned)` : ""),
+      `${t.mostly} mostly, ${t.partially} partially, ${t.not} not.` + scopeNote,
   });
 
   const byModel = report.by_model ?? [];

@@ -80,6 +80,19 @@ describe("insightsToBlocks", () => {
     expect(md).toContain("- retry storm on tests");
   });
 
+  // Exports must carry the same scope claim the on-screen card makes.
+  it("uses the eligible denominator when the judge cap bit", () => {
+    const md = blocksToMarkdown(insightsToBlocks(fullReport, 1395, { eligible: 214, judged: 5, sampled: true }));
+    expect(md).toContain("most-recent 5 of 214 sessions with a stated goal");
+    expect(md).not.toContain("1395");
+  });
+
+  it("makes no scope claim when every eligible session was judged", () => {
+    const md = blocksToMarkdown(insightsToBlocks(fullReport, 1395, { eligible: 5, judged: 5, sampled: false }));
+    expect(md).toContain("5 sessions judged");
+    expect(md).not.toContain("most-recent");
+  });
+
   it("omits empty sections and the by-model table when only one model", () => {
     const bare: InsightsReportView = {
       totals: { sessions: 1, mostly: 1, partially: 0, not: 0 },

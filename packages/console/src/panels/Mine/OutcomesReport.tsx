@@ -1,5 +1,5 @@
 import { useMemo, useState } from "react";
-import type { InsightsReportView } from "./insightsStream.js";
+import type { InsightsReportView, JudgeCoverageView } from "./insightsStream.js";
 import { OutcomesDonut, ByModelBars } from "./InsightsCharts.js";
 import { useTableSort, type SortColumn } from "../../shell/useTableSort.js";
 import { SortTh } from "../../shell/SortTh.js";
@@ -13,7 +13,7 @@ const CANDIDATE_COLUMNS: SortColumn<PublishCandidate>[] = [
   { id: "why", value: (c) => c.why.toLowerCase() },
 ];
 
-export function InsightsReportCard({ report, scanned, onBuild, onContribute }: { report: InsightsReportView; scanned?: number | null; onBuild?: () => void; onContribute?: () => void | Promise<void> }) {
+export function InsightsReportCard({ report, scanned, judgeCoverage, onBuild, onContribute }: { report: InsightsReportView; scanned?: number | null; judgeCoverage?: JudgeCoverageView | null; onBuild?: () => void; onContribute?: () => void | Promise<void> }) {
   const [contributing, setContributing] = useState(false);
   const [contributeError, setContributeError] = useState<string | null>(null);
   const candidateSort = useTableSort(CANDIDATE_COLUMNS);
@@ -31,16 +31,20 @@ export function InsightsReportCard({ report, scanned, onBuild, onContribute }: {
     }
   };
 
-  // Be honest about the cap: the report judges the most-recent sessions, which
-  // can be fewer than were scanned (50-session batch bound, or unmissioned ones).
-  const judged = report.totals.sessions;
-  const capped = scanned != null && scanned > judged;
+  // Be honest about the cap — but only when it actually bit. judgeCoverage is the
+  // accurate signal: `sampled` means DEFAULT_MAX_JUDGE dropped eligible sessions,
+  // and `eligible` is the right denominator (sessions with a stated goal). The
+  // `scanned > judged` proxy below conflated that with "some scanned session was
+  // never missioned", so it fired on almost every report. Kept only as the
+  // fallback for cached payloads written before coverage was reported.
+  const judged = judgeCoverage?.judged ?? report.totals.sessions;
+  const capped = judgeCoverage ? judgeCoverage.sampled : scanned != null && scanned > judged;
   // Defensive: tolerate a malformed/older-shape report (e.g. a stale cache entry
   // missing a field) — a missing array must not crash the whole console.
   const byModel = report.by_model ?? [];
   const publishCandidates = report.publish_candidates ?? [];
   const friction = report.friction ?? [];
-  const blocks = useMemo(() => insightsToBlocks(report, scanned), [report, scanned]);
+  const blocks = useMemo(() => insightsToBlocks(report, scanned, judgeCoverage), [report, scanned, judgeCoverage]);
   const markdown = useMemo(() => blocksToMarkdown(blocks), [blocks]);
   const html = useMemo(() => blocksToHtml(blocks, "AgentGem Insights"), [blocks]);
   const json = useMemo(() => JSON.stringify(report, null, 2), [report]);
@@ -49,7 +53,13 @@ export function InsightsReportCard({ report, scanned, onBuild, onContribute }: {
       <ReportActions title="AgentGem Insights" filename="agentgem-insights" markdown={markdown} json={json} html={html} />
       {report.narrative && <p className="insights-narrative">{report.narrative}</p>}
       <p className="analyze-candidate-desc">{report.outcomes_summary}</p>
-      {capped && <p className="insights-hint">Based on the {judged} most-recent of {scanned} sessions scanned.</p>}
+      {capped && (
+        <p className="insights-hint">
+          {judgeCoverage
+            ? `Based on the ${judged} most-recent of ${judgeCoverage.eligible} sessions with a stated goal.`
+            : `Based on the ${judged} most-recent of ${scanned} sessions scanned.`}
+        </p>
+      )}
 
       <OutcomesDonut totals={report.totals} />
 

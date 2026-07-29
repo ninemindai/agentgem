@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { makeClient } from "../../api/routes.js";
-import { openInsightsStream, type InsightsReportView, type InsightsEvent } from "./insightsStream.js";
+import { openInsightsStream, type InsightsReportView, type InsightsEvent, type JudgeCoverageView } from "./insightsStream.js";
 import { InsightsReportCard } from "./OutcomesReport.js";
 import { setPendingAnalyze, setPendingPlaybook } from "../../pendingAnalyze.js";
 import { timeAgo } from "../../util/timeAgo.js";
@@ -15,15 +15,16 @@ export function OutcomesView({ apiBase, scope, openStream = openInsightsStream }
   const [report, setReport] = useState<InsightsReportView | null>(null);
   const [updatedAt, setUpdatedAt] = useState<number | null>(null);
   const [scanned, setScanned] = useState<number | null>(null);
+  const [judgeCoverage, setJudgeCoverage] = useState<JudgeCoverageView | null>(null);
   const [degraded, setDegraded] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [running, setRunning] = useState(false);
   const closeRef = useRef<(() => void) | null>(null);
 
-  const reset = () => { setPhase(""); setOut(""); setReport(null); setUpdatedAt(null); setScanned(null); setDegraded(false); setError(null); };
+  const reset = () => { setPhase(""); setOut(""); setReport(null); setUpdatedAt(null); setScanned(null); setJudgeCoverage(null); setDegraded(false); setError(null); };
 
   const paint = (e: Extract<InsightsEvent, { type: "done" }>) => {
-    setPhase("done"); setReport(e.report); setUpdatedAt(e.updatedAt); setScanned(e.scanned ?? null); setDegraded(e.degraded);
+    setPhase("done"); setReport(e.report); setUpdatedAt(e.updatedAt); setScanned(e.scanned ?? null); setJudgeCoverage(e.judgeCoverage ?? null); setDegraded(e.degraded);
   };
 
   const run = (opts: { fresh?: boolean; cacheOnly?: boolean }) => {
@@ -77,6 +78,7 @@ export function OutcomesView({ apiBase, scope, openStream = openInsightsStream }
           <InsightsReportCard
             report={report}
             scanned={scanned}
+            judgeCoverage={judgeCoverage}
             onBuild={canBuild ? () => { setPendingAnalyze(scope); window.location.hash = "#/curate"; } : undefined}
             onContribute={canBuild ? () => { setPendingPlaybook({ root: scope }); window.location.hash = "#/curate"; } : undefined}
           />
