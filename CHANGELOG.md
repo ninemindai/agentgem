@@ -7,6 +7,51 @@ All notable changes to AgentGem are documented here. The format follows
 The npm core (`@ninemind/agentgem`) and the desktop app share a version number but
 are tagged separately: core releases are tagged `v*`, desktop releases `desktop-v*`.
 
+## [0.10.5] — `@ninemind/agentgem` (npm core) — 2026-07-29
+
+The first-run release. A developer ran `gemit` for the first time and hit three
+failures in the ten seconds around publishing, then said the thing that mattered
+most: "I'm not really sure how I'm supposed to improve my setup maturity." He was
+right, and not because he misread the report.
+
+### Fixed
+
+- **A bind timeout no longer prints a stack trace.** The device flow polls for five
+  minutes and then throws; nothing caught it, so "hasn't finished signing in yet"
+  surfaced as a crash. It now explains itself and points at the report, which was
+  already written before the bind was attempted.
+- **The publish prompt no longer reads a stray keystroke as "no".** Any unrecognised
+  answer, including a bare newline, meant decline — and keystrokes made during the
+  multi-minute wait sit in the terminal buffer to be consumed the instant the prompt
+  opens. The result was a silent "Not published." and a wasted re-run. Ambiguous
+  input now re-asks; three unusable answers still fail closed.
+- **A rubric can no longer claim "clean" over sessions its criteria never saw.**
+  `judgeCriteria` caps at 30 most-recent sessions and gave no sign the cap bit, on a
+  surface that makes a binary all-clear claim.
+- **The insights scope note fires on the judge cap**, not on unmissioned sessions —
+  it was using the wrong trigger and the wrong denominator.
+
+### Added
+
+- **The CLI opens the GitHub page for you.** It printed a URL and a code and went
+  silent for five minutes, which is exactly how the reporter wandered off and timed
+  out. The console has had a "Copy code & open GitHub" button all along. The code
+  stays on screen, so a refused opener or a browserless box loses nothing, and
+  nothing is ever launched off a TTY.
+- **Setup quests aimed at coverage.** SETUP is 70% coverage and 30% variety, but
+  quests derived from locked perks, and both setup perks threshold on variety alone.
+  Install enough and both unlock, so no setup quest appears while the score stays
+  low. A real payload: 61 skills and 7 subagents (both variety terms maxed), skills
+  reached for in 5% of sessions, setup 33, and zero setup quests. It now leads with
+  "Reach for a skill more often, 5/25% of sessions, +9" — exact, recomputed rather
+  than guessed, and silent once coverage clears the target.
+- **Judge coverage is reported**, so a report built from 30 recency-biased
+  judgements on a 1,400-session project can no longer read as a whole-project
+  conclusion.
+- **Skills carry their reference bundle.** Only `SKILL.md` was fetched, so a skill
+  whose body says "read references/loop.md" installed with that file absent, sending
+  the agent at a path that isn't there. `.agents/` skills are no longer hidden.
+
 ## [0.10.4] — `@ninemind/agentgem` (npm core) — 2026-07-28
 
 Supersedes 0.10.3, which was tagged but never published to npm. Everything in
@@ -331,6 +376,11 @@ the cohort is real.
   `@electric-sql/pglite`, `pg`, `drizzle-orm`, `drizzle-zod`, `@agentback/drizzle`,
   `@anthropic-ai/sdk`.
 - The broken public Fly Deploy CI workflow.
+
+## [desktop-v0.10.5] — desktop app — 2026-07-29
+
+No desktop-specific changes. Embeds everything in core 0.10.5, including the
+first-run publish fixes and the setup quests that finally say what to do.
 
 ## [desktop-v0.10.4] — desktop app — 2026-07-28
 
