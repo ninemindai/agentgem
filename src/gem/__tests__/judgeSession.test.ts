@@ -102,12 +102,12 @@ describe("judgeSessions", () => {
       maxSessions: 2,
       connectFn: fakeConnect(JSON.stringify({ facets: [] })),
     });
-    expect(coverage).toEqual({ eligible: 5, judged: 2, sampled: true });
+    expect(coverage).toEqual({ eligible: 5, judged: 2, sampled: true, truncated: 0 });
   });
 
   it("reports sampled:false when every eligible session was judged", async () => {
     const { coverage } = await judgeSessions(SIG, { connectFn: fakeConnect(JSON.stringify({ facets: [] })) });
-    expect(coverage).toEqual({ eligible: 2, judged: 2, sampled: false });
+    expect(coverage).toEqual({ eligible: 2, judged: 2, sampled: false, truncated: 0 });
   });
 
   it("reports zero coverage when no session carries a mission", async () => {
@@ -115,7 +115,7 @@ describe("judgeSessions", () => {
     const { coverage } = await judgeSessions(noMission, {
       connectFn: async () => { throw new Error("should not be called"); },
     });
-    expect(coverage).toEqual({ eligible: 0, judged: 0, sampled: false });
+    expect(coverage).toEqual({ eligible: 0, judged: 0, sampled: false, truncated: 0 });
   });
 
   it("defaults the cap to DEFAULT_MAX_JUDGE", async () => {

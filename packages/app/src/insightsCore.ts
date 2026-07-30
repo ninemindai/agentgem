@@ -89,7 +89,7 @@ export async function computeInsights(
     // Cache miss + cached-only caller (the dream harvest) — empty report without
     // judging/synthesizing, so the harvest never spends LLM.
     // Nothing was scanned or judged on this path, so coverage is honestly zero.
-    onCacheOnlyMiss: () => ({ report: synthesizeInsights([]), facets: [], findings: [], detectorSummary: [], degraded: false, signalSummary: { sessionsScanned: 0, spanDays: 0, notes: null, judgeCoverage: { eligible: 0, judged: 0, sampled: false } } }),
+    onCacheOnlyMiss: () => ({ report: synthesizeInsights([]), facets: [], findings: [], detectorSummary: [], degraded: false, signalSummary: { sessionsScanned: 0, spanDays: 0, notes: null, judgeCoverage: { eligible: 0, judged: 0, sampled: false, truncated: 0 } } }),
     compute: async () => {
       const signal = scanWorkflow(paths, scanInv, { retainSequences: true });
       p?.onPhase?.("scanned", { transcripts: paths.length, sessions: signal.sessions.scanned });
