@@ -442,3 +442,32 @@ only `@agentgem/play` importing it.
 
 **Depends on / blocked by:** Nothing, but it is a change to the publish contract — worth
 doing when someone is already touching release tooling rather than on its own.
+
+## No eval harness for the LLM criterion judge prompt
+
+**What:** Build a small eval suite for `packages/insight/src/criterionJudge.ts`'s prompt —
+fixture sessions with known-correct applicability and fire verdicts, run against the real
+agent, scored for agreement.
+
+**Why:** The applicability change (2026-07-30) makes the prompt carry more weight: it now
+asks the judge for a per-session not-applicable roster on top of the fire decision, and
+the roster feeds a denominator users read as a number. Unit tests only verify the parser
+against synthetic responses. Nothing verifies that the model actually produces good
+rosters, so prompt regressions land silently and show up as quietly wrong denominators.
+
+**Pros:** Turns the one untested surface in the rubric pipeline into a measured one, and
+gives a baseline for the "does asking two questions per pair degrade fire accuracy?"
+question the review flagged at 5/10 confidence but could not answer.
+
+**Cons:** Needs a real agent to run, so it is slow, costs tokens, and is non-deterministic —
+it cannot gate CI the way the unit tests do. Fixture sessions must be scrubbed before they
+can live in the repo.
+
+**Context:** Raised during the /plan-eng-review of the criterion-applicability design
+(`docs/superpowers/specs/2026-07-30-criterion-applicability-design.md` §9, "Not covered by
+tests"). The judge already has a stubbable seam — `evaluateRubric` takes `opts.judge` and
+`judgeCriteria` takes `opts.connectFn` — so an eval driver can reuse it without new
+plumbing. `judgeSession.ts` has the same untested-prompt gap and would share the harness.
+
+**Depends on / blocked by:** Ships after the applicability change; the prompt contract
+should settle first.
