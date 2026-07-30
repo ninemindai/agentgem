@@ -11,7 +11,7 @@ import { readQueue, readDiary } from "@agentgem/app/dream/store";
 const prov = { occurrences: [{ sessionId: "s1", transcript: "t.jsonl", messageIndices: [1], atMs: 5 }] };
 const analyzePayload = {
   candidates: [], gaps: ["no CI"], degraded: false,
-  signalSummary: { sessionsScanned: 3, spanDays: 2, notes: null, judgeCoverage: { eligible: 0, judged: 0, sampled: false } },
+  signalSummary: { sessionsScanned: 3, spanDays: 2, notes: null, judgeCoverage: { eligible: 0, judged: 0, sampled: false, truncated: 0 } },
   distilled: [{ name: "foo", description: "d", triggers: [], tools: [], mutating: false, body: "b",
     evidence: { sessions: 1, exampleSequence: [], root: "/p", provenance: prov }, status: "draft", confidence: "medium", origin: "llm" }],
   reflections: [{ kind: "recurring-decision", detail: "finish the migration", importance: "high", provenance: prov }],
@@ -21,7 +21,7 @@ const insightsPayload = {
     totals: { sessions: 1, mostly: 1, partially: 0, not: 0 }, outcomes_summary: "", narrative: "",
     by_model: [], friction: [], publish_candidates: [{ sessionId: "sess-1", goal: "ship the thing", why: "clean success" }],
   },
-  facets: [], findings: [], detectorSummary: [], degraded: false, signalSummary: { sessionsScanned: 1, spanDays: 1, notes: null, judgeCoverage: { eligible: 0, judged: 0, sampled: false } },
+  facets: [], findings: [], detectorSummary: [], degraded: false, signalSummary: { sessionsScanned: 1, spanDays: 1, notes: null, judgeCoverage: { eligible: 0, judged: 0, sampled: false, truncated: 0 } },
 };
 
 describe("dreamRoot", () => {

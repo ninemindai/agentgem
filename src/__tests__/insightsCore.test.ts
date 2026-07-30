@@ -44,7 +44,7 @@ describe("computeInsights", () => {
     mkdirSync(projDir, { recursive: true });
     writeFileSync(join(projDir, "t.jsonl"), JSON.stringify({ cwd: "/proj2" }) + "\n");
 
-    const fakeJudge: typeof judgeSessions = async () => ({ facets: [], degraded: false, coverage: { eligible: 0, judged: 0, sampled: false } });
+    const fakeJudge: typeof judgeSessions = async () => ({ facets: [], degraded: false, coverage: { eligible: 0, judged: 0, sampled: false, truncated: 0 } });
     const fakeNarrate: typeof narrateInsights = async () => ({ narrative: "ok", degraded: false });
 
     const first = await computeInsights("/proj2", { dir: claudeDir, judge: fakeJudge, narrate: fakeNarrate });
@@ -70,12 +70,12 @@ describe("computeInsights", () => {
     writeFileSync(join(projDir, "t.jsonl"), JSON.stringify({ cwd: "/proj-cov" }) + "\n");
 
     const sampledJudge: typeof judgeSessions = async () => ({
-      facets: [], degraded: false, coverage: { eligible: 42, judged: 30, sampled: true },
+      facets: [], degraded: false, coverage: { eligible: 42, judged: 30, sampled: true, truncated: 0 },
     });
     const fakeNarrate: typeof narrateInsights = async () => ({ narrative: "ok", degraded: false });
 
     const res = await computeInsights("/proj-cov", { dir: claudeDir, judge: sampledJudge, narrate: fakeNarrate });
-    expect(res.payload.signalSummary.judgeCoverage).toEqual({ eligible: 42, judged: 30, sampled: true });
+    expect(res.payload.signalSummary.judgeCoverage).toEqual({ eligible: 42, judged: 30, sampled: true, truncated: 0 });
   });
 
   it("degraded compute: does not write cache, repeated calls stay uncached", async () => {
@@ -86,7 +86,7 @@ describe("computeInsights", () => {
     mkdirSync(projDir, { recursive: true });
     writeFileSync(join(projDir, "t.jsonl"), JSON.stringify({ cwd: "/proj3" }) + "\n");
 
-    const fakeJudge: typeof judgeSessions = async () => ({ facets: [], degraded: true, coverage: { eligible: 0, judged: 0, sampled: false } });
+    const fakeJudge: typeof judgeSessions = async () => ({ facets: [], degraded: true, coverage: { eligible: 0, judged: 0, sampled: false, truncated: 0 } });
     const fakeNarrate: typeof narrateInsights = async () => ({ narrative: "ok", degraded: false });
 
     const first = await computeInsights("/proj3", { dir: claudeDir, judge: fakeJudge, narrate: fakeNarrate });
@@ -107,7 +107,7 @@ describe("computeInsights", () => {
     mkdirSync(projDir, { recursive: true });
     writeFileSync(join(projDir, "t.jsonl"), JSON.stringify({ cwd: "/proj4" }) + "\n");
 
-    const fakeJudge: typeof judgeSessions = async () => ({ facets: [], degraded: false, coverage: { eligible: 0, judged: 0, sampled: false } });
+    const fakeJudge: typeof judgeSessions = async () => ({ facets: [], degraded: false, coverage: { eligible: 0, judged: 0, sampled: false, truncated: 0 } });
     const fakeNarrate: typeof narrateInsights = async () => ({ narrative: "ok", degraded: false });
 
     const first = await computeInsights("/proj4", { dir: claudeDir, judge: fakeJudge, narrate: fakeNarrate });

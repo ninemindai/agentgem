@@ -83,6 +83,7 @@ export interface JudgeCoverage {
   eligible: number;   // missioned sessions available to judge
   judged: number;     // sessions actually sent to the judge (capped, most-recent first)
   sampled: boolean;   // judged < eligible — conclusions do NOT cover the project
+  truncated: number;  // of those, sessions whose step list was clipped — only partly seen
 }
 
 /**
@@ -97,7 +98,7 @@ export async function judgeSessions(
 ): Promise<{ facets: SessionFacet[]; degraded: boolean; coverage: JudgeCoverage }> {
   const allMissioned = (signal.sequences?.sessions ?? []).filter((s) => s.missionHint);
   // nothing to judge — agent never invoked
-  if (!allMissioned.length) return { facets: [], degraded: false, coverage: { eligible: 0, judged: 0, sampled: false } };
+  if (!allMissioned.length) return { facets: [], degraded: false, coverage: { eligible: 0, judged: 0, sampled: false, truncated: 0 } };
 
   const max = opts.maxSessions ?? DEFAULT_MAX_JUDGE;
   const chunkSize = Math.max(1, opts.chunkSize ?? JUDGE_CHUNK_SIZE);
@@ -119,6 +120,7 @@ export async function judgeSessions(
     eligible: allMissioned.length,
     judged: selected.length,
     sampled: selected.length < allMissioned.length,
+    truncated: 0,   // this judge reads missionHint, not the step spine — nothing is clipped
   };
   return { facets, degraded, coverage };
 }
