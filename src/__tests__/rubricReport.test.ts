@@ -105,9 +105,63 @@ describe("evaluateRubric — LLM criteria (Phase 2, injected judge)", () => {
   it("stays clean when the judge covered every eligible session", async () => {
     const judge = async () => ({
       findings: [] as DetectorFinding[], degraded: false,
-      coverage: { eligible: 1, judged: 1, sampled: false, truncated: 0 }, applicability: new Map(),
+      coverage: { eligible: 1, judged: 1, sampled: false, truncated: 0 },
+      // The criterion was assessed and applied — an all-clear needs something to
+      // have actually been checked, not merely an absence of findings.
+      applicability: new Map([["verified-real-case", { judged: 1, applicable: 1 }]]),
     });
     const r = await evaluateRubric(signalOf([B]), withCrit, { ...PROJECT, judge });
+    expect(r.clean).toBe(true);
+  });
+
+  it("decorates a criterion row with its denominator and leaves cheap rows undecorated", async () => {
+    const judge = async () => ({
+      findings: [] as DetectorFinding[], degraded: false,
+      coverage: { eligible: 30, judged: 30, sampled: false, truncated: 0 },
+      applicability: new Map([["verified-real-case", { judged: 30, applicable: 9 }]]),
+    });
+    const r = await evaluateRubric(signalOf([B]), withCrit, { ...PROJECT, judge });
+    const crit = r.factors.find((f) => f.id === "verified-real-case")!;
+    expect(crit.applicableSessions).toBe(9);
+    expect(crit.judgedSessions).toBe(30);
+    // Cheap detectors run over every session and have no applicability concept —
+    // giving them a denominator would invent a distinction that doesn't exist.
+    const cheap = r.factors.find((f) => f.id === "retry-storm")!;
+    expect(cheap.applicableSessions).toBeUndefined();
+    expect(cheap.judgedSessions).toBeUndefined();
+  });
+
+  // Zero applicable is not an all-clear: the criterion was never exercised, so
+  // "nothing fired" says nothing about whether the agent behaves.
+  it("is not clean when no criterion could be assessed anywhere", async () => {
+    const judge = async () => ({
+      findings: [] as DetectorFinding[], degraded: false,
+      coverage: { eligible: 5, judged: 5, sampled: false, truncated: 0 },
+      applicability: new Map([["verified-real-case", { judged: 5, applicable: 0 }]]),
+    });
+    const r = await evaluateRubric(signalOf([B]), withCrit, { ...PROJECT, judge });
+    expect(r.degraded).toBe(false);   // the judge worked fine — this is NOT that failure
+    expect(r.clean).toBe(false);
+  });
+
+  it("stays clean when one criterion never applied but another was assessed", async () => {
+    const two: Rubric = {
+      ...withCrit, id: "rigor2",
+      factors: [{ factor: "verified-real-case" }, { factor: "second-crit" }],
+      criteria: [
+        withCrit.criteria![0],
+        { id: "second-crit", title: "Second", question: "did the second thing happen?", advice: "do it" },
+      ],
+    };
+    const judge = async () => ({
+      findings: [] as DetectorFinding[], degraded: false,
+      coverage: { eligible: 5, judged: 5, sampled: false, truncated: 0 },
+      applicability: new Map([
+        ["verified-real-case", { judged: 5, applicable: 0 }],
+        ["second-crit", { judged: 5, applicable: 3 }],
+      ]),
+    });
+    const r = await evaluateRubric(signalOf([B]), two, { ...PROJECT, judge });
     expect(r.clean).toBe(true);
   });
 

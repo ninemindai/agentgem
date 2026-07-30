@@ -13,6 +13,11 @@ export interface RubricFactorView {
   severity: "info" | "warn";
   count: number;
   sessions: number;
+  // Mirrors DetectorSummary. LLM criteria only — absent on cheap detectors and on
+  // aggregate criteria, which have no per-session applicability. When present,
+  // applicableSessions: 0 means the check was never exercised, NOT that it passed.
+  applicableSessions?: number;
+  judgedSessions?: number;
 }
 export interface HygieneVerdictView { score: number; verdict: "bounded" | "mixed" | "bloated" }
 

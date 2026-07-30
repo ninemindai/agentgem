@@ -32,6 +32,7 @@ Bake the FACTS verbatim into the document as \`<script type="application/json" i
 - ONE accent color plus a success green and a warn tone; neutral surfaces otherwise. No gradients, no drop-shadow cards, no emoji, no icon fonts.
 - Charts: hand-rolled inline SVG sized from the data (bars, sparklines, a simple curve). No chart libraries.
 - Severity reads at a glance: findings that fired lead with their count and severity tone; clean checks collapse into one quiet "passed" line.
+- "Passed" and "did not apply" are different results and must never be merged. A check reporting applicableSessions: 0 was never exercised — say it did not apply, never that it passed. A check with a denominator states it ("2 in 9 applicable sessions"), because a rate without its denominator is the thing this report exists to avoid.
 
 ## Output
 

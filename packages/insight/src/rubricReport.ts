@@ -3,10 +3,18 @@
 // packages/insight/src/rubricReport.ts
 //
 // evaluateRubric: run one rubric's selected factors over an already-scanned (and
-// already scope-selected) WorkflowSignal and produce a RubricReport. Phase 1 runs
-// CHEAP factors only (built-in detectors + declarative rules); inline LLM criteria
-// are recorded as skipped (Phase 2 wires judgeCriteria). Pure — no fs, no LLM, no
-// scan; the caller (rubricCore) selects transcripts by scope and scans.
+// already scope-selected) WorkflowSignal and produce a RubricReport. Cheap factors
+// (built-in detectors + declarative rules) run in-process; inline LLM criteria are
+// evaluated by judgeCriteria, which drives an agent. No fs and no scan — the caller
+// (rubricCore) selects transcripts by scope and scans.
+//
+// `clean` is the report's all-clear, and it is deliberately hard to earn. Three
+// separate things each mean "we did not actually check", and any one of them
+// forbids the all-clear even when nothing fired:
+//   degraded          — the judge failed; criteria were never evaluated
+//   judgeCoverage     — the maxSessions cap left eligible sessions unjudged
+//   criterionBlackout — every criterion was inapplicable/unassessable everywhere
+// A findings-free run that never exercised a check is not a passing run.
 import { createLogger } from "@agentgem/base";
 import type { WorkflowSignal } from "./workflowScan.js";
 import type { DetectorSpec, DetectorFinding, DetectorSummary } from "./detectors.js";
@@ -123,17 +131,28 @@ export async function evaluateRubric(signal: WorkflowSignal, rubric: Rubric, opt
   }
 
   const cheapFindings = runSpecs(signal, cheapSpecs);
-  const { findings: llmFindings, degraded, coverage: judgeCoverage } = usedCriteria.length
+  const { findings: llmFindings, degraded, coverage: judgeCoverage, applicability } = usedCriteria.length
     ? await (opts.judge ?? judgeCriteria)(signal, usedCriteria, {
         connectFn: opts.connectFn, timeoutMs: opts.timeoutMs,
         maxSessions: opts.maxSessions, chunkSize: opts.chunkSize, onDelta: opts.onDelta,
       })
-    : { findings: [] as DetectorFinding[], degraded: false, coverage: undefined };
+    : { findings: [] as DetectorFinding[], degraded: false, coverage: undefined, applicability: undefined };
 
   const allFindings = [...cheapFindings, ...llmFindings];
   const allSpecs = [...cheapSpecs, ...usedCriteria.map(criterionSpec)];
 
-  const factors = summariesForSpecs(allSpecs, allFindings);
+  // Decorate AFTER summarizing: summariesForSpecs is shared with cheap detectors and
+  // keeps one job. Only criteria the judge could say something about get a denominator.
+  const factors = summariesForSpecs(allSpecs, allFindings).map((f) => {
+    const a = applicability?.get(f.id);
+    return a ? { ...f, applicableSessions: a.applicable, judgedSessions: a.judged } : f;
+  });
+
+  // A rubric whose criteria could not be assessed ANYWHERE has not been checked, and
+  // "no findings" from an unexercised check is not an all-clear. Narrow on purpose: one
+  // criterion that never applied is fine as long as another was actually assessed.
+  const criterionBlackout = usedCriteria.length > 0
+    && !usedCriteria.some((c) => (applicability?.get(c.id)?.applicable ?? 0) > 0);
   const report: RubricReport = {
     rubricId: rubric.id,
     target: rubric.target,
@@ -146,7 +165,7 @@ export async function evaluateRubric(signal: WorkflowSignal, rubric: Rubric, opt
     // Not "clean" when degraded: criteria weren't evaluated, so we can't claim all-clear.
     // Same for sampled: the cap left eligible sessions unjudged, and any one of them
     // could trip a criterion. A findings-free SAMPLE is not an all-clear.
-    clean: allFindings.length === 0 && !degraded && !judgeCoverage?.sampled,
+    clean: allFindings.length === 0 && !degraded && !judgeCoverage?.sampled && !criterionBlackout,
     degraded,
     skippedFactors,
     ...(judgeCoverage ? { judgeCoverage } : {}),
