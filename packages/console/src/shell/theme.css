@@ -2195,11 +2195,13 @@ button.scorecard-intent { line-height: 1.4; }
 .rub-factor { border: 1px solid var(--line); border-radius: var(--radius); background: var(--raised); padding: 10px 12px; }
 .rub-factor.rub-warn { border-left: 3px solid var(--accent); }
 .rub-factor.rub-ok { opacity: .7; }
+/* Never exercised — quieter than a pass, because it is not one. */
+.rub-factor.rub-na { opacity: .5; }
 .rub-factor-head { display: flex; align-items: center; gap: 8px; }
 .rub-factor-head .analyze-include-name { font: 13px/1.4 var(--font-ui); color: var(--ink); }
 .rub-icon { width: 16px; text-align: center; font-size: 13px; }
 .rub-warn .rub-icon { color: var(--accent); }
-.rub-info .rub-icon, .rub-ok .rub-icon { color: var(--muted); }
+.rub-info .rub-icon, .rub-ok .rub-icon, .rub-na .rub-icon { color: var(--muted); }
 .rub-advice { margin: 6px 0 0 24px; font: 12.5px/1.5 var(--font-ui); color: var(--ink-soft); }
 
 /* Catalog */

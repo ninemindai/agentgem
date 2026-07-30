@@ -21,18 +21,34 @@ function isCheap(r: RubricSummary): boolean {
   return !r.criteria || r.criteria.length === 0;
 }
 
+// What one factor row says on the right-hand side. A criterion carries a denominator
+// (how many judged sessions it could apply to) and a cheap detector does not, so the
+// two read differently on purpose: "no findings" from a check that was never exercised
+// is a false all-clear, and the row must say so instead.
+function factorTally(f: RubricFactorView): string {
+  const fired = f.count > 0;
+  const plural = (n: number) => `${n} session${n === 1 ? "" : "s"}`;
+  if (f.applicableSessions === undefined) {
+    return fired ? `${f.count} in ${plural(f.sessions)}` : "no findings";
+  }
+  if (f.applicableSessions === 0) return "did not apply to any checked session";
+  return fired
+    ? `${f.count} in ${f.sessions} of ${f.applicableSessions} applicable`
+    : `no findings in ${f.applicableSessions} applicable ${f.applicableSessions === 1 ? "session" : "sessions"}`;
+}
+
 function FactorRow({ f }: { f: RubricFactorView }) {
   const fired = f.count > 0;
-  const icon = !fired ? "✓" : f.severity === "warn" ? "⚠" : "ℹ";
-  const cls = !fired ? "rub-ok" : f.severity === "warn" ? "rub-warn" : "rub-info";
+  // A check that never applied is neither a pass nor a problem — don't give it the tick.
+  const inapplicable = f.applicableSessions === 0;
+  const icon = inapplicable ? "–" : !fired ? "✓" : f.severity === "warn" ? "⚠" : "ℹ";
+  const cls = inapplicable ? "rub-na" : !fired ? "rub-ok" : f.severity === "warn" ? "rub-warn" : "rub-info";
   return (
     <li className={"rub-factor " + cls}>
       <div className="rub-factor-head">
         <span className="rub-icon" aria-hidden="true">{icon}</span>
         <span className="analyze-include-name">{f.title}</span>
-        <span className="targets-label" style={{ marginLeft: "auto" }}>
-          {fired ? `${f.count} in ${f.sessions} session${f.sessions === 1 ? "" : "s"}` : "no findings"}
-        </span>
+        <span className="targets-label" style={{ marginLeft: "auto" }}>{factorTally(f)}</span>
       </div>
       {fired && <p className="rub-advice">→ {f.advice}</p>}
     </li>

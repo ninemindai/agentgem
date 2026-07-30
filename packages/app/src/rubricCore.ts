@@ -34,10 +34,16 @@ function scopeKey(scope: RubricScope): string {
   return "all";
 }
 
-/** Content-hash cache key: scope + the scanned transcripts + the rubric's canonical JSON. */
+// Bump whenever evaluateRubric's OUTPUT shape or the judge contract changes. The rest
+// of the token hashes inputs, so without this a report cached before such a change is
+// served forever as if it were current — the transcripts and rubric never changed.
+const RUBRIC_EVALUATOR_VERSION = 2;   // 2: criterion applicability denominators
+
+/** Content-hash cache key: evaluator version + scope + scanned transcripts + the
+ *  rubric's canonical JSON. */
 export function rubricToken(scope: RubricScope, paths: string[], rubric: Rubric): string {
   const rubricHash = createHash("sha1").update(JSON.stringify(rubric)).digest("hex").slice(0, 12);
-  return `${scopeKey(scope)}|${transcriptToken(paths)}|${rubricHash}`;
+  return `v${RUBRIC_EVALUATOR_VERSION}|${scopeKey(scope)}|${transcriptToken(paths)}|${rubricHash}`;
 }
 
 /** The factor pool: built-in detectors + user declarative rules. */

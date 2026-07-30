@@ -17,6 +17,12 @@ describe("rubricToken (content-hash cache key, E2)", () => {
     expect(rubricToken(project, [], edited)).not.toBe(rubricToken(project, [], hygiene));
   });
 
+  // The token hashes the INPUTS; it must also pin the evaluator, or a report cached
+  // before the report shape changed keeps being served as if it were current.
+  it("carries an evaluator version so a shape change invalidates old cached reports", () => {
+    expect(rubricToken(project, [], hygiene)).toMatch(/^v\d+\|/);
+  });
+
   it("changes with scope kind and with the session id", () => {
     const all: RubricScope = { kind: "all" };
     const sessA: RubricScope = { kind: "session", root: "/p", sessionId: "A" };

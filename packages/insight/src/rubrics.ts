@@ -34,8 +34,10 @@ export type RubricScopeKind = RubricScope["kind"];
 export type RubricGranularity = "session" | "aggregate";
 
 /**
- * An LLM factor: a natural-language criterion judged per session. Phase 2 executes
- * these (judgeCriteria); Phase 1 validates the shape and skips them at evaluation.
+ * An LLM factor: a natural-language criterion judged per session by judgeCriteria.
+ * The judge reports two things per session — whether the criterion could apply at
+ * all, and whether it fired — so a criterion that never applied stays distinct from
+ * one that applied and passed.
  */
 export interface LlmCriterion {
   id: string;                     // kebab-case, unique across factors (same ID_RE as rules)

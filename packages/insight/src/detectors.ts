@@ -270,6 +270,12 @@ export interface DetectorSummary {
   severity: DetectorSeverity;
   count: number;      // total findings
   sessions: number;   // distinct sessions it fired in
+  // The denominator, for LLM criteria only. Undefined on cheap detectors: they run
+  // over every session and cannot "not apply", so a denominator there would invent a
+  // distinction that doesn't exist. Where these ARE set, count:0 with
+  // applicableSessions:0 means "never exercised", NOT "passed".
+  applicableSessions?: number;   // of judgedSessions, how many the criterion could apply to
+  judgedSessions?: number;       // sessions we can honestly say were examined in full
 }
 
 export function summarizeFindings(findings: DetectorFinding[], specs: DetectorSpec[] = DETECTORS): DetectorSummary[] {
