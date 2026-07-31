@@ -63,6 +63,24 @@ describe("builtinRubrics + granularity", () => {
     expect(rubricGranularity(hygiene!)).toBe("session");
   });
 
+  // The first built-in that costs an agent call. It exists so the applicability
+  // denominator is reachable from the product at all — every other built-in is
+  // cheap-only, so nothing exercised the criterion path.
+  it("ships a shipping-discipline rubric whose LLM criterion resolves and validates", () => {
+    const r = builtinRubrics().find((x) => x.id === "ship-discipline");
+    expect(r).toBeDefined();
+    expect(validateRubric(r)).not.toBeNull();
+    // Every factor ref resolves to either a built-in detector or its own inline criterion.
+    const inline = new Set((r!.criteria ?? []).map((c) => c.id));
+    expect(r!.factors.some((f) => inline.has(f.factor))).toBe(true);
+    expect(rubricGranularity(r!)).toBe("session");
+  });
+
+  it("keeps every OTHER built-in cheap, so choosing one never silently costs an agent call", () => {
+    const llm = builtinRubrics().filter((r) => (r.criteria ?? []).length > 0).map((r) => r.id);
+    expect(llm).toEqual(["ship-discipline"]);
+  });
+
   it("an aggregate inline criterion makes the rubric aggregate", () => {
     const agg: Rubric = {
       id: "breadthish", title: "b", target: "overview",

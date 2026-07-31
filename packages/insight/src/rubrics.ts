@@ -182,6 +182,42 @@ export function builtinRubrics(): Rubric[] {
         { factor: "no-verify-finish" },
       ],
     },
+    // The only built-in with an inline LLM criterion, so it is the only one that costs
+    // an agent call. Kept separate from the cheap rubrics on purpose: adding a criterion
+    // to `hygiene` would make every hygiene run pay for an agent without the user asking.
+    // The picker labels it "LLM" so the choice is visible before it is made.
+    //
+    // Why this question needs a judge rather than a rule: "did the tests run" has no
+    // fixed spelling. npm test, pnpm -w test, vitest run, jest, pytest -q, cargo test,
+    // go test ./..., make check, tox, bundle exec rspec — a verb-pattern rule would
+    // enumerate a list and quietly miss whatever a project actually uses. The judge
+    // reads the commands that were really run.
+    //
+    // It also earns its denominator: it applies only to sessions that committed or
+    // pushed, so the report reads "1 in 1 of 4 applicable sessions" rather than
+    // implying every session was checked.
+    {
+      id: "ship-discipline",
+      title: "Shipping discipline",
+      target: "overview",
+      naturalScope: "project",
+      factors: [{ factor: "committed-without-tests" }, { factor: "no-verify-finish" }],
+      criteria: [
+        {
+          id: "committed-without-tests",
+          title: "Committed without running the tests",
+          question:
+            "Did this session commit or push without ever running the project's tests first? " +
+            "Judge from the commands actually run, not a fixed list — test commands vary widely " +
+            "(npm/pnpm/yarn test, vitest, jest, pytest, cargo test, go test, make check, tox, rspec). " +
+            "A session that never committed or pushed is not applicable.",
+          advice:
+            "Run the tests before committing, while the change is still in your head — a failure " +
+            "found after the commit costs a second trip through the same context.",
+          severity: "warn",
+        },
+      ],
+    },
     {
       id: "context-hygiene",
       title: "Context hygiene",
