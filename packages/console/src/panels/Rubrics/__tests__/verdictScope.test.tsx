@@ -25,12 +25,12 @@ const base: RubricReportView = {
 
 describe("rubric verdict — scope honesty", () => {
   it("claims a full all-clear only when coverage was complete", () => {
-    render(<RubricReportCard report={{ ...base, judgeCoverage: { eligible: 1900, judged: 1900, sampled: false } }} />);
+    render(<RubricReportCard report={{ ...base, judgeCoverage: { eligible: 1900, judged: 1900, sampled: false, truncated: 0 } }} />);
     expect(screen.getByText(/clean — all 2 checks passed/)).toBeTruthy();
   });
 
   it("does not claim all-clear when criteria only saw a sample", () => {
-    render(<RubricReportCard report={{ ...base, clean: false, judgeCoverage: { eligible: 214, judged: 30, sampled: true } }} />);
+    render(<RubricReportCard report={{ ...base, clean: false, judgeCoverage: { eligible: 214, judged: 30, sampled: true, truncated: 0 } }} />);
     expect(screen.queryByText(/all 2 checks passed/)).toBeNull();
     // and must NOT read as "0 of 2 checks need action" — nothing was found
     expect(screen.queryByText(/0 of 2 checks need action/)).toBeNull();
@@ -39,7 +39,7 @@ describe("rubric verdict — scope honesty", () => {
 
   it("still reports actionable findings normally when the cap also bit", () => {
     const withFinding = { ...base, clean: false, factors: [{ ...base.factors[0], count: 3 }, base.factors[1]],
-      judgeCoverage: { eligible: 214, judged: 30, sampled: true } };
+      judgeCoverage: { eligible: 214, judged: 30, sampled: true, truncated: 0 } };
     render(<RubricReportCard report={withFinding} />);
     expect(screen.getByText(/1 of 2 checks need action/)).toBeTruthy();
   });
