@@ -14,6 +14,7 @@ import {
   analysisWorkspace, currentTestConnectFn, defaultConnectFn,
 } from "./acpRecommender.js";
 import { createLogger, taskAgent } from "@agentgem/base";
+import { extractJson } from "./jsonReply.js";
 
 const log = createLogger("insight");
 
@@ -25,12 +26,6 @@ const NARRATE = (facetsJson: string) =>
   `what they consistently pursue, how they drive the agent, and where things tend to break down. ` +
   `Be concrete and grounded in the sessions; no flattery, no generic advice.\n` +
   `Return ONLY a JSON object: {"narrative":"..."}.`;
-
-function extractJson(text: string): string {
-  const start = text.indexOf("{");
-  const end = text.lastIndexOf("}");
-  return start >= 0 && end > start ? text.slice(start, end + 1) : text;
-}
 
 /** Pull the narrative string from an agent response; fall back on any failure. */
 export function validateNarrative(raw: unknown, fallback: string): string {

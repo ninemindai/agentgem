@@ -17,6 +17,7 @@ import {
   type AcpConnectFn, analysisWorkspace, currentTestConnectFn, defaultConnectFn,
 } from "./acpRecommender.js";
 import { createLogger, taskAgent } from "@agentgem/base";
+import { extractJson } from "./jsonReply.js";
 
 const log = createLogger("insight");
 
@@ -47,13 +48,6 @@ function withTimeout<T>(p: Promise<T>, ms: number): Promise<T> {
 
 // Locate a JSON object in possibly-fenced agent text (local copy — the established
 // per-module pattern in distill.ts / facets.ts / acpRecommender.ts).
-function extractJson(text: string): string {
-  const fence = text.match(/```(?:json)?\s*([\s\S]*?)```/);
-  if (fence) return fence[1].trim();
-  const a = text.indexOf("{"), b = text.lastIndexOf("}");
-  return a >= 0 && b > a ? text.slice(a, b + 1) : text;
-}
-
 function provenanceOf(session: SessionSequence): Provenance {
   const occ: Occurrence = {
     sessionId: session.sessionId,

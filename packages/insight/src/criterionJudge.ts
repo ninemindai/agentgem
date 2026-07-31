@@ -48,6 +48,7 @@ import {
   analysisWorkspace, currentTestConnectFn, defaultConnectFn,
 } from "./acpRecommender.js";
 import { createLogger, taskAgent } from "@agentgem/base";
+import { extractJson } from "./jsonReply.js";
 
 const log = createLogger("insight");
 
@@ -108,7 +109,7 @@ export function validateCriterionResults(
   text: string, sessions: SessionSequence[], criteria: LlmCriterion[],
 ): CriterionResults {
   let parsed: unknown;
-  try { parsed = JSON.parse(text); } catch { return EMPTY_RESULTS(); }
+  try { parsed = JSON.parse(extractJson(text)); } catch { return EMPTY_RESULTS(); }
   const results = (parsed as { results?: unknown })?.results;
   if (!Array.isArray(results)) return EMPTY_RESULTS();
   // BOTH keys are required. A reply with only `results` is the pre-applicability

@@ -88,6 +88,29 @@ describe("validateCriterionResults (evidence contract)", () => {
     expect(validateCriterionResults(JSON.stringify({ results: [] }), [A], CRIT).ok).toBe(false);
   });
 
+  // Real agents fence their JSON. Observed on the first live run of ship-discipline:
+  // a perfectly-formed roster wrapped in ```json ... ``` threw in JSON.parse, so the
+  // whole chunk degraded and every verdict was discarded. Four sibling judges in this
+  // package already tolerate this; the criterion judge never did, which is why the
+  // criterion path had never actually worked against a live agent.
+  it("reads a reply wrapped in a markdown code fence", () => {
+    const body = JSON.stringify({
+      sessions: [{ sessionId: "A", notApplicable: [] }],
+      results: [{ sessionId: "A", criterionId: "c1", fired: true, msgIndices: [1] }],
+    });
+    const r = validateCriterionResults("```json\n" + body + "\n```", [A], CRIT);
+    expect(r.ok).toBe(true);
+    expect(r.findings).toHaveLength(1);
+    expect([...r.rostered]).toEqual(["A"]);
+  });
+
+  it("reads a reply with prose around the JSON", () => {
+    const body = JSON.stringify({ sessions: [{ sessionId: "A", notApplicable: ["c1"] }], results: [] });
+    const r = validateCriterionResults(`Here is my assessment:\n\n${body}\n\nLet me know if you need more.`, [A], CRIT);
+    expect(r.ok).toBe(true);
+    expect([...(r.notApplicable.get("c1") ?? [])]).toEqual(["A"]);
+  });
+
   it("reports ok:true for a well-formed reply that simply found nothing", () => {
     const text = JSON.stringify({ sessions: [{ sessionId: "A", notApplicable: [] }], results: [] });
     expect(validateCriterionResults(text, [A], CRIT).ok).toBe(true);
