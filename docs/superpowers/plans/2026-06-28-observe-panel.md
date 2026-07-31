@@ -354,7 +354,7 @@ export function aggregateObserve(stats: SessionStat[], range: ObserveRange, nowM
     d.sessions++; d.msgs += s.msgs; d.tokensIn += s.tokensIn; d.tokensOut += s.tokensOut; d.tokensCache += s.tokensCache;
     byDay.set(date, d);
 
-    const mk = `${s.agent} ${s.model ?? "unknown"}`;
+    const mk = `${s.agent}\u0000${s.model ?? "unknown"}`;
     const m = byModel.get(mk) ?? { model: s.model ?? "unknown", agent: s.agent, sessions: 0, tokens: 0 };
     m.sessions++; m.tokens += tokensOf(s);
     byModel.set(mk, m);
