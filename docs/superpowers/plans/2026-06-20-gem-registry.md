@@ -576,7 +576,7 @@ export async function mergeGems(graph: ResolvedNode[], source: RegistrySource): 
       }
       throw new Error(`artifact name collision: '${artifact.name}' defined by unrelated items ${prev.owner} and ${node.key}`);
     }
-    for (const s of gem.requiredSecrets) secrets.set(`${s.name} ${s.location}`, s);
+    for (const s of gem.requiredSecrets) secrets.set(`${s.name}\u0000${s.location}`, s);
     for (const c of gem.checks) checks.set(c.name, c);
   }
 

@@ -198,7 +198,7 @@ export type IdKind = "known" | "registry" | "contentHash" | "package" | "url" | 
 export interface Ingredient { id: string; idKind: IdKind; public: boolean }
 
 function sha256(s: string): string { return createHash("sha256").update(s).digest("hex"); }
-export function saltedHash(salt: string, value: string): string { return `sha256:${sha256(salt + " " + value)}`; }
+export function saltedHash(salt: string, value: string): string { return `sha256:${sha256(salt + "\u0000" + value)}`; }
 
 export function canonicalModel(id: string): Ingredient { return { id: id.toLowerCase(), idKind: "known", public: true }; }
 export function canonicalHarness(flavor: "claude" | "codex"): Ingredient {

@@ -465,12 +465,12 @@ Replace the artifact-assembly block to also add hooks + instructions and compute
     const names = [...s.names].sort();
     for (let i = 0; i < names.length; i++)
       for (let j = i + 1; j < names.length; j++) {
-        const key = `${names[i]} ${names[j]}`;
+        const key = `${names[i]}\u0000${names[j]}`;
         pairCounts.set(key, (pairCounts.get(key) ?? 0) + 1);
       }
   }
   const coOccurrence = [...pairCounts.entries()].map(([k, sessions]) => {
-    const [a, b] = k.split(" ");
+    const [a, b] = k.split("\u0000");
     return { a, b, sessions };
   });
 ```
