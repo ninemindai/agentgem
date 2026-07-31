@@ -21,6 +21,7 @@ import type { WorkflowSignal, ScanInventory } from "./workflowScan.js";
 import type { GemSelection, ProjectSelection } from "@agentgem/build";
 import type { DistilledSkill } from "./distill.js";
 import type { Reflection } from "./distillTypes.js";
+import { extractJson } from "./jsonReply.js";
 
 // `root` is the namespace: a project root path, or null for a global/plugin artifact.
 export interface RecommendedItem { type: ArtifactType; name: string; reason: string; root: string | null }
@@ -141,13 +142,6 @@ export function recommendationToSelection(c: GemCandidate): GemSelection {
   if (c.includeInstructions) ensure(c.root).includeInstructions = true;
   if (Object.keys(projects).length) sel.projects = projects;
   return sel;
-}
-
-// Pull the first {...} block out of an agent message that may wrap JSON in prose/fences.
-function extractJson(text: string): string {
-  const start = text.indexOf("{");
-  const end = text.lastIndexOf("}");
-  return start >= 0 && end > start ? text.slice(start, end + 1) : text;
 }
 
 /**

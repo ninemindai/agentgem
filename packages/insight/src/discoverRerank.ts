@@ -10,6 +10,7 @@ import { analysisWorkspace, defaultConnectFn, currentTestConnectFn, type AcpConn
 import { describeCandidates } from "./skillDescribe.js";
 import type { DiscoverCandidate, DiscoverPayload } from "./discover.js";
 import { createLogger, taskAgent } from "@agentgem/base";
+import { extractJson } from "./jsonReply.js";
 
 const log = createLogger("insight");
 
@@ -32,11 +33,6 @@ function prompt(candidates: DiscoverCandidate[], topics: string[], descriptions:
     `Use ONLY the exact source/name pairs above — never invent. ` +
     `"reason" is one short clause on why it fits the user's workflows.`
   );
-}
-
-function extractJson(text: string): string {
-  const s = text.indexOf("{"), e = text.lastIndexOf("}");
-  return s >= 0 && e > s ? text.slice(s, e + 1) : text;
 }
 
 /** Validate the agent reply against the input set; append any items the agent omitted. */

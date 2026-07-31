@@ -9,6 +9,7 @@
 // source of truth for which sessions exist). Mirrors the validateAnalysis /
 // deterministicAnalysis pattern in acpRecommender.ts.
 import type { WorkflowSignal, SessionSequence } from "./workflowScan.js";
+import { extractJson } from "./jsonReply.js";
 
 export type SessionOutcome = "mostly_achieved" | "partially_achieved" | "not_achieved";
 
@@ -47,13 +48,6 @@ export function deterministicFacets(signal: WorkflowSignal): SessionFacet[] {
     model: s.model,
     origin: "heuristic",
   }));
-}
-
-// Pull the first {...} block out of a message that may wrap JSON in prose/fences.
-function extractJson(text: string): string {
-  const start = text.indexOf("{");
-  const end = text.lastIndexOf("}");
-  return start >= 0 && end > start ? text.slice(start, end + 1) : text;
 }
 
 /**

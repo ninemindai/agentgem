@@ -11,6 +11,7 @@ import type { GatedCandidate, ProcedureCandidate, DistilledSkill, Provenance, Oc
 import { extractCandidates } from "./extract.js";
 import type { TriggerContract } from "@agentgem/model";
 import { createLogger, taskAgent } from "@agentgem/base";
+import { extractJson } from "./jsonReply.js";
 
 const log = createLogger("insight");
 
@@ -28,12 +29,6 @@ export const MAX_DISTILL_CANDIDATES = 5;
 
 const KEBAB_RE = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
 const MUTATING_TOOL_RE = /^(Bash|Edit|Write|NotebookEdit)$/;
-
-function extractJson(text: string): string {
-  const start = text.indexOf("{");
-  const end = text.lastIndexOf("}");
-  return start >= 0 && end > start ? text.slice(start, end + 1) : text;
-}
 
 // Parse a trigger contract out of raw LLM JSON. Never throws, never fabricates:
 // requires the load-bearing fields (intent + >=1 trigger) or returns undefined so
