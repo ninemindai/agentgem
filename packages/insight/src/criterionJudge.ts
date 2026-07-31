@@ -139,6 +139,19 @@ export function validateCriterionResults(
     }
   }
 
+  // Roster compliance, measured HERE — before fired rows below add their own sessions
+  // and paper over a gap. The prompt asks for one entry per session in the chunk; a
+  // shortfall means the judge ignored part of the contract, and those sessions drop out
+  // of every denominator (they are never counted as passes, so the number shrinks rather
+  // than lies). Nothing else observes this: the judge prompt has no eval harness, so
+  // real runs are the only place compliance can be measured. If this line stays quiet in
+  // practice, the contract holds; if it fires often, the prompt needs work before anyone
+  // trusts a denominator.
+  if (rosterOk && rostered.size < sessions.length) {
+    log.warn("criterion-judge: judge rostered %d of %d sessions — the rest count as unjudged",
+      rostered.size, sessions.length);
+  }
+
   // Collapse to one fire per (session, criterion), unioning evidence. A repeated row
   // would otherwise inflate `count` past the number of sessions the criterion could
   // fire in, so the row reads as more fires than there were opportunities.

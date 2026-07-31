@@ -111,6 +111,19 @@ describe("validateCriterionResults (applicability roster)", () => {
     expect([...(r.notApplicable.get("c1") ?? [])]).toEqual(["A"]);
   });
 
+  // Compliance is measured on the roster alone. A fired row rosters its own session
+  // (so numerator and denominator share a population), but that must not disguise a
+  // judge that skipped the session in the roster it was asked to return.
+  it("counts a session toward the roster even when only a fired row mentioned it", () => {
+    const text = JSON.stringify({
+      sessions: [{ sessionId: "A", notApplicable: [] }],
+      results: [{ sessionId: "B", criterionId: "c1", fired: true, msgIndices: [0] }],
+    });
+    const r = validateCriterionResults(text, [A, B], CRIT);
+    expect([...r.rostered].sort()).toEqual(["A", "B"]);
+    expect(r.findings.map((f) => f.sessionId)).toEqual(["B"]);
+  });
+
   it("drops a roster entry naming a session we never sent", () => {
     const text = JSON.stringify({ sessions: [{ sessionId: "GHOST", notApplicable: ["c1"] }], results: [] });
     const r = validateCriterionResults(text, [A], CRIT);
