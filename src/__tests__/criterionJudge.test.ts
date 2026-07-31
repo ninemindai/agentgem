@@ -80,8 +80,17 @@ describe("validateCriterionResults (evidence contract)", () => {
     expect(validateCriterionResults(JSON.stringify({ nope: 1 }), [A], CRIT).ok).toBe(false);
   });
 
+  // The contract asks for BOTH keys. A reply carrying only `results` is the OLD
+  // shape: it yields no roster, so every session reads as unjudged and the report
+  // silently loses its denominators. Treat it as unreadable so the run degrades
+  // loudly instead of quietly reporting nothing-to-see-here.
+  it("reports ok:false when the reply omits the session roster", () => {
+    expect(validateCriterionResults(JSON.stringify({ results: [] }), [A], CRIT).ok).toBe(false);
+  });
+
   it("reports ok:true for a well-formed reply that simply found nothing", () => {
-    expect(validateCriterionResults(JSON.stringify({ results: [] }), [A], CRIT).ok).toBe(true);
+    const text = JSON.stringify({ sessions: [{ sessionId: "A", notApplicable: [] }], results: [] });
+    expect(validateCriterionResults(text, [A], CRIT).ok).toBe(true);
   });
 });
 
@@ -121,6 +130,19 @@ describe("validateCriterionResults (applicability roster)", () => {
     expect(findings[0].evidence.msgIndices).toEqual([0, 2]);
   });
 
+  // A fire IS an answer about that session, so it belongs in the denominator it is
+  // reported against. Otherwise "2 in 2 of 9 applicable" can count fires from
+  // sessions that are not among the 9.
+  it("rosters a session the judge only mentioned via a fired row", () => {
+    const text = JSON.stringify({
+      sessions: [{ sessionId: "B", notApplicable: [] }],
+      results: [{ sessionId: "A", criterionId: "c1", fired: true, msgIndices: [1] }],
+    });
+    const r = validateCriterionResults(text, [A, B], CRIT);
+    expect(r.findings).toHaveLength(1);
+    expect([...r.rostered].sort()).toEqual(["A", "B"]);
+  });
+
   // A criterion that fired is self-evidently applicable; the finding wins.
   it("discards a not-applicable claim for a criterion that also fired", () => {
     const text = JSON.stringify({
@@ -150,7 +172,10 @@ describe("judgeCriteria", () => {
   });
 
   it("returns validated findings from the agent (degraded:false)", async () => {
-    const canned = JSON.stringify({ results: [{ sessionId: "A", criterionId: "c1", fired: true, msgIndices: [1] }] });
+    const canned = JSON.stringify({
+      sessions: [{ sessionId: "A", notApplicable: [] }, { sessionId: "B", notApplicable: [] }],
+      results: [{ sessionId: "A", criterionId: "c1", fired: true, msgIndices: [1] }],
+    });
     const { findings, degraded } = await judgeCriteria(SIG, CRIT, { connectFn: fakeConnect(canned) });
     expect(degraded).toBe(false);
     expect(findings.map((f) => f.sessionId)).toEqual(["A"]);

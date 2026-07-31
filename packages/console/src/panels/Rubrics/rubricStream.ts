@@ -35,7 +35,7 @@ export interface RubricReportView {
   perSessionTruncated?: boolean;
   // How much of the eligible universe the LLM criteria saw. Absent when the rubric
   // has no criteria (cheap factors always run over every session).
-  judgeCoverage?: { eligible: number; judged: number; sampled: boolean };
+  judgeCoverage?: { eligible: number; judged: number; sampled: boolean; truncated: number };
 }
 
 // Panel-facing union: `report` typed as the view the panel renders. The wire
