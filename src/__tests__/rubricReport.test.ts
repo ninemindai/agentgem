@@ -144,6 +144,39 @@ describe("evaluateRubric — LLM criteria (Phase 2, injected judge)", () => {
     expect(r.clean).toBe(false);
   });
 
+  // A clipped session was only partly seen — the judge never got steps 81+. That is
+  // the same "we did not actually check" as degraded and sampled, and it must refuse
+  // the all-clear for the same reason.
+  it("is not clean when a session was only partly examined", async () => {
+    const judge = async () => ({
+      findings: [] as DetectorFinding[], degraded: false,
+      coverage: { eligible: 5, judged: 5, sampled: false, truncated: 1 },
+      applicability: new Map([["verified-real-case", { judged: 4, applicable: 4 }]]),
+    });
+    const r = await evaluateRubric(signalOf([B]), withCrit, { ...PROJECT, judge });
+    expect(r.degraded).toBe(false);
+    expect(r.clean).toBe(false);
+  });
+
+  // Applicability is defined per session; an aggregate criterion has no per-session
+  // denominator, so inventing one would be a number that means nothing.
+  it("leaves an aggregate criterion undecorated even if the judge returns a denominator", async () => {
+    const agg: Rubric = {
+      id: "agg2", title: "Agg", target: "overview",
+      factors: [{ factor: "breadth-crit" }],
+      criteria: [{ id: "breadth-crit", title: "Breadth", question: "how broad?", advice: "x", granularity: "aggregate" }],
+    };
+    const judge = async () => ({
+      findings: [] as DetectorFinding[], degraded: false,
+      coverage: { eligible: 5, judged: 5, sampled: false, truncated: 0 },
+      applicability: new Map([["breadth-crit", { judged: 5, applicable: 5 }]]),
+    });
+    const r = await evaluateRubric(signalOf([B]), agg, { ...PROJECT, judge });
+    const row = r.factors.find((f) => f.id === "breadth-crit")!;
+    expect(row.applicableSessions).toBeUndefined();
+    expect(row.judgedSessions).toBeUndefined();
+  });
+
   it("stays clean when one criterion never applied but another was assessed", async () => {
     const two: Rubric = {
       ...withCrit, id: "rigor2",

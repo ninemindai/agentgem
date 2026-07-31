@@ -8,12 +8,13 @@
 // evaluated by judgeCriteria, which drives an agent. No fs and no scan — the caller
 // (rubricCore) selects transcripts by scope and scans.
 //
-// `clean` is the report's all-clear, and it is deliberately hard to earn. Three
+// `clean` is the report's all-clear, and it is deliberately hard to earn. Four
 // separate things each mean "we did not actually check", and any one of them
 // forbids the all-clear even when nothing fired:
-//   degraded          — the judge failed; criteria were never evaluated
-//   judgeCoverage     — the maxSessions cap left eligible sessions unjudged
-//   criterionBlackout — every criterion was inapplicable/unassessable everywhere
+//   degraded            — the judge failed; criteria were never evaluated
+//   coverage.sampled    — the maxSessions cap left eligible sessions unjudged
+//   coverage.truncated  — a session was clipped, so part of it was never seen
+//   criterionBlackout   — every criterion was inapplicable/unassessable everywhere
 // A findings-free run that never exercised a check is not a passing run.
 import { createLogger } from "@agentgem/base";
 import type { WorkflowSignal } from "./workflowScan.js";
@@ -143,8 +144,11 @@ export async function evaluateRubric(signal: WorkflowSignal, rubric: Rubric, opt
 
   // Decorate AFTER summarizing: summariesForSpecs is shared with cheap detectors and
   // keeps one job. Only criteria the judge could say something about get a denominator.
+  // Applicability is defined PER SESSION, so an aggregate criterion has no
+  // denominator to report — decorating one would print a number that means nothing.
+  const perSessionCriteria = new Set(usedCriteria.filter((c) => (c.granularity ?? "session") === "session").map((c) => c.id));
   const factors = summariesForSpecs(allSpecs, allFindings).map((f) => {
-    const a = applicability?.get(f.id);
+    const a = perSessionCriteria.has(f.id) ? applicability?.get(f.id) : undefined;
     return a ? { ...f, applicableSessions: a.applicable, judgedSessions: a.judged } : f;
   });
 
@@ -165,7 +169,8 @@ export async function evaluateRubric(signal: WorkflowSignal, rubric: Rubric, opt
     // Not "clean" when degraded: criteria weren't evaluated, so we can't claim all-clear.
     // Same for sampled: the cap left eligible sessions unjudged, and any one of them
     // could trip a criterion. A findings-free SAMPLE is not an all-clear.
-    clean: allFindings.length === 0 && !degraded && !judgeCoverage?.sampled && !criterionBlackout,
+    clean: allFindings.length === 0 && !degraded && !judgeCoverage?.sampled
+      && !judgeCoverage?.truncated && !criterionBlackout,
     degraded,
     skippedFactors,
     ...(judgeCoverage ? { judgeCoverage } : {}),

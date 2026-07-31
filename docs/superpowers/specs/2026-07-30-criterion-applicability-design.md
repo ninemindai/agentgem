@@ -115,6 +115,18 @@ whole session. A criterion that first applies at step 81 would read as applicabl
 sessions are excluded from `judgedSessions`. Their fired rows still count as findings — a fire we
 actually observed is real evidence and must not be hidden.
 
+**A missing roster** (added by the PR review). A reply carrying only `results` is the pre-applicability
+shape. It is `ok: false`, so the run degrades — but its **findings are kept** and its denominators are
+**surrendered** (`rostered` and `notApplicable` return empty). Same principle as truncation: refuse the
+coverage claim, never the evidence.
+
+**Numerator and denominator must come from one population** (added by the PR review). Findings are drawn
+from every session; the denominator counts only rostered sessions. A fire for an unrostered session
+therefore used to be counted in `count` while its session sat outside `applicableSessions`, so
+"2 in 2 of 9 applicable" could include fires that were not among the 9. A fired row now rosters its own
+session — a fire *is* an answer about that session. Truncated sessions remain the one deliberate
+exception, and the renderer handles it by leading with the finding instead of quoting a denominator.
+
 Truncation is a per-session coverage fact, not a per-criterion one, so it is reported on `JudgeCoverage`
 rather than on every row:
 
@@ -184,6 +196,10 @@ strictly per-session and has no meaning for an aggregate criterion. Aggregate cr
 **no denominator** — both fields stay `undefined`, and the renderer falls back to today's wording. This
 is a documented gap, not a silent one; defining an aggregate applicability contract is deferred (§10).
 
+**Enforced, not merely intended** (added by the PR review). The first implementation decorated any row
+the judge returned applicability for, including aggregate ones — the code contradicted this paragraph.
+`evaluateRubric` now filters to `granularity ?? "session"` before decorating.
+
 ### Unchanged
 
 `LlmCriterion`, `Rubric`, and the on-disk rubric JSON in `~/.agentgem/rubrics/`. No migration, no
@@ -212,10 +228,17 @@ and so an honest all-clear. Decision 5 breaks that: the roster now also absorbs 
 tell," which is not a complete look.
 
 ```ts
-clean: allFindings.length === 0 && !degraded && !judgeCoverage?.sampled && !criterionBlackout
+clean: allFindings.length === 0 && !degraded && !judgeCoverage?.sampled
+  && !judgeCoverage?.truncated && !criterionBlackout
 // criterionBlackout = the rubric HAS criteria AND no criterion had any
 //                     assessed-applicable session
 ```
+
+**`truncated` joins the guard list** (added by the PR review). A clipped session was
+only partly seen, which is the same "we did not actually check" as `degraded` and
+`sampled`. The first implementation added `coverage.truncated` to make truncation
+visible and then failed to consult it here — a run could clip a session, find nothing
+in the part it saw, and render "clean — all checks passed."
 
 Deliberately narrow. A rubric with three criteria where two were assessed and one was never applicable is
 still `clean`. Only total blackout — nothing assessable at all — flips it, which is the case that would
@@ -425,15 +448,21 @@ different files, but land A first to avoid a `rubricReport.ts` conflict.
 | Review | Trigger | Why | Runs | Status | Findings |
 |--------|---------|-----|------|--------|----------|
 | CEO Review | `/plan-ceo-review` | Scope & strategy | 0 | — | — |
-| Codex Review | `/codex review` | Independent 2nd opinion | 1 | issues_found | 7 findings, 7 folded |
-| Eng Review | `/plan-eng-review` | Architecture & tests (required) | 1 | clean | 13 issues, 0 critical gaps |
+| Codex Review | `/codex review` | Independent 2nd opinion | 2 | issues_found | 11 findings, 11 folded |
+| Eng Review | `/plan-eng-review` | Architecture & tests (required) | 2 | clean | 19 issues, 0 critical gaps |
 | Design Review | `/plan-design-review` | UI/UX gaps | 0 | — | — |
 | DX Review | `/plan-devex-review` | Developer experience gaps | 0 | — | — |
 
-**CODEX:** 7 findings, all verified against source and folded. The P1 the Claude pass missed: `judgeBatch:122` returns `degraded:false` even when the response failed to parse, so under the original silence-means-pass rule a garbage agent response minted a full chunk of passes and reported `clean`.
+**CODEX:** two passes, 11 findings total, all verified against source and folded. The
+spec pass caught the `degraded:false`-on-unparseable-JSON P1. The PR pass caught that
+`clean` never consulted `coverage.truncated` — the guard this change itself added — plus
+aggregate criteria being decorated against the spec, and a missing roster passing as
+`ok:true`.
 
-**CROSS-MODEL:** One tension, resolved by the user. The Claude pass kept "silence means pass" on token-cost grounds; Codex argued it is unfalsifiable. Codex was right — an omitted not-applicable row is indistinguishable from a considered one. Resolved to the per-session roster (D2). Both reviewers independently reached the same conclusion on the core defect (no denominator) and on including the renderer.
+**CROSS-MODEL:** one tension across both passes, both resolved toward Codex. Pass 1:
+silence-means-pass was unfalsifiable, replaced by the per-session roster. Pass 2: no
+tension — every PR finding was a straight defect, confirmed by reading source.
 
-**VERDICT:** ENG CLEARED — ready to implement.
+**VERDICT:** ENG CLEARED — implemented, both suites green (root 3031, console 1167).
 
 NO UNRESOLVED DECISIONS

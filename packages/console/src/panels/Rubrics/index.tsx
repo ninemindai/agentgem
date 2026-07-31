@@ -31,10 +31,16 @@ function factorTally(f: RubricFactorView): string {
   if (f.applicableSessions === undefined) {
     return fired ? `${f.count} in ${plural(f.sessions)}` : "no findings";
   }
+  // Fired first. A fire can come from a session outside the denominator (one that
+  // was clipped, say), and claiming "did not apply" next to a finding's advice reads
+  // as a contradiction. Only quote the denominator when there actually is one.
+  if (fired) {
+    return f.applicableSessions > 0
+      ? `${f.count} in ${f.sessions} of ${f.applicableSessions} applicable`
+      : `${f.count} in ${plural(f.sessions)}`;
+  }
   if (f.applicableSessions === 0) return "did not apply to any checked session";
-  return fired
-    ? `${f.count} in ${f.sessions} of ${f.applicableSessions} applicable`
-    : `no findings in ${f.applicableSessions} applicable ${f.applicableSessions === 1 ? "session" : "sessions"}`;
+  return `no findings in ${f.applicableSessions} applicable ${f.applicableSessions === 1 ? "session" : "sessions"}`;
 }
 
 function FactorRow({ f }: { f: RubricFactorView }) {
@@ -80,6 +86,12 @@ export function RubricReportCard({ report }: { report: RubricReportView }) {
         <p className="insights-hint">
           LLM criteria were evaluated on the {cov.judged} most-recent of {cov.eligible} eligible sessions — an
           unchecked session could still trip one. Cheap factors ran over all {report.sessionsScanned}.
+        </p>
+      )}
+      {!!cov?.truncated && (
+        <p className="insights-hint">
+          {cov.truncated} session{cov.truncated === 1 ? " was" : "s were"} too long to show the judge in full, so
+          only the opening steps were checked. Those sessions are left out of every criterion&apos;s denominator.
         </p>
       )}
       {report.hygiene && (

@@ -111,6 +111,12 @@ export function validateCriterionResults(
   try { parsed = JSON.parse(text); } catch { return EMPTY_RESULTS(); }
   const results = (parsed as { results?: unknown })?.results;
   if (!Array.isArray(results)) return EMPTY_RESULTS();
+  // BOTH keys are required. A reply with only `results` is the pre-applicability
+  // shape. We still keep whatever fires it reported — an observed fire is real
+  // evidence and hiding it would be its own dishonesty — but the run degrades and
+  // claims NO denominators, because nothing here says which sessions were examined.
+  const roster = (parsed as { sessions?: unknown })?.sessions;
+  const rosterOk = Array.isArray(roster);
 
   const byId = new Map(criteria.map((c) => [c.id, c]));
   const sessById = new Map(sessions.map((s) => [s.sessionId, s]));
@@ -121,8 +127,7 @@ export function validateCriterionResults(
   // must not move a denominator.
   const rostered = new Set<string>();
   const notApplicable = new Map<string, Set<string>>();
-  const roster = (parsed as { sessions?: unknown })?.sessions;
-  for (const raw of Array.isArray(roster) ? (roster as RawRoster[]) : []) {
+  for (const raw of rosterOk ? (roster as RawRoster[]) : []) {
     if (!raw || typeof raw.sessionId !== "string" || !sessById.has(raw.sessionId)) continue;
     rostered.add(raw.sessionId);
     const ids = Array.isArray(raw.notApplicable) ? raw.notApplicable : [];
@@ -155,6 +160,12 @@ export function validateCriterionResults(
     // A criterion that fired is self-evidently applicable — the finding wins over a
     // contradicting roster entry.
     notApplicable.get(r.criterionId)?.delete(r.sessionId);
+
+    // A fire IS an answer about this session, so the session belongs in the
+    // denominator the fire will be reported against. Without this the numerator and
+    // denominator come from different populations, and "2 in 2 of 9 applicable" can
+    // count fires from sessions that are not among the 9.
+    rostered.add(r.sessionId);
   }
 
   const out: DetectorFinding[] = [];
@@ -172,7 +183,11 @@ export function validateCriterionResults(
       evidence: { msgIndices: valid },
     });
   }
-  return { ok: true, findings: out, rostered, notApplicable };
+  // Without a roster there is no honest denominator, so surrender the counts rather
+  // than let a fire-derived roster stand in for "these are the sessions we examined".
+  return rosterOk
+    ? { ok: true, findings: out, rostered, notApplicable }
+    : { ok: false, findings: out, rostered: new Set(), notApplicable: new Map() };
 }
 
 async function judgeBatch(

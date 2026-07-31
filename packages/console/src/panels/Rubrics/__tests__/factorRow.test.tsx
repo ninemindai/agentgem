@@ -45,6 +45,17 @@ describe("FactorRow applicability", () => {
     expect(screen.getByText(/no findings in 9 applicable/i)).toBeTruthy();
   });
 
+  // A fire can come from a session outside the denominator (a clipped one). Saying
+  // "did not apply" while showing that finding's advice reads as a contradiction.
+  it("leads with the finding when a fire has no usable denominator", () => {
+    render(<RubricReportCard report={reportWith([
+      { id: "c1", ...base, count: 1, sessions: 1, applicableSessions: 0, judgedSessions: 4 },
+    ])} />);
+    const row = within(screen.getByRole("listitem"));
+    expect(row.queryByText(/did not apply/i)).toBeNull();
+    expect(row.getByText(/1 in 1 session/i)).toBeTruthy();
+  });
+
   // Cheap detectors and aggregate criteria carry no denominator — they must render
   // exactly as they did before this change.
   it("renders a row without applicability data exactly as before", () => {
