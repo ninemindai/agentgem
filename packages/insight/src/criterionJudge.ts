@@ -152,7 +152,7 @@ export function validateCriterionResults(
 
     const real = realIdx.get(r.sessionId)!;
     const cited = Array.isArray(r.msgIndices) ? r.msgIndices.filter((n): n is number => typeof n === "number") : [];
-    const key = `${r.sessionId} ${r.criterionId}`;
+    const key = `${r.sessionId}\u0000${r.criterionId}`;
     const entry = fires.get(key) ?? { crit, session, indices: new Set<number>() };
     for (const n of cited) if (real.has(n)) entry.indices.add(n);   // drop hallucinated indices
     fires.set(key, entry);

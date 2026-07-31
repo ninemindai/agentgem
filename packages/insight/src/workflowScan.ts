@@ -433,7 +433,7 @@ export function scanWorkflow(paths: string[], inv: ScanInventory, opts: ScanOpti
   const scrub = opts.scrub ?? scrubStep;
   const seqSessions: SessionSequence[] = [];
   const global: GlobalArtifacts = inv.global ?? { skills: [], mcpServers: [], hooks: [] };
-  // key = `${ns} ${name}` where ns is "p" (project) or "g" (global).
+  // key = `${ns}\u0000${name}` where ns is "p" (project) or "g" (global).
   const used = new Map<string, { type: ArtifactType; acc: Acc }>();
   const unresolved = new Map<string, { kind: ArtifactType | "builtin"; count: number }>();
   const perSession: { ms: number; names: Set<string> }[] = [];
@@ -446,7 +446,7 @@ export function scanWorkflow(paths: string[], inv: ScanInventory, opts: ScanOpti
   let firstMs = Infinity, lastMs = 0;
 
   const touch = (ns: "p" | "g", name: string, type: ArtifactType, ms: number, sessionId: string, evidence?: string) => {
-    const key = `${ns} ${name}`;
+    const key = `${ns}\u0000${name}`;
     let e = used.get(key);
     if (!e) { e = { type, acc: { invocations: 0, sessions: new Set(), lastMs: 0, evidence } }; used.set(key, e); }
     e.acc.invocations++;
@@ -600,7 +600,7 @@ export function scanWorkflow(paths: string[], inv: ScanInventory, opts: ScanOpti
   // can be huge — installing-but-unused globals are noise here).
   const artifacts: ArtifactUsage[] = [];
   const add = (ns: "p" | "g", type: ArtifactType, name: string, confidence: "high" | "low") => {
-    const e = used.get(`${ns} ${name}`);
+    const e = used.get(`${ns}\u0000${name}`);
     artifacts.push({
       type, name, root: ns === "p" ? project.root : null,
       invocations: e?.acc.invocations ?? 0,
@@ -623,7 +623,7 @@ export function scanWorkflow(paths: string[], inv: ScanInventory, opts: ScanOpti
   }
   // Global artifacts that actually fired (root=null → global namespace).
   for (const [key, e] of used) {
-    if (!key.startsWith("g ")) continue;
+    if (!key.startsWith("g\u0000")) continue;
     add("g", e.type, key.slice(2), e.type === "hook" ? "low" : "high");
   }
 
@@ -646,12 +646,12 @@ export function scanWorkflow(paths: string[], inv: ScanInventory, opts: ScanOpti
     const names = [...s.names].sort();
     for (let i = 0; i < names.length; i++)
       for (let j = i + 1; j < names.length; j++) {
-        const key = `${names[i]} ${names[j]}`;
+        const key = `${names[i]}\u0000${names[j]}`;
         pairCounts.set(key, (pairCounts.get(key) ?? 0) + 1);
       }
   }
   const coOccurrence = [...pairCounts.entries()].map(([k, sessions]) => {
-    const [a, b] = k.split(" ");
+    const [a, b] = k.split("\u0000");
     return { a, b, sessions };
   });
 
