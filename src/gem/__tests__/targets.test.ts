@@ -321,10 +321,12 @@ describe("eve compose (runnable project scaffold)", () => {
     const r = materialize(gem([skill("review")]), "eve");
     const pkg = JSON.parse(r.files["package.json"]);
     expect(pkg.name).toBe("p");                       // from gem name "p"
-    expect(pkg.engines.node).toBe("24.x");
-    expect(pkg.dependencies.eve).toBe("^0.15.0");
+    expect(pkg.engines.node).toBe(">=24");
+    expect(pkg.dependencies.eve).toBe("^0.30.8");
     expect(pkg.dependencies.microsandbox).toBe("^0.5.0");
-    expect(pkg.dependencies.ai).toBe("7.0.2");
+    expect(pkg.dependencies.ai).toBe("^7.0.38");
+    // eve pulls `ai` transitively; the override must collapse to one copy inside that range.
+    expect(pkg.overrides.ai).toBe("7.0.38");
     expect(pkg.scripts.start).toBe("eve start");
     expect(r.files["agent/agent.ts"]).toContain('model: "anthropic/claude-sonnet-4.6"');
     expect(r.files["agent/agent.ts"]).toContain('defineAgent');
