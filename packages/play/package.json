@@ -13,11 +13,11 @@
     "@agentgem/base": "workspace:*",
     "@agentgem/capture": "workspace:*",
     "@agentgem/model": "workspace:*",
-    "@modelcontextprotocol/sdk": "^1.29.0",
+    "@modelcontextprotocol/sdk": "^1.30.0",
     "@ninemind/miniapp-gate": "workspace:^"
   },
   "devDependencies": {
     "@types/jsdom": "^28",
-    "jsdom": "^29"
+    "jsdom": "^30"
   }
 }

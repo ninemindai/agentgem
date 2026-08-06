@@ -15,6 +15,12 @@ minimumReleaseAge: 0
 # (electron 43 has no install script — electron-builder fetches the runtime itself
 # via @electron/get — so the old `pnpm.onlyBuiltDependencies: ["electron"]`, which
 # pnpm 11 no longer reads, was already vestigial and is dropped.)
+# electron-winstaller arrived transitively with electron-builder 26.15.7, which now
+# pulls electron-builder-squirrel-windows. Its `install` script (select-7z-arch.js)
+# stages a 7za binary for the Squirrel installer — a target we do not build:
+# electron-builder.yml pins `win.target: [nsis]`. false = don't run, but acknowledged.
+# If a Squirrel/AppX target is ever added, flip this to true.
 allowBuilds:
+  electron-winstaller: false
   esbuild: false
 verifyDepsBeforeRun: false
