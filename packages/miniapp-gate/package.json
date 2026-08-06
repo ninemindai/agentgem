@@ -16,7 +16,7 @@
   "bugs": { "url": "https://github.com/ninemindai/agentgem/issues" },
   "scripts": { "build": "tsc -b" },
   "dependencies": {
-    "jsdom": "^29"
+    "jsdom": "^30"
   },
   "devDependencies": {
     "@types/jsdom": "^28"

@@ -18,6 +18,6 @@
   "dependencies": {
     "@agentgem/archive": "workspace:*",
     "@agentgem/model": "workspace:*",
-    "undici": "^8.7.0"
+    "undici": "^8.10.0"
   }
 }
