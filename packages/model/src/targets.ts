@@ -666,11 +666,17 @@ const evePackageJson = (gemName: string): string =>
     type: "module",
     imports: { "#*": "./agent/*", "#evals/*": "./evals/*" },
     scripts: { build: "eve build", dev: "eve dev", start: "eve start", typecheck: "tsgo" },
-    dependencies: { "@vercel/connect": "0.2.2", ai: "7.0.2", eve: "^0.15.0", microsandbox: "^0.5.0", zod: "4.4.3" },
+    // Tracks eve 0.30.8's own `eve init` scaffold defaults (DEFAULT_AI_PACKAGE_VERSION,
+    // DEFAULT_CONNECT_PACKAGE_VERSION, DEFAULT_ZOD_PACKAGE_VERSION, DEFAULT_EVE_PACKAGE_CONTRACT)
+    // so a rendered gem installs the versions eve tests its scaffold against. ncu cannot see
+    // these — they are emitted strings, not a manifest — so re-check them when bumping eve.
+    dependencies: { "@vercel/connect": "0.4.3", ai: "^7.0.38", eve: "^0.30.8", microsandbox: "^0.5.0", zod: "4.4.3" },
     devDependencies: { "@types/node": "24.x", "@typescript/native-preview": "7.0.0-dev.20260523.1" },
-    overrides: { ai: "7.0.2" },
-    resolutions: { ai: "7.0.2" },
-    engines: { node: "24.x" },
+    // eve pulls `ai` transitively; overrides/resolutions collapse the tree to one copy, so they
+    // stay an exact pin inside the caret range above rather than a second range to satisfy.
+    overrides: { ai: "7.0.38" },
+    resolutions: { ai: "7.0.38" },
+    engines: { node: ">=24" },
   }, null, 2) + "\n";
 
 // Cross-cutting scaffold: the files `eve init` provides so the rendered agent/ source is runnable.
