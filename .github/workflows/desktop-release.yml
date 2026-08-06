@@ -24,9 +24,13 @@ jobs:
     environment: ${{ startsWith(github.ref, 'refs/tags/desktop-v') && 'release' || '' }}
     steps:
       - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+      # This pin is NOT what decides the pnpm version. pnpm 11 self-switches to the root
+      # package.json `packageManager` (managePackageManagerVersions, on by default), so a
+      # stale value here runs as packageManager anyway and only misleads the reader. Keep
+      # it in sync with `packageManager` — ci.yml omits `version:` and reads it directly.
       - uses: pnpm/action-setup@f40ffcd9367d9f12939873eb1018b921a783ffaa # v4
         with:
-          version: 11.10.0
+          version: 11.20.0
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
           node-version: 24

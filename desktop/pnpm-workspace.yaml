@@ -7,7 +7,8 @@
 packages: []
 
 # --- pnpm 11 config (matches the root pnpm-workspace.yaml; desktop is a separate
-# pnpm root so it needs its own copy). desktop-release CI pins pnpm 11.10.0. ---
+# pnpm root so it needs its own copy). The pnpm version desktop-release actually runs
+# comes from the ROOT package.json `packageManager`, not from the workflow's pin. ---
 # Cooldown disabled: a 24h window rejected the just-bumped vite@8.1.4 and broke the
 # desktop-release build. Same call as root — see root pnpm-workspace.yaml.
 minimumReleaseAge: 0
