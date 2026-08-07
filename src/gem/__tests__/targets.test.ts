@@ -323,11 +323,15 @@ describe("eve compose (runnable project scaffold)", () => {
     expect(pkg.name).toBe("p");                       // from gem name "p"
     expect(pkg.engines.node).toBe(">=24");
     expect(pkg.dependencies.eve).toBe("^0.30.8");
+    // Pinned to eve's optional-peer range (^0.5.0). Bumping to ^0.6.x breaks the peer — see targets.ts.
     expect(pkg.dependencies.microsandbox).toBe("^0.5.0");
     expect(pkg.dependencies.ai).toBe("^7.0.38");
     // eve pulls `ai` transitively; the override must collapse to one copy inside that range.
     expect(pkg.overrides.ai).toBe("7.0.38");
     expect(pkg.scripts.start).toBe("eve start");
+    // `tsgo` only ships in @typescript/native-preview, so the script and the dep move together.
+    expect(pkg.scripts.typecheck).toBe("tsgo");
+    expect(pkg.devDependencies["@typescript/native-preview"]).toBe("7.0.0-dev.20260707.2");
     expect(r.files["agent/agent.ts"]).toContain('model: "anthropic/claude-sonnet-4.6"');
     expect(r.files["agent/agent.ts"]).toContain('defineAgent');
     expect(r.files["agent/channels/eve.ts"]).toContain("eveChannel");
