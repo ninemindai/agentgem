@@ -15,8 +15,12 @@ export interface AgentPluginImport { gem: Gem; skipped: SkippedArtifact[]; notes
 export function readAgentPlugin(files: FileTree): AgentPluginImport {
   const raw = files["plugin.json"];
   if (raw === undefined) throw new InvalidInputError("not an Agent Plugin: plugin.json is missing");
-  let manifest: Record<string, unknown>;
-  try { manifest = JSON.parse(raw) as Record<string, unknown>; } catch { throw new InvalidInputError("plugin.json is not valid JSON"); }
+  let parsed: unknown;
+  try { parsed = JSON.parse(raw); } catch { throw new InvalidInputError("plugin.json is not valid JSON"); }
+  if (typeof parsed !== "object" || parsed === null || Array.isArray(parsed)) {
+    throw new InvalidInputError("plugin.json must be a JSON object");
+  }
+  const manifest = parsed as Record<string, unknown>;
   if (manifest.$schema !== PLUGIN_SCHEMA_URI) throw new InvalidInputError(`unsupported plugin.json $schema '${String(manifest.$schema)}'`);
   const name = manifest.name;
   if (typeof name !== "string" || !NAME_RE.test(name) || name.includes("--") || name.includes("..")) {
@@ -44,7 +48,7 @@ export function readAgentPlugin(files: FileTree): AgentPluginImport {
     const safe: { path: string; content: string }[] = [];
     for (const p of siblings) {
       const rel = p.slice(`skills/${dir}/`.length);
-      if (rel.split("/").some((s) => s === "" || s === "." || s === "..")) {
+      if (rel.split("/").some((s) => s === "" || s === "." || s === "..") || rel.includes("\\")) {
         skipped.push({ artifact: `${dir}:${rel}`, type: "skill", reason: "unsafe skill file path in plugin" });
         continue;
       }
@@ -57,7 +61,7 @@ export function readAgentPlugin(files: FileTree): AgentPluginImport {
   // MCP servers: optional mcp.json; a version mismatch invalidates only this component.
   const mcpRaw = files["mcp.json"];
   if (mcpRaw !== undefined) {
-    type McpDoc = { $schema?: unknown; mcpServers?: Record<string, Record<string, unknown>> };
+    type McpDoc = { $schema?: unknown; mcpServers?: Record<string, unknown> };
     let doc: McpDoc | null = null;
     try { doc = JSON.parse(mcpRaw) as McpDoc; } catch { notes.push("mcp.json: invalid JSON — component skipped"); }
     if (doc !== null && doc.$schema !== MCP_SCHEMA_URI) { notes.push(`mcp.json: unsupported $schema — component skipped`); doc = null; }
@@ -73,7 +77,9 @@ export function readAgentPlugin(files: FileTree): AgentPluginImport {
   return { gem, skipped, notes };
 }
 
-function importServer(key: string, s: Record<string, unknown>): McpServerArtifact | string {
+function importServer(key: string, raw: unknown): McpServerArtifact | string {
+  if (typeof raw !== "object" || raw === null || Array.isArray(raw)) return "server entry is not an object";
+  const s = raw as Record<string, unknown>;
   const pick = (keys: string[]): Record<string, unknown> => {
     const out: Record<string, unknown> = {};
     for (const k of keys) if (s[k] !== undefined) out[k] = s[k];
