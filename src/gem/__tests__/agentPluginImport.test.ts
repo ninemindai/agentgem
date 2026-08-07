@@ -86,4 +86,33 @@ describe("readAgentPlugin", () => {
     expect((skill as { files?: { path: string }[] }).files!.every((x) => !x.path.includes(".."))).toBe(true);
     expect(skipped.some((s) => s.reason.includes("unsafe"))).toBe(true);
   });
+  it("skips a null mcp.json server entry, leaving other artifacts intact", () => {
+    const f = fixture();
+    f["mcp.json"] = JSON.stringify({
+      $schema: "https://agent-plugins.org/schemas/1.0.0/mcp.schema.json",
+      mcpServers: {
+        validator: { type: "stdio", command: "./bin/validate" },
+        broken: null,
+      },
+    });
+    const { gem, skipped } = readAgentPlugin(f);
+    expect(skipped.some((s) => s.artifact === "broken" && s.type === "mcp_server" && s.reason.length > 0)).toBe(true);
+    expect(gem.artifacts.some((a) => a.type === "mcp_server" && a.name === "validator")).toBe(true);
+    expect(gem.artifacts.some((a) => a.type === "skill")).toBe(true);
+  });
+  it("rejects a plugin.json whose parsed body isn't a JSON object", () => {
+    const f = fixture();
+    f["plugin.json"] = "null";
+    expect(() => readAgentPlugin(f)).toThrow(InvalidInputError);
+    f["plugin.json"] = "[]";
+    expect(() => readAgentPlugin(f)).toThrow(InvalidInputError);
+  });
+  it("skips a sibling path containing a backslash", () => {
+    const f = fixture();
+    f["skills/summarize/scripts\\evil.sh"] = "x";
+    const { gem, skipped } = readAgentPlugin(f);
+    const skill = gem.artifacts.find((a) => a.type === "skill");
+    expect((skill as { files?: { path: string }[] }).files!.every((x) => !x.path.includes("\\"))).toBe(true);
+    expect(skipped.some((s) => s.reason.includes("unsafe"))).toBe(true);
+  });
 });
