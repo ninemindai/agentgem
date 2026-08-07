@@ -23,6 +23,8 @@ export const SkillArtifactSchema = z.object({
   source: z.string(),
   content: z.string(),
   trigger: TriggerContractSchema.optional(),
+  files: z.array(z.object({ path: z.string(), content: z.string() })).optional(),
+  filesTruncated: z.boolean().optional(),
 });
 
 export const McpServerArtifactSchema = z.object({
@@ -369,14 +371,22 @@ export const GemLockSchema = z.object({
   signature: z.string().nullable(),
 });
 
+// Mirrors the v2 manifest entry shapes (packages/archive). Like GemContractSchema below, this
+// exists so the Zod boundaries that re-validate a manifest (publish/install) don't silently
+// strip the archived facets — `files`/`secretRefs`/`extra`/`metadata` — as unknown keys.
 export const GemManifestArtifactSchema = z.object({
-  type: z.enum(["skill", "mcp_server", "instructions", "hook", "channel", "subagent"]),
+  type: z.enum(["skill", "mcp_server", "instructions", "hook", "channel", "subagent", "game", "rubric", "reference"]),
   name: z.string(),
   path: z.string(),
   description: z.string().optional(),
   source: z.string().optional(),
   tools: z.array(z.string()).optional(),
   model: z.string().optional(),
+  metadata: z.string().optional(),
+  files: z.array(z.string()).optional(),
+  filesTruncated: z.boolean().optional(),
+  secretRefs: z.array(z.object({ name: z.string(), location: z.string() })).optional(),
+  extra: z.record(z.string(), z.unknown()).optional(),
 });
 
 // Mirrors GemContract (packages/model/src/types.ts). Like the loop facet, a contract is an
