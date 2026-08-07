@@ -5,3 +5,4 @@
 export * from "./archive.js";
 export * from "./archiveFs.js";
 export * from "./archiveTar.js";
+export * from "./agentPlugin.js";
