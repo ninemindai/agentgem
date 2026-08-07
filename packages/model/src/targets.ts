@@ -42,6 +42,17 @@ export function safePathSegment(name: string): string {
   return safe === "." || safe === ".." || safe.length === 0 ? "unnamed" : safe;
 }
 
+// Agent Plugins 1.0.0 manifest name: 1–64 chars of [a-z0-9.-], alphanumeric at both
+// ends, no "--" or "..". Derived for plugin.json only — gem.name stays canonical and
+// the slug is never read back.
+export function pluginNameSlug(name: string): string {
+  let s = name.normalize("NFKC").toLowerCase().replace(/[^a-z0-9.-]+/g, "-");
+  s = s.replace(/-+/g, "-").replace(/\.+/g, ".");
+  s = s.replace(/^[^a-z0-9]+/, "").replace(/[^a-z0-9]+$/, "");
+  if (s.length > 64) s = s.slice(0, 64).replace(/[^a-z0-9]+$/, "");
+  return s.length === 0 ? "gem" : s;
+}
+
 // Eve derives skill/connection names from the filename and requires the segment to START with an
 // alphanumeric character. Strip leading non-alphanumerics from the safe segment.
 const eveSegment = (name: string): string => safePathSegment(name).replace(/^[^A-Za-z0-9]+/, "") || "unnamed";
