@@ -145,8 +145,9 @@ in `packages/archive`, accepting any conformant plugin directory tree:
   against the existing `createdFrom` union).
 - `skills/`: each immediate child directory containing `SKILL.md` becomes a
   `SkillArtifact` (no recursion, per spec discovery rules). Extra files under
-  a skill dir (`scripts/`, `references/`) are carried as additional body files
-  so a subsequent v2 write preserves them. Invalid skills → `SkippedArtifact`.
+  a skill dir (`scripts/`, `references/`) land in the existing
+  `SkillArtifact.files` field, which v2 serializes (see below) so a subsequent
+  write preserves them. Invalid skills → `SkippedArtifact`.
 - `mcp.json`: optional; each server maps back to a `McpServerArtifact`
   (`streamable-http → http`). Unsupported/invalid entries → `SkippedArtifact`,
   isolation per spec.
@@ -154,12 +155,18 @@ in `packages/archive`, accepting any conformant plugin directory tree:
   ignored, per spec conformance rules.
 
 The result is a plain Gem: gradeable, publishable, and writable as a v2
-archive. The user-facing entry point (likely a SourceSpec adapter next to the
-existing multi-agent source adapters) is chosen in the implementation plan.
+archive. Decision (recorded from the implementation plan): the user-facing
+entry point (likely a SourceSpec adapter next to the existing multi-agent
+source adapters) ships as a follow-up branch — `readAgentPlugin` is the
+library seam this iteration delivers.
 
-Open follow-up (out of scope): whether v1 skill subdirectory files
-(`skills/<n>/scripts/…`) already survive our archive round-trip; the importer
-must preserve them either way.
+Resolved during planning: v1 archives silently **drop** `SkillArtifact.files`
+(sibling `scripts/`/`references/` files — the field exists in the model but
+was never added to the manifest allowlist). v2 fixes this: each sibling file
+is placed at `skills/<n>/<relative-path>` (collision-checked, `..`-free), the
+skill's manifest entry lists the relative paths in a new `files: string[]`
+field (plus `filesTruncated` when set), and read restores them. Skills
+without sibling files serialize byte-identically to before.
 
 ## Error handling
 
