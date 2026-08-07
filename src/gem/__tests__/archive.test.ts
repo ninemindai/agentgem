@@ -81,7 +81,7 @@ describe("writeGemArchive", () => {
     expect(JSON.parse(files["hooks/fmt.json"]).event).toBe("PostToolUse");
 
     const manifest = JSON.parse(files["gem.json"]);
-    expect(manifest.formatVersion).toBe(1);
+    expect(manifest.formatVersion).toBe(2);
     expect(manifest.version).toBe("1.2.3");
     expect(manifest.name).toBe("demo");
     expect(manifest.artifacts.find((a: { name: string }) => a.name === "code review"))
