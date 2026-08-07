@@ -479,8 +479,10 @@ describe("POST /api/archive", () => {
     expect(JSON.parse(r.body.files["gem.json"]).version).toBe("2.0.0");
     expect(r.body.lock.gemDigest).toMatch(/^sha256:/);
     expect(r.body.path).toBe(out);
-    expect(r.body.files["mcp/gh.json"]).toBeDefined();
-    expect(r.body.files["mcp/gh.json"]).toContain("<redacted>");
+    // The `gh` server (stdio, plain command+env) is portable — it folds into mcp.json
+    // instead of a per-server mcp/gh.json file.
+    expect(r.body.files["mcp/gh.json"]).toBeUndefined();
+    expect(JSON.parse(r.body.files["mcp.json"]).mcpServers.gh.env.GH_TOKEN).toBe("<redacted>");
     expect(JSON.stringify(r.body)).not.toContain("ghp_secret"); // redaction survives
     expect(r.body.tarGz).toBeNull(); // no tar unless requested
     rmSync(out, { recursive: true, force: true });
@@ -494,7 +496,7 @@ describe("POST /api/archive", () => {
     expect(r.body.path).toBeNull(); // tar requested but no outDir -> nothing written to disk
     const unpacked = unpackTar(Buffer.from(r.body.tarGz, "base64"));
     expect(unpacked).toEqual(r.body.files); // round-trips the exact archive tree
-    expect(unpacked["mcp/gh.json"]).toContain("<redacted>");
+    expect(JSON.parse(unpacked["mcp.json"]).mcpServers.gh.env.GH_TOKEN).toBe("<redacted>");
     expect(JSON.stringify(unpacked)).not.toContain("ghp_secret"); // tarball is secret-safe too
   });
 
