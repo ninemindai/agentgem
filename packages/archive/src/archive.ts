@@ -76,7 +76,7 @@ export function verifyLock(files: FileTree, lock: GemLock): VerifyResult {
   return { ok, mismatches, missing, extra };
 }
 
-interface ManifestArtifactEntry { type: ArtifactType | "reference"; name: string; path: string; description?: string; source?: string; tools?: string[]; model?: string; metadata?: string }
+interface ManifestArtifactEntry { type: ArtifactType | "reference"; name: string; path: string; description?: string; source?: string; tools?: string[]; model?: string; metadata?: string; files?: string[]; filesTruncated?: boolean }
 interface ManifestCheckEntry { name: string; path: string }
 interface GemManifest {
   formatVersion: number;
@@ -110,10 +110,22 @@ export function writeGemArchive(gem: Gem, opts: { version?: string; dependencies
   for (const a of gem.artifacts) {
     const seg = safePathSegment(a.name);
     if (a.type === "skill") {
-      const path = `skills/${seg}/SKILL.md`;
+      const skillDir = `skills/${seg}`;
+      const path = `${skillDir}/SKILL.md`;
       if (place(path, a.content, a.name, "skill")) {
         const e: ManifestArtifactEntry = { type: "skill", name: a.name, path, source: a.source };
         if (a.description !== undefined) e.description = a.description;
+        const rels: string[] = [];
+        for (const f of a.files ?? []) {
+          const segs = f.path.split("/");
+          if (segs.some((s) => s === "" || s === "." || s === "..") || f.path === "SKILL.md") {
+            skipped.push({ artifact: `${a.name}:${f.path}`, type: "skill", reason: "unsafe or reserved skill file path" });
+            continue;
+          }
+          if (place(`${skillDir}/${f.path}`, f.content, `${a.name}:${f.path}`, "skill")) rels.push(f.path);
+        }
+        if (rels.length > 0) e.files = rels;
+        if (a.filesTruncated) e.filesTruncated = true;
         artifacts.push(e);
       }
     } else if (a.type === "instructions") {
@@ -288,6 +300,9 @@ export function readGemArchive(files: FileTree): Gem {
     if (e.type === "skill") {
       const a: SkillArtifact = { type: "skill", name: e.name, source: e.source ?? "standalone", content: body(e.path) };
       if (e.description !== undefined) a.description = e.description;
+      const skillDir = e.path.replace(/\/SKILL\.md$/, "");
+      if (e.files !== undefined) a.files = e.files.map((rel) => ({ path: rel, content: body(`${skillDir}/${rel}`) }));
+      if (e.filesTruncated) a.filesTruncated = true;
       return a;
     }
     if (e.type === "instructions") {
