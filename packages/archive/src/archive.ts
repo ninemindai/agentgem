@@ -76,7 +76,7 @@ export function verifyLock(files: FileTree, lock: GemLock): VerifyResult {
   return { ok, mismatches, missing, extra };
 }
 
-interface ManifestArtifactEntry { type: ArtifactType | "reference"; name: string; path: string; description?: string; source?: string; tools?: string[]; model?: string; metadata?: string; files?: string[]; filesTruncated?: boolean }
+interface ManifestArtifactEntry { type: ArtifactType | "reference"; name: string; path: string; description?: string; source?: string; tools?: string[]; model?: string; metadata?: string; files?: string[]; filesTruncated?: boolean; secretRefs?: SecretRef[]; extra?: Record<string, unknown> }
 interface ManifestCheckEntry { name: string; path: string }
 interface GemManifest {
   formatVersion: number;
@@ -94,10 +94,49 @@ interface GemManifest {
 
 export interface ArchiveResult { files: FileTree; skipped: SkippedArtifact[] }
 
+// A server is portable when its redacted config supplies the closed spec schema's
+// required fields. Recognized keys go to mcp.json; everything else (wrong-shaped,
+// unknown, or spec-reserved) rides in the manifest entry's `extra` and merges back
+// on read — the round-trip stays exact while mcp.json stays conformant.
+function mcpPortable(a: McpServerArtifact): { entry: Record<string, unknown>; extra: Record<string, unknown> } | null {
+  const c = a.config;
+  const extra: Record<string, unknown> = {};
+  const isStrMap = (v: unknown): v is Record<string, string> =>
+    typeof v === "object" && v !== null && !Array.isArray(v) && Object.values(v).every((x) => typeof x === "string");
+  if (a.transport === "stdio") {
+    if (typeof c.command !== "string" || c.command === "") return null;
+    const entry: Record<string, unknown> = { type: "stdio", command: c.command };
+    for (const [k, v] of Object.entries(c)) {
+      if (k === "command") continue;
+      if (k === "args" && Array.isArray(v) && v.every((x) => typeof x === "string")) entry.args = v;
+      else if (k === "env" && isStrMap(v) && !("PLUGIN_ROOT" in v) && !("PLUGIN_DATA" in v)) entry.env = v;
+      // The spec schema patterns cwd: it MUST start with ./, ${PLUGIN_ROOT}, or ${PLUGIN_DATA}.
+      // Mined configs usually carry absolute paths — those ride in `extra` instead.
+      else if (k === "cwd" && typeof v === "string" && /^(?:\.\/|\$\{PLUGIN_ROOT\}(?:\/|$)|\$\{PLUGIN_DATA\}(?:\/|$))/.test(v)) entry.cwd = v;
+      else extra[k] = v;
+    }
+    return { entry, extra };
+  }
+  if (typeof c.url !== "string") return null;
+  let u: URL;
+  try { u = new URL(c.url); } catch { return null; }
+  const loopback = u.hostname === "localhost" || u.hostname === "[::1]" || u.hostname.startsWith("127.");
+  if (u.protocol !== "https:" && !(u.protocol === "http:" && loopback)) return null;
+  if (u.username !== "" || u.password !== "" || u.hash !== "") return null;
+  const entry: Record<string, unknown> = { type: a.transport === "http" ? "streamable-http" : "sse", url: c.url };
+  for (const [k, v] of Object.entries(c)) {
+    if (k === "url") continue;
+    if (k === "headers" && isStrMap(v)) entry.headers = v;
+    else extra[k] = v;
+  }
+  return { entry, extra };
+}
+
 export function writeGemArchive(gem: Gem, opts: { version?: string; dependencies?: string[] } = {}): ArchiveResult {
   const files: FileTree = {};
   const skipped: SkippedArtifact[] = [];
   const artifacts: ManifestArtifactEntry[] = [];
+  const mcpServers: Record<string, Record<string, unknown>> = {};
 
   const withExt = (s: string, ext: string) => (s.endsWith(ext) ? s : s + ext);
 
@@ -132,11 +171,25 @@ export function writeGemArchive(gem: Gem, opts: { version?: string; dependencies
       const path = `instructions/${withExt(seg, ".md")}`;
       if (place(path, a.content, a.name, "instructions")) artifacts.push({ type: "instructions", name: a.name, path });
     } else if (a.type === "mcp_server") {
-      const path = `mcp/${withExt(seg, ".json")}`;
-      const body: Record<string, unknown> = { transport: a.transport, config: a.config };
-      if (a.source !== undefined) body.source = a.source;
-      if (a.secretRefs !== undefined) body.secretRefs = a.secretRefs;
-      if (place(path, JSON.stringify(body, null, 2), a.name, "mcp_server")) artifacts.push({ type: "mcp_server", name: a.name, path });
+      const portable = mcpPortable(a);
+      if (portable) {
+        if (seg in mcpServers) {
+          skipped.push({ artifact: a.name, type: "mcp_server", reason: `mcp.json key collision with an earlier server at ${seg}` });
+        } else {
+          mcpServers[seg] = portable.entry;
+          const e: ManifestArtifactEntry = { type: "mcp_server", name: a.name, path: MCP_JSON_PATH };
+          if (a.source !== undefined) e.source = a.source;
+          if (a.secretRefs !== undefined) e.secretRefs = a.secretRefs;
+          if (Object.keys(portable.extra).length > 0) e.extra = portable.extra;
+          artifacts.push(e);
+        }
+      } else {
+        const path = `mcp/${withExt(seg, ".json")}`;
+        const body: Record<string, unknown> = { transport: a.transport, config: a.config };
+        if (a.source !== undefined) body.source = a.source;
+        if (a.secretRefs !== undefined) body.secretRefs = a.secretRefs;
+        if (place(path, JSON.stringify(body, null, 2), a.name, "mcp_server")) artifacts.push({ type: "mcp_server", name: a.name, path });
+      }
     } else if (a.type === "channel") {
       const path = `channels/${withExt(seg, ".json")}`;
       const body: Record<string, unknown> = { platform: a.platform, secretRefs: a.secretRefs };
@@ -179,6 +232,10 @@ export function writeGemArchive(gem: Gem, opts: { version?: string; dependencies
       if (a.criteria !== undefined) body.criteria = a.criteria;
       if (place(path, JSON.stringify(body, null, 2), a.name, "rubric")) artifacts.push({ type: "rubric", name: a.name, path });
     }
+  }
+
+  if (Object.keys(mcpServers).length > 0) {
+    files[MCP_JSON_PATH] = JSON.stringify({ $schema: MCP_SCHEMA_URI, mcpServers }, null, 2);
   }
 
   const checks: ManifestCheckEntry[] = [];
@@ -309,6 +366,17 @@ export function readGemArchive(files: FileTree): Gem {
       return { type: "instructions", name: e.name, content: body(e.path) };
     }
     if (e.type === "mcp_server") {
+      if (e.path === MCP_JSON_PATH) {
+        const doc = JSON.parse(body(MCP_JSON_PATH)) as { mcpServers?: Record<string, Record<string, unknown>> };
+        const s = doc.mcpServers?.[safePathSegment(e.name)];
+        if (s === undefined) throw new Error(`mcp.json is missing server '${e.name}'`);
+        const { type: specType, ...rest } = s;
+        const transport: McpServerArtifact["transport"] = specType === "streamable-http" ? "http" : specType === "sse" ? "sse" : "stdio";
+        const a: McpServerArtifact = { type: "mcp_server", name: e.name, transport, config: { ...rest, ...(e.extra ?? {}) } };
+        if (e.source !== undefined) a.source = e.source;
+        if (e.secretRefs !== undefined) a.secretRefs = e.secretRefs;
+        return a;
+      }
       const o = JSON.parse(body(e.path)) as { transport: McpServerArtifact["transport"]; config: Record<string, unknown>; source?: string; secretRefs?: McpServerArtifact["secretRefs"] };
       const a: McpServerArtifact = { type: "mcp_server", name: e.name, transport: o.transport, config: o.config };
       if (o.source !== undefined) a.source = o.source;

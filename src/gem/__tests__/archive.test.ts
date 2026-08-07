@@ -77,7 +77,9 @@ describe("writeGemArchive", () => {
     expect(skipped).toEqual([]);
     expect(files["skills/code_review/SKILL.md"]).toBe("# Review");
     expect(files["instructions/soul.md"]).toBe("be kind");
-    expect(JSON.parse(files["mcp/context7.json"]).transport).toBe("http");
+    // A conforming https server is portable — it folds into mcp.json, not a per-server file.
+    expect(files["mcp/context7.json"]).toBeUndefined();
+    expect(JSON.parse(files["mcp.json"]).mcpServers["context7"].type).toBe("streamable-http");
     expect(JSON.parse(files["hooks/fmt.json"]).event).toBe("PostToolUse");
 
     const manifest = JSON.parse(files["gem.json"]);
@@ -114,7 +116,10 @@ describe("writeGemArchive", () => {
   it("does not double the extension when an artifact name already ends in it", () => {
     const p = gem([
       { type: "instructions", name: "CLAUDE.md", content: "be kind" },
-      { type: "mcp_server", name: "ctx.json", transport: "http", config: { url: "https://x/sse" } },
+      // Non-portable (no url) so it still falls back to the per-server mcp/<n>.json path,
+      // which is where the double-extension risk lives (portable servers key mcp.json by
+      // raw name, never through withExt).
+      { type: "mcp_server", name: "ctx.json", transport: "http", config: { note: "no url" } },
     ]);
     const { files } = writeGemArchive(p);
     expect(files["instructions/CLAUDE.md"]).toBe("be kind");        // not instructions/CLAUDE.md.md
