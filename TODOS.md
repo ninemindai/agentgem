@@ -471,3 +471,53 @@ plumbing. `judgeSession.ts` has the same untested-prompt gap and would share the
 
 **Depends on / blocked by:** Ships after the applicability change; the prompt contract
 should settle first.
+
+## Agent Plugin import: product entry point + safe tar extraction
+
+**What:** Wire `readAgentPlugin()` (packages/archive) into a user-facing import
+surface — most likely a SourceSpec adapter next to the existing multi-agent
+source adapters — including hardened tar extraction for untrusted plugin
+archives (reject `..`/absolute entries, symlink escapes, size bombs).
+
+**Why:** The 2026-08-07 Agent Plugins alignment ships the library seam only;
+`importGem()` (packages/distribute/src/share.ts) still requires gem.json/gem.lock,
+so a foreign plugin is not importable through any product path yet. The Codex
+outside-voice review flagged the goal/delivery gap explicitly.
+
+**Pros:** Every published Agent Plugin (Google Agents CLI, Data Agent Kit, ARD
+catalog) becomes minable/gradeable AgentGem inventory — the import direction is
+the strategically valuable one for a find/mine/share product.
+
+**Cons:** Untrusted-archive handling is security-sensitive; needs its own review
+(existing archiveTar was built for self-produced archives, not hostile input).
+
+**Context:** `readAgentPlugin` lands in packages/archive/src/agentPlugin.ts
+(plan: docs/superpowers/plans/2026-08-07-agent-plugins-alignment.md, Task 6).
+Import-time path sanitization of skill sibling files is already in that task;
+the tar layer is what remains. Spec decision recorded in
+docs/superpowers/specs/2026-08-07-agent-plugins-alignment-design.md.
+
+**Depends on / blocked by:** The alignment PR landing first.
+
+## ARD / AI Catalog discovery feed for the marketplace
+
+**What:** Evaluate consuming Agentic Resource Discovery (ARD) and the AI Catalog
+(`application/agent-plugins+json` media type) as a discovery feed, surfacing
+external Agent Plugins in the AgentGem marketplace as import candidates.
+
+**Why:** Google/Amazon/Microsoft/OpenAI/Vercel/Cursor are standardizing plugin
+packaging + discovery; being an early conformant *indexer* positions the
+marketplace as the place where plugins get graded/verified, which is AgentGem's
+moat (trust + effectiveness data, not hosting).
+
+**Pros:** Inventory growth without authoring; rides the gem-grade/verify
+pipeline unchanged once import (above) exists.
+
+**Cons:** Spec layers are young (1.0.0, June-2026 era); indexing half-baked
+feeds could import junk — needs curation gates.
+
+**Context:** Announcement: developers.googleblog.com/agent-plugins-package-your-skills-tools-and-more/;
+spec: agent-plugins.org/specification. Vendored schemas live in
+src/gem/__tests__/fixtures/agentPluginSchemas.ts after the alignment PR.
+
+**Depends on / blocked by:** Agent Plugin import entry point (above).

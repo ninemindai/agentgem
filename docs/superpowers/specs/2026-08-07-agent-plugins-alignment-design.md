@@ -36,9 +36,11 @@ my-gem/
 
 Invariants preserved from v1:
 
-- `readGemArchive(writeGemArchive(gem)) == gem` — the Gem is reconstructed
-  from `gem.json` + body files only. `plugin.json` is derived output: written,
-  lock-verified, never read back.
+- `readGemArchive(writeGemArchive(gem)) == gem` (structural equality, and only
+  when the write reported zero `skipped` artifacts — colliding artifacts were
+  already lossy in v1). The Gem is reconstructed from `gem.json` + body files
+  only. `plugin.json` is derived output: written, lock-verified, never read
+  back.
 - Serialization stays at the edges (`packages/archive`); `materialize`/
   `publish` still take a `Gem` and need no changes.
 - Secret-safety: archives serialize an already-redacted Gem.
@@ -80,10 +82,12 @@ key. Two servers slugging to the same key is a collision — the later one is
 skipped with a `SkippedArtifact`, matching `place()`'s path-collision
 semantics. Transport maps `stdio → "stdio"`,
 `http → "streamable-http"`, `sse → "sse"`. Recognized config keys are copied
-when shape-valid: `command`, `args` (string[]), `env` (string map), `cwd`
-(string) for stdio; `url`, `headers` (string map) for http/sse. The spec
-schema is closed, so everything else moves to the server's `gem.json` manifest
-entry:
+when shape-valid: `command`, `args` (string[]), `env` (string map), `cwd` for
+stdio; `url`, `headers` (string map) for http/sse. `cwd` is additionally
+pattern-gated — the official schema requires it to start with `./`,
+`${PLUGIN_ROOT}`, or `${PLUGIN_DATA}`, so the absolute paths mined configs
+usually carry ride in `extra` instead. The spec schema is closed, so
+everything else moves to the server's `gem.json` manifest entry:
 
 ```json
 { "type": "mcp_server", "name": "...", "path": "mcp.json",
@@ -96,8 +100,8 @@ Reserved-name guard: the spec invalidates servers whose `env` contains
 
 **Portable server (read):** `config` = spec fields from the named `mcp.json`
 entry (transport-mapped back, spec `type` key dropped) merged with `extra`.
-The merge restores the exact original `config` object, keeping the round-trip
-invariant byte-exact.
+The merge restores the original `config` object structurally (key order is
+immaterial: digest hashing canonicalizes via `stableStringify`).
 
 **Non-portable server:** keeps the v1-style `mcp/<n>.json` body file and is
 omitted from `mcp.json` — mirroring the spec's own skip-and-continue
@@ -138,11 +142,14 @@ covered by the digest-safety test so that gems without MCP servers remain
 New `readAgentPlugin(files: FileTree): { gem: Gem; skipped: SkippedArtifact[] }`
 in `packages/archive`, accepting any conformant plugin directory tree:
 
-- `plugin.json`: required; validated against the closed schema. Unknown
-  top-level fields are reported (skipped-note), not fatal, per spec. Invalid
-  `name` or missing manifest → `InputError`. `name`/`version` seed the Gem
-  (`createdFrom: "agent-plugin"` — exact enum value settled in the plan
-  against the existing `createdFrom` union).
+- `plugin.json`: required; checked by a hand-rolled closed-schema validation
+  (known-field set + the official name pattern) — deliberately NOT strict ajv
+  validation, because the spec makes unknown top-level fields non-fatal:
+  they are reported via a `notes: string[]` channel (manifest-level
+  diagnostics; `SkippedArtifact` is reserved for per-component failures).
+  Invalid `name` or missing/unparseable manifest → `InvalidInputError`.
+  `name`/`version` seed the Gem; `createdFrom` is the model's free-form
+  provenance string (e.g. `Imported from Agent Plugin '<name>' v<version>`).
 - `skills/`: each immediate child directory containing `SKILL.md` becomes a
   `SkillArtifact` (no recursion, per spec discovery rules). Extra files under
   a skill dir (`scripts/`, `references/`) land in the existing
@@ -168,6 +175,19 @@ skill's manifest entry lists the relative paths in a new `files: string[]`
 field (plus `filesTruncated` when set), and read restores them. Skills
 without sibling files serialize byte-identically to before.
 
+## Wire-schema mirrors (found in engineering review)
+
+The "serialization stays at the edges" framing missed that archive/artifact
+shape is *also* mirrored in `packages/app/src/schemas.ts`, whose Zod
+boundaries strip unknown keys by design. `SkillArtifactSchema` must gain
+`files`/`filesTruncated`, and `GemManifestArtifactSchema` must gain the v2
+entry fields (`files`, `filesTruncated`, `secretRefs`, `extra`, `metadata`)
+plus the artifact kinds its enum already lags behind on (`game`, `rubric`,
+`reference`). Otherwise skill sibling files and MCP extras are silently
+stripped at publish/install boundaries — the known silent-strip bug class.
+Guarded by a preserve-not-strip test in the style of the existing
+`contract.schema.test.ts`.
+
 ## Error handling
 
 - Write: unchanged collision/skip semantics (`SkippedArtifact`).
@@ -184,8 +204,10 @@ without sibling files serialize byte-identically to before.
    non-portable MCP servers, `extra` merge fidelity, secretRefs preservation,
    and every other artifact type unchanged.
 2. **Digest safety:** consecutive v2 writes of the same Gem are
-   byte-identical; a v1 archive fixture still reads; v1 and v2 digests differ
-   only because of the format bump.
+   byte-identical; v1 archive fixtures still read (including one whose MCP
+   server lives at `mcp/<n>.json` — the read branch v2 rewrites); v2 writes
+   produce new digests (new derived files + relocated MCP bodies, i.e. the
+   format bump in the broad sense).
 3. **Conformance:** vendor the published `plugin.schema.json` and
    `mcp.schema.json` (1.0.0 URIs are immutable per spec) as test fixtures and
    validate generated `plugin.json`/`mcp.json` against them with `ajv`

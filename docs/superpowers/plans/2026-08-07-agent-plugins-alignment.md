@@ -17,7 +17,7 @@
 - **New source files start with** the two-line header:
   `// Copyright (c) 2026 NineMind, Inc.` / `// SPDX-License-Identifier: MIT`
 - **Determinism:** nothing written into an archive may depend on time or randomness; unchanged gems must produce byte-identical archives across writes.
-- **Round-trip invariant:** `readGemArchive(writeGemArchive(gem).files)` deep-equals `gem` for every field this plan touches.
+- **Round-trip invariant:** when `writeGemArchive` reports zero `skipped` entries, `readGemArchive(writeGemArchive(gem).files)` deep-equals `gem` for every field this plan touches (structural equality; byte order inside JSON bodies is immaterial because digest hashing canonicalizes via `stableStringify`).
 - Spec constants (verbatim): plugin schema URI `https://agent-plugins.org/schemas/1.0.0/plugin.schema.json`, mcp schema URI `https://agent-plugins.org/schemas/1.0.0/mcp.schema.json`, plugin name rule = 1–64 chars of `[a-z0-9.-]`, alphanumeric first/last char, no `--`, no `..`.
 
 ---
@@ -203,9 +203,11 @@ Expected: FAIL — no `plugin.json` in output, formatVersion still 1.
 ```ts
 export const PLUGIN_MANIFEST_PATH = "plugin.json";
 export const MCP_JSON_PATH = "mcp.json";
-const PLUGIN_SCHEMA_URI = "https://agent-plugins.org/schemas/1.0.0/plugin.schema.json";
-const MCP_SCHEMA_URI = "https://agent-plugins.org/schemas/1.0.0/mcp.schema.json";
+export const PLUGIN_SCHEMA_URI = "https://agent-plugins.org/schemas/1.0.0/plugin.schema.json";
+export const MCP_SCHEMA_URI = "https://agent-plugins.org/schemas/1.0.0/mcp.schema.json";
 ```
+
+(The URI constants are exported so Task 6's importer shares them — writer and importer must never disagree about the spec version they speak.)
 
 3. Add `pluginNameSlug` to the `@agentgem/model` value import (line 12).
 4. In `writeGemArchive`, immediately before `files[MANIFEST_PATH] = …` (line 189), add:
@@ -385,7 +387,7 @@ describe("archive v2: mcp.json folding", () => {
     expect(readGemArchive(files)).toEqual(gem);
   });
   it("carries non-spec config keys, source, and secretRefs via the manifest entry", () => {
-    const gem = mk({ source: "claude", secretRefs: [{ name: "DB_TOKEN", locations: ["env.DB_TOKEN"] }], config: { command: "npx", timeoutMs: 5000, env: { PLUGIN_ROOT: "reserved" } } } as Partial<McpServerArtifact>);
+    const gem = mk({ source: "claude", secretRefs: [{ name: "DB_TOKEN", location: "env.DB_TOKEN" }], config: { command: "npx", timeoutMs: 5000, env: { PLUGIN_ROOT: "reserved" } } } as Partial<McpServerArtifact>);
     const { files } = writeGemArchive(gem);
     const entry = JSON.parse(files["gem.json"]).artifacts[0];
     expect(entry.path).toBe("mcp.json");
@@ -414,10 +416,37 @@ describe("archive v2: mcp.json folding", () => {
     expect(JSON.parse(files["mcp.json"]).mcpServers["db_server"].command).toBe("a");
     expect(skipped.some((s) => s.type === "mcp_server" && s.reason.includes("collision"))).toBe(true);
   });
+  it("keeps a non-conforming cwd out of mcp.json and round-trips it via extra", () => {
+    const gem = mk({ config: { command: "npx", cwd: "/abs/checkout" } });
+    const { files } = writeGemArchive(gem);
+    expect(JSON.parse(files["mcp.json"]).mcpServers["db_server"].cwd).toBeUndefined();
+    expect(JSON.parse(files["gem.json"]).artifacts[0].extra).toEqual({ cwd: "/abs/checkout" });
+    expect(readGemArchive(files)).toEqual(gem);
+  });
+  it("round-trips an sse server", () => {
+    const gem = mk({ transport: "sse", config: { url: "https://x.example/sse" } });
+    const { files } = writeGemArchive(gem);
+    expect(JSON.parse(files["mcp.json"]).mcpServers["db_server"].type).toBe("sse");
+    expect(readGemArchive(files)).toEqual(gem);
+  });
+  it("REGRESSION: still reads a v1 archive whose server lives at mcp/<n>.json", () => {
+    const files: Record<string, string> = {
+      "gem.json": JSON.stringify({
+        formatVersion: 1, name: "old", version: "0.1.0", createdFrom: "unit test",
+        artifacts: [{ type: "mcp_server", name: "db", path: "mcp/db.json" }],
+        requiredSecrets: [], checks: [],
+      }),
+      "mcp/db.json": JSON.stringify({ transport: "stdio", config: { command: "npx" } }),
+    };
+    files["gem.lock"] = JSON.stringify(computeLock(files));
+    expect(readGemArchive(files).artifacts).toEqual([
+      { type: "mcp_server", name: "db", transport: "stdio", config: { command: "npx" } },
+    ]);
+  });
 });
 ```
 
-(Check `SecretRef`'s exact shape in `packages/model/src/types.ts` before writing the secretRefs fixture and adjust the literal to match.)
+(`SecretRef` shape verified against `packages/model/src/types.ts:8` — it is `{ name, location }`, singular. The v1 regression fixture is mandatory: this task rewrites the read branch every published gem with MCP servers flows through.)
 
 - [ ] **Step 2: Run to verify fail** — `pnpm exec tsc -b && pnpm exec vitest run dist/**/__tests__/agentPluginArchive.test.js`. Expected: FAIL (servers still under `mcp/`).
 
@@ -443,7 +472,9 @@ function mcpPortable(a: McpServerArtifact): { entry: Record<string, unknown>; ex
       if (k === "command") continue;
       if (k === "args" && Array.isArray(v) && v.every((x) => typeof x === "string")) entry.args = v;
       else if (k === "env" && isStrMap(v) && !("PLUGIN_ROOT" in v) && !("PLUGIN_DATA" in v)) entry.env = v;
-      else if (k === "cwd" && typeof v === "string") entry.cwd = v;
+      // The spec schema patterns cwd: it MUST start with ./, ${PLUGIN_ROOT}, or ${PLUGIN_DATA}.
+      // Mined configs usually carry absolute paths — those ride in `extra` instead.
+      else if (k === "cwd" && typeof v === "string" && /^(?:\.\/|\$\{PLUGIN_ROOT\}(?:\/|$)|\$\{PLUGIN_DATA\}(?:\/|$))/.test(v)) entry.cwd = v;
       else extra[k] = v;
     }
     return { entry, extra };
@@ -451,7 +482,7 @@ function mcpPortable(a: McpServerArtifact): { entry: Record<string, unknown>; ex
   if (typeof c.url !== "string") return null;
   let u: URL;
   try { u = new URL(c.url); } catch { return null; }
-  const loopback = u.hostname === "localhost" || u.hostname === "127.0.0.1" || u.hostname === "[::1]";
+  const loopback = u.hostname === "localhost" || u.hostname === "[::1]" || u.hostname.startsWith("127.");
   if (u.protocol !== "https:" && !(u.protocol === "http:" && loopback)) return null;
   if (u.username !== "" || u.password !== "" || u.hash !== "") return null;
   const entry: Record<string, unknown> = { type: a.transport === "http" ? "streamable-http" : "sse", url: c.url };
@@ -589,8 +620,9 @@ const gem: Gem = {
   name: "Conformance Gem", createdFrom: "unit test", checks: [], requiredSecrets: [],
   artifacts: [
     { type: "skill", name: "summarize", source: "standalone", content: "# S" },
-    { type: "mcp_server", name: "db", transport: "stdio", config: { command: "npx", args: ["db-mcp"], env: { MODE: "ro" } } },
+    { type: "mcp_server", name: "db", transport: "stdio", config: { command: "npx", args: ["db-mcp"], env: { MODE: "ro" }, cwd: "./cfg" } },
     { type: "mcp_server", name: "api", transport: "http", config: { url: "https://x.example/mcp" } },
+    { type: "mcp_server", name: "events", transport: "sse", config: { url: "https://x.example/sse" } },
   ],
 };
 
@@ -723,6 +755,21 @@ describe("readAgentPlugin", () => {
     const { gem } = readAgentPlugin(fixture());
     expect(readGemArchive(writeGemArchive(gem).files)).toEqual(gem);
   });
+  it("imports an empty-but-valid plugin as a zero-artifact gem", () => {
+    const f = { "plugin.json": JSON.stringify({ $schema: "https://agent-plugins.org/schemas/1.0.0/plugin.schema.json", name: "empty" }) };
+    const { gem, skipped, notes } = readAgentPlugin(f);
+    expect(gem.artifacts).toEqual([]);
+    expect(skipped).toEqual([]);
+    expect(notes).toEqual([]);
+  });
+  it("skips traversal-shaped sibling paths from a hostile tree", () => {
+    const f = fixture();
+    f["skills/summarize/../../evil.sh"] = "x";
+    const { gem, skipped } = readAgentPlugin(f);
+    const skill = gem.artifacts.find((a) => a.type === "skill");
+    expect((skill as { files?: { path: string }[] }).files!.every((x) => !x.path.includes(".."))).toBe(true);
+    expect(skipped.some((s) => s.reason.includes("unsafe"))).toBe(true);
+  });
 });
 ```
 
@@ -738,9 +785,8 @@ describe("readAgentPlugin", () => {
 // isolated as SkippedArtifact, matching the spec's failure-handling table.
 import type { FileTree, Gem, GemArtifact, McpServerArtifact, SkillArtifact, SkippedArtifact } from "@agentgem/model";
 import { InvalidInputError } from "@agentgem/model";
+import { PLUGIN_SCHEMA_URI, MCP_SCHEMA_URI } from "./archive.js";
 
-const PLUGIN_SCHEMA_URI = "https://agent-plugins.org/schemas/1.0.0/plugin.schema.json";
-const MCP_SCHEMA_URI = "https://agent-plugins.org/schemas/1.0.0/mcp.schema.json";
 const NAME_RE = /^[a-z0-9](?:[a-z0-9.-]{0,62}[a-z0-9])?$/;
 const KNOWN_MANIFEST_FIELDS = new Set(["$schema", "name", "version", "description", "author", "homepage", "repository", "license", "keywords", "extensions"]);
 
@@ -773,7 +819,18 @@ export function readAgentPlugin(files: FileTree): AgentPluginImport {
     const siblings = Object.keys(files)
       .filter((p) => p.startsWith(`skills/${dir}/`) && p !== `skills/${dir}/SKILL.md`)
       .sort();
-    if (siblings.length > 0) a.files = siblings.map((p) => ({ path: p.slice(`skills/${dir}/`.length), content: files[p] }));
+    // Defense in depth: a hostile tree can carry traversal-shaped keys. The archive
+    // writer guards again on the next write, but the in-memory Gem must never hold them.
+    const safe: { path: string; content: string }[] = [];
+    for (const p of siblings) {
+      const rel = p.slice(`skills/${dir}/`.length);
+      if (rel.split("/").some((s) => s === "" || s === "." || s === "..")) {
+        skipped.push({ artifact: `${dir}:${rel}`, type: "skill", reason: "unsafe skill file path in plugin" });
+        continue;
+      }
+      safe.push({ path: rel, content: files[p] });
+    }
+    if (safe.length > 0) a.files = safe;
     artifacts.push(a);
   }
 
@@ -831,7 +888,95 @@ git commit -m "feat(archive): readAgentPlugin imports conformant Agent Plugins a
 
 ---
 
-### Task 7: Full-suite regression, docs, and PR
+### Task 7: Keep the app wire-schema mirrors faithful (silent-strip guard)
+
+The plan's original "serialization-edge-only" claim was wrong: archive/artifact
+shape is also encoded in `packages/app/src/schemas.ts`, whose Zod boundaries
+strip unknown keys (that file's own comments say so for `contract` and `loop`).
+Without this task, `SkillArtifact.files` dies at every API boundary and v2
+manifest entries lose `files`/`secretRefs`/`extra` on publish/install
+re-validation — the exact silent-strip bug class this repo has been bitten by
+twice (`browser-bundle-client-schemas` and `GemManifestArtifactSchema` already
+missing `game`/`rubric`/`reference` today).
+
+**Files:**
+- Modify: `packages/app/src/schemas.ts` (`SkillArtifactSchema` ~line 19, `GemManifestArtifactSchema` ~line 372)
+- Test: `src/gem/__tests__/wireMirrors.schema.test.ts` (new — mirrors the style of `src/gem/__tests__/contract.schema.test.ts`)
+
+**Interfaces:**
+- Consumes: manifest entry fields introduced in Tasks 3–4 (`files: string[]`, `filesTruncated`, `secretRefs`, `extra`) and `SkillArtifact.files`/`filesTruncated` from the model.
+- Produces: wire schemas that preserve those fields; nothing new for later tasks.
+
+- [ ] **Step 1: Write the failing test**
+
+```ts
+// Copyright (c) 2026 NineMind, Inc.
+// SPDX-License-Identifier: MIT
+import { describe, it, expect } from "vitest";
+import { SkillArtifactSchema, GemManifestSchema } from "@agentgem/app/schemas";
+
+describe("wire mirrors preserve v2 archive fields instead of stripping them", () => {
+  it("SkillArtifactSchema keeps files and filesTruncated", () => {
+    const skill = {
+      type: "skill", name: "s", source: "standalone", content: "# S",
+      files: [{ path: "scripts/a.sh", content: "#!/bin/sh\n" }],
+      filesTruncated: true,
+    };
+    expect(SkillArtifactSchema.parse(skill)).toEqual(skill);
+  });
+  it("GemManifestSchema keeps v2 manifest entry fields and newer artifact kinds", () => {
+    const manifest = {
+      formatVersion: 2, name: "g", version: "0.1.0", createdFrom: "unit test",
+      requiredSecrets: [], checks: [],
+      artifacts: [
+        { type: "skill", name: "s", path: "skills/s/SKILL.md", source: "standalone", files: ["scripts/a.sh"], filesTruncated: true },
+        { type: "mcp_server", name: "db", path: "mcp.json", secretRefs: [{ name: "T", location: "env.T" }], extra: { timeoutMs: 5 } },
+        { type: "game", name: "pong", path: "games/pong.html", metadata: "{}" },
+        { type: "rubric", name: "r", path: "rubrics/r.json" },
+        { type: "reference", name: "ref", path: "refs/ref.json" },
+      ],
+    };
+    expect(GemManifestSchema.parse(manifest).artifacts).toEqual(manifest.artifacts);
+  });
+});
+```
+
+- [ ] **Step 2: Run to verify fail**
+
+```bash
+pnpm exec tsc -b && pnpm exec vitest run dist/**/__tests__/wireMirrors.schema.test.js
+```
+Expected: FAIL — `files`/`filesTruncated` stripped by `SkillArtifactSchema`; `game`/`rubric`/`reference` rejected by the manifest enum.
+
+- [ ] **Step 3: Implement**
+
+1. `SkillArtifactSchema`: add
+   `files: z.array(z.object({ path: z.string(), content: z.string() })).optional(),` and
+   `filesTruncated: z.boolean().optional(),`.
+2. `GemManifestArtifactSchema`: extend the enum to
+   `z.enum(["skill", "mcp_server", "instructions", "hook", "channel", "subagent", "game", "rubric", "reference"])`
+   and add
+   `metadata: z.string().optional(), files: z.array(z.string()).optional(), filesTruncated: z.boolean().optional(), secretRefs: z.array(z.object({ name: z.string(), location: z.string() })).optional(), extra: z.record(z.string(), z.unknown()).optional(),`.
+   (If schemas.ts already defines a `SecretRef` Zod mirror — grep `secretRefs` there — reuse it instead of the inline object.)
+3. Add a comment above `GemManifestArtifactSchema` in the style of `GemContractSchema`'s: these mirrors exist so Zod boundaries (which strip unknown keys) don't silently drop archived facets.
+
+- [ ] **Step 4: Run to verify pass**
+
+```bash
+pnpm exec tsc -b && pnpm exec vitest run dist/**/__tests__/wireMirrors.schema.test.js dist/**/__tests__/schemas.test.js
+```
+Expected: PASS, including the pre-existing schemas suite.
+
+- [ ] **Step 5: Commit**
+
+```bash
+git add packages/app/src/schemas.ts src/gem/__tests__/wireMirrors.schema.test.ts
+git commit -m "fix(app): wire-schema mirrors carry v2 archive fields instead of stripping them"
+```
+
+---
+
+### Task 8: Full-suite regression, docs, and PR
 
 **Files:**
 - Modify: `docs/superpowers/specs/2026-08-07-agent-plugins-alignment-design.md` only if implementation diverged (record the divergence; don't rewrite history).
@@ -892,5 +1037,22 @@ git show origin/main:packages/archive/src/archive.ts | grep -c "e.files"        
 git show origin/main:packages/archive/src/archive.ts | grep -c mcpPortable          # ≥1 (Task 4)
 git show origin/main:src/gem/__tests__/agentPluginConformance.test.ts | grep -c ajv # ≥1 (Task 5)
 git show origin/main:packages/archive/src/agentPlugin.ts | grep -c readAgentPlugin  # ≥1 (Task 6)
+git show origin/main:packages/app/src/schemas.ts | grep -c filesTruncated           # ≥1 (Task 7)
 ```
 Every command must print ≥ 1. If any commit was dropped (this repo has been bitten twice), the work is safe on the local branch: `git rebase origin/main` (merged commits auto-skip) → fresh branch → new PR.
+
+## GSTACK REVIEW REPORT
+
+| Review | Trigger | Why | Runs | Status | Findings |
+|--------|---------|-----|------|--------|----------|
+| CEO Review | `/plan-ceo-review` | Scope & strategy | 0 | — | — |
+| Codex Review | `/codex review` | Independent 2nd opinion | 1 | CLEAR (via /plan-eng-review outside voice) | 12 raised, 3 confirmed-new, 5 wording, 2 rejected, 1 tension kept, 1 pre-decided |
+| Eng Review | `/plan-eng-review` | Architecture & tests (required) | 1 | CLEAR (PLAN) | 8 issues, 0 critical gaps open — all folded into Tasks 4–7 |
+| Design Review | `/plan-design-review` | UI/UX gaps | 0 | — | no UI surface in this plan |
+| DX Review | `/plan-devex-review` | Developer experience gaps | 0 | — | — |
+
+- **CODEX:** Outside voice confirmed the wire-schema silent-strip gap (now Task 7), the `SecretRef` fixture shape, and five wording overclaims; env-splitting suggestion rejected (whole-map-to-`extra` kept — simpler, round-trip-exact, conformant).
+- **CROSS-MODEL:** Both reviewers agree on the format architecture (dual-format v2, write-only plugin.json, v1 read-compat, single-sourced mcp.json). Disagreement was limited to env-key splitting (kept current) and entry-point scope (pre-decided deferral, recorded in spec + TODOS.md).
+- **VERDICT:** ENG CLEARED — ready to implement (Tasks 1–8).
+
+NO UNRESOLVED DECISIONS
