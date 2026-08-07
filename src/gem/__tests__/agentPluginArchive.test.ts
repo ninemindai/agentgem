@@ -54,6 +54,20 @@ describe("archive v2: plugin.json", () => {
     files["gem.lock"] = JSON.stringify(computeLock(files));
     expect(() => readGemArchive(files)).toThrow(/formatVersion/);
   });
+  it("reads a v1-style manifest with NO formatVersion field as v1", () => {
+    const files: Record<string, string> = {
+      "gem.json": JSON.stringify({
+        name: "old", version: "0.1.0", createdFrom: "unit test",
+        artifacts: [{ type: "skill", name: "s", path: "skills/s/SKILL.md", source: "standalone" }],
+        requiredSecrets: [], checks: [],
+      }),
+      "skills/s/SKILL.md": "# S",
+    };
+    files["gem.lock"] = JSON.stringify(computeLock(files));
+    const gem = readGemArchive(files);
+    expect(gem.name).toBe("old");
+    expect(gem.artifacts).toEqual([{ type: "skill", name: "s", source: "standalone", content: "# S" }]);
+  });
 });
 
 describe("archive v2: skill sibling files", () => {
@@ -163,6 +177,27 @@ describe("archive v2: mcp.json folding", () => {
     const { files } = writeGemArchive(gem);
     expect(JSON.parse(files["mcp.json"]).mcpServers["db_server"].type).toBe("sse");
     expect(readGemArchive(files)).toEqual(gem);
+  });
+  it("writes and round-trips a server named 'constructor' (prototype-chain-safe key lookup)", () => {
+    const gem = mk({ name: "constructor", config: { command: "npx" } });
+    const { files, skipped } = writeGemArchive(gem);
+    expect(skipped).toEqual([]);
+    const doc = JSON.parse(files["mcp.json"]);
+    expect(Object.hasOwn(doc.mcpServers, "constructor")).toBe(true);
+    expect(doc.mcpServers.constructor).toEqual({ type: "stdio", command: "npx" });
+    expect(readGemArchive(files)).toEqual(gem);
+  });
+  it("throws /missing server/ for a hand-built archive referencing an inherited (not own) mcpServers key", () => {
+    const files: Record<string, string> = {
+      "gem.json": JSON.stringify({
+        formatVersion: 2, name: "g", version: "0.1.0", createdFrom: "unit test",
+        artifacts: [{ type: "mcp_server", name: "toString", path: "mcp.json" }],
+        requiredSecrets: [], checks: [],
+      }),
+      "mcp.json": JSON.stringify({ $schema: "https://agent-plugins.org/schemas/1.0.0/mcp.schema.json", mcpServers: {} }),
+    };
+    files["gem.lock"] = JSON.stringify(computeLock(files));
+    expect(() => readGemArchive(files)).toThrow(/missing server/);
   });
   it("REGRESSION: still reads a v1 archive whose server lives at mcp/<n>.json", () => {
     const files: Record<string, string> = {
