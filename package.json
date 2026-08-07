@@ -72,6 +72,7 @@
     "zod": "^4.4.3"
   },
   "devDependencies": {
+    "@agentgem/app": "workspace:*",
     "@agentgem/archive": "workspace:*",
     "@agentgem/base": "workspace:*",
     "@agentgem/build": "workspace:*",
@@ -93,6 +94,7 @@
     "@types/node": "^26",
     "@types/supertest": "^7",
     "@typescript/native": "npm:typescript@~7.0.2",
+    "ajv": "^8.20.0",
     "esbuild": "^0.28.1",
     "eve": "^0.30.8",
     "highlight.js": "^11.11.1",
@@ -101,7 +103,6 @@
     "supertest": "^7",
     "typescript": "npm:@typescript/typescript6@^6.0.2",
     "vitest": "^4",
-    "yaml": "^2",
-    "@agentgem/app": "workspace:*"
+    "yaml": "^2"
   }
 }
