@@ -9,17 +9,21 @@ import type {
   LoopSpec, LoopGuardrails, LoopSchedule, LoopGoal,
   RubricArtifact, RubricScopeKind, RubricFactorRef, LlmCriterion,
 } from "@agentgem/model";
-import { safePathSegment, GAME_GENRES } from "@agentgem/model";
+import { safePathSegment, GAME_GENRES, pluginNameSlug } from "@agentgem/model";
 import type { GameGenre } from "@agentgem/model";
 
 const isGameGenre = (g: unknown): g is GameGenre =>
   typeof g === "string" && (GAME_GENRES as readonly string[]).includes(g);
 
 export type { FileTree, SkippedArtifact };
-export const ARCHIVE_FORMAT_VERSION = 1;
+export const ARCHIVE_FORMAT_VERSION = 2;
 
 const MANIFEST_PATH = "gem.json";
 const LOCK_PATH = "gem.lock";
+export const PLUGIN_MANIFEST_PATH = "plugin.json";
+export const MCP_JSON_PATH = "mcp.json";
+export const PLUGIN_SCHEMA_URI = "https://agent-plugins.org/schemas/1.0.0/plugin.schema.json";
+export const MCP_SCHEMA_URI = "https://agent-plugins.org/schemas/1.0.0/mcp.schema.json";
 
 export interface GemLock {
   formatVersion: number;
@@ -186,6 +190,10 @@ export function writeGemArchive(gem: Gem, opts: { version?: string; dependencies
     ...(gem.contract ? { contract: gem.contract } : {}),
     ...(gem.loop ? { loop: gem.loop } : {}),
   };
+  files[PLUGIN_MANIFEST_PATH] = JSON.stringify(
+    { $schema: PLUGIN_SCHEMA_URI, name: pluginNameSlug(gem.name), version: opts.version ?? "0.1.0" },
+    null, 2,
+  );
   files[MANIFEST_PATH] = JSON.stringify(manifest, null, 2);
   files[LOCK_PATH] = JSON.stringify(computeLock(files), null, 2);
   return { files, skipped };
@@ -259,6 +267,9 @@ export function readGemArchive(files: FileTree): Gem {
   if (lockRaw === undefined) throw new Error("archive missing gem.lock");
 
   const manifest = JSON.parse(manifestRaw) as GemManifest;
+  if (manifest.formatVersion !== 1 && manifest.formatVersion !== ARCHIVE_FORMAT_VERSION) {
+    throw new Error(`unsupported archive formatVersion ${manifest.formatVersion}`);
+  }
   const lock = JSON.parse(lockRaw) as GemLock;
   const v = verifyLock(files, lock);
   if (!v.ok) {
