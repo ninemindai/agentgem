@@ -670,8 +670,14 @@ const evePackageJson = (gemName: string): string =>
     // DEFAULT_CONNECT_PACKAGE_VERSION, DEFAULT_ZOD_PACKAGE_VERSION, DEFAULT_EVE_PACKAGE_CONTRACT)
     // so a rendered gem installs the versions eve tests its scaffold against. ncu cannot see
     // these — they are emitted strings, not a manifest — so re-check them when bumping eve.
+    // microsandbox stays ^0.5.0 DELIBERATELY — do not "modernise" it to ^0.6.x. eve declares it
+    // as an optional peerDependency at ^0.5.0 (and dev-depends on 0.5.5); ^0.6.x installs outside
+    // that range and every rendered gem gets an unmet-peer error.
     dependencies: { "@vercel/connect": "0.4.3", ai: "^7.0.38", eve: "^0.30.8", microsandbox: "^0.5.0", zod: "4.4.3" },
-    devDependencies: { "@types/node": "24.x", "@typescript/native-preview": "7.0.0-dev.20260523.1" },
+    // `typecheck: tsgo` above binds this: typescript@7 ships `tsc`, only @typescript/native-preview
+    // ships `tsgo`. eve's own scaffold moved to typescript@7 + tsc; we keep tsgo, so the two must
+    // change together — swapping the dep without the script leaves typecheck with no binary.
+    devDependencies: { "@types/node": "24.x", "@typescript/native-preview": "7.0.0-dev.20260707.2" },
     // eve pulls `ai` transitively; overrides/resolutions collapse the tree to one copy, so they
     // stay an exact pin inside the caret range above rather than a second range to satisfy.
     overrides: { ai: "7.0.38" },
