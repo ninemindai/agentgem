@@ -118,7 +118,7 @@ export function writeGemArchive(gem: Gem, opts: { version?: string; dependencies
         const rels: string[] = [];
         for (const f of a.files ?? []) {
           const segs = f.path.split("/");
-          if (segs.some((s) => s === "" || s === "." || s === "..") || f.path === "SKILL.md") {
+          if (segs.some((s) => s === "" || s === "." || s === "..") || f.path.includes("\\") || f.path === "SKILL.md") {
             skipped.push({ artifact: `${a.name}:${f.path}`, type: "skill", reason: "unsafe or reserved skill file path" });
             continue;
           }

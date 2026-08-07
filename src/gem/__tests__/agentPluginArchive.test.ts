@@ -91,4 +91,14 @@ describe("archive v2: skill sibling files", () => {
     expect(a).toEqual(b);
     expect(JSON.parse(a["gem.json"]).artifacts[0].files).toBeUndefined();
   });
+  it("skips backslash-separated sibling paths instead of writing them", () => {
+    const gem = gemWithFiles();
+    (gem.artifacts[0] as { files: { path: string; content: string }[] }).files = [
+      { path: "..\\..\\evil.sh", content: "x" },
+      { path: "scripts\\x.sh", content: "y" },
+    ];
+    const { files, skipped } = writeGemArchive(gem);
+    expect(Object.keys(files).some((p) => p.includes("evil"))).toBe(false);
+    expect(skipped.filter((s) => s.reason.includes("unsafe")).length).toBe(2);
+  });
 });
