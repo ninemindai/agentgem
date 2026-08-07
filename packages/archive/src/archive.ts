@@ -173,7 +173,7 @@ export function writeGemArchive(gem: Gem, opts: { version?: string; dependencies
     } else if (a.type === "mcp_server") {
       const portable = mcpPortable(a);
       if (portable) {
-        if (seg in mcpServers) {
+        if (Object.hasOwn(mcpServers, seg)) {
           skipped.push({ artifact: a.name, type: "mcp_server", reason: `mcp.json key collision with an earlier server at ${seg}` });
         } else {
           mcpServers[seg] = portable.entry;
@@ -336,7 +336,8 @@ export function readGemArchive(files: FileTree): Gem {
   if (lockRaw === undefined) throw new Error("archive missing gem.lock");
 
   const manifest = JSON.parse(manifestRaw) as GemManifest;
-  if (manifest.formatVersion !== 1 && manifest.formatVersion !== ARCHIVE_FORMAT_VERSION) {
+  const fv = manifest.formatVersion ?? 1;
+  if (fv !== 1 && fv !== ARCHIVE_FORMAT_VERSION) {
     throw new Error(`unsupported archive formatVersion ${manifest.formatVersion}`);
   }
   const lock = JSON.parse(lockRaw) as GemLock;
@@ -368,7 +369,8 @@ export function readGemArchive(files: FileTree): Gem {
     if (e.type === "mcp_server") {
       if (e.path === MCP_JSON_PATH) {
         const doc = JSON.parse(body(MCP_JSON_PATH)) as { mcpServers?: Record<string, Record<string, unknown>> };
-        const s = doc.mcpServers?.[safePathSegment(e.name)];
+        const key = safePathSegment(e.name);
+        const s = doc.mcpServers && Object.hasOwn(doc.mcpServers, key) ? doc.mcpServers[key] : undefined;
         if (s === undefined) throw new Error(`mcp.json is missing server '${e.name}'`);
         const { type: specType, ...rest } = s;
         const transport: McpServerArtifact["transport"] = specType === "streamable-http" ? "http" : specType === "sse" ? "sse" : "stdio";

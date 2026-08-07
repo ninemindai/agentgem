@@ -100,8 +100,10 @@ Reserved-name guard: the spec invalidates servers whose `env` contains
 
 **Portable server (read):** `config` = spec fields from the named `mcp.json`
 entry (transport-mapped back, spec `type` key dropped) merged with `extra`.
-The merge restores the original `config` object structurally (key order is
-immaterial: digest hashing canonicalizes via `stableStringify`).
+The merge restores the original `config` object structurally (structural
+equality; gem.json is the only file whose hash is key-order-canonicalized —
+mcp.json is byte-hashed, and repeated writes of the same Gem are
+byte-identical).
 
 **Non-portable server:** keeps the v1-style `mcp/<n>.json` body file and is
 omitted from `mcp.json` — mirroring the spec's own skip-and-continue
