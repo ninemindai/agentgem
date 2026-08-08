@@ -13,6 +13,7 @@ import type { ProcedureStep, SessionSequence, WorkflowSignal } from "./workflowS
 import { createLogger } from "@agentgem/base";
 import { isEdit, isVerify } from "./stageLabels.js";
 import { taskSprawl, taskPingpong, rereadChurn, contextPinned, cacheChurnLate } from "./contextHygiene.js";
+import type { FactorCalibration } from "./rubricVerdicts.js";
 
 const log = createLogger("insight");
 
@@ -276,6 +277,11 @@ export interface DetectorSummary {
   // applicableSessions:0 means "never exercised", NOT "passed".
   applicableSessions?: number;   // of judgedSessions, how many the criterion could apply to
   judgedSessions?: number;       // sessions we can honestly say were examined in full
+  // All-time human calibration for this factor, decorated by the caller AFTER
+  // evaluation (rubricCore.withVerdicts) — evaluateRubric has no fs access. ABSENT
+  // when the factor has no verdicts or the store could not be read: a zeroed
+  // calibration would read as "nobody has ever disputed this".
+  calibration?: FactorCalibration;
 }
 
 export function summarizeFindings(findings: DetectorFinding[], specs: DetectorSpec[] = DETECTORS): DetectorSummary[] {
