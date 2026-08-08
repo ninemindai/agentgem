@@ -228,6 +228,9 @@ importers:
       '@agentgem/transfer':
         specifier: workspace:*
         version: link:../transfer
+      '@ninemind/miniapp-gate':
+        specifier: workspace:^
+        version: link:../miniapp-gate
       zod:
         specifier: ^4.4.3
         version: 4.4.3

@@ -1,7 +1,7 @@
 {
   "name": "@agentgem/app",
   "version": "0.7.0",
-  "description": "The composable app layer — REST controllers, the app-building spine (appCommon), MCP tools, and the shared server library the CLI/desktop entries and downstream deployments compose from.",
+  "description": "The composable app layer \u2014 REST controllers, the app-building spine (appCommon), MCP tools, and the shared server library the CLI/desktop entries and downstream deployments compose from.",
   "license": "MIT",
   "private": true,
   "type": "module",
@@ -39,6 +39,7 @@
     "@agentgem/run": "workspace:*",
     "@agentgem/testbed": "workspace:*",
     "@agentgem/transfer": "workspace:*",
+    "@ninemind/miniapp-gate": "workspace:^",
     "zod": "^4.4.3"
   }
 }

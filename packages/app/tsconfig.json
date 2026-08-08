@@ -24,7 +24,7 @@
   },
   "include": ["src/**/*"],
   "exclude": ["dist", "node_modules"],
-  "references": [
+  "references": [{ "path": "../miniapp-gate" }, 
     { "path": "../archive" }, { "path": "../base" }, { "path": "../build" },
     { "path": "../capture" }, { "path": "../contract" }, { "path": "../distribute" },
     { "path": "../fabric" }, { "path": "../insight" }, { "path": "../memory" }, { "path": "../model" },

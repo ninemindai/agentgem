@@ -21,5 +21,5 @@
   },
   "include": ["src/**/*"],
   "exclude": ["dist", "node_modules"],
-  "references": [{ "path": "../model" }, { "path": "../archive" }, { "path": "../base" }, { "path": "../build" }]
+  "references": [{ "path": "../miniapp-gate" }, { "path": "../model" }, { "path": "../archive" }, { "path": "../base" }, { "path": "../build" }]
 }
