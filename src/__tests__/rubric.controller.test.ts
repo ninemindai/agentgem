@@ -209,7 +209,7 @@ describe("RubricController.stream (streamOf route)", () => {
     setRubricComputeForTests(fakeCompute([]));
     setReportRenderForTests(async (input) => {
       input.onDelta?.("rendering…");
-      return { html: "<html>R</html>", ok: true };
+      return { html: "<html>R</html>", ok: true, findings: [], truncated: false };
     });
     try {
       const events = await drain(new RubricController().report({ query: { rubric: "hygiene", scope: "project", root: "/x" } }));
@@ -225,7 +225,7 @@ describe("RubricController.stream (streamOf route)", () => {
   it("report route: hands the compute payload to the renderer as FACTS", async () => {
     setRubricComputeForTests(fakeCompute([]));
     let facts: unknown = null;
-    setReportRenderForTests(async (input) => { facts = input.facts; return { html: "<p>r</p>", ok: true }; });
+    setReportRenderForTests(async (input) => { facts = input.facts; return { html: "<p>r</p>", ok: true, findings: [], truncated: false }; });
     try {
       await drain(new RubricController().report({ query: { rubric: "hygiene", scope: "all" } }));
       expect(facts).toMatchObject({ rubricId: "hygiene" });
@@ -236,7 +236,7 @@ describe("RubricController.stream (streamOf route)", () => {
 
   it("report route: a degraded renderer (agent offline) becomes a failed event", async () => {
     setRubricComputeForTests(fakeCompute([]));
-    setReportRenderForTests(async () => ({ html: "", ok: false }));
+    setReportRenderForTests(async () => ({ ok: false as const, reason: "render failed" }));
     try {
       const events = await drain(new RubricController().report({ query: { rubric: "hygiene", scope: "all" } }));
       expect(events.map((e) => (e as { type: string }).type)).toEqual(["start", "failed"]);

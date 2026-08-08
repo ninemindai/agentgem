@@ -27,6 +27,7 @@
     "@agentgem/base": "workspace:*",
     "@agentgem/build": "workspace:*",
     "@agentgem/model": "workspace:*",
+    "@ninemind/miniapp-gate": "workspace:^",
     "yaml": "^2"
   }
 }
