@@ -285,6 +285,7 @@ import { InvalidInputError, scorecardFloor, loadOrCreateIdentity } from "@agentg
 import { scaffoldChecks } from "@agentgem/build";
 import { materialize, compatibility } from "@agentgem/model";
 import type { TargetId } from "@agentgem/model";
+import type { Finding } from "@ninemind/miniapp-gate";
 import { createWorkspace, listWorkspaces, readWorkspace, renderTarget, deleteWorkspace } from "@agentgem/base";
 import { writeGemArchive, readGemArchive, readGemMeta } from "@agentgem/archive";
 import type { GemLock } from "@agentgem/archive";
@@ -630,7 +631,9 @@ export class GemController {
           return;
         }
         emit({ type: "start", cached: false, events: inp.events.length });
-        let r: { html: string; ok: boolean };
+        // Normalized across the two renderers: renderReport returns a discriminated union carrying
+        // its gate findings, renderDashboard still returns a flat record and contributes none.
+        let r: { ok: true; html: string; findings: Finding[] } | { ok: false; reason: string };
         if (kind === "report" && reportSources) {
           // Long-form editorial readout from DETERMINISTIC facts (session basics
           // + blast summary + the hygiene readout, Claude only) — same engine and
@@ -656,22 +659,27 @@ export class GemController {
             // pipeline (finding → skill/lesson gem).
             ...(actions && actions.length ? { recommendedActions: actions } : {}),
           };
-          r = await renderReport({
+          const out = await renderReport({
             facts,
             meta: { rubricId: "session-report", title: `Session report — ${inp.project ?? id}`, scope: "session" },
             onDelta: (chunk) => emit({ type: "delta", text: chunk }),
           });
+          r = out.ok ? { ok: true, html: out.html, findings: out.findings } : { ok: false, reason: out.reason };
         } else {
-          r = await renderDashboard({
+          const out = await renderDashboard({
             prevHtml: "", deltaEvents: inp.events, final: true,
             meta: { project: inp.project, agent: agent === "codex" ? "codex" : "claude" },
             timeoutMs: 240_000,
             onDelta: (chunk) => emit({ type: "delta", text: chunk }),
           });
+          r = out.ok ? { ok: true, html: out.html, findings: [] } : { ok: false, reason: "render failed" };
         }
         if (!r.ok) { emit({ type: "failed", message: `${kind} rendering failed — is the local coding agent available?` }); return; }
         const now = Date.now();
-        writeDashboardCache(id, inp.token, r.html, now, kind);
+        // Findings go INTO the cache entry. Recording them only on the render result would lose them
+        // on every cache hit, and a finished session's transcript never changes — so the copy served
+        // for the rest of that session's life would carry no findings at all.
+        writeDashboardCache(id, inp.token, r.html, now, kind, r.findings);
         emit({ type: "done", html: r.html, cached: false, updatedAt: now, ...(actions ? { actions } : {}) });
       } catch (err) {
         // Only tagged guard failures echo their message — an unexpected fault's

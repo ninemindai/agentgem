@@ -110,6 +110,7 @@ describe("renderReport", () => {
   it("returns the agent HTML with ok:true", async () => {
     const r = await renderReport({ facts: {}, meta, connectFn: fakeConnect("<html><body>report</body></html>") });
     expect(r.ok).toBe(true);
+    if (!r.ok) throw new Error(r.reason);
     expect(r.html).toContain("report");
   });
 
@@ -118,20 +119,28 @@ describe("renderReport", () => {
     expect(r).toMatchObject({ ok: true, html: "<div>ok</div>" });
   });
 
+  // A failure carries a reason and NOTHING else — no html, and crucially no findings. An empty
+  // findings list on a failed render reads exactly like "checked, nothing wrong", which would let a
+  // downstream tally count renders that never produced a document as gate-clean.
   it("degrades to ok:false on non-markup output", async () => {
     const r = await renderReport({ facts: {}, meta, connectFn: fakeConnect("sorry, cannot") });
-    expect(r).toEqual({ html: "", ok: false });
+    expect(r.ok).toBe(false);
+    expect(r).not.toHaveProperty("html");
+    expect(r).not.toHaveProperty("findings");
   });
 
   it("degrades to ok:false on a throwing agent (never throws)", async () => {
     const r = await renderReport({ facts: {}, meta, connectFn: fakeConnect(async () => { throw new Error("boom"); }) });
-    expect(r).toEqual({ html: "", ok: false });
+    expect(r.ok).toBe(false);
+    if (r.ok) throw new Error("unreachable");
+    expect(r.reason).toContain("boom");
   });
 
   it("caps oversized documents and flags truncation", async () => {
     const big = "<html>" + "x".repeat(MAX_REPORT_HTML) + "</html>";
     const r = await renderReport({ facts: {}, meta, connectFn: fakeConnect(big) });
     expect(r.ok).toBe(true);
+    if (!r.ok) throw new Error(r.reason);
     expect(r.truncated).toBe(true);
     expect(r.html.length).toBe(MAX_REPORT_HTML);
   });

@@ -24,6 +24,7 @@ export * from "./inspectSession.js";
 export * from "./artifactScan.js";
 export * from "./analysisCache.js";
 export * from "./dashboardCache.js";
+export { REPORT_CHECKS, REPORT_CHECK_IDS, REPORT_DATA_ID, reportTruncatedFinding } from "./reportChecks.js";
 export * from "./distill.js";
 export * from "./distillTypes.js";
 export * from "./extract.js";

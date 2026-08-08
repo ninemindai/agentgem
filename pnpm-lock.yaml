@@ -373,6 +373,9 @@ importers:
       '@agentgem/model':
         specifier: workspace:*
         version: link:../model
+      '@ninemind/miniapp-gate':
+        specifier: workspace:^
+        version: link:../miniapp-gate
       yaml:
         specifier: ^2
         version: 2.9.0

@@ -5,7 +5,7 @@ import { describe, it, expect, beforeAll, afterAll } from "vitest";
 import { mkdtempSync, rmSync, writeFileSync, utimesSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
-import { dashboardToken, readDashboardCacheEntry, readDashboardCacheLatest, writeDashboardCache } from "@agentgem/insight";
+import { dashboardToken, rendererFingerprint, readDashboardCacheEntry, readDashboardCacheLatest, writeDashboardCache } from "@agentgem/insight";
 import { capDashboardEvents, blastFacts, downsampleCurve, recommendedActions } from "@agentgem/app/sessionDashboardCore";
 import type { SessionEvent, BlastReport } from "@agentgem/insight";
 
@@ -22,7 +22,7 @@ afterAll(() => {
 describe("dashboardCache", () => {
   it("round-trips (sessionId, token) → html, misses on a stale token, replaces per session", () => {
     writeDashboardCache("s1", "dv1:100", "<html>v1</html>", 1000);
-    expect(readDashboardCacheEntry("s1", "dv1:100")).toEqual({ html: "<html>v1</html>", ts: 1000 });
+    expect(readDashboardCacheEntry("s1", "dv1:100")).toMatchObject({ html: "<html>v1</html>", ts: 1000 });
     expect(readDashboardCacheEntry("s1", "dv1:999")).toBeNull();       // transcript changed
     expect(readDashboardCacheEntry("s2", "dv1:100")).toBeNull();       // other session
     writeDashboardCache("s1", "dv1:200", "<html>v2</html>", 2000);     // replaces, never accumulates
@@ -36,14 +36,43 @@ describe("dashboardCache", () => {
     expect(readDashboardCacheEntry("s3", "dv1:100", "summary")?.html).toBe("<html>sum</html>");
     expect(readDashboardCacheEntry("s3", "dv1:100", "report")?.html).toBe("<html>rep</html>");
     // legacy entries (written before kinds) read back as summary
-    expect(readDashboardCacheEntry("s3", "dv1:100")).toEqual({ html: "<html>sum</html>", ts: 1000 });
+    expect(readDashboardCacheEntry("s3", "dv1:100")).toMatchObject({ html: "<html>sum</html>", ts: 1000 });
   });
 
-  it("token derives from the transcript mtime and version", () => {
+  it("token derives from the transcript mtime, the version, and the RENDERER", () => {
     const p = join(home, "t.jsonl");
     writeFileSync(p, "{}");
     utimesSync(p, new Date(1_700_000_000_000), new Date(1_700_000_000_000));
-    expect(dashboardToken(p)).toBe("dv1:1700000000000");
+    // The mtime answers "did the input change?". It cannot answer "did the thing that PRODUCES the
+    // output change?" — and that is the question that matters when a renderer gains a gate. Without a
+    // renderer component, every report cached before this change keeps being served unexamined, and a
+    // finished session's transcript never changes again, so it never ages out.
+    expect(dashboardToken(p)).toMatch(/^dv1:[0-9a-f]{8}:1700000000000$/);
+  });
+
+  it("changes the token when the renderer contract changes, without anyone bumping a constant", () => {
+    const p = join(home, "t.jsonl");
+    writeFileSync(p, "{}");
+    utimesSync(p, new Date(1_700_000_000_000), new Date(1_700_000_000_000));
+    // The fingerprint is derived from the authoring brief, the house style, and the check ids — the
+    // things that actually determine what a render emits. Same inputs → same token, so this is stable
+    // within a build and self-invalidating across one.
+    expect(dashboardToken(p)).toBe(dashboardToken(p));
+    expect(rendererFingerprint()).toHaveLength(8);
+    expect(dashboardToken(p)).toContain(rendererFingerprint());
+  });
+
+  it("keeps findings alongside the html, so a cache hit does not lose them", () => {
+    // Findings recorded only on the render result evaporate on every cache hit — and the cache hit is
+    // the common path, since a finished session is served from cache for the rest of its life.
+    const findings = [{ id: "blank-render", severity: "warn" as const, message: "rendered nothing" }];
+    writeDashboardCache("s9", "dv1:aaaaaaaa:100", "<html>r</html>", 1000, "report", findings);
+    expect(readDashboardCacheEntry("s9", "dv1:aaaaaaaa:100", "report")?.findings).toEqual(findings);
+  });
+
+  it("reads an entry written before findings existed as having none", () => {
+    writeDashboardCache("s10", "dv1:aaaaaaaa:100", "<html>r</html>", 1000, "report");
+    expect(readDashboardCacheEntry("s10", "dv1:aaaaaaaa:100", "report")?.findings).toEqual([]);
   });
 
   it("readDashboardCacheLatest serves the entry regardless of token, scoped by kind", () => {
