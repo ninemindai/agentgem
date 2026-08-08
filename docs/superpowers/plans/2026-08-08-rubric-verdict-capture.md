@@ -38,7 +38,7 @@ Pure module: no fs, no sqlite, no imports beyond types. This is where every coun
 
 **Interfaces:**
 - Consumes: nothing.
-- Produces: `VerdictValue`, `VERDICT_VALUES`, `NOTE_MAX`, `RubricVerdict`, `FactorCalibration`, `pairKey(sessionId, factorId): string`, `latestPerPair(rows: RubricVerdict[]): Map<string, RubricVerdict>`, `foldCalibration(rows: RubricVerdict[]): Map<string, FactorCalibration>`, `verdictsBySession(rows: RubricVerdict[]): Map<string, Record<string, RubricVerdict>>`.
+- Produces: `VerdictValue`, `VERDICT_VALUES`, `NOTE_MAX`, `RubricVerdict`, `FactorCalibration`, `verdictKey(rubricId, sessionId, factorId): string`, `latestPerKey(rows: RubricVerdict[]): Map<string, RubricVerdict>`, `foldCalibration(rows: RubricVerdict[]): Map<string, FactorCalibration>`, `verdictsBySession(rows: RubricVerdict[]): Map<string, Record<string, RubricVerdict>>`.
 
 - [ ] **Step 1: Write the failing test**
 
@@ -48,20 +48,30 @@ Create `src/__tests__/rubricVerdicts.test.ts`:
 // Copyright (c) 2026 NineMind, Inc.
 // SPDX-License-Identifier: MIT
 import { describe, it, expect } from "vitest";
-import { foldCalibration, latestPerPair, verdictsBySession, pairKey, type RubricVerdict } from "@agentgem/insight";
+import { foldCalibration, latestPerKey, verdictsBySession, verdictKey, type RubricVerdict } from "@agentgem/insight";
 
 const v = (o: Partial<RubricVerdict> & { sessionId: string; factorId: string; verdict: RubricVerdict["verdict"]; atMs: number }): RubricVerdict =>
   ({ rubricId: "ship-discipline", ...o });
 
 describe("rubricVerdicts", () => {
-  it("keeps only the latest verdict per (session, factor) pair", () => {
+  it("keeps only the latest verdict per (rubric, session, factor) key", () => {
     const rows = [
       v({ sessionId: "s1", factorId: "f1", verdict: "wrong", atMs: 100 }),
       v({ sessionId: "s1", factorId: "f1", verdict: "accepted", atMs: 200 }),
     ];
-    const latest = latestPerPair(rows);
+    const latest = latestPerKey(rows);
     expect(latest.size).toBe(1);
-    expect(latest.get(pairKey("s1", "f1"))?.verdict).toBe("accepted");
+    expect(latest.get(verdictKey("ship-discipline", "s1", "f1"))?.verdict).toBe("accepted");
+  });
+
+  it("keeps two rubrics' verdicts on the same factor id apart", () => {
+    // Inline criteria are rubric-local: two user rubrics may each define `f1` with a
+    // different question, so merging their verdicts would describe neither. See spec §1.4.
+    const rows = [
+      v({ rubricId: "hygiene", sessionId: "s1", factorId: "f1", verdict: "wrong", atMs: 100 }),
+      v({ rubricId: "ship-discipline", sessionId: "s1", factorId: "f1", verdict: "accepted", atMs: 200 }),
+    ];
+    expect(latestPerKey(rows).size).toBe(2);
   });
 
   it("resolves a same-millisecond rewrite in favour of the later row", () => {
@@ -70,7 +80,7 @@ describe("rubricVerdicts", () => {
       v({ sessionId: "s1", factorId: "f1", verdict: "wrong", atMs: 100 }),
       v({ sessionId: "s1", factorId: "f1", verdict: "wontfix", atMs: 100 }),
     ];
-    expect(latestPerPair(rows).get(pairKey("s1", "f1"))?.verdict).toBe("wontfix");
+    expect(latestPerKey(rows).get(verdictKey("ship-discipline", "s1", "f1"))?.verdict).toBe("wontfix");
   });
 
   it("counts wrong and wontfix separately — they are different diagnoses", () => {
@@ -153,14 +163,21 @@ export interface RubricVerdict {
   verdict: VerdictValue;
   note?: string;
   atMs: number;
-  /** Provenance only — never part of the key. The same factor firing on the same
-   *  session means the same thing in every rubric that includes it, so a verdict
-   *  recorded under one rubric is visible from all of them. */
+  /** Part of the key. Inline criteria are rubric-local and user-authored, so the same
+   *  factor id in two rubrics can mean two different things — scoping by rubric keeps
+   *  their calibration apart (spec §1.4). */
   rubricId: string;
 }
 
-/** All-time calibration for one factor. `reviewed` counts only pairs that carry a
- *  verdict — an untriaged fire is an unanswered question, never an implicit pass. */
+/**
+ * All-time calibration for one factor WITHIN ONE RUBRIC. `reviewed` counts only keys
+ * that carry a verdict — an untriaged fire is an unanswered question, never an
+ * implicit pass.
+ *
+ * This is a false-positive rate and nothing more. It cannot see a criterion that
+ * fails to fire when it should: no fire means no verdict, so a false negative leaves
+ * no trace here. Never present it as accuracy.
+ */
 export interface FactorCalibration {
   reviewed: number;
   accepted: number;
@@ -172,20 +189,24 @@ export interface FactorCalibration {
 // a stray control byte makes grep classify the file as binary and skip it (40089570).
 const SEP = "\u0000";
 
-/** The (session, factor) composite — the same key criterionJudge.ts uses to collapse
- *  duplicate fires. */
-export function pairKey(sessionId: string, factorId: string): string {
-  return `${sessionId}${SEP}${factorId}`;
+/**
+ * The verdict key. Scoped by rubric because inline criteria are rubric-LOCAL:
+ * validateRubric only rejects an inline id that collides with a built-in detector or
+ * rule, so two user rubrics may each define `f1` with a different question. Merging
+ * their verdicts would produce one number describing neither (spec §1.4).
+ */
+export function verdictKey(rubricId: string, sessionId: string, factorId: string): string {
+  return `${rubricId}${SEP}${sessionId}${SEP}${factorId}`;
 }
 
 /**
- * Collapse append-only rows to the current verdict per pair. `rows` MUST arrive in
+ * Collapse append-only rows to the current verdict per key. `rows` MUST arrive in
  * ascending (atMs, id) order — the store's readers guarantee it — so a later row at
  * the same millisecond still wins.
  */
-export function latestPerPair(rows: RubricVerdict[]): Map<string, RubricVerdict> {
+export function latestPerKey(rows: RubricVerdict[]): Map<string, RubricVerdict> {
   const out = new Map<string, RubricVerdict>();
-  for (const r of rows) out.set(pairKey(r.sessionId, r.factorId), r);
+  for (const r of rows) out.set(verdictKey(r.rubricId, r.sessionId, r.factorId), r);
   return out;
 }
 
@@ -197,7 +218,7 @@ export function latestPerPair(rows: RubricVerdict[]): Map<string, RubricVerdict>
  */
 export function foldCalibration(rows: RubricVerdict[]): Map<string, FactorCalibration> {
   const out = new Map<string, FactorCalibration>();
-  for (const v of latestPerPair(rows).values()) {
+  for (const v of latestPerKey(rows).values()) {
     const c = out.get(v.factorId) ?? { reviewed: 0, accepted: 0, wrong: 0, wontfix: 0 };
     c.reviewed++;
     c[v.verdict]++;
@@ -210,7 +231,7 @@ export function foldCalibration(rows: RubricVerdict[]): Map<string, FactorCalibr
  *  perSession rows carry so the console can render button state. */
 export function verdictsBySession(rows: RubricVerdict[]): Map<string, Record<string, RubricVerdict>> {
   const out = new Map<string, Record<string, RubricVerdict>>();
-  for (const v of latestPerPair(rows).values()) {
+  for (const v of latestPerKey(rows).values()) {
     const rec = out.get(v.sessionId) ?? {};
     rec[v.factorId] = v;
     out.set(v.sessionId, rec);
@@ -233,7 +254,7 @@ export * from "./rubricVerdicts.js";
 pnpm exec tsc -b && pnpm exec vitest run dist/__tests__/rubricVerdicts.test.js
 ```
 
-Expected: 6 passed.
+Expected: 7 passed.
 
 - [ ] **Step 6: Commit**
 
@@ -263,7 +284,7 @@ Co-Authored-By: Claude Opus 5 (1M context) <noreply@anthropic.com>"
 
 **Interfaces:**
 - Consumes: `RubricVerdict`, `VerdictValue` from Task 1.
-- Produces: `defaultRubricVerdictsDbPath(): string`, `openRubricVerdictStore(dataDir?: string): RubricVerdictStore` where `RubricVerdictStore = { recordVerdict(v: RubricVerdict): void; verdictRowsForFactors(factorIds: string[]): RubricVerdict[]; verdictRowsForSessions(sessionIds: string[]): RubricVerdict[]; close(): void }`. Both readers return rows ordered by `(at_ms, id)` ascending. `"memory://"` as `dataDir` opens an in-memory database.
+- Produces: `defaultRubricVerdictsDbPath(): string`, `openRubricVerdictStore(dataDir?: string): RubricVerdictStore` where `RubricVerdictStore = { recordVerdict(v: RubricVerdict): void; verdictRowsForFactors(rubricId: string, factorIds: string[]): RubricVerdict[]; verdictRowsForSessions(rubricId: string, sessionIds: string[]): RubricVerdict[]; close(): void }`. Both readers are rubric-scoped and return rows ordered by `(at_ms, id)` ascending. `recordVerdict` throws on a note longer than `NOTE_MAX`. `"memory://"` as `dataDir` opens an in-memory database.
 
 - [ ] **Step 1: Write the failing test**
 
@@ -277,7 +298,7 @@ import { mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { DatabaseSync } from "node:sqlite";
-import { openRubricVerdictStore, foldCalibration, type RubricVerdict } from "@agentgem/insight";
+import { openRubricVerdictStore, foldCalibration, NOTE_MAX, type RubricVerdict } from "@agentgem/insight";
 
 const row = (o: Partial<RubricVerdict> & { sessionId: string; factorId: string; verdict: RubricVerdict["verdict"] }): RubricVerdict =>
   ({ atMs: 1000, rubricId: "ship-discipline", ...o });
@@ -290,7 +311,7 @@ describe("rubricVerdictStore", () => {
   it("round-trips a verdict", () => {
     const s = openRubricVerdictStore(tmpDb());
     s.recordVerdict(row({ sessionId: "s1", factorId: "f1", verdict: "wrong", note: "monorepo runs tests in CI" }));
-    const rows = s.verdictRowsForFactors(["f1"]);
+    const rows = s.verdictRowsForFactors("ship-discipline", ["f1"]);
     expect(rows).toHaveLength(1);
     expect(rows[0].verdict).toBe("wrong");
     expect(rows[0].note).toBe("monorepo runs tests in CI");
@@ -301,17 +322,17 @@ describe("rubricVerdictStore", () => {
     const s = openRubricVerdictStore(tmpDb());
     s.recordVerdict(row({ sessionId: "s1", factorId: "f1", verdict: "wrong", atMs: 500 }));
     s.recordVerdict(row({ sessionId: "s1", factorId: "f1", verdict: "accepted", atMs: 500 }));
-    expect(s.verdictRowsForFactors(["f1"]).map((r) => r.verdict)).toEqual(["wrong", "accepted"]);
+    expect(s.verdictRowsForFactors("ship-discipline", ["f1"]).map((r) => r.verdict)).toEqual(["wrong", "accepted"]);
     s.close();
   });
 
-  it("returns a verdict recorded under one rubric when read for another", () => {
-    // The key is (session, factor); rubricId is provenance only.
+  it("does NOT return another rubric's verdict on the same factor id", () => {
+    // Inline criteria are rubric-local, so `no-verify-finish` in `hygiene` may be a
+    // different question from `no-verify-finish` in `ship-discipline` (spec §1.4).
     const s = openRubricVerdictStore(tmpDb());
     s.recordVerdict(row({ sessionId: "s1", factorId: "no-verify-finish", verdict: "wrong", rubricId: "hygiene" }));
-    const rows = s.verdictRowsForFactors(["no-verify-finish"]);
-    expect(rows).toHaveLength(1);
-    expect(rows[0].rubricId).toBe("hygiene");
+    expect(s.verdictRowsForFactors("hygiene", ["no-verify-finish"])).toHaveLength(1);
+    expect(s.verdictRowsForFactors("ship-discipline", ["no-verify-finish"])).toEqual([]);
     s.close();
   });
 
@@ -319,9 +340,18 @@ describe("rubricVerdictStore", () => {
     const s = openRubricVerdictStore(tmpDb());
     s.recordVerdict(row({ sessionId: "s1", factorId: "f1", verdict: "wrong" }));
     s.recordVerdict(row({ sessionId: "s2", factorId: "f2", verdict: "accepted" }));
-    expect(s.verdictRowsForFactors(["f1"]).map((r) => r.factorId)).toEqual(["f1"]);
-    expect(s.verdictRowsForSessions(["s2"]).map((r) => r.sessionId)).toEqual(["s2"]);
-    expect(s.verdictRowsForFactors([])).toEqual([]);
+    expect(s.verdictRowsForFactors("ship-discipline", ["f1"]).map((r) => r.factorId)).toEqual(["f1"]);
+    expect(s.verdictRowsForSessions("ship-discipline", ["s2"]).map((r) => r.sessionId)).toEqual(["s2"]);
+    expect(s.verdictRowsForFactors("ship-discipline", [])).toEqual([]);
+    s.close();
+  });
+
+  it("refuses a note longer than NOTE_MAX at the store boundary", () => {
+    // Enforced HERE, not only in the route: a direct caller or a test must not be able
+    // to persist an oversized note past a guard the route happens to own.
+    const s = openRubricVerdictStore(tmpDb());
+    expect(() => s.recordVerdict(row({ sessionId: "s1", factorId: "f1", verdict: "wrong", note: "x".repeat(NOTE_MAX + 1) })))
+      .toThrow(/note exceeds/);
     s.close();
   });
 
@@ -331,9 +361,9 @@ describe("rubricVerdictStore", () => {
     a.recordVerdict(row({ sessionId: "s1", factorId: "f1", verdict: "wrong" }));
     a.close();
     const b = openRubricVerdictStore(path);
-    expect(b.verdictRowsForFactors(["f1"])).toHaveLength(1);
+    expect(b.verdictRowsForFactors("ship-discipline", ["f1"])).toHaveLength(1);
     b.recordVerdict(row({ sessionId: "s1", factorId: "f1", verdict: "accepted", atMs: 2000 }));
-    expect(foldCalibration(b.verdictRowsForFactors(["f1"])).get("f1")).toEqual({ reviewed: 1, accepted: 1, wrong: 0, wontfix: 0 });
+    expect(foldCalibration(b.verdictRowsForFactors("ship-discipline", ["f1"])).get("f1")).toEqual({ reviewed: 1, accepted: 1, wrong: 0, wontfix: 0 });
     b.close();
   });
 
@@ -388,7 +418,7 @@ import { DatabaseSync } from "node:sqlite";
 import { mkdirSync } from "node:fs";
 import { join, dirname } from "node:path";
 import { agentgemHome } from "@agentgem/model";
-import type { RubricVerdict, VerdictValue } from "./rubricVerdicts.js";
+import { NOTE_MAX, type RubricVerdict, type VerdictValue } from "./rubricVerdicts.js";
 
 const SCHEMA_VERSION = "1";
 
@@ -401,17 +431,19 @@ export function defaultRubricVerdictsDbPath(): string {
 }
 
 export interface RubricVerdictStore {
-  /** Append one verdict. Throws on failure — a dropped verdict is user input lost. */
+  /** Append one verdict. Throws on failure — a dropped verdict is user input lost —
+   *  and on a note longer than NOTE_MAX. */
   recordVerdict(v: RubricVerdict): void;
-  /** Every row for these factors, ascending by (at_ms, id). */
-  verdictRowsForFactors(factorIds: string[]): RubricVerdict[];
-  /** Every row for these sessions, ascending by (at_ms, id). */
-  verdictRowsForSessions(sessionIds: string[]): RubricVerdict[];
+  /** Every row for these factors WITHIN this rubric, ascending by (at_ms, id). */
+  verdictRowsForFactors(rubricId: string, factorIds: string[]): RubricVerdict[];
+  /** Every row for these sessions WITHIN this rubric, ascending by (at_ms, id). */
+  verdictRowsForSessions(rubricId: string, sessionIds: string[]): RubricVerdict[];
   close(): void;
 }
 
-function placeholders(xs: unknown[]): string {
-  return xs.map((_, i) => `?${i + 1}`).join(",");
+/** ?n placeholders starting at `from` (1-based), so a leading bound param can take ?1. */
+function placeholders(xs: unknown[], from: number): string {
+  return xs.map((_, i) => `?${i + from}`).join(",");
 }
 
 interface Row {
@@ -467,30 +499,35 @@ export function openRubricVerdictStore(dataDir?: string): RubricVerdictStore {
       rubric_id  TEXT    NOT NULL,
       at_ms      INTEGER NOT NULL
     );
-    CREATE INDEX IF NOT EXISTS rubric_verdicts_pair   ON rubric_verdicts (session_id, factor_id);
-    CREATE INDEX IF NOT EXISTS rubric_verdicts_factor ON rubric_verdicts (factor_id);
+    CREATE INDEX IF NOT EXISTS rubric_verdicts_key    ON rubric_verdicts (rubric_id, session_id, factor_id);
+    CREATE INDEX IF NOT EXISTS rubric_verdicts_factor ON rubric_verdicts (rubric_id, factor_id);
   `);
 
-  const select = (column: "factor_id" | "session_id", keys: string[]): RubricVerdict[] => {
+  const select = (rubricId: string, column: "factor_id" | "session_id", keys: string[]): RubricVerdict[] => {
     if (!keys.length) return [];
     const rows = db.prepare(
       `SELECT session_id, factor_id, verdict, note, rubric_id, at_ms
        FROM rubric_verdicts
-       WHERE ${column} IN (${placeholders(keys)})
+       WHERE rubric_id = ?1 AND ${column} IN (${placeholders(keys, 2)})
        ORDER BY at_ms ASC, id ASC`,
-    ).all(...keys) as unknown as Row[];
+    ).all(rubricId, ...keys) as unknown as Row[];
     return rows.map(toVerdict);
   };
 
   return {
     recordVerdict(v) {
+      // Enforced here, not only in the route: the constant lives at this layer, so a
+      // direct caller or a test must not be able to walk past a guard the route owns.
+      if (v.note !== undefined && v.note.length > NOTE_MAX) {
+        throw new Error(`note exceeds NOTE_MAX (${v.note.length} > ${NOTE_MAX})`);
+      }
       db.prepare(
         `INSERT INTO rubric_verdicts (session_id, factor_id, verdict, note, rubric_id, at_ms)
          VALUES (?1,?2,?3,?4,?5,?6)`,
       ).run(v.sessionId, v.factorId, v.verdict, v.note ?? null, v.rubricId, v.atMs);
     },
-    verdictRowsForFactors(factorIds) { return select("factor_id", factorIds); },
-    verdictRowsForSessions(sessionIds) { return select("session_id", sessionIds); },
+    verdictRowsForFactors(rubricId, factorIds) { return select(rubricId, "factor_id", factorIds); },
+    verdictRowsForSessions(rubricId, sessionIds) { return select(rubricId, "session_id", sessionIds); },
     close() { db.close(); },
   };
 }
@@ -510,7 +547,7 @@ export * from "./rubricVerdictStore.js";
 pnpm exec tsc -b && pnpm exec vitest run dist/__tests__/rubricVerdictStore.test.js
 ```
 
-Expected: 7 passed.
+Expected: 8 passed.
 
 - [ ] **Step 6: Commit**
 
@@ -604,7 +641,7 @@ describe("withVerdicts", () => {
     expect(out.perSession![0].verdicts!["committed-without-tests"].note).toBe("spike branch");
   });
 
-  it("degrades to no calibration when the store cannot be read, never to zero", () => {
+  it("degrades to unavailable when the store cannot be read — not to zero, not to silence", () => {
     const path = tmpDb("future.db");
     const db = new DatabaseSync(path);
     db.exec("CREATE TABLE IF NOT EXISTS meta (key TEXT PRIMARY KEY, value TEXT);");
@@ -612,8 +649,24 @@ describe("withVerdicts", () => {
     db.close();
     const out = withVerdicts(baseReport(), path);
     expect(out.factors[0].calibration).toBeUndefined();
+    // The flag is the point: without it a broken store looks like an untriaged factor.
+    expect(out.calibrationUnavailable).toBe(true);
     expect(out.factors).toHaveLength(2);           // findings intact
     expect(out.perSession![0].verdicts).toBeUndefined();
+  });
+
+  it("does not set the unavailable flag on a healthy but empty store", () => {
+    expect(withVerdicts(baseReport(), tmpDb()).calibrationUnavailable).toBeUndefined();
+  });
+
+  it("assigns atMs server-side rather than trusting the caller", () => {
+    const db = tmpDb();
+    const r = recordRubricVerdict(
+      { sessionId: "s1", factorId: "committed-without-tests", rubricId: "ship-discipline", verdict: "wrong" },
+      db, () => 4242,
+    );
+    expect(r.atMs).toBe(4242);
+    expect(withVerdicts(baseReport(), db).perSession![0].verdicts!["committed-without-tests"].atMs).toBe(4242);
   });
 
   it("never alters the report's own honesty fields", () => {
@@ -663,6 +716,9 @@ In `packages/insight/src/rubricReport.ts`, extend the `perSession` element type 
     // The current verdict per factor for this session, decorated by rubricCore.
     verdicts?: Record<string, RubricVerdict>;
   }[];
+  // The verdict store could not be read. Distinct from "no verdicts": without this,
+  // a broken store is indistinguishable from a factor nobody has triaged (spec §1.9).
+  calibrationUnavailable?: boolean;
 ```
 
 and add to its imports:
@@ -703,7 +759,8 @@ export function withVerdicts(payload: RubricReport, dataDir?: string): RubricRep
   let store: ReturnType<typeof openRubricVerdictStore> | null = null;
   try {
     store = openRubricVerdictStore(dataDir);
-    const calibration = foldCalibration(store.verdictRowsForFactors(payload.factors.map((f) => f.id)));
+    const rubricId = payload.rubricId;
+    const calibration = foldCalibration(store.verdictRowsForFactors(rubricId, payload.factors.map((f) => f.id)));
     const factors = payload.factors.map((f) => {
       const c = calibration.get(f.id);
       return c ? { ...f, calibration: c } : f;
@@ -711,7 +768,7 @@ export function withVerdicts(payload: RubricReport, dataDir?: string): RubricRep
 
     let perSession = payload.perSession;
     if (perSession?.length) {
-      const bySession = verdictsBySession(store.verdictRowsForSessions(perSession.map((s) => s.sessionId)));
+      const bySession = verdictsBySession(store.verdictRowsForSessions(rubricId, perSession.map((s) => s.sessionId)));
       perSession = perSession.map((s) => {
         const v = bySession.get(s.sessionId);
         return v ? { ...s, verdicts: v } : s;
@@ -719,8 +776,11 @@ export function withVerdicts(payload: RubricReport, dataDir?: string): RubricRep
     }
     return { ...payload, factors, ...(perSession ? { perSession } : {}) };
   } catch (err) {
+    // `unavailable`, not silence. Omitting the line alone would make a broken store
+    // indistinguishable from a factor nobody has triaged yet — the same
+    // unfalsifiable-silence failure the roster contract closes, one layer down.
     log.warn("rubric verdicts: calibration unavailable, report unaffected: %s", (err as Error)?.message ?? err);
-    return payload;
+    return { ...payload, calibrationUnavailable: true };
   } finally {
     try { store?.close(); } catch { /* ignore */ }
   }
@@ -777,7 +837,7 @@ In `packages/app/src/rubricCore.ts`, change the `return computeCached<RubricRepo
 pnpm exec tsc -b && pnpm exec vitest run dist/__tests__/rubricVerdictDecorate.test.js
 ```
 
-Expected: 5 passed.
+Expected: 7 passed.
 
 - [ ] **Step 7: Run the neighbouring suites for regressions**
 
@@ -813,7 +873,8 @@ Co-Authored-By: Claude Opus 5 (1M context) <noreply@anthropic.com>"
 
 **Files:**
 - Modify: `packages/app/src/rubric.stream.schema.ts` (two schemas)
-- Modify: `packages/app/src/rubric.controller.ts` (one route)
+- Modify: `packages/app/src/rubric.controller.ts` (one route + the render-path strip at `:203-205`)
+- Modify: `packages/app/src/rubricCore.ts` (`withoutVerdictNotes`, calibration in `recordRubricVerdict`)
 - Test: `src/__tests__/rubricVerdictRoute.test.ts`
 
 **Interfaces:**
@@ -898,7 +959,18 @@ export const RubricVerdictBody = z.object({
 }).strict();
 export type RubricVerdictBody = z.infer<typeof RubricVerdictBody>;
 
-export const RubricVerdictResponse = z.object({ ok: z.literal(true), atMs: z.number() });
+/**
+ * The response carries the factor's REFRESHED calibration so the console can update
+ * the rate in place. Without it the button flips but the line beside it keeps showing
+ * the pre-click count until the next full report fetch, which reads as a failed write.
+ */
+export const RubricVerdictResponse = z.object({
+  ok: z.literal(true),
+  atMs: z.number(),
+  calibration: z.object({
+    reviewed: z.number(), accepted: z.number(), wrong: z.number(), wontfix: z.number(),
+  }),
+});
 export type RubricVerdictResponse = z.infer<typeof RubricVerdictResponse>;
 ```
 
@@ -916,19 +988,94 @@ In `packages/app/src/rubric.controller.ts`, add `recordRubricVerdict` to the exi
   }
 ```
 
-- [ ] **Step 5: Run the test and verify it passes**
+Extend `recordRubricVerdict` in `rubricCore.ts` (Task 3) to fold and return the refreshed
+calibration from the same open handle, so the write and the read-back cannot disagree:
+
+```ts
+  const store = openRubricVerdictStore(dataDir);
+  try {
+    const v: RubricVerdict = { ...input, atMs };
+    store.recordVerdict(v);
+    const calibration = foldCalibration(store.verdictRowsForFactors(input.rubricId, [input.factorId]))
+      .get(input.factorId)
+      // The row we just wrote guarantees a fold entry; this is a type guard, not a fallback.
+      ?? { reviewed: 1, accepted: 0, wrong: 0, wontfix: 0 };
+    return { ok: true, atMs, calibration };
+  } finally {
+    try { store.close(); } catch { /* ignore */ }
+  }
+```
+
+- [ ] **Step 5: Stop notes reaching the report-rendering agent (CRITICAL)**
+
+`GET /api/rubric/report` feeds the decorated payload straight into an ACP agent
+(`rubric.controller.ts:203-205`). Because Task 3 decorates inside `computeRubric`, human note
+text would ride into that prompt — and for a cloud model, off the machine. This is the same
+boundary `criterionJudge.ts:37-38` already holds: *"`detail` is built from the criterion +
+counts only (never the agent's free text or step args), preserving the scrubbing contract."*
+
+Add to `rubricCore.ts` and export it:
+
+```ts
+/**
+ * Drop per-session verdicts before a payload is handed to an agent. Calibration counts
+ * stay — they are integers. Notes are the first human free-text field in this pipeline,
+ * so they inherit the scrubbing contract rather than escaping it.
+ */
+export function withoutVerdictNotes(payload: RubricReport): RubricReport {
+  if (!payload.perSession?.length) return payload;
+  return {
+    ...payload,
+    perSession: payload.perSession.map(({ verdicts: _drop, ...rest }) => rest),
+  };
+}
+```
+
+Then in `rubric.controller.ts`, change the render call:
+
+```ts
+        const r = await renderFn({
+          facts: withoutVerdictNotes(payload),
+```
+
+Add to `src/__tests__/rubricVerdictRoute.test.ts`:
+
+```ts
+import { withoutVerdictNotes } from "../rubricCore.js";
+
+describe("withoutVerdictNotes", () => {
+  it("strips per-session verdicts before the payload reaches an agent", () => {
+    const payload = {
+      rubricId: "ship-discipline", target: "overview", scope: "session",
+      factors: [{ id: "f1", title: "T", advice: "A", severity: "warn" as const, count: 1, sessions: 1,
+                  calibration: { reviewed: 2, accepted: 1, wrong: 1, wontfix: 0 } }],
+      sessionsScanned: 1, clean: false, degraded: false, skippedFactors: [],
+      perSession: [{ sessionId: "s1", transcript: "/tmp/s1.jsonl", factors: [],
+                     verdicts: { f1: { sessionId: "s1", factorId: "f1", rubricId: "ship-discipline",
+                                       verdict: "wrong" as const, note: "SECRET", atMs: 1 } } }],
+    };
+    const out = withoutVerdictNotes(payload);
+    expect(out.perSession![0]).not.toHaveProperty("verdicts");
+    expect(JSON.stringify(out)).not.toContain("SECRET");
+    // Counts are integers and may stay.
+    expect(out.factors[0].calibration).toEqual({ reviewed: 2, accepted: 1, wrong: 1, wontfix: 0 });
+  });
+});
+```
+
+- [ ] **Step 6: Run the test and verify it passes**
 
 ```bash
 pnpm exec tsc -b && pnpm exec vitest run dist/__tests__/rubricVerdictRoute.test.js dist/__tests__/rubric.controller.test.js
 ```
 
-Expected: 5 new tests pass; the existing controller suite is unchanged.
+Expected: 6 new tests pass; the existing controller suite is unchanged.
 
-- [ ] **Step 6: Commit**
+- [ ] **Step 7: Commit**
 
 ```bash
-git add packages/app/src/rubric.stream.schema.ts packages/app/src/rubric.controller.ts src/__tests__/rubricVerdictRoute.test.ts
-git commit -m "feat(app): add POST /api/rubric/verdict
+git add packages/app/src/rubric.stream.schema.ts packages/app/src/rubric.controller.ts packages/app/src/rubricCore.ts src/__tests__/rubricVerdictRoute.test.ts
+git commit -m "feat(app): add POST /api/rubric/verdict, and keep notes off the agent
 
 Strict body, unlike the permissive /rubrics drafts next to it: those
 accept an arbitrary editor draft so the endpoint can describe what is
@@ -962,11 +1109,17 @@ Create `packages/console/src/panels/Rubrics/__tests__/verdictControls.test.tsx`:
 ```tsx
 // Copyright (c) 2026 NineMind, Inc.
 // SPDX-License-Identifier: MIT
-import { describe, it, expect } from "vitest";
-import { render, screen } from "@testing-library/react";
+import { describe, it, expect, vi } from "vitest";
+import { render, screen, fireEvent, waitFor } from "@testing-library/react";
+import type { Client } from "@agentback/client";
 import { RubricReportCard } from "../index.js";
 import { calibrationLine } from "../rubricStream.js";
 import type { RubricReportView } from "../rubricStream.js";
+
+// Controls only render when a client is present (onRecord is undefined otherwise), so
+// every button assertion below must pass one. A bare stub is enough for render-only
+// checks; the click test stubs the transport explicitly.
+const client = {} as Client;
 
 const report = (over: Partial<RubricReportView> = {}): RubricReportView => ({
   rubricId: "ship-discipline",
@@ -986,21 +1139,27 @@ const report = (over: Partial<RubricReportView> = {}): RubricReportView => ({
 
 describe("verdict controls", () => {
   it("offers the three calls on a fired factor at session scope", () => {
-    render(<RubricReportCard report={report()} sessionId="s1" />);
+    render(<RubricReportCard report={report()} sessionId="s1" client={client} />);
     expect(screen.getByRole("button", { name: /accepted/i })).toBeTruthy();
     expect(screen.getByRole("button", { name: /wrong/i })).toBeTruthy();
     expect(screen.getByRole("button", { name: /won't fix/i })).toBeTruthy();
   });
 
   it("offers no call on a factor that did not fire — there is nothing to judge", () => {
-    render(<RubricReportCard report={report()} sessionId="s1" />);
+    render(<RubricReportCard report={report()} sessionId="s1" client={client} />);
     // Exactly one fired row, so exactly one set of three buttons.
     expect(screen.getAllByRole("button", { name: /wrong/i })).toHaveLength(1);
   });
 
   it("offers no call at project scope, where a row spans many sessions", () => {
-    render(<RubricReportCard report={report({ scope: "project" })} />);
+    render(<RubricReportCard report={report({ scope: "project" })} client={client} />);
     expect(screen.queryByRole("button", { name: /wrong/i })).toBeNull();
+  });
+
+  it("says the store is unreadable rather than showing nothing", () => {
+    // "No verdicts yet" and "the DB is broken" must not look identical.
+    render(<RubricReportCard report={report({ calibrationUnavailable: true })} sessionId="s1" client={client} />);
+    expect(screen.getByText(/calibration unavailable/i)).toBeTruthy();
   });
 
   it("marks the current verdict as pressed", () => {
@@ -1014,9 +1173,36 @@ describe("verdict controls", () => {
   it("renders the calibration line only when there are verdicts", () => {
     const r = report();
     r.factors[0].calibration = { reviewed: 10, accepted: 1, wrong: 9, wontfix: 0 };
-    render(<RubricReportCard report={r} sessionId="s1" />);
-    expect(screen.getByText(/9 of 10 reviewed/i)).toBeTruthy();
-    expect(screen.queryByText(/0 of 0/)).toBeNull();
+    const { container } = render(<RubricReportCard report={r} sessionId="s1" client={client} />);
+    // The caveat span splits the text node, so assert on the element's textContent.
+    const lines = [...container.querySelectorAll(".rub-calib")].map((n) => n.textContent ?? "");
+    expect(lines).toHaveLength(1);                            // only the factor that has verdicts
+    expect(lines[0]).toContain("9 of 10 reviewed");
+    expect(lines[0]).toContain("of reviewed fires only");     // the false-negative caveat
+    expect(container.textContent).not.toContain("0 of 0");
+  });
+
+  it("updates the rate from the POST response instead of waiting for a refetch", async () => {
+    const r = report();
+    r.factors[0].calibration = { reviewed: 1, accepted: 1, wrong: 0, wontfix: 0 };
+    const mod = await import("../rubricStream.js");
+    vi.spyOn(mod, "postRubricVerdict").mockResolvedValue({
+      ok: true, atMs: 1, calibration: { reviewed: 2, accepted: 1, wrong: 1, wontfix: 0 },
+    });
+    const { container } = render(<RubricReportCard report={r} sessionId="s1" client={client} />);
+    fireEvent.click(screen.getByRole("button", { name: /^wrong/i }));
+    await waitFor(() => expect(container.querySelector(".rub-calib")!.textContent).toContain("1 of 2 reviewed"));
+  });
+
+  it("rolls the button back and says so when the write fails", async () => {
+    const mod = await import("../rubricStream.js");
+    vi.spyOn(mod, "postRubricVerdict").mockRejectedValue(new Error("boom"));
+    render(<RubricReportCard report={report()} sessionId="s1" client={client} />);
+    const wrong = screen.getByRole("button", { name: /^wrong/i });
+    fireEvent.click(wrong);
+    // A dropped verdict is user input lost — the button must not keep looking saved.
+    await waitFor(() => expect(screen.getByText(/was not saved/i)).toBeTruthy());
+    expect(wrong.getAttribute("aria-pressed")).toBe("false");
   });
 
   it("states the rate against reviewed calls, never against all fires", () => {
@@ -1064,6 +1250,8 @@ Extend the `perSession` element in `RubricReportView`:
     sessionId: string; transcript: string; factors: RubricFactorView[]; hygiene?: HygieneVerdictView;
     verdicts?: Record<string, VerdictView>;
   }[];
+  // Store unreadable. Distinct from "no verdicts yet" — the UI must say which.
+  calibrationUnavailable?: boolean;
 ```
 
 Append the route and the copy helper:
@@ -1075,16 +1263,24 @@ const rubricVerdictRoute = defineRoute("POST", "/api/rubric/verdict", {
     factorId: z.string(),
     rubricId: z.string(),
     verdict: z.enum(["accepted", "wrong", "wontfix"]),
-    note: z.string().optional(),
+    // Mirror the server's cap. Without it a 501-character note round-trips to a 422
+    // AFTER the person typed it; the input also carries maxLength={500}.
+    note: z.string().max(500).optional(),
   }),
-  response: z.object({ ok: z.literal(true), atMs: z.number() }),
+  response: z.object({
+    ok: z.literal(true),
+    atMs: z.number(),
+    calibration: z.object({
+      reviewed: z.number(), accepted: z.number(), wrong: z.number(), wontfix: z.number(),
+    }),
+  }),
 });
 
 /** Record one verdict. Rejects on a non-2xx so the caller can show the row unsaved. */
 export function postRubricVerdict(
   client: Client,
   body: { sessionId: string; factorId: string; rubricId: string; verdict: VerdictValueView; note?: string },
-): Promise<{ ok: true; atMs: number }> {
+): Promise<{ ok: true; atMs: number; calibration: FactorCalibrationView }> {
   return rubricVerdictRoute.call(client, { body });
 }
 
@@ -1113,13 +1309,15 @@ const VERDICT_LABELS: { value: VerdictValueView; label: string }[] = [
   { value: "wontfix", label: "Won't fix" },
 ];
 
-function FactorRow({ f, sessionId, rubricId, current, onRecord }: {
+function FactorRow({ f, sessionId, current, calibration, onRecord }: {
   f: RubricFactorView;
   // Present only at session scope, where this row maps to exactly one session and a
   // (sessionId, factorId) verdict key is unambiguous.
   sessionId?: string;
-  rubricId: string;
   current?: VerdictValueView;
+  // The live count: the parent's patched value after a click, else the server's.
+  // Passed in rather than read off `f` so a click updates the rate immediately.
+  calibration?: FactorCalibrationView;
   onRecord?: (factorId: string, verdict: VerdictValueView) => void;
 }) {
   const fired = f.count > 0;
@@ -1137,7 +1335,14 @@ function FactorRow({ f, sessionId, rubricId, current, onRecord }: {
         <span className="targets-label" style={{ marginLeft: "auto" }}>{factorTally(f)}</span>
       </div>
       {fired && <p className="rub-advice">→ {f.advice}</p>}
-      {f.calibration && <p className="rub-calib">{calibrationLine(f.calibration)}</p>}
+      {calibration && (
+        <p className="rub-calib">
+          {calibrationLine(calibration)}
+          {/* Say what the number is not. It counts only fires someone reviewed, so it
+              cannot see a criterion that failed to fire when it should have. */}
+          <span className="rub-calib-caveat"> · of reviewed fires only</span>
+        </p>
+      )}
       {canCall && (
         <div className="rub-call-actions" role="group" aria-label={`Your call on ${f.title}`}>
           {VERDICT_LABELS.map(({ value, label }) => (
@@ -1180,6 +1385,10 @@ export function RubricReportCard({ report, sessionId, client }: {
   const callable = report.scope === "session" ? sessionId : undefined;
   const stored = report.perSession?.find((s) => s.sessionId === callable)?.verdicts;
   const [calls, setCalls] = useState<Record<string, VerdictValueView>>({});
+  // Calibration patched from the POST response. Without this the button flips but the
+  // rate beside it keeps the pre-click count until the next report fetch, which reads
+  // as a write that did not take.
+  const [rates, setRates] = useState<Record<string, FactorCalibrationView>>({});
   const [failed, setFailed] = useState<string | null>(null);
 
   const record = (factorId: string, verdict: VerdictValueView) => {
@@ -1188,6 +1397,7 @@ export function RubricReportCard({ report, sessionId, client }: {
     setCalls((c) => ({ ...c, [factorId]: verdict }));   // optimistic
     setFailed(null);
     postRubricVerdict(client, { sessionId: callable, factorId, rubricId: report.rubricId, verdict })
+      .then((r) => setRates((m) => ({ ...m, [factorId]: r.calibration })))
       .catch(() => {
         // A dropped verdict is user input lost — roll back and say so rather than
         // leaving the button looking saved.
@@ -1201,14 +1411,19 @@ export function RubricReportCard({ report, sessionId, client }: {
 and the factor list:
 
 ```tsx
+      {report.calibrationUnavailable && (
+        // Not the same as "no verdicts yet" — say which one it is.
+        <p className="insights-hint">Calibration unavailable — the verdict store could not be read. Findings are unaffected.</p>
+      )}
+
       <ul className="rub-factors">
         {report.factors.map((f) => (
           <FactorRow
             key={f.id}
             f={f}
             sessionId={callable}
-            rubricId={report.rubricId}
             current={calls[f.id] ?? stored?.[f.id]?.verdict}
+            calibration={rates[f.id] ?? f.calibration}
             onRecord={client ? record : undefined}
           />
         ))}
@@ -1228,6 +1443,7 @@ In `packages/console/src/shell/theme.css`, next to the existing `.rub-*` rules. 
   font-size: 12px;
   color: var(--ink-3);
 }
+.rub-calib-caveat { opacity: 0.7; }
 .rub-call-actions {
   display: flex;
   gap: 6px;
@@ -1256,7 +1472,7 @@ Confirm each `var(--…)` token exists in `theme.css` before using it; substitut
 - [ ] **Step 6: Verify every new class has a rule**
 
 ```bash
-for c in rub-calib rub-call-actions rub-call-btn; do
+for c in rub-calib rub-calib-caveat rub-call-actions rub-call-btn; do
   printf '%s: ' "$c"; grep -c "\.$c" packages/console/src/shell/theme.css
 done
 ```
@@ -1270,7 +1486,7 @@ pnpm --filter @agentgem/console test -- verdictControls
 pnpm --filter @agentgem/console typecheck
 ```
 
-Expected: 6 passed, typecheck clean.
+Expected: 9 passed, typecheck clean.
 
 - [ ] **Step 8: Commit**
 
@@ -1320,7 +1536,11 @@ jsdom asserts behavior and never appearance, and the CLAUDE.md UI rule exists be
 
 1. Rubrics → pick `ship-discipline` → scope **session** → pick a session that fires a factor.
 2. Confirm the three buttons render as styled pills, not raw gray browser buttons.
-3. Click **Wrong**; confirm the pressed state.
+3. Click **Wrong**; confirm the pressed state **and** that the calibration line updates
+   immediately, without a re-run. A button that flips while the rate beside it stays stale reads
+   as a failed write.
+3b. Confirm the report page (`/api/rubric/report`, the rendered HTML) still works and that no note
+   text appears in it — the render path strips `verdicts` (Task 4 Step 5).
 4. Re-run the rubric (the **Re-run** control) and confirm the verdict survives — this is the cache check from Task 3: a verdict must be visible on a *cached* report.
 5. Confirm the calibration line appears and reads `… of … reviewed calls`.
 6. Switch scope to **project** and confirm no buttons render, but the calibration line still does.
@@ -1376,3 +1596,103 @@ gh pr merge --rebase --delete-branch
 **Type consistency:** `FactorCalibration` (server) ↔ `FactorCalibrationView` (console mirror, same four fields, mirrored because the console cannot import root `src/` — the same reason `RubricFactorView` mirrors `DetectorSummary`). `RubricVerdict` ↔ `VerdictView`, same fields. `VerdictValue` ↔ `VerdictValueView`, same union. `withVerdicts` / `recordRubricVerdict` / `postRubricVerdict` / `calibrationLine` are each defined once and referenced with matching signatures.
 
 **Known soft spot:** Task 5 Step 4 shows the changed regions of `index.tsx` rather than the whole 442-line file. The unchanged middle of `RubricReportCard` (verdict line, coverage hints, hygiene, degraded block, per-session tail, skipped factors) is marked with a comment and must be preserved verbatim. Read the file before editing.
+
+---
+
+## What already exists (reused, not rebuilt)
+
+| Existing | Used for | Rebuilt? |
+|---|---|---|
+| `packages/insight/src/artifactOutcomesStore.ts` | Store shape: own-file rationale, `SCHEMA_VERSION` refusal, `addColumnIfMissing`, WAL pragma | No — copied the pattern |
+| `computeCached` / `readAnalysisCacheEntry` (`rubricCore.ts:192`) | Report caching; decoration deliberately sits outside it | No |
+| `defineRoute` (`@agentback/client`) | Typed console POST | No |
+| `FactorRow` (`panels/Rubrics/index.tsx:46`) | The row verdict controls attach to | Extended, not replaced |
+| `criterionJudge.ts` roster/applicability | The honesty rules calibration inherits | Untouched |
+
+## NOT in scope
+
+Full list with rationale in spec §9. Deferred here: the per-session verdict list (project/all scope),
+CLI entry, aggregator sync, suppression/snooze, feeding verdicts back into the judge prompt,
+aggregate-granularity criteria, and server-side verification that a factor really fired.
+
+## Worktree parallelization
+
+| Step | Modules touched | Depends on |
+|------|-----------------|------------|
+| Task 1 rollup math | `packages/insight/src` | — |
+| Task 2 store | `packages/insight/src` | Task 1 (types) |
+| Task 3 decoration | `packages/insight/src`, `packages/app/src` | Tasks 1-2 |
+| Task 4 route + strip | `packages/app/src` | Task 3 |
+| Task 5 console | `packages/console/src` | Task 4 (response shape) |
+
+`Lane A: T1 → T2 → T3 → T4 → T5 (sequential)`
+
+**Sequential implementation, no parallelization opportunity.** Every task consumes the previous
+task's exported types, and Tasks 1-3 all touch `packages/insight/src`. Splitting across worktrees
+would trade a real merge-conflict risk for no wall-clock gain.
+
+## Implementation Tasks
+
+Synthesized from the review findings. **All seven are already folded into Tasks 1-5 above** —
+this list is the traceability map from finding to change, not a second backlog. Check them off
+as the tasks that carry them land.
+
+- [ ] **T1 (P1, human: ~45min / CC: ~8min)** — `rubric.controller.ts` — strip verdict notes before `renderFn`
+  - Surfaced by: Architecture A1 — `rubric.controller.ts:203-205` passes the decorated payload to an ACP agent
+  - Files: `packages/app/src/rubricCore.ts`, `packages/app/src/rubric.controller.ts`, `src/__tests__/rubricVerdictRoute.test.ts`
+  - Verify: `pnpm exec tsc -b && pnpm exec vitest run dist/__tests__/rubricVerdictRoute.test.js`
+- [ ] **T2 (P1, human: ~2h / CC: ~20min)** — `rubricVerdicts.ts` / `rubricVerdictStore.ts` — key on `(rubric, session, factor)`
+  - Surfaced by: Outside voice — inline criteria are rubric-local, so two rubrics' `f1` would merge
+  - Files: `packages/insight/src/rubricVerdicts.ts`, `packages/insight/src/rubricVerdictStore.ts`, `src/__tests__/rubricVerdicts.test.ts`, `src/__tests__/rubricVerdictStore.test.ts`
+  - Verify: `pnpm exec vitest run dist/__tests__/rubricVerdicts.test.js dist/__tests__/rubricVerdictStore.test.js`
+- [ ] **T3 (P2, human: ~30min / CC: ~6min)** — `rubricCore.ts` — `calibrationUnavailable` instead of silence
+  - Surfaced by: Outside voice — a broken store currently looks identical to an untriaged factor
+  - Files: `packages/insight/src/rubricReport.ts`, `packages/app/src/rubricCore.ts`, `packages/console/src/panels/Rubrics/index.tsx`
+  - Verify: `pnpm exec vitest run dist/__tests__/rubricVerdictDecorate.test.js`
+- [ ] **T4 (P2, human: ~30min / CC: ~6min)** — verdict route — return refreshed calibration
+  - Surfaced by: Outside voice — no refresh story; the rate stays stale after a click
+  - Files: `packages/app/src/rubric.stream.schema.ts`, `packages/app/src/rubricCore.ts`, `packages/console/src/panels/Rubrics/`
+  - Verify: `pnpm --filter @agentgem/console test -- verdictControls`
+- [ ] **T5 (P2, human: ~15min / CC: ~3min)** — `rubricVerdictStore.ts` — enforce `NOTE_MAX` in `recordVerdict`
+  - Surfaced by: Outside voice — the constant lives in the store but only the route enforced it
+  - Files: `packages/insight/src/rubricVerdictStore.ts`, `src/__tests__/rubricVerdictStore.test.ts`
+  - Verify: `pnpm exec vitest run dist/__tests__/rubricVerdictStore.test.js`
+- [ ] **T6 (P2, human: ~10min / CC: ~2min)** — console — drop the dead `rubricId` prop, cap the note client-side
+  - Surfaced by: Code Quality C1 and C2
+  - Files: `packages/console/src/panels/Rubrics/index.tsx`, `packages/console/src/panels/Rubrics/rubricStream.ts`
+  - Verify: `pnpm --filter @agentgem/console typecheck`
+- [ ] **T7 (P2, human: ~20min / CC: ~4min)** — spec/UI — state that calibration is a false-positive rate only
+  - Surfaced by: Outside voice — bias by design, unstated
+  - Files: spec §4, `packages/console/src/panels/Rubrics/index.tsx`
+  - Verify: `pnpm --filter @agentgem/console test -- verdictControls`
+
+_No new tasks from Performance review._
+
+---
+
+## GSTACK REVIEW REPORT
+
+| Review | Trigger | Why | Runs | Status | Findings |
+|--------|---------|-----|------|--------|----------|
+| CEO Review | `/plan-ceo-review` | Scope & strategy | 0 | — | — |
+| Codex Review | `/codex review` | Independent 2nd opinion | 0 | — | — |
+| Eng Review | `/plan-eng-review` | Architecture & tests (required) | 1 | CLEAR | 5 issues, 0 critical gaps remaining (1 was critical, fixed) |
+| Design Review | `/plan-design-review` | UI/UX gaps | 0 | — | — |
+| DX Review | `/plan-devex-review` | Developer experience gaps | 0 | — | — |
+| Outside Voice | `codex-plan-review` | Cross-model plan challenge | 1 | ISSUES_FOUND | 12 raised: 6 accepted, 4 already handled, 1 rejected, 1 deferred |
+
+**CODEX:** Caught the load-bearing one — keying on `(sessionId, factorId)` merges two rubrics'
+inline criteria that share an id, because `validateRubric` only guards against built-in and rule
+ids. Also caught that omitting calibration on an unreadable store is indistinguishable from
+having no verdicts, that the rate never refreshes after a click, and that `NOTE_MAX` was declared
+in the store but enforced only in the route.
+
+**CROSS-MODEL:** One tension, resolved in Codex's favour (D2): the verdict key is now
+`(rubricId, sessionId, factorId)`. Codex's append-only-is-unjustified argument was rejected —
+nothing reads history today, but a feature whose premise is "do not destroy a human judgment"
+should not overwrite one in place, and the cost is a single fold function. Both reviewers agreed
+independently that the calibration denominator must count only reviewed fires.
+
+**VERDICT:** ENG CLEARED — ready to implement.
+
+NO UNRESOLVED DECISIONS
