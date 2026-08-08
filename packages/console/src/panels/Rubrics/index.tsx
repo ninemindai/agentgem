@@ -1,7 +1,12 @@
 import { useCallback, useEffect, useRef, useState } from "react";
+import type { Client } from "@agentback/client";
 import { testbedRecentsRoute, testbedProjectsRoute, rubricsRoute, makeClient, type RecentEntry, type ProjectCandidate, type RubricSummary } from "../../api/routes.js";
 import { defineConsolePage } from "../../registry.js";
-import { openRubricStream, openRubricReportStream, type RubricReportView, type RubricFactorView, type RubricScopeParams } from "./rubricStream.js";
+import {
+  openRubricStream, openRubricReportStream, calibrationLine, postRubricVerdict,
+  type RubricReportView, type RubricFactorView, type RubricScopeParams,
+  type VerdictValueView, type FactorCalibrationView,
+} from "./rubricStream.js";
 import { HygieneLeaderboard } from "./HygieneLeaderboard.js";
 import { SessionPicker, type PickedSession } from "../_shared/SessionPicker.js";
 import { consumePendingRubricRun, type PendingRubricRun } from "../../pendingAnalyze.js";
@@ -43,12 +48,32 @@ function factorTally(f: RubricFactorView): string {
   return `no findings in ${f.applicableSessions} applicable ${f.applicableSessions === 1 ? "session" : "sessions"}`;
 }
 
-function FactorRow({ f }: { f: RubricFactorView }) {
+const VERDICT_LABELS: { value: VerdictValueView; label: string }[] = [
+  { value: "accepted", label: "Accepted" },
+  { value: "wrong", label: "Wrong" },
+  { value: "wontfix", label: "Won't fix" },
+];
+
+function FactorRow({ f, sessionId, current, calibration, onRecord }: {
+  f: RubricFactorView;
+  // Present only at session scope, where this row maps to exactly one session and a
+  // (sessionId, factorId) verdict key is unambiguous.
+  sessionId?: string;
+  current?: VerdictValueView;
+  // The live count: the parent's patched value after a click, else the server's.
+  // Passed in rather than read off `f` so a click updates the rate immediately.
+  calibration?: FactorCalibrationView;
+  onRecord?: (factorId: string, verdict: VerdictValueView) => void;
+}) {
   const fired = f.count > 0;
   // A check that never applied is neither a pass nor a problem — don't give it the tick.
   const inapplicable = f.applicableSessions === 0;
   const icon = inapplicable ? "–" : !fired ? "✓" : f.severity === "warn" ? "⚠" : "ℹ";
   const cls = inapplicable ? "rub-na" : !fired ? "rub-ok" : f.severity === "warn" ? "rub-warn" : "rub-info";
+  // No call to make on a row that did not fire, or outside session scope (see
+  // sessionId's doc above). Visibility does not depend on onRecord: the current
+  // call still needs to be shown even when the caller wired no write handler.
+  const canCall = fired && !!sessionId;
   return (
     <li className={"rub-factor " + cls}>
       <div className="rub-factor-head">
@@ -57,15 +82,64 @@ function FactorRow({ f }: { f: RubricFactorView }) {
         <span className="targets-label" style={{ marginLeft: "auto" }}>{factorTally(f)}</span>
       </div>
       {fired && <p className="rub-advice">→ {f.advice}</p>}
+      {calibration && (
+        <p className="rub-calib">
+          {calibrationLine(calibration)}
+          {/* Say what the number is not. It counts only fires someone reviewed, so it
+              cannot see a criterion that failed to fire when it should have. */}
+          <span className="rub-calib-caveat"> · of reviewed fires only</span>
+        </p>
+      )}
+      {canCall && (
+        <div className="rub-call-actions" role="group" aria-label={`Your call on ${f.title}`}>
+          {VERDICT_LABELS.map(({ value, label }) => (
+            <button
+              key={value}
+              type="button"
+              className={"rub-call-btn" + (current === value ? " is-on" : "")}
+              aria-pressed={current === value}
+              onClick={() => onRecord?.(f.id, value)}
+            >{label}</button>
+          ))}
+        </div>
+      )}
     </li>
   );
 }
 
-export function RubricReportCard({ report }: { report: RubricReportView }) {
+export function RubricReportCard({ report, sessionId, client }: {
+  report: RubricReportView;
+  sessionId?: string;
+  client?: Client;
+}) {
   const total = report.factors.length;
   const actionable = report.factors.filter((f) => f.count > 0).length;
   const affected = report.perSession?.length ?? 0;
   const cov = report.judgeCoverage;
+  // Verdicts are only unambiguous at session scope (see FactorRow).
+  const callable = report.scope === "session" ? sessionId : undefined;
+  const stored = report.perSession?.find((s) => s.sessionId === callable)?.verdicts;
+  const [calls, setCalls] = useState<Record<string, VerdictValueView>>({});
+  // Calibration patched from the POST response. Without this the button flips but the
+  // rate beside it keeps the pre-click count until the next report fetch, which reads
+  // as a write that did not take.
+  const [rates, setRates] = useState<Record<string, FactorCalibrationView>>({});
+  const [failed, setFailed] = useState<string | null>(null);
+
+  const record = (factorId: string, verdict: VerdictValueView) => {
+    if (!callable || !client) return;
+    const prev = calls[factorId];
+    setCalls((c) => ({ ...c, [factorId]: verdict }));   // optimistic
+    setFailed(null);
+    postRubricVerdict(client, { sessionId: callable, factorId, rubricId: report.rubricId, verdict })
+      .then((r) => setRates((m) => ({ ...m, [factorId]: r.calibration })))
+      .catch(() => {
+        // A dropped verdict is user input lost — roll back and say so rather than
+        // leaving the button looking saved.
+        setCalls((c) => { const n = { ...c }; if (prev) n[factorId] = prev; else delete n[factorId]; return n; });
+        setFailed(factorId);
+      });
+  };
   return (
     <div className="insights-report">
       {/* Verdict line — advice-first: what needs action, not a score. */}
@@ -102,10 +176,24 @@ export function RubricReportCard({ report }: { report: RubricReportView }) {
       {report.degraded && (
         <p className="insights-hint">Some LLM criteria were skipped — the local agent was unavailable. Cheap-factor results are shown.</p>
       )}
+      {report.calibrationUnavailable && (
+        // Not the same as "no verdicts yet" — say which one it is.
+        <p className="insights-hint">Calibration unavailable — the verdict store could not be read. Findings are unaffected.</p>
+      )}
 
       <ul className="rub-factors">
-        {report.factors.map((f) => <FactorRow key={f.id} f={f} />)}
+        {report.factors.map((f) => (
+          <FactorRow
+            key={f.id}
+            f={f}
+            sessionId={callable}
+            current={calls[f.id] ?? stored?.[f.id]?.verdict}
+            calibration={rates[f.id] ?? f.calibration}
+            onRecord={client ? record : undefined}
+          />
+        ))}
       </ul>
+      {failed && <p className="insights-hint">That call was not saved — check the console log and try again.</p>}
 
       {affected > 0 && (
         report.perSession!.some((s) => s.hygiene)
@@ -409,7 +497,7 @@ export function Rubrics({ apiBase }: { apiBase: string }) {
                       )}
                       {error && <p className="ledger-error">{error}</p>}
                       {out && !report && <pre className="run-transcript">{out}</pre>}
-                      {report && <RubricReportCard report={report} />}
+                      {report && <RubricReportCard report={report} sessionId={sessionRow?.sessionId} client={makeClient(apiBase)} />}
                     </div>
                   )}
                 </li>

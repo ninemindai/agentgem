@@ -6,6 +6,13 @@
 import { z } from "zod";
 import { defineRoute, type Client } from "@agentback/client";
 
+export type VerdictValueView = "accepted" | "wrong" | "wontfix";
+export interface FactorCalibrationView { reviewed: number; accepted: number; wrong: number; wontfix: number }
+export interface VerdictView {
+  sessionId: string; factorId: string; rubricId: string;
+  verdict: VerdictValueView; note?: string; atMs: number;
+}
+
 export interface RubricFactorView {
   id: string;
   title: string;
@@ -18,6 +25,9 @@ export interface RubricFactorView {
   // applicableSessions: 0 means the check was never exercised, NOT that it passed.
   applicableSessions?: number;
   judgedSessions?: number;
+  // All-time human calibration. Absent when the factor has no verdicts, or the
+  // store could not be read — never present with zeroes.
+  calibration?: FactorCalibrationView;
 }
 export interface HygieneVerdictView { score: number; verdict: "bounded" | "mixed" | "bloated" }
 
@@ -31,11 +41,16 @@ export interface RubricReportView {
   degraded: boolean;
   skippedFactors: { factor: string; reason: string }[];
   hygiene?: HygieneVerdictView;
-  perSession?: { sessionId: string; transcript: string; factors: RubricFactorView[]; hygiene?: HygieneVerdictView }[];
+  perSession?: {
+    sessionId: string; transcript: string; factors: RubricFactorView[]; hygiene?: HygieneVerdictView;
+    verdicts?: Record<string, VerdictView>;
+  }[];
   perSessionTruncated?: boolean;
   // How much of the eligible universe the LLM criteria saw. Absent when the rubric
   // has no criteria (cheap factors always run over every session).
   judgeCoverage?: { eligible: number; judged: number; sampled: boolean; truncated: number };
+  // Store unreadable. Distinct from "no verdicts yet" — the UI must say which.
+  calibrationUnavailable?: boolean;
 }
 
 // Panel-facing union: `report` typed as the view the panel renders. The wire
@@ -151,4 +166,44 @@ export function openRubricStream(
     }
   })();
   return () => ctrl.abort();
+}
+
+const rubricVerdictRoute = defineRoute("POST", "/api/rubric/verdict", {
+  body: z.object({
+    sessionId: z.string(),
+    factorId: z.string(),
+    rubricId: z.string(),
+    verdict: z.enum(["accepted", "wrong", "wontfix"]),
+    // Mirror the server's cap. Without it a 501-character note round-trips to a 422
+    // AFTER the person typed it; the input also carries maxLength={500}.
+    note: z.string().max(500).optional(),
+  }),
+  response: z.object({
+    ok: z.literal(true),
+    atMs: z.number(),
+    calibration: z.object({
+      reviewed: z.number(), accepted: z.number(), wrong: z.number(), wontfix: z.number(),
+    }),
+  }),
+});
+
+/** Record one verdict. Rejects on a non-2xx so the caller can show the row unsaved. */
+export function postRubricVerdict(
+  client: Client,
+  body: { sessionId: string; factorId: string; rubricId: string; verdict: VerdictValueView; note?: string },
+): Promise<{ ok: true; atMs: number; calibration: FactorCalibrationView }> {
+  return rubricVerdictRoute.call(client, { body });
+}
+
+/**
+ * The calibration sentence. The denominator is REVIEWED calls, never total fires:
+ * an untriaged fire is an unanswered question, and folding it in as an implicit
+ * pass is the same unfalsifiable silence the judge's roster contract exists to
+ * close. Callers must not render this for a factor with no calibration.
+ */
+export function calibrationLine(c: FactorCalibrationView): string {
+  const head = c.wrong >= c.accepted
+    ? `called wrong in ${c.wrong} of ${c.reviewed} reviewed calls`
+    : `accepted in ${c.accepted} of ${c.reviewed} reviewed calls`;
+  return c.wontfix > 0 ? `${head} · ${c.wontfix} won't fix` : head;
 }

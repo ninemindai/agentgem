@@ -2204,6 +2204,22 @@ button.scorecard-intent { line-height: 1.4; }
 .rub-info .rub-icon, .rub-ok .rub-icon, .rub-na .rub-icon { color: var(--muted); }
 .rub-advice { margin: 6px 0 0 24px; font: 12.5px/1.5 var(--font-ui); color: var(--ink-soft); }
 
+/* Verdict controls + calibration — human review of a fired factor at session
+   scope. Tokens borrowed from siblings: --ink-soft (.rub-advice's secondary
+   text), --paper/--line (.ws-chip's pill), --accent (the "selected" tone
+   .feed-toggle .is-active already uses) — the brief's --ink-3/--surface-2/
+   --brand/--line-2 tokens don't exist in this palette. */
+.rub-calib { margin: 2px 0 0 26px; font-size: 12px; color: var(--ink-soft); }
+.rub-calib-caveat { opacity: 0.7; }
+.rub-call-actions { display: flex; gap: 6px; margin: 6px 0 0 26px; }
+.rub-call-btn {
+  padding: 2px 10px; font: inherit; font-size: 12px;
+  color: var(--ink-soft); background: var(--paper);
+  border: 1px solid var(--line); border-radius: 999px; cursor: pointer;
+}
+.rub-call-btn:hover { color: var(--ink); border-color: var(--accent); }
+.rub-call-btn.is-on { color: var(--ink); background: var(--raised); border-color: var(--accent); }
+
 /* Catalog */
 .rub-lib-group { margin-top: 14px; }
 .rub-lib-heading { margin: 0 0 6px; font: 700 11px/1.4 var(--font-mono); text-transform: uppercase; letter-spacing: .06em; color: var(--muted); }
