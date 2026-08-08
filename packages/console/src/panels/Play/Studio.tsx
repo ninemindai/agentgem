@@ -90,6 +90,9 @@ export function Studio({
   const [connectorRows, setConnectorRows] = useState<ConnectorRow[]>([]);   // declared MCP connectors, for the strip
   const [status, setStatus] = useState("");
   const [gate, setGate] = useState<string[] | null>(null);       // seal failures → actionable banner
+  // Warn-level render checks from the last save. Distinct from `gate`: those BLOCK the save and offer
+  // a fix; these are advisory and the save already succeeded, so the wording must never imply failure.
+  const [findings, setFindings] = useState<{ id: string; message: string; evidence?: string }[]>([]);
   const [share, setShare] = useState<{ gemUrl: string; cardUrl?: string; message?: string } | null>(null);
   const [pendingPublish, setPendingPublish] = useState(false);   // Share clicked while unbound
   const [pendingVersion, setPendingVersion] = useState<{ latestVersion: string; nextVersion: string; login: string } | null>(null);
@@ -425,7 +428,7 @@ export function Studio({
 
   // Save gates the seal; a gate failure becomes an actionable banner (offer to have the agent fix it).
   async function save(): Promise<boolean> {
-    setStatus("saving…"); setGate(null);
+    setStatus("saving…"); setGate(null); setFindings([]);
     try {
       const cur = await playMiniappRoute.call(makeClient(apiBase), { query: { name } });
       const res = await playSaveRoute.call(makeClient(apiBase), { body: { name, html: cur.html, meta: {
@@ -444,6 +447,7 @@ export function Studio({
       // miniapp ran host-less until an unmount/remount. There is no reload control to escape that with.
       const prunedNeeds = (res.prunedNeeds ?? []) as string[];
       setPruned(prunedNeeds);
+      setFindings(res.findings ?? []);
       const needs = (cur.meta.needs ?? []).filter((n) => !prunedNeeds.includes(n));
       // mcpNeeds is never pruned (declared-authoritative) — carry it forward as-is so <Runner
       // mcpNeeds> stays correct after a save, the same way `needs` is reconciled above.
@@ -738,6 +742,20 @@ export function Studio({
             <div className="play-banner__detail">{gate.join("; ")}</div>
           </div>
           <button className="play-btn play-btn--primary" disabled={busy} onClick={() => { const f = gate; setGate(null); send(fixSealPrompt(f)); }}>Fix with agent</button>
+        </div>
+      )}
+      {findings.length > 0 && (
+        // Reuses .play-banner wholesale — no new class names, so nothing can render unstyled. The
+        // save SUCCEEDED here, so this is dismissible and says "worth a look", never "can't save".
+        <div className="play-banner">
+          <span className="play-banner__ico">👀</span>
+          <div className="play-banner__body">
+            <div className="play-banner__title">Saved — {findings.length === 1 ? "one thing" : `${findings.length} things`} worth a look</div>
+            {findings.map((f) => (
+              <div key={f.id} className="play-banner__detail">{f.message}{f.evidence ? ` (${f.evidence})` : ""}</div>
+            ))}
+          </div>
+          <button className="play-btn play-btn--ghost" onClick={() => setFindings([])}>Dismiss</button>
         </div>
       )}
       {pendingPublish && (
