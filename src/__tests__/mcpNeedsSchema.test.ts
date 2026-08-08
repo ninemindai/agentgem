@@ -4,6 +4,10 @@ import type { McpNeed } from "@agentgem/model";
 import type { z } from "zod";
 import { McpNeedSchema, McpNeedsSchema, GameArtifactSchema, PlaySaveRequestSchema, PlaySaveResponseSchema, PlayMiniappSchema, MiniappListSchema } from "@agentgem/app/schemas";
 
+const mcpWarnings = (r: { findings: { id: string; message: string }[] }): string[] =>
+  r.findings.filter((f) => f.id === "mcp-scan").map((f) => f.message);
+
+
 // Compile-time lockstep pin: the wire schema and the model type must be assignable both ways.
 // If either side drifts, this file stops compiling — the drift guard for a STRUCTURED shape,
 // where the enum-style value-list guard doesn't apply.
@@ -54,8 +58,8 @@ describe("mcpNeeds on the wire", () => {
     expect(list.miniapps[0].mcpNeeds).toEqual([NEED]);
   });
 
-  it("save response surfaces mcpWarnings, defaulting to []", () => {
+  it("save response surfaces mcp-scan findings, defaulting to []", () => {
     const res = PlaySaveResponseSchema.parse({ name: "g", commit: null, prunedNeeds: [] });
-    expect(res.mcpWarnings).toEqual([]);
+    expect(mcpWarnings(res)).toEqual([]);
   });
 });
