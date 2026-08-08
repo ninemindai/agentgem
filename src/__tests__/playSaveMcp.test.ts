@@ -5,6 +5,10 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { PlayController } from "@agentgem/app/play.controller";
 
+const mcpWarnings = (r: { findings: { id: string; message: string }[] }): string[] =>
+  r.findings.filter((f) => f.id === "mcp-scan").map((f) => f.message);
+
+
 let home: string;
 beforeEach(() => { home = mkdtempSync(join(tmpdir(), "agh-")); process.env.AGENTGEM_HOME = home; });
 afterEach(() => { rmSync(home, { recursive: true, force: true }); delete process.env.AGENTGEM_HOME; });
@@ -22,7 +26,7 @@ describe("POST /api/play/save with mcpNeeds", () => {
     const html = `<!doctype html><body><canvas></canvas><script>function pick() { return "list_pull_requests"; } if (window.agentgemApp && window.agentgemApp.mcp) { const c = (s, t) => window.agentgemApp.mcp.callTool(s, t); c("github", pick()); }</script></body>`;
     const declared = [{ server: "github", tools: ["list_pull_requests"] }];
     const saved = await ctrl.save({ body: { name: "pulse", html, meta: { ...meta, mcpNeeds: declared } } });
-    expect(saved.mcpWarnings).toHaveLength(1);
+    expect(mcpWarnings(saved)).toHaveLength(1);
     const read = await ctrl.miniapp({ query: { name: "pulse" } });
     expect(read.meta.mcpNeeds).toEqual(declared);
   });
@@ -30,7 +34,7 @@ describe("POST /api/play/save with mcpNeeds", () => {
   it("stays absent end-to-end for a plain miniapp (regression)", async () => {
     const ctrl = new PlayController();
     const saved = await ctrl.save({ body: { name: "plain", html: "<!doctype html><body><canvas></canvas></body>", meta } });
-    expect(saved.mcpWarnings).toEqual([]);
+    expect(mcpWarnings(saved)).toEqual([]);
     const read = await ctrl.miniapp({ query: { name: "plain" } });
     expect(read.meta.mcpNeeds).toBeUndefined();
   });

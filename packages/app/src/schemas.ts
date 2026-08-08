@@ -912,14 +912,25 @@ export const PlaySaveRequestSchema = z.object({
     mcpNeeds: McpNeedsSchema,
   }),
 });
+// Mirrors the Finding type from @ninemind/miniapp-gate. Declared here rather than imported because
+// this file is the wire contract and must not depend on the gate's runtime.
+export const FindingSchema = z.object({
+  id: z.string(),
+  severity: z.enum(["fail", "warn"]),
+  message: z.string(),
+  evidence: z.string().optional(),
+});
 export const PlaySaveResponseSchema = z.object({
   name: z.string(),
   commit: z.string().nullable(),
-  // Declared capabilities the html never used. Reported, never silent — the Studio surfaces these.
+  // Declared capabilities the html never used. DATA, not a message: the Studio filters the granted
+  // set by this array to drive <Runner needs>, so it stays typed rather than folding into `findings`.
   prunedNeeds: z.array(GameCapabilityEnum).default([]),
-  // Advisory scan output (never blocking): non-literal connector calls the static scan cannot
-  // verify, or mcp usage with no declaration. The Studio surfaces these like prunedNeeds.
-  mcpWarnings: z.array(z.string()).default([]),
+  // Everything the user should know about this save, in ONE shape — render checks, the MCP scan's
+  // advisory output, and a display entry for any prune. Replaces the former `mcpWarnings: string[]`;
+  // three differently-shaped channels for one question meant three rendering paths downstream.
+  // Never blocking: a `fail` throws before the response is built.
+  findings: z.array(FindingSchema).default([]),
 });
 export const PlayDeleteRequestSchema = z.object({ name: z.string() });
 // Delete shares {name, commit} with save but never reconciles capabilities, so it gets its own response

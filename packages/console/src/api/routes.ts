@@ -1124,9 +1124,14 @@ export const playSaveRoute = defineRoute("POST", "/api/play/save", {
     name: z.string(),
     commit: z.string().nullable(),
     prunedNeeds: z.array(PlayCapEnum).default([]),
-    // Advisory only (never blocking) — Studio doesn't act on it, but declaring the field keeps the
-    // client schema from stripping it, mirroring src/schemas.ts's PlaySaveResponseSchema.
-    mcpWarnings: z.array(z.string()).default([]),
+    // One list for everything the user should read about this save. Declaring it keeps the client
+    // schema from stripping it, mirroring PlaySaveResponseSchema in packages/app/src/schemas.ts.
+    findings: z.array(z.object({
+      id: z.string(),
+      severity: z.enum(["fail", "warn"]),
+      message: z.string(),
+      evidence: z.string().optional(),
+    })).default([]),
   }),
 });
 export const playDeleteRoute = defineRoute("POST", "/api/play/delete", {

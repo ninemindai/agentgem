@@ -57,7 +57,7 @@ describe("Studio → mcpNeeds threading (Task 6 wiring gap)", () => {
 
   it("includes the declared mcpNeeds manifest in the save() body — save must not drop it (D10)", async () => {
     vi.spyOn(routes.playMiniappRoute, "call").mockResolvedValue(miniapp as never);
-    const save = vi.spyOn(routes.playSaveRoute, "call").mockResolvedValue({ name: "g1", commit: "abc", prunedNeeds: [], mcpWarnings: [] } as never);
+    const save = vi.spyOn(routes.playSaveRoute, "call").mockResolvedValue({ name: "g1", commit: "abc", prunedNeeds: [], findings: [] } as never);
     mount();
     await waitFor(() => expect(propsLog.length).toBeGreaterThan(0));
 
@@ -70,7 +70,7 @@ describe("Studio → mcpNeeds threading (Task 6 wiring gap)", () => {
 
   it("carries mcpNeeds forward through the post-save reconciliation, so <Runner> stays correct", async () => {
     vi.spyOn(routes.playMiniappRoute, "call").mockResolvedValue(miniapp as never);
-    vi.spyOn(routes.playSaveRoute, "call").mockResolvedValue({ name: "g1", commit: "abc", prunedNeeds: [], mcpWarnings: [] } as never);
+    vi.spyOn(routes.playSaveRoute, "call").mockResolvedValue({ name: "g1", commit: "abc", prunedNeeds: [], findings: [] } as never);
     mount();
     await waitFor(() => expect(propsLog.length).toBeGreaterThan(0));
 

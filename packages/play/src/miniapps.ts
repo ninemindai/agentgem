@@ -10,7 +10,7 @@ import { safePathSegment, CAP_TOOL, CAP_METHOD } from "@agentgem/model";
 import type { Gem, GameArtifact, GameGenre, GameSource, GameCapability, McpNeed } from "@agentgem/model";
 import { workspaceDir } from "@agentgem/base";
 import { writeGemArchive, writeArchiveDir } from "@agentgem/archive";
-import { gameGate } from "@ninemind/miniapp-gate";
+import { gameGate, runChecks, SHARED_CHECKS, type Finding } from "@ninemind/miniapp-gate";
 import { assertPortable } from "./portability.js";
 import { ensureRepo, commitWithLock } from "./git.js";
 import { migrateMiniappHtml, ensureClientShim, type MigrateOutcome } from "./migrate.js";
@@ -23,7 +23,21 @@ export interface MiniappMeta {
   uploads?: { ship: number; ref: number };   // author-supplied seed files: ship→uploads/, reference→gitignored ref/
 }
 export interface SaveMiniappInput { name: string; html: string; meta: MiniappMeta }
-export interface SaveMiniappResult { name: string; commit: string | null; prunedNeeds: GameCapability[]; mcpWarnings: string[] }
+export interface SaveMiniappResult {
+  name: string;
+  commit: string | null;
+  /** Capabilities declared in meta.json that the html never used, pruned at save.
+   *
+   *  DATA, not a message — deliberately NOT folded into `findings`. Studio computes the granted set
+   *  from it (`needs.filter((n) => !prunedNeeds.includes(n))`) to drive <Runner needs>, so recovering
+   *  capability names by parsing them back out of a finding's prose would be strictly worse. A
+   *  matching `pruned-capability` finding is ALSO emitted so the console still renders one list. */
+  prunedNeeds: GameCapability[];
+  /** Everything the user should know about this save, in one shape: render checks, the MCP scan's
+   *  advisory output, and a display entry for any prune. Replaces the former `mcpWarnings: string[]`.
+   *  Never blocking — a `fail` throws before this is built. */
+  findings: Finding[];
+}
 
 export function miniappsRoot(): string {
   // SAME convention as workspacesRoot(): AGENTGEM_HOME is already the ~/.agentgem dir.
@@ -124,8 +138,17 @@ export async function saveMiniapp(input: SaveMiniappInput): Promise<SaveMiniappR
   // html is migrateAllMiniapps's job, where the derived declaration is written alongside it.
   const html = ensureClientShim(input.html);
 
-  const gate = await gameGate(html);
+  // digest: true HERE and nowhere else in this file. The other two gameGate call sites read only
+  // `.ok`, and one of them runs once per miniapp inside migrateAllMiniapps — a DOM walk they discard
+  // would multiply across the whole registry.
+  const gate = await gameGate(html, { digest: true });
   if (!gate.ok) throw new Error(`miniapp failed the gate: ${gate.failures.join("; ")}`);
+
+  // The gate passed, so the bundle ran. A digest is therefore expected; "not-executed" here means our
+  // own walk failed, which must not cost the user their save — say so and carry on.
+  const findings: Finding[] = typeof gate.digest === "string"
+    ? [{ id: "render-not-verified", severity: "warn", message: "The miniapp loaded but could not be inspected, so its render checks did not run. Preview it before sharing." }]
+    : runChecks(gate.digest, SHARED_CHECKS);
 
   // The reconciler below reads the SOURCE, so a tool name it cannot see is a capability it prunes — and
   // the call then fails in a viewer's browser with -32601. MINIAPP_BUILDER_BRIEF requires literal names;
@@ -155,7 +178,9 @@ export async function saveMiniapp(input: SaveMiniappInput): Promise<SaveMiniappR
   // authored), warnings surface what it cannot verify, and nothing is ever pruned or blocked —
   // the /api/play/mcp/call manifest check is the boundary that actually holds.
   const mcpNeeds = mergeMcpNeeds(input.meta.mcpNeeds, deriveMcpNeeds(html));
-  const mcpWarnings = mcpUsageWarnings(html, input.meta.mcpNeeds);
+  for (const w of mcpUsageWarnings(html, input.meta.mcpNeeds)) {
+    findings.push({ id: "mcp-scan", severity: "warn", message: w });
+  }
   if (mcpNeeds.length) meta.mcpNeeds = mcpNeeds; else delete meta.mcpNeeds;
 
   // `needs` is what the HOST grants: the Runner only attaches a host when it is non-empty, and answers
@@ -189,7 +214,17 @@ export async function saveMiniapp(input: SaveMiniappInput): Promise<SaveMiniappR
   const commit = await commitWithLock(root, `save miniapp ${safe}${note}`);
   const gemMeta = { ...meta }; delete gemMeta.uploads; // uploads is private authoring state — keep it out of the gem
   writeGameGem(safe, html, gemMeta);                  // the PRUNED meta — a phantom cap must not reach the gem
-  return { name: safe, commit, prunedNeeds: rec.pruned, mcpWarnings };
+  // The prune is reported twice ON PURPOSE: as typed data the console computes with, and as a finding
+  // so it appears in the same list as everything else the user should read.
+  if (rec.pruned.length) {
+    findings.push({
+      id: "pruned-capability",
+      severity: "warn",
+      message: "Capabilities were declared in meta.json but never used, so they were removed rather than granted.",
+      evidence: rec.pruned.join(", "),
+    });
+  }
+  return { name: safe, commit, prunedNeeds: rec.pruned, findings };
 }
 
 // Remove the dual-written game gem — but ONLY the one WE wrote. workspaceDir() is a shared, name-keyed
