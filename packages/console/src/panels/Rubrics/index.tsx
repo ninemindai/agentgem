@@ -70,10 +70,10 @@ function FactorRow({ f, sessionId, current, calibration, onRecord }: {
   const inapplicable = f.applicableSessions === 0;
   const icon = inapplicable ? "–" : !fired ? "✓" : f.severity === "warn" ? "⚠" : "ℹ";
   const cls = inapplicable ? "rub-na" : !fired ? "rub-ok" : f.severity === "warn" ? "rub-warn" : "rub-info";
-  // No call to make on a row that did not fire, or outside session scope (see
-  // sessionId's doc above). Visibility does not depend on onRecord: the current
-  // call still needs to be shown even when the caller wired no write handler.
-  const canCall = fired && !!sessionId;
+  // No call to make on a row that did not fire, outside session scope (see
+  // sessionId's doc above), or with no write handler wired — a control that
+  // cannot act must not appear.
+  const canCall = fired && !!sessionId && !!onRecord;
   return (
     <li className={"rub-factor " + cls}>
       <div className="rub-factor-head">
