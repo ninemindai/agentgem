@@ -162,7 +162,14 @@ where a criterion with `judged === 0` is deleted from the map rather than report
 ## 5. Wiring
 
 **Read path.** `evaluateRubric` keeps its no-fs contract, so decoration happens one level up in
-`packages/app/src/rubricCore.ts`, after `evaluateRubric` returns and before the report is emitted:
+`packages/app/src/rubricCore.ts` — specifically **after `computeCached` returns, not inside its `compute:`
+closure**. `computeRubric` writes its payload to the analysis cache (`rubricCore.ts:192-196`), so
+decorating inside `compute:` would bake verdicts into a cached report and a new verdict would not appear
+until the cache was invalidated. Decorating the returned `RubricResult.payload` instead keeps verdicts
+always-fresh and keeps the cache token free of verdict state — the cached artifact stays a pure analysis
+result, which is what it is.
+
+Given a `RubricResult`:
 
 1. Collect factor ids from `report.factors` and session ids from `report.perSession`.
 2. `calibrationForFactors` → decorate `report.factors[].calibration`.
@@ -188,16 +195,32 @@ report passed.
 arbitrary drafts so the endpoint can describe what is wrong. There is no draft here; a malformed verdict is
 a client bug and a 422 is the correct answer. `atMs` is server-assigned, not client-supplied.
 
-**Console.** In `packages/console/src/panels/Rubrics/`:
+**Console — session scope only in v1.** There are no per-session factor rows to decorate. `perSession` is
+rendered at `panels/Rubrics/index.tsx:110-116` as *either* the `HygieneLeaderboard` *or* a one-line count
+("12 sessions tripped a factor"); the only factor rows on screen are the aggregate ones at `:107`, and an
+aggregate row spans many sessions so it cannot carry a verdict keyed on `(sessionId, factorId)`.
 
-- Three buttons on each per-session factor row, reflecting the current verdict when one exists.
+At `scope === "session"` that ambiguity disappears: the report covers exactly one session, so each
+aggregate `FactorRow` **is** that session's result. v1 therefore renders verdict controls on the existing
+`FactorRow`, gated on session scope, and builds no new list. This also matches the real gesture — a person
+reviews one session and signs off on it.
+
+In `packages/console/src/panels/Rubrics/index.tsx`:
+
+- Three buttons on a **fired** `FactorRow`, shown only when `report.scope === "session"`, reflecting the
+  current verdict when one exists. Not shown on passing or not-applicable rows: there is no call to make.
 - An optional one-line note input, revealed after a verdict is chosen rather than shown up front — the
   gesture has to stay one keystroke or it will not be used, and an unused control produces no calibration.
-- The calibration line on each factor summary row, per §4.
+- The calibration line on every factor row, at all scopes, per §4. Calibration is all-time and does not
+  depend on the current scope.
 
-Every new `ex-*` className ships with a matching rule in the same change, per CLAUDE.md — that rule is
-written for `packages/marketplace`, but the console has the same hand-authored-CSS property and the same
-failure mode.
+Current verdict state comes from the `perSession` entry whose `sessionId` matches the panel's selected
+session. Keeping the data on `perSession` rather than on a scope-conditional top-level field means the
+per-session list (§9) can later reuse it unchanged.
+
+Every new `rub-*` className ships with a matching rule in `packages/console/src/shell/theme.css` in the
+same change. CLAUDE.md writes that rule for `packages/marketplace` and the `ex-*` prefix, but the console
+has the same hand-authored-CSS property and the same failure mode.
 
 ## 6. What a verdict does not do
 
@@ -260,5 +283,9 @@ button styling get a real-browser check via the `verify` skill before the PR lan
 - **Sync to the aggregator**, and with it the actor identity, the `contributeAllowed` governance check, and
   note redaction. §1 chose local-first; the record already carries `atMs` and `rubricId`, so a later sync
   adds fields rather than reshaping rows.
+- **The per-session verdict list.** Verdict controls at `project`/`all` scope need a new disclosure UI
+  listing each affected session and its fired factors. Most fires appear at those scopes, so this is the
+  obvious follow-up — deferred until verdicts prove they get used at all. The `perSession[].verdicts`
+  shape in §2 is already the right shape for it.
 - **Suppression / snooze** (§1.1, §6).
 - **Feeding verdicts back into the judge prompt** (§6).
