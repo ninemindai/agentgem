@@ -40,7 +40,47 @@
 // Save) the old shape meant one generated `while(true)` stopped health checks responding.
 // Measured on Node 24 + jsdom 29: ~300ms warm, ~520ms cold.
 
-export interface GateResult { ok: boolean; failures: string[] }
+/** What the DOM looked like after the bundle's scripts ran. Produced inside the smoke worker — it is
+ *  the only place that can see it — and consumed by typed check functions on the main thread. */
+export interface RenderDigest {
+  title: string | null;
+  ids: string[];                              // document order; duplicates detectable, and nameable
+  bodyElementCount: number;                   // rendered element nodes under <body>
+  controls: {
+    tag: string;                              // button, a[href], [role=button]
+    /** APPROXIMATE. textContent + aria-label + resolved aria-labelledby — NOT the accessible-name
+     *  algorithm, which jsdom does not implement. Named `nameHint` so no caller mistakes it for
+     *  accname; the check that reads it is `warn`, never `fail`, because the input is a heuristic. */
+    nameHint: string;
+  }[];
+  images: { hasAlt: boolean; src: string }[];
+  jsonBlocks: { id: string; parses: boolean; empty: boolean; bytes: number }[];
+  /** External URLs on nodes that are IN the DOM after execution. Does NOT catch a detached
+   *  `new Image().src = url` — that element is never attached, so no DOM walk can see it. Closing
+   *  that needs setter instrumentation; tracked in TODOS.md. */
+  attachedExternal: string[];
+  ariaRefs: { attr: string; target: string; resolves: boolean }[];
+  hasCanvas: boolean;
+  hasVectorOrImageContent: boolean;           // svg / img / canvas present
+}
+
+/** `staticGate` never executes anything, so it has nothing to say about a digest. Keeping its result
+ *  narrower than `GateResult` is what lets it stay a pure syntax check. */
+export interface StaticGateResult { ok: boolean; failures: string[] }
+
+export interface GateResult extends StaticGateResult {
+  /** NEVER optional, and three states rather than two.
+   *
+   *  "not-requested" — the caller passed no `digest: true`. Two of the three gameGate call sites read
+   *                    only `.ok`, and one of those runs once per miniapp in a registry-wide pass.
+   *  "not-executed"  — a digest was asked for and could not be produced: the static gate
+   *                    short-circuited, or the smoke never ran. NOT a pass. Nothing was examined.
+   *
+   *  Collapsing these two would make an opt-out call site indistinguishable from a bundle that never
+   *  ran, and an optional field would make "skip the checks entirely" the easiest code to write. */
+  digest: RenderDigest | "not-requested" | "not-executed";
+}
+
 export interface GateOptions {
   maxBytes?: number; // default 1.5 MB — archives/shares well
   // Skip the NETWORK_CALL scan. HOST POLICY, and NOT a weakening of the gate.
@@ -59,6 +99,17 @@ export interface GateOptions {
   // those at runtime too, but only after the miniapp has already rendered silently broken; failing at
   // admission with a named reason is better feedback and costs nothing.
   allowNetwork?: boolean;
+
+  // Narrow the NETWORK_CALL scan to executable script bodies. Default "document" preserves the sealed
+  // miniapp contract, where the whole bundle IS code. Reports pass "executable": they are documents
+  // ABOUT code, so `fetch` appears in prose that a document-wide scan cannot tell from a call.
+  scanScope?: "document" | "executable";
+
+  // Produce a RenderDigest. OFF by default, and deliberately so: of the three gameGate call sites,
+  // two read only `.ok` and one of those runs once per miniapp inside migrateAllMiniapps. At a
+  // measured ~300ms warm / ~520ms cold per entry, a DOM walk those callers discard multiplies across
+  // the whole registry.
+  digest?: boolean;
 }
 
 const DEFAULT_MAX_BYTES = 1_500_000;
@@ -76,27 +127,54 @@ const JSON_TYPE = /\btype\s*=\s*["']application\/json["']/i;
 // That matters: a regex can start matching a fake `<script type="application/json">` that appears inside a
 // REAL executable script's string literal and delete the executable payload with it; the tokenizer walk
 // cannot, because an executable script's content only ends at a real </script>, so its code is preserved.
-export function scannableCode(html: string): string {
+type Region = { text: string; role: "markup" | "code" | "data" };
+
+// ONE tokenizer walk, three roles. Both scan surfaces below are filters over it, because a second
+// hand-rolled walk is exactly where the two would drift on the fake-JSON-open trap the tests cover.
+//   markup — everything outside a script body, INCLUDING the <script …> open tag (keeps src= attrs)
+//   code   — the body of a script that is not application/json
+//   data   — the body of a script that IS application/json (inert; baked session/report data)
+function scriptRegions(html: string): Region[] {
   const lower = html.toLowerCase();
-  let out = "";
+  const out: Region[] = [];
   let i = 0;
   for (;;) {
     const open = lower.indexOf("<script", i);
-    if (open === -1) { out += html.slice(i); break; }
+    if (open === -1) { out.push({ text: html.slice(i), role: "markup" }); break; }
     const gt = html.indexOf(">", open);
-    if (gt === -1) { out += html.slice(i); break; } // malformed open tag → keep the rest, scan it
+    if (gt === -1) { out.push({ text: html.slice(i), role: "markup" }); break; } // malformed open tag → keep the rest, scan it
     const close = lower.indexOf("</script>", gt);
     const contentEnd = close === -1 ? html.length : close;
     const elemEnd = close === -1 ? html.length : close + "</script>".length;
-    out += html.slice(i, gt + 1); // everything up to & including the <script …> open tag (keeps src= attrs)
-    if (!JSON_TYPE.test(html.slice(open, gt + 1))) out += html.slice(gt + 1, contentEnd); // keep executable body
-    out += html.slice(contentEnd, elemEnd); // the </script>
+    out.push({ text: html.slice(i, gt + 1), role: "markup" });
+    out.push({ text: html.slice(gt + 1, contentEnd), role: JSON_TYPE.test(html.slice(open, gt + 1)) ? "data" : "code" });
+    out.push({ text: html.slice(contentEnd, elemEnd), role: "markup" }); // the </script>
     i = elemEnd;
   }
   return out;
 }
 
-export function staticGate(html: string, opts: GateOptions = {}): GateResult {
+export function scannableCode(html: string): string {
+  return scriptRegions(html).filter((r) => r.role !== "data").map((r) => r.text).join("");
+}
+
+// EXECUTABLE bodies only — no markup, no prose, no inert data.
+//
+// This exists for REPORTS. A miniapp's text is all code, so scanning the whole document for `fetch`
+// is right for it. A report is a document ABOUT code: "the agent's fetch calls failed" is a headline,
+// not a call, and failing a report for describing the thing it exists to describe is a false positive
+// on a large slice of real sessions. Turning the scan off for reports is not the alternative — a
+// report is served with no CSP, so a genuine fetch() would fire when opened.
+//
+// Joined with "\n" so a token cannot merge across two script bodies and defeat the \b anchors.
+//
+// Known limit: an inline event-handler attribute (onclick="fetch(…)") is markup, so it is outside
+// this surface. Tracked in the render-verification-gate design under Failure modes.
+function scriptCode(html: string): string {
+  return scriptRegions(html).filter((r) => r.role === "code").map((r) => r.text).join("\n");
+}
+
+export function staticGate(html: string, opts: GateOptions = {}): StaticGateResult {
   const failures: string[] = [];
   const maxBytes = opts.maxBytes ?? DEFAULT_MAX_BYTES;
   const code = scannableCode(html); // drop inert data content before scanning for code syntax
@@ -110,7 +188,12 @@ export function staticGate(html: string, opts: GateOptions = {}): GateResult {
   if (BARE_IMPORT.test(code)) {
     failures.push("uses an external module import");
   }
-  if (!opts.allowNetwork && NETWORK_CALL.test(code)) {
+  // The network scan alone narrows with scanScope. EXTERNAL_ATTR and BARE_IMPORT stay document-wide
+  // under either scope: an external `src` is a real self-containment violation wherever it sits, and
+  // it lives in markup, which `scriptCode` deliberately excludes.
+  const netSurface = opts.scanScope === "executable" ? scriptCode(html) : code;
+
+  if (!opts.allowNetwork && NETWORK_CALL.test(netSurface)) {
     failures.push("attempts a network call (fetch/XHR/WebSocket/…) — games must be sealed");
   }
 
@@ -146,8 +229,73 @@ const SMOKE_RESOURCE_LIMITS = { maxOldGenerationSizeMb: 128, maxYoungGenerationS
 // meaningful path of its own to resolve from.
 const SMOKE_WORKER_SRC = `
 const { workerData, parentPort } = require("node:worker_threads");
+
+// Elements that occupy no visual space. \`bodyElementCount\` excludes them so a body holding only a
+// <script> reads as 0 — "rendered nothing" — rather than as one element of content.
+const NON_RENDERED = new Set(["SCRIPT", "STYLE", "TEMPLATE", "LINK", "META", "TITLE", "NOSCRIPT"]);
+const EXTERNAL_URL = /^(?:https?:)?\\/\\//i;
+
+function buildDigest(doc) {
+  const all = (sel) => Array.from(doc.querySelectorAll(sel));
+
+  // APPROXIMATE, and named so at the type. The real accessible-name algorithm is not in jsdom; this
+  // is text + aria-label + resolved aria-labelledby, which is enough to tell "has a name" from
+  // "has none" and nothing more.
+  const nameHint = (el) => {
+    const byIds = (el.getAttribute("aria-labelledby") || "").split(/\\s+/).filter(Boolean)
+      .map((id) => { const t = doc.getElementById(id); return t ? (t.textContent || "") : ""; }).join(" ");
+    return ((el.textContent || "") + " " + (el.getAttribute("aria-label") || "") + " " + byIds)
+      .replace(/\\s+/g, " ").trim();
+  };
+
+  const ariaRefs = [];
+  for (const attr of ["aria-labelledby", "aria-describedby", "aria-controls", "aria-owns"]) {
+    for (const el of all("[" + attr + "]")) {
+      for (const target of (el.getAttribute(attr) || "").split(/\\s+/).filter(Boolean)) {
+        ariaRefs.push({ attr, target, resolves: !!doc.getElementById(target) });
+      }
+    }
+  }
+
+  const jsonBlocks = all('script[type="application/json"]').map((s) => {
+    const text = s.textContent || "";
+    try {
+      const v = JSON.parse(text);
+      const empty = v === null || v === undefined || v === ""
+        || (Array.isArray(v) && v.length === 0)
+        || (typeof v === "object" && !Array.isArray(v) && Object.keys(v).length === 0);
+      return { id: s.id || "", parses: true, empty, bytes: text.length };
+    } catch (_) {
+      return { id: s.id || "", parses: false, empty: true, bytes: text.length };
+    }
+  });
+
+  const attachedExternal = [];
+  for (const el of all("[src],[href]")) {
+    const url = el.getAttribute("src") || el.getAttribute("href") || "";
+    if (EXTERNAL_URL.test(url)) attachedExternal.push(url);
+  }
+
+  const body = doc.body;
+  return {
+    title: doc.title || null,
+    ids: all("[id]").map((el) => el.id),
+    bodyElementCount: body
+      ? Array.from(body.querySelectorAll("*")).filter((el) => !NON_RENDERED.has(el.tagName)).length
+      : 0,
+    controls: all('button, a[href], [role="button"]').map((el) => ({ tag: el.tagName.toLowerCase(), nameHint: nameHint(el) })),
+    images: all("img").map((el) => ({ hasAlt: el.hasAttribute("alt"), src: el.getAttribute("src") || "" })),
+    jsonBlocks,
+    attachedExternal,
+    ariaRefs,
+    hasCanvas: !!doc.querySelector("canvas"),
+    hasVectorOrImageContent: !!doc.querySelector("svg, img, canvas"),
+  };
+}
+
 (async () => {
   const failures = [];
+  let digest;
   const msg = (e) => (e && e.message) ? e.message : String(e);
 
   // Record async escapes IN THE WORKER rather than relying on Node turning an unhandled rejection
@@ -204,11 +352,24 @@ const { workerData, parentPort } = require("node:worker_threads");
     });
     await new Promise((r) => setTimeout(r, 0)); // let the first tick run
     await new Promise((r) => setTimeout(r, 0)); // and the microtask backlog behind it (async boot())
+
+    // Snapshot the DOM the scripts BUILT, before the window closes. Only when asked: two of the three
+    // gameGate call sites read just \`.ok\`, and one runs per-miniapp in a registry-wide pass.
+    //
+    // NOT a rendering contract. Two ticks is what the load-smoke needs; a document that paints on
+    // requestAnimationFrame or a delayed timer is not finished here. Every check that reads this
+    // snapshot must be severity "warn", never "fail" — see checks.ts.
+    //
+    // A throw in here leaves \`digest\` absent, which surfaces as "not-executed". Deliberate: our own
+    // walk failing must not fail a user's Save.
+    if (workerData.wantDigest) {
+      try { digest = buildDigest(dom.window.document); } catch (_) { /* absent → "not-executed" */ }
+    }
     dom.window.close();
   } catch (err) {
     failures.push("bundle failed to load: " + (err && err.message ? err.message : String(err)));
   }
-  parentPort.postMessage({ ok: failures.length === 0, failures });
+  parentPort.postMessage({ ok: failures.length === 0, failures, digest });
 })();
 `;
 
@@ -217,8 +378,13 @@ const { workerData, parentPort } = require("node:worker_threads");
 // canvas — visual correctness is the human preview's job (Tier-2) — but it reliably catches the large
 // class of "broken on load" failures the self-repair loop iterates against.
 export async function gameGate(html: string, opts: GateOptions = {}): Promise<GateResult> {
+  // Why the digest state is decided here and threaded through every exit: each `return` below is a
+  // path where no DOM was ever produced, and the type refuses to let one of them stay silent about it.
+  const wantDigest = opts.digest === true;
+  const noDigest = wantDigest ? "not-executed" : "not-requested";
+
   const staticResult = staticGate(html, opts);
-  if (!staticResult.ok) return staticResult; // short-circuit; don't execute a non-sealed bundle
+  if (!staticResult.ok) return { ...staticResult, digest: noDigest }; // short-circuit; don't execute a non-sealed bundle
 
   const errText = (err: unknown) => (err instanceof Error ? err.message : String(err));
 
@@ -235,18 +401,43 @@ export async function gameGate(html: string, opts: GateOptions = {}): Promise<Ga
     const { pathToFileURL } = await import("node:url");
     jsdomHref = pathToFileURL(createRequire(import.meta.url).resolve("jsdom")).href;
   } catch (err) {
-    return { ok: false, failures: [`smoke could not start: ${errText(err)}`] };
+    return { ok: false, failures: [`smoke could not start: ${errText(err)}`], digest: noDigest };
   }
 
   return await new Promise<GateResult>((resolve) => {
-    // FOUR settle paths, and all four are load-bearing:
-    //   'message' — the smoke finished and reported (including async escapes the worker trapped);
-    //   'error'   — the worker itself failed, e.g. ERR_WORKER_OUT_OF_MEMORY on the heap ceiling;
-    //   'exit'    — a hard kill fires NEITHER 'message' NOR 'error'; without this the worker dies
-    //               silently and we would wait out the full timeout, then misreport the cause;
-    //   timeout   — a synchronous spin yields to nothing, so terminate() is the only way out.
-    // Whichever fires first wins; `settle` guarantees exactly one resolution and always reclaims
-    // the thread.
+    // FOUR settle paths, and all four are load-bearing. Whichever fires first wins; `settle`
+    // guarantees exactly one resolution and always reclaims the thread.
+    //
+    //                         ┌──────────────────────────┐
+    //                         │  Worker (isolated thread) │
+    //                         │  jsdom parse → execute    │
+    //                         │  → 2 ticks → digest?      │
+    //                         └────────────┬─────────────┘
+    //                                      │
+    //        ┌──────────────┬──────────────┼──────────────┬────────────────┐
+    //        │              │              │              │                │
+    //    'message'       'error'        'exit'         timeout        (construction
+    //   reported ok    worker died   died silently   never yielded      threw)
+    //   or failures    e.g. OOM on   — fires NEITHER  — a sync spin    → resolve()
+    //   incl. async    the heap      message NOR      yields to        directly,
+    //   escapes the    ceiling       error, so        nothing, so      no worker
+    //   worker         (V8:          without this     terminate() is   exists yet
+    //   trapped        ERR_WORKER_   we'd wait out    the only exit
+    //                  OUT_OF_       the full          → awaitTermination
+    //                  MEMORY)       timeout and       so a burning
+    //                                misreport         core is gone
+    //                                the cause         before we return
+    //        │              │              │              │
+    //        └──────────────┴──────────────┼──────────────┘
+    //                                      ▼
+    //                            settle(result, awaitTermination?)
+    //                            ├── settled? → drop (exactly-once)
+    //                            ├── clearTimeout
+    //                            ├── worker.terminate()
+    //                            └── resolve(result)
+    //
+    // Only 'message' can carry a digest. Every other path means no DOM was ever examined, so each
+    // resolves with `noDigest` — never an empty digest, which would read as "checked, clean".
     //
     // `timer` and `worker` are declared before `settle` so it never closes over a binding that has
     // not been initialized yet. Every call site today runs after both are assigned, but reading the
@@ -270,20 +461,23 @@ export async function gameGate(html: string, opts: GateOptions = {}): Promise<Ga
     try {
       worker = new Worker(SMOKE_WORKER_SRC, {
         eval: true,
-        workerData: { html, jsdomHref },
+        workerData: { html, jsdomHref, wantDigest },
         resourceLimits: SMOKE_RESOURCE_LIMITS,
       });
     } catch (err) {
-      resolve({ ok: false, failures: [`smoke could not start: ${errText(err)}`] });
+      resolve({ ok: false, failures: [`smoke could not start: ${errText(err)}`], digest: noDigest });
       return;
     }
 
     timer = setTimeout(
-      () => settle({ ok: false, failures: [`smoke did not finish within ${SMOKE_TIMEOUT_MS}ms (infinite loop?)`] }, true),
+      () => settle({ ok: false, failures: [`smoke did not finish within ${SMOKE_TIMEOUT_MS}ms (infinite loop?)`], digest: noDigest }, true),
       SMOKE_TIMEOUT_MS,
     );
 
-    worker.on("message", (result: GateResult) => settle(result));
+    // The worker reports `digest` only when one was asked for AND the walk succeeded. Absent means
+    // nothing was examined, which is `noDigest` — never an empty digest, which would read as clean.
+    worker.on("message", (msg: { ok: boolean; failures: string[]; digest?: RenderDigest }) =>
+      settle({ ok: msg.ok, failures: msg.failures, digest: msg.digest ?? noDigest }));
     // Name the cause rather than guessing at it — these strings go back to the authoring agent as the
     // self-repair loop's error signal, and "out of memory?" on a setup failure sends it after the
     // wrong fix. V8 reports a breached resourceLimit as ERR_WORKER_OUT_OF_MEMORY.
@@ -295,6 +489,7 @@ export async function gameGate(html: string, opts: GateOptions = {}): Promise<Ga
             ? `smoke exceeded the ${SMOKE_RESOURCE_LIMITS.maxOldGenerationSizeMb}MB memory ceiling (runaway allocation?)`
             : `smoke worker failed: ${errText(err)}`,
         ],
+        digest: noDigest,
       }),
     );
     worker.on("exit", (code) =>
@@ -305,6 +500,7 @@ export async function gameGate(html: string, opts: GateOptions = {}): Promise<Ga
             ? "smoke worker exited without reporting a result"
             : `smoke worker exited before reporting (code ${code})`,
         ],
+        digest: noDigest,
       }),
     );
   });

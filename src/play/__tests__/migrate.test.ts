@@ -157,7 +157,7 @@ describe("migrateMiniappHtml", () => {
 
   it("an injected bundle passes gameGate, and its capability scan is unchanged", async () => {
     const { html } = migrateMiniappHtml(SHIMLESS_HOST_APP);
-    expect(await gameGate(html)).toEqual({ ok: true, failures: [] });
+    expect(await gameGate(html)).toMatchObject({ ok: true, failures: [] });
     // the shim is TRANSPORT, not capability: injecting it must not add or remove a declared need, and
     // its own `callTool: function (name, args)` definition must not scan as a dynamic call.
     expect(deriveNeeds(html)).toEqual(deriveNeeds(SHIMLESS_HOST_APP));
@@ -201,7 +201,7 @@ describe("migrateMiniappHtml", () => {
     it("the spliced document still passes the gate and stays idempotent", async () => {
       const src = `<!doctype html><html><body><script>window.agentgemApp.callTool("agentgem_get_inventory",{})</script></body></html>`;
       const { html } = migrateMiniappHtml(src);
-      expect(await gameGate(html)).toEqual({ ok: true, failures: [] });
+      expect(await gameGate(html)).toMatchObject({ ok: true, failures: [] });
       const again = migrateMiniappHtml(html);
       expect(again.outcome).toBe("already");
       expect(again.html).toBe(html);
@@ -220,7 +220,7 @@ describe("migrateMiniappHtml", () => {
     expect(outcome).toBe("migrated");
 
     const gate = await gameGate(html);
-    expect(gate).toEqual({ ok: true, failures: [] });
+    expect(gate).toMatchObject({ ok: true, failures: [] });
 
     const portable = assertPortable(html, ["session-data"]);
     expect(portable).toEqual({ ok: true, failures: [] });

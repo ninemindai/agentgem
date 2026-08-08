@@ -49,7 +49,7 @@ describe("gameGate threads GateOptions into the static pass", () => {
     // then survived the worker smoke — so this one assertion guards the thread-through and proves
     // the async path is still wired to the worker.
     const r = await gameGate(netCall, { allowNetwork: true });
-    expect(r).toEqual({ ok: true, failures: [] });
+    expect(r).toMatchObject({ ok: true, failures: [] });
   });
 
   it("still short-circuits before the smoke when a non-network static check fails", async () => {

@@ -8,7 +8,7 @@ const good = `<!doctype html><body><canvas id="c"></canvas>
 describe("gameGate (static + jsdom smoke)", () => {
   it("passes a bundle whose inline script runs without throwing", async () => {
     const r = await gameGate(good);
-    expect(r).toEqual({ ok: true, failures: [] });
+    expect(r).toMatchObject({ ok: true, failures: [] });
   });
 
   it("fails when the inline script throws on load", async () => {
