@@ -1,0 +1,116 @@
+// Copyright (c) 2026 NineMind, Inc.
+// SPDX-License-Identifier: MIT
+import { describe, it, expect, vi, afterEach } from "vitest";
+import { render, screen, fireEvent, waitFor, cleanup } from "@testing-library/react";
+import type { Client } from "@agentback/client";
+import { RubricReportCard } from "../index.js";
+import { calibrationLine } from "../rubricStream.js";
+import type { RubricReportView } from "../rubricStream.js";
+
+// vi.spyOn on the rubricStream module namespace does not work under vitest + ESM
+// here (named exports are non-configurable on the namespace object), so the
+// module is mocked wholesale and only postRubricVerdict is replaced with a
+// vi.fn() — everything else (calibrationLine, types) passes through untouched.
+vi.mock("../rubricStream.js", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("../rubricStream.js")>()),
+  postRubricVerdict: vi.fn(),
+}));
+
+afterEach(() => { cleanup(); vi.restoreAllMocks(); });
+
+// Controls only render when a client is present (onRecord is undefined otherwise), so
+// every button assertion below must pass one. A bare stub is enough for render-only
+// checks; the click test stubs the transport explicitly.
+const client = {} as Client;
+
+const report = (over: Partial<RubricReportView> = {}): RubricReportView => ({
+  rubricId: "ship-discipline",
+  target: "overview",
+  scope: "session",
+  factors: [
+    { id: "committed-without-tests", title: "Committed without running the tests", advice: "Run the tests first.", severity: "warn", count: 1, sessions: 1 },
+    { id: "no-verify-finish", title: "Finished without verifying", advice: "Verify before finishing.", severity: "info", count: 0, sessions: 0 },
+  ],
+  sessionsScanned: 1,
+  clean: false,
+  degraded: false,
+  skippedFactors: [],
+  perSession: [{ sessionId: "s1", transcript: "/tmp/s1.jsonl", factors: [] }],
+  ...over,
+});
+
+describe("verdict controls", () => {
+  it("offers the three calls on a fired factor at session scope", () => {
+    render(<RubricReportCard report={report()} sessionId="s1" client={client} />);
+    expect(screen.getByRole("button", { name: /accepted/i })).toBeTruthy();
+    expect(screen.getByRole("button", { name: /wrong/i })).toBeTruthy();
+    expect(screen.getByRole("button", { name: /won't fix/i })).toBeTruthy();
+  });
+
+  it("offers no call on a factor that did not fire — there is nothing to judge", () => {
+    render(<RubricReportCard report={report()} sessionId="s1" client={client} />);
+    // Exactly one fired row, so exactly one set of three buttons.
+    expect(screen.getAllByRole("button", { name: /wrong/i })).toHaveLength(1);
+  });
+
+  it("offers no call at project scope, where a row spans many sessions", () => {
+    render(<RubricReportCard report={report({ scope: "project" })} client={client} />);
+    expect(screen.queryByRole("button", { name: /wrong/i })).toBeNull();
+  });
+
+  it("says the store is unreadable rather than showing nothing", () => {
+    // "No verdicts yet" and "the DB is broken" must not look identical.
+    render(<RubricReportCard report={report({ calibrationUnavailable: true })} sessionId="s1" client={client} />);
+    expect(screen.getByText(/calibration unavailable/i)).toBeTruthy();
+  });
+
+  it("marks the current verdict as pressed", () => {
+    const r = report();
+    r.perSession![0].verdicts = { "committed-without-tests": { verdict: "wontfix", atMs: 1, sessionId: "s1", factorId: "committed-without-tests", rubricId: "ship-discipline" } };
+    render(<RubricReportCard report={r} sessionId="s1" />);
+    expect(screen.getByRole("button", { name: /won't fix/i }).getAttribute("aria-pressed")).toBe("true");
+    expect(screen.getByRole("button", { name: /^wrong/i }).getAttribute("aria-pressed")).toBe("false");
+  });
+
+  it("renders the calibration line only when there are verdicts", () => {
+    const r = report();
+    r.factors[0].calibration = { reviewed: 10, accepted: 1, wrong: 9, wontfix: 0 };
+    const { container } = render(<RubricReportCard report={r} sessionId="s1" client={client} />);
+    // The caveat span splits the text node, so assert on the element's textContent.
+    const lines = [...container.querySelectorAll(".rub-calib")].map((n) => n.textContent ?? "");
+    expect(lines).toHaveLength(1);                            // only the factor that has verdicts
+    expect(lines[0]).toContain("9 of 10 reviewed");
+    expect(lines[0]).toContain("of reviewed fires only");     // the false-negative caveat
+    expect(container.textContent).not.toContain("0 of 0");
+  });
+
+  it("updates the rate from the POST response instead of waiting for a refetch", async () => {
+    const r = report();
+    r.factors[0].calibration = { reviewed: 1, accepted: 1, wrong: 0, wontfix: 0 };
+    const mod = await import("../rubricStream.js");
+    vi.mocked(mod.postRubricVerdict).mockResolvedValue({
+      ok: true, atMs: 1, calibration: { reviewed: 2, accepted: 1, wrong: 1, wontfix: 0 },
+    });
+    const { container } = render(<RubricReportCard report={r} sessionId="s1" client={client} />);
+    fireEvent.click(screen.getByRole("button", { name: /^wrong/i }));
+    await waitFor(() => expect(container.querySelector(".rub-calib")!.textContent).toContain("1 of 2 reviewed"));
+  });
+
+  it("rolls the button back and says so when the write fails", async () => {
+    const mod = await import("../rubricStream.js");
+    vi.mocked(mod.postRubricVerdict).mockRejectedValue(new Error("boom"));
+    render(<RubricReportCard report={report()} sessionId="s1" client={client} />);
+    const wrong = screen.getByRole("button", { name: /^wrong/i });
+    fireEvent.click(wrong);
+    // A dropped verdict is user input lost — the button must not keep looking saved.
+    await waitFor(() => expect(screen.getByText(/was not saved/i)).toBeTruthy());
+    expect(wrong.getAttribute("aria-pressed")).toBe("false");
+  });
+
+  it("states the rate against reviewed calls, never against all fires", () => {
+    expect(calibrationLine({ reviewed: 10, accepted: 1, wrong: 9, wontfix: 0 }))
+      .toBe("called wrong in 9 of 10 reviewed calls");
+    expect(calibrationLine({ reviewed: 4, accepted: 1, wrong: 0, wontfix: 3 }))
+      .toBe("accepted in 1 of 4 reviewed calls · 3 won't fix");
+  });
+});
