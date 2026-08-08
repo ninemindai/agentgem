@@ -62,6 +62,7 @@ export * from "./rubricArtifact.js";
 export * from "./criterionJudge.js";
 export * from "./rubricReport.js";
 export * from "./rubricVerdicts.js";
+export * from "./rubricVerdictStore.js";
 export * from "./dashboardRender.js";
 export * from "./reportBrief.js";
 export * from "./reportExemplar.js";
