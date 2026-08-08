@@ -180,6 +180,30 @@ describe("Studio", () => {
     await waitFor(() => expect(screen.queryByText(/run a local AI agent on your machine/i)).toBeNull());
   });
 
+  // Render checks reach the console as `findings`. Before this they were computed, plumbed through
+  // both schema mirrors, and then dropped on the floor — a warning nobody can see is the same as no
+  // warning at all.
+  it("shows warn-level findings after a save, without blocking it", async () => {
+    renderStudio([]);
+    vi.spyOn(playSaveRoute, "call").mockResolvedValue({
+      name: "g1", commit: "abc1234", prunedNeeds: [],
+      findings: [{ id: "unnamed-control", severity: "warn", message: "A control has no text, aria-label, or aria-labelledby.", evidence: "button" }],
+    });
+    fireEvent.click(screen.getByRole("button", { name: /^share$/i }));
+
+    expect(await screen.findByText(/A control has no text, aria-label, or aria-labelledby/i)).toBeTruthy();
+    // "worth a look", not "can't save" — the save succeeded and the wording must not imply otherwise.
+    expect(screen.queryByText(/can't save/i)).toBeNull();
+  });
+
+  it("shows nothing when a save comes back clean", async () => {
+    renderStudio([]);
+    vi.spyOn(playSaveRoute, "call").mockResolvedValue({ name: "g1", commit: "abc1234", prunedNeeds: [], findings: [] });
+    fireEvent.click(screen.getByRole("button", { name: /^share$/i }));
+    await waitFor(() => expect(playSaveRoute.call).toHaveBeenCalled());
+    expect(screen.queryByText(/worth a look/i)).toBeNull();
+  });
+
   it("renders the auto-approved session-data capability with a fallback label, not a blank row", async () => {
     renderStudio(["session-data"]);
     expect(await screen.findByText(/read this miniapp's own source session/i)).toBeTruthy();
