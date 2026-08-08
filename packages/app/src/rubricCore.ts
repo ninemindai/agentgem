@@ -23,7 +23,7 @@ import {
   DETECTORS, loadRuleDetectors,
   openRubricVerdictStore, foldCalibration, verdictsBySession,
   type Rubric, type RubricScope, type RubricReport, type WorkflowSignal, type AcpConnectFn, type RubricGranularity,
-  type RubricVerdict, type VerdictValue,
+  type RubricVerdict, type VerdictValue, type FactorCalibration,
 } from "@agentgem/insight";
 
 const log = createLogger("rubricCore");
@@ -279,14 +279,31 @@ export function recordRubricVerdict(
   input: { sessionId: string; factorId: string; rubricId: string; verdict: VerdictValue; note?: string },
   dataDir?: string,
   now: () => number = Date.now,
-): { ok: true; atMs: number } {
+): { ok: true; atMs: number; calibration: FactorCalibration } {
   const atMs = now();
   const store = openRubricVerdictStore(dataDir);
   try {
     const v: RubricVerdict = { ...input, atMs };
     store.recordVerdict(v);
-    return { ok: true, atMs };
+    const calibration = foldCalibration(store.verdictRowsForFactors(input.rubricId, [input.factorId]))
+      .get(input.factorId)
+      // The row we just wrote guarantees a fold entry; this is a type guard, not a fallback.
+      ?? { reviewed: 1, accepted: 0, wrong: 0, wontfix: 0 };
+    return { ok: true, atMs, calibration };
   } finally {
     try { store.close(); } catch { /* ignore */ }
   }
+}
+
+/**
+ * Drop per-session verdicts before a payload is handed to an agent. Calibration counts
+ * stay — they are integers. Notes are the first human free-text field in this pipeline,
+ * so they inherit the scrubbing contract rather than escaping it.
+ */
+export function withoutVerdictNotes(payload: RubricReport): RubricReport {
+  if (!payload.perSession?.length) return payload;
+  return {
+    ...payload,
+    perSession: payload.perSession.map(({ verdicts: _drop, ...rest }) => rest),
+  };
 }

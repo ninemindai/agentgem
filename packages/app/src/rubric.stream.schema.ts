@@ -74,3 +74,33 @@ export const RubricReportEvent = z.discriminatedUnion("type", [
   FailedEvent,
 ]);
 export type RubricReportEvent = z.infer<typeof RubricReportEvent>;
+
+/**
+ * Body for POST /api/rubric/verdict. STRICT, unlike the deliberately permissive
+ * /rubrics and /rubrics/validate bodies — those accept an arbitrary editor draft so
+ * the endpoint can describe what is wrong. There is no draft here: a malformed
+ * verdict is a client bug and 422 is the right answer. `atMs` is server-assigned,
+ * so sending one is rejected rather than ignored.
+ */
+export const RubricVerdictBody = z.object({
+  sessionId: z.string().min(1),
+  factorId: z.string().min(1),
+  rubricId: z.string().min(1),
+  verdict: z.enum(["accepted", "wrong", "wontfix"]),
+  note: z.string().max(500).optional(),
+}).strict();
+export type RubricVerdictBody = z.infer<typeof RubricVerdictBody>;
+
+/**
+ * The response carries the factor's REFRESHED calibration so the console can update
+ * the rate in place. Without it the button flips but the line beside it keeps showing
+ * the pre-click count until the next full report fetch, which reads as a failed write.
+ */
+export const RubricVerdictResponse = z.object({
+  ok: z.literal(true),
+  atMs: z.number(),
+  calibration: z.object({
+    reviewed: z.number(), accepted: z.number(), wrong: z.number(), wontfix: z.number(),
+  }),
+});
+export type RubricVerdictResponse = z.infer<typeof RubricVerdictResponse>;
