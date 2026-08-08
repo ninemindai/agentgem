@@ -46,14 +46,25 @@ on a sound primitive.
 3. **Key is `(sessionId, factorId)`** — the same composite `criterionJudge.ts:169` already uses to collapse
    duplicate fires. It is stable across runs and identical for cheap detectors and LLM criteria, so
    verdicts apply to **any session-granular factor**. Cheap detectors mis-fire too.
-4. **The verdict is about the factor, not the rubric.** A factor can appear in several rubrics; the same
-   fire on the same session means the same thing in all of them, so a verdict transfers. `rubric_id` is
-   recorded for provenance only and is never part of the key.
+4. **Key is `(rubricId, sessionId, factorId)`** *(revised — this reversed an earlier decision; see
+   below)*. The first draft keyed on `(sessionId, factorId)` and treated `rubricId` as provenance,
+   reasoning that a factor means the same thing wherever it appears. That is true for a built-in detector
+   or a loaded rule, whose ids are globally registered — but **false for inline criteria**, which are
+   rubric-local and user-authored. `validateRubric` (`rubrics.ts:91`) rejects an inline criterion id only
+   when it collides with a **built-in detector or rule** (`reservedIds` defaults to
+   `new Set(DETECTORS.map((d) => d.id))`); two *user rubrics* may each define an inline criterion with the
+   same id and a different `question`, and both validate. Under the old key their verdicts merged into one
+   number describing neither. Scoping every verdict by rubric closes that silently. The cost is real and
+   accepted: a verdict on a built-in like `no-verify-finish` no longer transfers between rubrics, even
+   though for that id the transfer would have been correct.
 5. **Append-only, latest-wins on read.** Changing your mind is data. Writes never destroy a prior row.
 6. **Its own sqlite store**, `~/.agentgem/rubric-verdicts.db`, separate from both `transcript-index.db` and
    `artifact-outcomes.db`. See §3.
 7. **An unreviewed fire is not an accepted fire.** The calibration denominator counts only fires that
    received a verdict. See §4 — this is the decision most likely to be eroded by a later "simplification."
+9. **Unavailable is not none.** A store that cannot be read must render as *unavailable*, not as a factor
+   with no verdicts. This is the package's own unjudged-is-not-passed rule turned on the store itself:
+   collapsing "we could not look" into "nothing to show" is the same unfalsifiable silence, one layer down.
 8. **`evaluateRubric` stays pure.** It has no fs access by design; the store read and the decoration happen
    in `rubricCore` (`packages/app`). See §5.
 
@@ -69,12 +80,12 @@ export interface RubricVerdict {
   verdict: VerdictValue;
   note?: string;        // optional, human-authored, <= NOTE_MAX chars
   atMs: number;
-  rubricId: string;     // provenance only — never part of the key (§1.4)
+  rubricId: string;     // part of the key (§1.4)
 }
 
-/** Per-factor calibration, all-time, derived from the store alone. */
+/** Per-factor calibration, all-time, within ONE rubric, derived from the store alone. */
 export interface FactorCalibration {
-  reviewed: number;     // distinct (session, factor) pairs carrying a verdict
+  reviewed: number;     // distinct (rubric, session, factor) keys carrying a verdict
   accepted: number;
   wrong: number;
   wontfix: number;
@@ -123,18 +134,22 @@ create table if not exists rubric_verdicts (
   rubric_id  text    not null,
   at_ms      integer not null
 );
-create index if not exists idx_verdicts_pair   on rubric_verdicts(session_id, factor_id);
-create index if not exists idx_verdicts_factor on rubric_verdicts(factor_id);
+create index if not exists idx_verdicts_key    on rubric_verdicts(rubric_id, session_id, factor_id);
+create index if not exists idx_verdicts_factor on rubric_verdicts(rubric_id, factor_id);
 ```
 
 Surface:
 
-- `recordVerdict(v: RubricVerdict): void` — one INSERT. Throws on failure (§7).
-- `verdictsForSessions(sessionIds: string[]): Map<sessionId, Map<factorId, RubricVerdict>>` — latest row
-  per pair by `max(at_ms)`, tie-broken by `max(id)` so two writes in the same millisecond still resolve.
-- `calibrationForFactors(factorIds: string[]): Map<factorId, FactorCalibration>` — folds the latest verdict
-  per pair, then groups by factor. Factors with no rows are **absent from the map**, never present with
-  zeroes (§4).
+- `recordVerdict(v: RubricVerdict): void` — one INSERT. Throws on failure (§7). **Enforces `NOTE_MAX`
+  here**, not only in the route: the constant lives at this layer, so a direct caller or a test must not be
+  able to persist an oversized note past a boundary the route happens to guard.
+- `verdictRowsForFactors(rubricId: string, factorIds: string[]): RubricVerdict[]`
+- `verdictRowsForSessions(rubricId: string, sessionIds: string[]): RubricVerdict[]`
+
+Both readers are scoped by `rubricId` (§1.4) and return rows ascending by `(at_ms, id)`, so the pure fold
+in `rubricVerdicts.ts` resolves a same-millisecond rewrite in favour of the later row. The store does no
+counting; folding and grouping happen next door where they can be tested without a database. Factors with
+no rows produce **no map entry**, never a zeroed one (§4).
 
 Both readers accept an optional `base` for tests, mirroring `reflectionStore.writeReflections`.
 
@@ -142,22 +157,26 @@ Both readers accept an optional `base` for tests, mirroring `reflectionStore.wri
 
 The rate is `wrong / reviewed`, where `reviewed` counts only pairs carrying a verdict:
 
-> `committed-without-tests` — dismissed as wrong in **9 of 12 reviewed calls**. 14 fires here, 3 reviewed.
+> `committed-without-tests` — called wrong in **9 of 12 reviewed calls**.
 
 Never `9 of 24`. An untriaged fire is an unanswered question, and folding it into the denominator as an
 implicit pass is the same unfalsifiable-silence failure the roster contract was built to close: a criterion
 nobody has looked at would otherwise be indistinguishable from one everyone approved.
 
-Two independent numbers, deliberately not blended:
+**One number, one population.** An earlier draft paired the all-time rate with a per-report coverage line
+("14 fires here, 3 reviewed"). That is cut. The two counts come from different populations — the current
+report versus the whole store — and putting them on one line is precisely the trap recorded in
+`numerator-and-denominator-must-share-one-population`, which produced three separate bugs in these same
+two files. `reviewed`, `accepted`, `wrong`, and `wontfix` all come from one fold over one set.
 
-- **All-time calibration** (`reviewed`, `wrong`, `accepted`, `wontfix`) — from the store alone, spanning
-  every report ever run. This is the criterion-quality signal.
-- **This report's coverage** (`fires here`, `of those reviewed`) — from the current report joined against
-  the store. This tells the reader how much of what they are looking at has been triaged.
-
-A factor with zero verdicts renders **no calibration line at all**, mirroring `criterionJudge.ts:298`,
+**A factor with zero verdicts renders no calibration line at all**, mirroring `criterionJudge.ts:298`,
 where a criterion with `judged === 0` is deleted from the map rather than reported as a defensible-looking
 `0/0`.
+
+**What this number cannot tell you.** It measures only fires a person chose to review, so it is a
+false-positive rate and nothing else. It cannot see a criterion that silently *fails to fire* when it
+should — there is no fire to triage, so no verdict is ever recorded. Read it as "when this fired and
+someone looked, how often was it real", never as accuracy. The UI says so in one line beneath the rate.
 
 ## 5. Wiring
 
@@ -183,6 +202,15 @@ per-session rows.
 Both are pure map-merges over data already in hand. No new scan, no agent call, no change to `clean`,
 `degraded`, or `judgeCoverage` — a verdict is an annotation on a report, never an input to whether the
 report passed.
+
+**Render path — strip the notes.** `GET /api/rubric/report` feeds the decorated payload straight into the
+report-rendering agent (`rubric.controller.ts:203-205`: `const { payload } = await computeFn(...)` then
+`renderFn({ facts: payload, … })`). Left alone, that sends human free text to a model. The route therefore
+strips `perSession[].verdicts` before calling `renderFn`. Calibration counts may stay — they are integers.
+
+This is the same boundary `criterionJudge.ts:37-38` already draws: *"`detail` is built from the criterion +
+counts only (never the agent's free text or step args), preserving the scrubbing contract."* A note is the
+first human free-text field in this pipeline, so it inherits the rule rather than escaping it.
 
 **Write path.** One route on `RubricController`:
 
@@ -241,10 +269,12 @@ Asymmetric on purpose, because the two directions have different costs:
   answers non-2xx; the console shows the row as unsaved and keeps the buttons live. This deliberately
   departs from `reflectionStore`'s best-effort write, which is right for a derived secondary signal and
   wrong here.
-- **Read failure degrades to absent, never to zero.** An unreadable store means calibration is omitted
-  from the report — no line rendered. It must never render `0 wrong of 0 reviewed`, which would read as "a
-  criterion nobody has ever disputed." Logged at `warn` via `createLogger("insight")`; the report is
-  otherwise unaffected and still renders every finding.
+- **Read failure degrades to `unavailable`, never to zero and never to silence.** An unreadable store must
+  never render `0 wrong of 0 reviewed`, which would read as "a criterion nobody has ever disputed." But
+  omitting the line silently is only half a fix: it makes a broken store indistinguishable from a factor
+  nobody has triaged yet. The report therefore carries an explicit `calibrationUnavailable: true`, and the
+  UI says "calibration unavailable" once rather than per row. Logged at `warn` via
+  `createLogger("insight")`; every finding still renders.
 
 ## 8. Testing
 
@@ -287,5 +317,9 @@ button styling get a real-browser check via the `verify` skill before the PR lan
   listing each affected session and its fired factors. Most fires appear at those scopes, so this is the
   obvious follow-up — deferred until verdicts prove they get used at all. The `perSession[].verdicts`
   shape in §2 is already the right shape for it.
+- **Server-side verification that the factor actually fired for that session.** The route trusts the
+  client, so a stale console tab — or any same-origin caller — can record a verdict on a fire that no
+  longer exists and skew the rate. Verifying means re-running the rubric on every write, which is far more
+  expensive than the skew is harmful for a local single-user store. Revisit if verdicts ever sync (§9).
 - **Suppression / snooze** (§1.1, §6).
 - **Feeding verdicts back into the judge prompt** (§6).
