@@ -521,3 +521,85 @@ spec: agent-plugins.org/specification. Vendored schemas live in
 src/gem/__tests__/fixtures/agentPluginSchemas.ts after the alignment PR.
 
 **Depends on / blocked by:** Agent Plugin import entry point (above).
+
+## Detached external loads escape both the static scan and the digest
+
+**What:** Instrument resource-loading setters and constructors (`Image`, `Audio`,
+`HTMLElement.prototype.src`, `link.href`) inside the smoke worker so a
+`new Image().src = "https://…"` load is detected.
+
+**Why:** Flagged as the one critical gap in the 2026-08-07 eng review of the
+render-verification gate. `staticGate`'s own comment concedes the source scan
+misses it, and the post-execution digest misses it too because the element is
+never attached to the DOM. For miniapps the runtime CSP (`default-src 'none'`)
+still blocks it, so this is contained. For **reports**, which are served with no
+CSP, it is undetected and unmitigated: a report could phone home when opened.
+
+**Pros:** Closes the last known silent self-containment hole; makes
+`attachedExternal` honest rather than partial.
+
+**Cons:** Patching globals inside `SMOKE_WORKER_SRC` grows the untypechecked
+eval'd string that file explicitly asks to keep small. Needs care so the patches
+cannot be defeated by the bundle re-assigning the same globals.
+
+**Context:** `packages/miniapp-gate/src/gameGate.ts` — the `beforeParse(window)`
+hook already installs canvas stand-ins, so there is an established place to hang
+this. See "Failure modes" in
+`docs/superpowers/specs/2026-08-05-render-verification-gate-design.md`.
+
+**Depends on / blocked by:** The digest producer (T2) should land first so the
+two mechanisms report through one `Finding` shape.
+
+## No trustworthy settle condition, so blank-render stays a warning
+
+**What:** Replace the smoke's two `setTimeout(0)` ticks with a bounded quiet
+period (drain timers and `requestAnimationFrame`, cap the wait), then promote
+`blank-render` from `warn` to `fail`.
+
+**Why:** The 2026-08-07 eng review demoted `blank-render` specifically because
+two ticks is not a rendering contract — a document that paints on rAF or a
+delayed timer looks blank when the worker snapshots. That makes the check unsafe
+as a gate, so a genuinely blank report still ships with only a warning. Codex
+raised this independently as finding 7.
+
+**Pros:** Promotes the highest-value report check to an actual gate; also makes
+every other digest field more reliable, since they all read the same snapshot.
+
+**Cons:** Any wait lengthens the gate, which runs on every miniapp Save and once
+per entry in `migrateAllMiniapps`. Needs a cap so a slow bundle cannot stall a
+registry-wide pass, and the cap reintroduces the same false-negative in the tail.
+
+**Context:** `packages/miniapp-gate/src/gameGate.ts:205-206` is the current
+two-tick settle. Baseline cost is ~300ms warm / ~520ms cold per entry; canvas
+games are documented as taking 3-5s to first paint, so a naive "wait for paint"
+is not viable.
+
+**Depends on / blocked by:** T2 and T4 (digest producer and check set).
+
+## Tier 2: real-browser layout and contrast checks
+
+**What:** A `renderCheck(html, viewports)` test helper driving headless Chrome as
+an optional devDependency, plus a CI job over fixtures — one golden report, one
+golden miniapp — at 360 / 390 / 1440 across four theme states.
+
+**Why:** Deferred from the 2026-08-07 eng review, which scoped that pass to Tier
+1.5. jsdom has no layout engine, so page-level horizontal overflow, clipping, and
+computed contrast are structurally undetectable there. This is the tier that
+would automate the narrow-viewport screenshots currently taken by hand.
+
+**Pros:** Catches the class of bug being checked manually today (text wrapping at
+360px, light/dark contrast on generated documents). Also gives deterministic
+template output — `renderRpgTheme`, `scaffolds.ts`, `ember.ts` — somewhere to be
+tested.
+
+**Cons:** Adds a browser dependency and a CI job. Must be skipped when the
+browser is absent so local `pnpm test` never breaks, and must never reach the
+published tarball.
+
+**Context:** Full design intent preserved under "NOT in scope" in
+`docs/superpowers/specs/2026-08-05-render-verification-gate-design.md`. Checks
+that need layout: `documentElement.scrollWidth > clientWidth`, interactive-target
+clipping, and computed contrast on every distinct surface (text inheriting the
+body colour inside a tinted region is the failure mode).
+
+**Depends on / blocked by:** Nothing — shares no code with Tier 1.5.
