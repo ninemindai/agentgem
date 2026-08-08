@@ -15,14 +15,14 @@
 import { z } from "zod";
 import { api, get, post } from "@agentback/openapi";
 import { inject } from "@agentback/core";
-import { listRubricsWithMeta, validateRubricInput, saveRubric, deleteRubric, computeRubric as realComputeRubric, resolveRubric } from "./rubricCore.js";
+import { listRubricsWithMeta, validateRubricInput, saveRubric, deleteRubric, computeRubric as realComputeRubric, resolveRubric, recordRubricVerdict, withoutVerdictNotes } from "./rubricCore.js";
 import { scopeAllowed, resolveClaudeSession, renderReport as realRenderReport, type RubricScope } from "@agentgem/insight";
 import { resolveDir } from "@agentgem/model";
 import { beginForeground, endForeground } from "./warm/orchestrator.js";
 import { ReportRegistry, REPORT_REGISTRY } from "./report/registry.js";
 import { trackerFor, rubricParamsKey, queryParams } from "./report/track.js";
 import { pump } from "./sse/pump.js";
-import { RubricStreamQuery, RubricEvent, RubricReportStreamQuery, RubricReportEvent } from "./rubric.stream.schema.js";
+import { RubricStreamQuery, RubricEvent, RubricReportStreamQuery, RubricReportEvent, RubricVerdictBody, RubricVerdictResponse } from "./rubric.stream.schema.js";
 
 // The Rubric shape (packages/insight/src/rubrics.ts), mirrored so /openapi.json
 // describes the catalog + validation payloads. Response validation is advisory
@@ -200,7 +200,7 @@ export class RubricController {
         emit({ type: "start", rubric: rubric.id, title: rubric.title, scope: scope.kind });
         const { payload } = await computeFn(rubric, scope, { dir });
         const r = await renderFn({
-          facts: payload,
+          facts: withoutVerdictNotes(payload),
           meta: { rubricId: rubric.id, title: rubric.title, scope: scope.kind },
           onDelta: (chunk) => emit({ type: "delta", text: chunk }),
           // Opt-in few-shot exemplar (default off). Read at call time, not module load, so toggling
@@ -242,5 +242,13 @@ export class RubricController {
   @post("/rubrics/delete", { body: RubricDeleteBodySchema, response: RubricDeleteResponseSchema })
   async remove(input: { body: z.infer<typeof RubricDeleteBodySchema> }): Promise<z.infer<typeof RubricDeleteResponseSchema>> {
     return deleteRubric(input.body.id);
+  }
+
+  // POST /api/rubric/verdict — record one human call on a fired factor. Write
+  // failures propagate: a dropped verdict is user input lost, and the console must
+  // be able to tell the person their call did not stick.
+  @post("/rubric/verdict", { body: RubricVerdictBody, response: RubricVerdictResponse })
+  async verdict(input: { body: z.infer<typeof RubricVerdictBody> }): Promise<z.infer<typeof RubricVerdictResponse>> {
+    return recordRubricVerdict(input.body);
   }
 }
