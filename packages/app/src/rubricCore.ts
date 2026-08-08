@@ -11,6 +11,7 @@
 import { createHash } from "node:crypto";
 import { basename, join } from "node:path";
 import { mkdirSync, writeFileSync, rmSync } from "node:fs";
+import { createLogger } from "@agentgem/base";
 import { introspectConfig, introspectProject } from "@agentgem/capture";
 import { resolveDirs, resolveProject, type Gem } from "@agentgem/model";
 import {
@@ -20,8 +21,12 @@ import {
   builtinRubrics, loadRubrics, validateRubric, defaultRubricsDir, evaluateRubric,
   artifactToRubric, rubricGranularity,
   DETECTORS, loadRuleDetectors,
+  openRubricVerdictStore, foldCalibration, verdictsBySession,
   type Rubric, type RubricScope, type RubricReport, type WorkflowSignal, type AcpConnectFn, type RubricGranularity,
+  type RubricVerdict, type VerdictValue,
 } from "@agentgem/insight";
+
+const log = createLogger("rubricCore");
 
 const ID_RE = /^[a-z0-9][a-z0-9-]{0,63}$/;
 
@@ -189,7 +194,7 @@ export async function computeRubric(
   const paths = selectPaths(scope, dirs.claudeDir);
   const token = rubricToken(scope, paths, rubric);
 
-  return computeCached<RubricReport>({
+  const result = await computeCached<RubricReport>({
     token, force: opts.force, now,
     read: (t) => readAnalysisCacheEntry(RUBRIC_CACHE_ROOT, t) as CacheHit<RubricReport> | null,
     write: (t, payload, ts) => writeAnalysisCache(RUBRIC_CACHE_ROOT, t, payload, ts),
@@ -213,4 +218,75 @@ export async function computeRubric(
       });
     },
   });
+  // Decorate AFTER the cache: verdicts must never be cached (see withVerdicts).
+  return { ...result, payload: withVerdicts(result.payload) };
+}
+
+/**
+ * Decorate a report with human verdicts: all-time calibration per factor, and the
+ * current verdict per factor on each per-session row.
+ *
+ * Called on the RESULT of computeCached, never inside its `compute` closure —
+ * computeRubric writes its payload to the analysis cache, so decorating inside
+ * would bake verdicts into a cached report and a new verdict would stay invisible
+ * until the cache turned over. Out here, verdicts are always fresh and the cached
+ * artifact stays a pure analysis result.
+ *
+ * A read failure degrades to NO calibration (never to zero) and never disturbs the
+ * findings: "0 wrong of 0 reviewed" would read as a criterion nobody has disputed,
+ * which is the opposite of "we could not check".
+ */
+export function withVerdicts(payload: RubricReport, dataDir?: string): RubricReport {
+  let store: ReturnType<typeof openRubricVerdictStore> | null = null;
+  try {
+    store = openRubricVerdictStore(dataDir);
+    const rubricId = payload.rubricId;
+    const calibration = foldCalibration(store.verdictRowsForFactors(rubricId, payload.factors.map((f) => f.id)));
+    const factors = payload.factors.map((f) => {
+      const c = calibration.get(f.id);
+      return c ? { ...f, calibration: c } : f;
+    });
+
+    let perSession = payload.perSession;
+    if (perSession?.length) {
+      const bySession = verdictsBySession(store.verdictRowsForSessions(rubricId, perSession.map((s) => s.sessionId)));
+      perSession = perSession.map((s) => {
+        const v = bySession.get(s.sessionId);
+        return v ? { ...s, verdicts: v } : s;
+      });
+    }
+    return { ...payload, factors, ...(perSession ? { perSession } : {}) };
+  } catch (err) {
+    // `unavailable`, not silence. Omitting the line alone would make a broken store
+    // indistinguishable from a factor nobody has triaged yet — the same
+    // unfalsifiable-silence failure the roster contract closes, one layer down.
+    log.warn("rubric verdicts: calibration unavailable, report unaffected: %s", (err as Error)?.message ?? err);
+    return { ...payload, calibrationUnavailable: true };
+  } finally {
+    try { store?.close(); } catch { /* ignore */ }
+  }
+}
+
+/**
+ * Append one verdict. Throws on failure so the route answers non-2xx: a verdict is
+ * user input, and silently dropping it is the one unrecoverable bug here — the
+ * person believes their call was recorded. This deliberately differs from
+ * reflectionStore's best-effort write, which is right for a derived signal.
+ *
+ * `atMs` is assigned HERE, never taken from the client.
+ */
+export function recordRubricVerdict(
+  input: { sessionId: string; factorId: string; rubricId: string; verdict: VerdictValue; note?: string },
+  dataDir?: string,
+  now: () => number = Date.now,
+): { ok: true; atMs: number } {
+  const atMs = now();
+  const store = openRubricVerdictStore(dataDir);
+  try {
+    const v: RubricVerdict = { ...input, atMs };
+    store.recordVerdict(v);
+    return { ok: true, atMs };
+  } finally {
+    try { store.close(); } catch { /* ignore */ }
+  }
 }

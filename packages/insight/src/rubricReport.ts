@@ -26,6 +26,7 @@ import { judgeCriteria } from "./criterionJudge.js";
 import type { JudgeCoverage } from "./judgeSession.js";
 import type { AcpConnectFn } from "./acpRecommender.js";
 import { hygieneScore, assessesHygiene, type HygieneVerdict } from "./contextHygiene.js";
+import type { RubricVerdict } from "./rubricVerdicts.js";
 
 const log = createLogger("insight");
 
@@ -45,12 +46,19 @@ export interface RubricReport {
   // sessions that tripped a factor — a row per clean session explodes the payload at
   // scope "all" (1900+ sessions); the aggregate `factors` already carries the clean
   // picture. Capped at PER_SESSION_CAP with `perSessionTruncated` when there are more.
-  perSession?: { sessionId: string; transcript: string; factors: DetectorSummary[]; hygiene?: HygieneVerdict }[];
+  perSession?: {
+    sessionId: string; transcript: string; factors: DetectorSummary[]; hygiene?: HygieneVerdict;
+    // The current verdict per factor for this session, decorated by rubricCore.
+    verdicts?: Record<string, RubricVerdict>;
+  }[];
   perSessionTruncated?: boolean;
   // How much of the eligible universe the LLM criteria actually saw. Absent when
   // the rubric has no criteria (nothing was judged, so nothing was sampled).
   // Cheap factors always run over every session — only criteria are capped.
   judgeCoverage?: JudgeCoverage;
+  // The verdict store could not be read. Distinct from "no verdicts": without this,
+  // a broken store is indistinguishable from a factor nobody has triaged (spec §1.9).
+  calibrationUnavailable?: boolean;
 }
 
 // Max per-session rows returned; beyond this, perSessionTruncated is set (no silent cap).
