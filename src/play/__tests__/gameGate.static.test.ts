@@ -92,4 +92,61 @@ describe("staticGate", () => {
       expect(big.failures.some((f) => f.includes("size"))).toBe(true);
     });
   });
+
+  // scanScope is the miniapp/report split. A miniapp's text IS code, so scanning the whole document
+  // is right for it. A REPORT is a document ABOUT code: its headline and finding prose legitimately
+  // contain "fetch"/"WebSocket", and failing it for describing the thing it exists to describe is a
+  // false positive on a large slice of real sessions.
+  describe("scanScope (document vs executable)", () => {
+    const proseAboutNetworking = `<!doctype html><html><body>
+<h1>The agent's fetch calls failed</h1>
+<p>Six sessions opened a WebSocket and never closed it. XMLHttpRequest was retried 40 times.</p>
+<script>document.title = "report";</script></body></html>`;
+
+    it("flags network words in prose under the default document scope", () => {
+      // Unchanged sealed-miniapp contract: the whole document is code as far as the gate is concerned.
+      const r = staticGate(proseAboutNetworking);
+      expect(r.ok).toBe(false);
+      expect(r.failures.some((f) => f.includes("network"))).toBe(true);
+    });
+
+    it("admits prose about networking when only executable code is scanned", () => {
+      expect(staticGate(proseAboutNetworking, { scanScope: "executable" })).toEqual({ ok: true, failures: [] });
+    });
+
+    it("still fails a real network call under the executable scope", () => {
+      const r = staticGate(`<body><p>a harmless paragraph</p><script>fetch("https://evil.example")</script></body>`, { scanScope: "executable" });
+      expect(r.ok).toBe(false);
+      expect(r.failures.some((f) => f.includes("network"))).toBe(true);
+    });
+
+    it("keeps the JSON-data exemption under the executable scope", () => {
+      const data = JSON.stringify({ findings: [{ text: "used fetch wrongly" }] });
+      const html = `<body><script id="report-data" type="application/json">${data}</script><script>render();</script></body>`;
+      expect(staticGate(html, { scanScope: "executable" })).toEqual({ ok: true, failures: [] });
+    });
+
+    it("is not fooled by a fake JSON-script open inside an executable string literal", () => {
+      // Same trap as the document-scope test above: the JSON open tag is a STRING inside real code.
+      const html = `<script>
+        const s = '<script type="application/json">x</' + 'script>';
+        fetch("http://evil.com");
+      </script>`;
+      const r = staticGate(html, { scanScope: "executable" });
+      expect(r.ok).toBe(false);
+      expect(r.failures.some((f) => f.includes("network"))).toBe(true);
+    });
+
+    it("keeps external-resource and bare-import checks document-wide under either scope", () => {
+      // scanScope narrows ONLY the network word-scan. An external <img src> is a real self-containment
+      // violation wherever it sits, and it lives in markup, not in a script body.
+      const ext = staticGate(`<body><img src="https://cdn.example/x.png"></body>`, { scanScope: "executable" });
+      expect(ext.ok).toBe(false);
+      expect(ext.failures.some((f) => f.includes("external"))).toBe(true);
+
+      const bare = staticGate(`<script type="module">import x from "lodash";</script>`, { scanScope: "executable" });
+      expect(bare.ok).toBe(false);
+      expect(bare.failures.some((f) => f.includes("module import"))).toBe(true);
+    });
+  });
 });

@@ -65,7 +65,7 @@ describe("gameGate — worker isolation", () => {
   }, 20_000);
 
   it("still passes a good bundle after the failures above (host is reusable)", async () => {
-    expect(await gameGate(page("document.body.textContent='ok'"))).toEqual({ ok: true, failures: [] });
+    expect(await gameGate(page("document.body.textContent='ok'"))).toMatchObject({ ok: true, failures: [] });
   }, 20_000);
 
   it("fails an async escape even under --unhandled-rejections=warn", async () => {
@@ -92,7 +92,7 @@ describe("gameGate — worker isolation", () => {
   document.body.setAttribute("data-acc", String(acc));
 </script></body>`;
     expect(Buffer.byteLength(big)).toBeGreaterThan(1_000_000); // meaningfully near the 1.5 MB cap
-    expect(await gameGate(big)).toEqual({ ok: true, failures: [] });
+    expect(await gameGate(big)).toMatchObject({ ok: true, failures: [] });
   }, 20_000);
 
   it("resolves rather than rejecting when the smoke cannot start", async () => {

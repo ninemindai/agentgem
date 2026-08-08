@@ -13,7 +13,7 @@ function withBakedTimeline(html: string): string {
 describe("scaffolds", () => {
   it("scaffoldFor throws on unknown", () => { expect(() => scaffoldFor("nope")).toThrow(/unknown scaffold/); });
   it("every genre's scaffold passes the gate empty (sealed + runs clean)", async () => {
-    for (const g of Object.values(GENRES)) expect(await gameGate(scaffoldFor(g.scaffold))).toEqual({ ok: true, failures: [] });
+    for (const g of Object.values(GENRES)) expect(await gameGate(scaffoldFor(g.scaffold))).toMatchObject({ ok: true, failures: [] });
   });
   it("scaffolds carry the agent-editable marker", () => { expect(scaffoldFor("replay")).toContain("AGENTGEM:GAME-LOGIC"); });
   // EVERY scaffold ships the transport, not just replay's. The studio agent writes `window.agentgemApp`
@@ -40,7 +40,7 @@ describe("scaffolds", () => {
   });
   it("the replay scaffold (with a baked timeline) passes gameGate + assertPortable", async () => {
     const html = withBakedTimeline(scaffoldFor("replay"));
-    expect(await gameGate(html)).toEqual({ ok: true, failures: [] });
+    expect(await gameGate(html)).toMatchObject({ ok: true, failures: [] });
     expect(assertPortable(html, ["session-data"])).toEqual({ ok: true, failures: [] });
   });
 });

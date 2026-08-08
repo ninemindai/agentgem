@@ -14,7 +14,7 @@ const canvasGame = `<!doctype html><body><canvas id="c" width="320" height="200"
 
 describe("gameGate — canvas games", () => {
   it("passes a canvas game (getContext/measureText/gradient stubbed under jsdom)", async () => {
-    expect(await gameGate(canvasGame)).toEqual({ ok: true, failures: [] });
+    expect(await gameGate(canvasGame)).toMatchObject({ ok: true, failures: [] });
   });
   it("still catches a genuine throw after canvas setup", async () => {
     const r = await gameGate(`<!doctype html><body><canvas id="c"></canvas>
