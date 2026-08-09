@@ -2209,16 +2209,27 @@ button.scorecard-intent { line-height: 1.4; }
    text), --paper/--line (.ws-chip's pill), --accent (the "selected" tone
    .feed-toggle .is-active already uses) — the brief's --ink-3/--surface-2/
    --brand/--line-2 tokens don't exist in this palette. */
-.rub-calib { margin: 2px 0 0 26px; font-size: 12px; color: var(--ink-soft); }
+.rub-calib { margin: 2px 0 0 24px; font-size: 12px; color: var(--ink-soft); }
 .rub-calib-caveat { opacity: 0.7; }
-.rub-call-actions { display: flex; gap: 6px; margin: 6px 0 0 26px; }
+.rub-call-actions { display: flex; align-items: center; gap: 6px; margin: 6px 0 0 24px; flex-wrap: wrap; }
 .rub-call-btn {
   padding: 2px 10px; font: inherit; font-size: 12px;
   color: var(--ink-soft); background: var(--paper);
   border: 1px solid var(--line); border-radius: 999px; cursor: pointer;
 }
 .rub-call-btn:hover { color: var(--ink); border-color: var(--accent); }
-.rub-call-btn.is-on { color: var(--ink); background: var(--raised); border-color: var(--accent); }
+/* Selected must read as MORE contrast than the card, not less: .rub-factor's own
+   background is --raised, so painting the selected pill --raised too erases the
+   distinction the unselected --paper pill already has against that card. --paper-2
+   is the established inset/selected fill (theme.css ~L263, .console-activegem). */
+.rub-call-btn.is-on { color: var(--ink); background: var(--paper-2); border-color: var(--accent); }
+.rub-call-note {
+  padding: 3px 8px; font: inherit; font-size: 12px; min-width: 160px; flex: 1 1 220px; max-width: 320px;
+  color: var(--ink); background: var(--paper);
+  border: 1px solid var(--line); border-radius: 6px;
+}
+.rub-call-note::placeholder { color: var(--muted); }
+.rub-call-note:focus { outline: none; border-color: var(--accent); box-shadow: var(--ring); }
 
 /* Catalog */
 .rub-lib-group { margin-top: 14px; }
