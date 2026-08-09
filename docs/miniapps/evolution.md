@@ -118,6 +118,20 @@ repo (`9d4e5166`, `da250782`); the miniapp engine (`packages/play`), the console
 surfaces, and the authoring skill live here, and the hosted marketplace is
 something this repo only talks to as a client.
 
+**D12 — The A7 minting gets a transport, not a re-implementation.** The minted
+MCP Apps shapes existed before anything served them over the MCP wire — only
+the console's REST route returned them as JSON. The `agentgem-play` stdio
+server closes that gap the narrow way: it serves `mcpAppFor`'s output
+verbatim (tools/list, resources/read) and nothing else — no capability tools,
+no registry mutation, no sidecar files. The framework-idiomatic route
+(AgentBack `@tool`/`@resource`) was considered and rejected because its
+decorator surface cannot emit the conformance-locked `_meta` blocks
+(`ai.agentgem/game`, the sealed CSP); serving pre-minted wire JSON through the
+plain MCP SDK keeps `mcpApp.ts` the single source of truth, per D10's
+widening/tightening pairing: the widening is external-host reach, the
+tightening is a surface that cannot leak more than the bundle and its declared
+metadata.
+
 ## Lessons from the human ↔ AI building experience
 
 **L1 — Spec first, but let the spec lose.** The specs made the agent's work

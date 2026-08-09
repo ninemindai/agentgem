@@ -6,7 +6,8 @@
   "bin": {
     "agentgem": "dist/cli.js",
     "agentgem-distill": "dist/distill/mcpServer.js",
-    "agentgem-goldmine": "dist/goldmine/mcpServer.js"
+    "agentgem-goldmine": "dist/goldmine/mcpServer.js",
+    "agentgem-play": "dist/play/mcpServer.js"
   },
   "files": [
     "dist",
