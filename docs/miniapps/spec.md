@@ -72,6 +72,19 @@ Three invariants anchor everything below:
   `play_<name>` launcher tool, carrying its game metadata (genre, needs,
   `offline` flag) in `_meta["ai.agentgem/game"]` — this is what lets external
   MCP Apps hosts render a miniapp unchanged.
+- **A8.** The minted app is **served over MCP** by the `agentgem-play` stdio
+  server, so any MCP Apps host can render it. `tools/list` MUST reflect the
+  registry at list time (plus the built-in Protocol Inspector), and
+  `tools/call`/`resources/read` MUST return the shapes exactly as
+  `mcpAppFor` mints them — the minting functions are the single source of
+  truth; the endpoint MUST NOT re-derive them. The endpoint is deliberately
+  narrow (the D10 tightening paired with this reach widening): it MUST NOT
+  expose the §6.2/§6.3 capability tools (a host-proxied capability call gets
+  JSON-RPC method-not-found and the miniapp degrades per P3/S9), MUST NOT
+  expose registry mutation, and MUST serve only the bundle plus its declared
+  metadata — never `ref/`, `uploads/`, or `share.json`. Spawning the endpoint
+  is itself the explicit user act (I3): it runs only when the user configures
+  it in an MCP client.
 
 ## 4. Admission: what Save enforces
 
@@ -297,6 +310,7 @@ still live in the root `src/__tests__/` and `src/play/__tests__/` trees.)
 | needs derivation/reconciliation, literal-name check, mcpNeeds merge | `packages/play/src/capabilityScan.ts` |
 | portability gate (`assertPortable`) | `packages/play/src/portability.ts` |
 | MCP Apps resource/tool minting (`ui://agentgem/<name>`) | `packages/play/src/mcpApp.ts` |
+| MCP endpoint serving minted apps (`agentgem-play` bin) | `src/play/mcpServer.ts` |
 | injected client shim (`window.agentgemApp`) | `packages/play/src/mcpAppClient.ts` |
 | MCP connector broker (pooled SDK clients) + config digest | `packages/play/src/mcpConnectors.ts`, `mcpDigest.ts` |
 | Studio create seams, cwd jail, seed baking | `packages/play/src/studio.ts`, `sourceContext.ts`, `redact.ts`, `scaffolds.ts` |
@@ -338,5 +352,7 @@ For verifying an implementation change (or reviewing a PR) against this spec:
 - [ ] Any contract change is made in `MINIAPP_BUILDER_BRIEF`
       (`packages/play/src/builderBrief.ts`) and mirrored into
       `skills/agentgem-miniapp/SKILL.md` (drift-guarded).
+- [ ] The `agentgem-play` endpoint serves the minted shapes verbatim, lists the
+      registry dynamically, and exposes no capability or mutation tools (A8).
 - [ ] New capability widenings ship with a matching save-time or consent-time
       tightening (see [`evolution.md`](evolution.md), D10).
