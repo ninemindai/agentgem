@@ -44,12 +44,13 @@ describe("RubricVerdictBody", () => {
 });
 
 describe("withoutVerdictNotes", () => {
-  it("strips per-session verdicts before the payload reaches an agent", () => {
+  it("strips per-session verdicts AND calibration before the payload reaches an agent", () => {
     const payload: RubricReport = {
       rubricId: "ship-discipline", target: "overview", scope: "session",
       factors: [{ id: "f1", title: "T", advice: "A", severity: "warn" as const, count: 1, sessions: 1,
                   calibration: { reviewed: 2, accepted: 1, wrong: 1, wontfix: 0 } }],
       sessionsScanned: 1, clean: false, degraded: false, skippedFactors: [],
+      calibrationUnavailable: false,
       perSession: [{ sessionId: "s1", transcript: "/tmp/s1.jsonl", factors: [],
                      verdicts: { f1: { sessionId: "s1", factorId: "f1", rubricId: "ship-discipline",
                                        verdict: "wrong" as const, note: "SECRET", atMs: 1 } } }],
@@ -57,7 +58,10 @@ describe("withoutVerdictNotes", () => {
     const out = withoutVerdictNotes(payload);
     expect(out.perSession![0]).not.toHaveProperty("verdicts");
     expect(JSON.stringify(out)).not.toContain("SECRET");
-    // Counts are integers and may stay.
-    expect(out.factors[0].calibration).toEqual({ reviewed: 2, accepted: 1, wrong: 1, wontfix: 0 });
+    // Calibration is integers, but the agent has no guard equivalent to the console's
+    // calibrationLine — it must not see it either, or it can render an "accuracy" tile
+    // over the wrong denominator (spec §4). Same for the top-level unavailable flag.
+    expect(out.factors[0]).not.toHaveProperty("calibration");
+    expect(out).not.toHaveProperty("calibrationUnavailable");
   });
 });

@@ -236,10 +236,10 @@ export async function computeRubric(
  * findings: "0 wrong of 0 reviewed" would read as a criterion nobody has disputed,
  * which is the opposite of "we could not check".
  */
-export function withVerdicts(payload: RubricReport, dataDir?: string): RubricReport {
+export function withVerdicts(payload: RubricReport, dbPath?: string): RubricReport {
   let store: ReturnType<typeof openRubricVerdictStore> | null = null;
   try {
-    store = openRubricVerdictStore(dataDir);
+    store = openRubricVerdictStore(dbPath);
     const rubricId = payload.rubricId;
     const calibration = foldCalibration(store.verdictRowsForFactors(rubricId, payload.factors.map((f) => f.id)));
     const factors = payload.factors.map((f) => {
@@ -277,11 +277,11 @@ export function withVerdicts(payload: RubricReport, dataDir?: string): RubricRep
  */
 export function recordRubricVerdict(
   input: { sessionId: string; factorId: string; rubricId: string; verdict: VerdictValue; note?: string },
-  dataDir?: string,
+  dbPath?: string,
   now: () => number = Date.now,
 ): { ok: true; atMs: number; calibration: FactorCalibration } {
   const atMs = now();
-  const store = openRubricVerdictStore(dataDir);
+  const store = openRubricVerdictStore(dbPath);
   try {
     const v: RubricVerdict = { ...input, atMs };
     store.recordVerdict(v);
@@ -296,14 +296,24 @@ export function recordRubricVerdict(
 }
 
 /**
- * Drop per-session verdicts before a payload is handed to an agent. Calibration counts
- * stay — they are integers. Notes are the first human free-text field in this pipeline,
- * so they inherit the scrubbing contract rather than escaping it.
+ * Strip every verdict-derived field before a payload is handed to an agent: per-session
+ * verdicts (which carry free-text notes), factor-level calibration, and the top-level
+ * `calibrationUnavailable` flag. Calibration is still integers — {reviewed, wrong, ...}
+ * carries no free text — but leaving it in is its own leak: the console only ever
+ * renders it through the guarded `calibrationLine` (denominator = REVIEWED calls,
+ * labelled "of reviewed fires only", never framed as accuracy). renderFn hands this
+ * object straight to an agent building an arbitrary report with no such guard, so
+ * `{count: 24, calibration: {wrong: 9}}` in one place invites "wrong 9 of 24 times" or
+ * a bare "25% accurate" tile — exactly what spec §4 forbids. Nothing downstream of
+ * renderFn needs any of it.
  */
 export function withoutVerdictNotes(payload: RubricReport): RubricReport {
-  if (!payload.perSession?.length) return payload;
+  const { calibrationUnavailable: _drop1, ...rest } = payload;
   return {
-    ...payload,
-    perSession: payload.perSession.map(({ verdicts: _drop, ...rest }) => rest),
+    ...rest,
+    factors: payload.factors.map(({ calibration: _drop2, ...f }) => f),
+    ...(payload.perSession?.length
+      ? { perSession: payload.perSession.map(({ verdicts: _drop3, ...s }) => s) }
+      : {}),
   };
 }
