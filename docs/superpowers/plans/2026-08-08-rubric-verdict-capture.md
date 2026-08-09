@@ -1165,7 +1165,7 @@ describe("verdict controls", () => {
   it("marks the current verdict as pressed", () => {
     const r = report();
     r.perSession![0].verdicts = { "committed-without-tests": { verdict: "wontfix", atMs: 1, sessionId: "s1", factorId: "committed-without-tests", rubricId: "ship-discipline" } };
-    render(<RubricReportCard report={r} sessionId="s1" />);
+    render(<RubricReportCard report={r} sessionId="s1" client={client} />);
     expect(screen.getByRole("button", { name: /won't fix/i }).getAttribute("aria-pressed")).toBe("true");
     expect(screen.getByRole("button", { name: /^wrong/i }).getAttribute("aria-pressed")).toBe("false");
   });
