@@ -48,22 +48,40 @@ function factorTally(f: RubricFactorView): string {
   return `no findings in ${f.applicableSessions} applicable ${f.applicableSessions === 1 ? "session" : "sessions"}`;
 }
 
-const VERDICT_LABELS: { value: VerdictValueView; label: string }[] = [
-  { value: "accepted", label: "Accepted" },
-  { value: "wrong", label: "Wrong" },
-  { value: "wontfix", label: "Won't fix" },
-];
+// Order and canonical values mirror @agentgem/insight's VERDICT_VALUES
+// (rubricVerdicts.ts: ["accepted", "wrong", "wontfix"]) — the console can't import
+// that package's barrel, so the comment is the cross-reference and the assertion
+// below is the enforcement: dropping or renaming a VerdictValueView member without
+// updating LABEL_BY_VALUE fails to typecheck (Record requires every key), and adding
+// a member the tuple doesn't cover fails the exhaustiveness check, so this list
+// cannot silently drift from the server's canonical one.
+const LABEL_BY_VALUE: Record<VerdictValueView, string> = {
+  accepted: "Accepted", wrong: "Wrong", wontfix: "Won't fix",
+};
+const VERDICT_VALUE_ORDER = ["accepted", "wrong", "wontfix"] as const;
+type _AssertOrderIsExhaustive = Exclude<VerdictValueView, (typeof VERDICT_VALUE_ORDER)[number]> extends never ? true : never;
+const _assertOrderIsExhaustive: _AssertOrderIsExhaustive = true;
+void _assertOrderIsExhaustive;
+const VERDICT_LABELS: { value: VerdictValueView; label: string }[] =
+  VERDICT_VALUE_ORDER.map((value) => ({ value, label: LABEL_BY_VALUE[value] }));
 
-function FactorRow({ f, sessionId, current, calibration, onRecord }: {
+function FactorRow({ f, sessionId, current, currentNote, calibration, onRecord, onNote, failed }: {
   f: RubricFactorView;
   // Present only at session scope, where this row maps to exactly one session and a
   // (sessionId, factorId) verdict key is unambiguous.
   sessionId?: string;
   current?: VerdictValueView;
+  // Seeds the note input on mount — the stored note if one exists, else undefined
+  // (empty). The input is otherwise uncontrolled: typing doesn't re-render the row.
+  currentNote?: string;
   // The live count: the parent's patched value after a click, else the server's.
   // Passed in rather than read off `f` so a click updates the rate immediately.
   calibration?: FactorCalibrationView;
   onRecord?: (factorId: string, verdict: VerdictValueView) => void;
+  onNote?: (factorId: string, verdict: VerdictValueView, note: string) => void;
+  // This row's own failed-write flag — NOT a card-level flag, so one row's failure
+  // doesn't disappear the moment a different row's call succeeds.
+  failed?: boolean;
 }) {
   const fired = f.count > 0;
   // A check that never applied is neither a pass nor a problem — don't give it the tick.
@@ -74,6 +92,9 @@ function FactorRow({ f, sessionId, current, calibration, onRecord }: {
   // sessionId's doc above), or with no write handler wired — a control that
   // cannot act must not appear.
   const canCall = fired && !!sessionId && !!onRecord;
+  // Tracks the note text last sent to the server, so blur only re-POSTs on an actual
+  // edit — not on every blur of an untouched (or re-blurred) field.
+  const lastPosted = useRef(currentNote ?? "");
   return (
     <li className={"rub-factor " + cls}>
       <div className="rub-factor-head">
@@ -101,8 +122,29 @@ function FactorRow({ f, sessionId, current, calibration, onRecord }: {
               onClick={() => onRecord?.(f.id, value)}
             >{label}</button>
           ))}
+          {/* Revealed only once a verdict is chosen, not up front — the gesture has to
+              stay one keystroke (click a verdict) or it won't be used (spec §5). */}
+          {current && (
+            <input
+              type="text"
+              className="rub-call-note"
+              maxLength={500}
+              placeholder="why? (optional)"
+              aria-label={`Note on ${f.title}`}
+              defaultValue={currentNote ?? ""}
+              onBlur={(e) => {
+                const text = e.target.value;
+                if (text === lastPosted.current) return;
+                lastPosted.current = text;
+                // Re-POST the SAME verdict with the note attached — the store is
+                // append-only and latest-wins, so a second row is correct here.
+                onNote?.(f.id, current, text);
+              }}
+            />
+          )}
         </div>
       )}
+      {failed && <p className="insights-hint">That call was not saved — check the console log and try again.</p>}
     </li>
   );
 }
@@ -124,20 +166,25 @@ export function RubricReportCard({ report, sessionId, client }: {
   // rate beside it keeps the pre-click count until the next report fetch, which reads
   // as a write that did not take.
   const [rates, setRates] = useState<Record<string, FactorCalibrationView>>({});
-  const [failed, setFailed] = useState<string | null>(null);
+  // Keyed by factorId, not a single card-level flag — otherwise a second row's
+  // successful call silently clears the first row's failure notice.
+  const [failedIds, setFailedIds] = useState<Set<string>>(new Set());
 
-  const record = (factorId: string, verdict: VerdictValueView) => {
+  const record = (factorId: string, verdict: VerdictValueView, note?: string) => {
     if (!callable || !client) return;
     const prev = calls[factorId];
     setCalls((c) => ({ ...c, [factorId]: verdict }));   // optimistic
-    setFailed(null);
-    postRubricVerdict(client, { sessionId: callable, factorId, rubricId: report.rubricId, verdict })
+    setFailedIds((s) => (s.has(factorId) ? new Set([...s].filter((id) => id !== factorId)) : s));
+    const body: { sessionId: string; factorId: string; rubricId: string; verdict: VerdictValueView; note?: string } =
+      { sessionId: callable, factorId, rubricId: report.rubricId, verdict };
+    if (note !== undefined) body.note = note;
+    postRubricVerdict(client, body)
       .then((r) => setRates((m) => ({ ...m, [factorId]: r.calibration })))
       .catch(() => {
         // A dropped verdict is user input lost — roll back and say so rather than
         // leaving the button looking saved.
         setCalls((c) => { const n = { ...c }; if (prev) n[factorId] = prev; else delete n[factorId]; return n; });
-        setFailed(factorId);
+        setFailedIds((s) => new Set(s).add(factorId));
       });
   };
   return (
@@ -177,8 +224,14 @@ export function RubricReportCard({ report, sessionId, client }: {
         <p className="insights-hint">Some LLM criteria were skipped — the local agent was unavailable. Cheap-factor results are shown.</p>
       )}
       {report.calibrationUnavailable && (
-        // Not the same as "no verdicts yet" — say which one it is.
-        <p className="insights-hint">Calibration unavailable — the verdict store could not be read. Findings are unaffected.</p>
+        // Not the same as "no verdicts yet" — say which one it is. The same store
+        // outage also hides `perSession[].verdicts`, so a factor you already called
+        // renders with every button unpressed — indistinguishable from never having
+        // called it (spec §1.9) unless the banner says so too.
+        <p className="insights-hint">
+          Calibration unavailable — the verdict store could not be read. Findings are unaffected, but any calls you
+          already made on this report won&apos;t show as pressed until the store is back.
+        </p>
       )}
 
       <ul className="rub-factors">
@@ -188,12 +241,14 @@ export function RubricReportCard({ report, sessionId, client }: {
             f={f}
             sessionId={callable}
             current={calls[f.id] ?? stored?.[f.id]?.verdict}
+            currentNote={stored?.[f.id]?.note}
             calibration={rates[f.id] ?? f.calibration}
             onRecord={client ? record : undefined}
+            onNote={client ? record : undefined}
+            failed={failedIds.has(f.id)}
           />
         ))}
       </ul>
-      {failed && <p className="insights-hint">That call was not saved — check the console log and try again.</p>}
 
       {affected > 0 && (
         report.perSession!.some((s) => s.hygiene)

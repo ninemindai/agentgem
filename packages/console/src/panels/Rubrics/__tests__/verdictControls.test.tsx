@@ -113,4 +113,82 @@ describe("verdict controls", () => {
     expect(calibrationLine({ reviewed: 4, accepted: 1, wrong: 0, wontfix: 3 }))
       .toBe("accepted in 1 of 4 reviewed calls · 3 won't fix");
   });
+
+  it("keeps one row's failure notice after a different row's call succeeds", async () => {
+    // Two rows, one failing and one succeeding, must not lose the failure notice —
+    // `failed` is keyed per factorId, not a single card-level flag.
+    const mod = await import("../rubricStream.js");
+    vi.mocked(mod.postRubricVerdict)
+      .mockRejectedValueOnce(new Error("boom"))
+      .mockResolvedValueOnce({ ok: true, atMs: 1, calibration: { reviewed: 1, accepted: 0, wrong: 1, wontfix: 0 } });
+    const r = report({
+      factors: [
+        { id: "f1", title: "First check", advice: "a", severity: "warn", count: 1, sessions: 1 },
+        { id: "f2", title: "Second check", advice: "b", severity: "warn", count: 1, sessions: 1 },
+      ],
+    });
+    render(<RubricReportCard report={r} sessionId="s1" client={client} />);
+    const [firstWrong, secondWrong] = screen.getAllByRole("button", { name: /^wrong/i });
+    fireEvent.click(firstWrong);
+    await waitFor(() => expect(screen.getByText(/was not saved/i)).toBeTruthy());
+    fireEvent.click(secondWrong);
+    await waitFor(() => expect(secondWrong.getAttribute("aria-pressed")).toBe("true"));
+    // The first row's failure notice must still be showing.
+    expect(screen.getByText(/was not saved/i)).toBeTruthy();
+  });
+});
+
+describe("verdict note", () => {
+  it("does not render a note input before a verdict is chosen", () => {
+    render(<RubricReportCard report={report()} sessionId="s1" client={client} />);
+    expect(screen.queryByLabelText(/^Note on/i)).toBeNull();
+  });
+
+  it("reveals a note input once a verdict is chosen", async () => {
+    const mod = await import("../rubricStream.js");
+    vi.mocked(mod.postRubricVerdict).mockResolvedValue({
+      ok: true, atMs: 1, calibration: { reviewed: 1, accepted: 0, wrong: 1, wontfix: 0 },
+    });
+    render(<RubricReportCard report={report()} sessionId="s1" client={client} />);
+    fireEvent.click(screen.getByRole("button", { name: /^wrong/i }));
+    const note = await screen.findByLabelText(/^Note on/i);
+    expect(note).toBeTruthy();
+    expect((note as HTMLInputElement).maxLength).toBe(500);
+  });
+
+  it("seeds the note from the stored verdict and POSTs the same verdict with the edited note on blur", async () => {
+    const mod = await import("../rubricStream.js");
+    vi.mocked(mod.postRubricVerdict).mockResolvedValue({
+      ok: true, atMs: 2, calibration: { reviewed: 1, accepted: 0, wrong: 0, wontfix: 1 },
+    });
+    const r = report();
+    r.perSession![0].verdicts = {
+      "committed-without-tests": {
+        verdict: "wontfix", note: "spike branch", atMs: 1,
+        sessionId: "s1", factorId: "committed-without-tests", rubricId: "ship-discipline",
+      },
+    };
+    render(<RubricReportCard report={r} sessionId="s1" client={client} />);
+    const note = (await screen.findByLabelText(/^Note on/i)) as HTMLInputElement;
+    expect(note.value).toBe("spike branch");
+    fireEvent.change(note, { target: { value: "spike branch, closing soon" } });
+    fireEvent.blur(note);
+    await waitFor(() => expect(mod.postRubricVerdict).toHaveBeenCalledWith(client, {
+      sessionId: "s1", factorId: "committed-without-tests", rubricId: "ship-discipline",
+      verdict: "wontfix", note: "spike branch, closing soon",
+    }));
+  });
+
+  it("does not re-POST on blur when the note text is unchanged", async () => {
+    const mod = await import("../rubricStream.js");
+    vi.mocked(mod.postRubricVerdict).mockResolvedValue({
+      ok: true, atMs: 1, calibration: { reviewed: 1, accepted: 1, wrong: 0, wontfix: 0 },
+    });
+    render(<RubricReportCard report={report()} sessionId="s1" client={client} />);
+    fireEvent.click(screen.getByRole("button", { name: /^accepted/i }));
+    const note = await screen.findByLabelText(/^Note on/i);
+    vi.mocked(mod.postRubricVerdict).mockClear();
+    fireEvent.blur(note);
+    expect(mod.postRubricVerdict).not.toHaveBeenCalled();
+  });
 });
