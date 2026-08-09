@@ -12,7 +12,7 @@
 // along in a store whose schema will move for unrelated reasons.
 //
 // Append-only. A pair can carry several rows; the readers return them in
-// (at_ms, id) order and rubricVerdicts.latestPerPair collapses them. Nothing here
+// (at_ms, id) order and rubricVerdicts.latestPerKey collapses them. Nothing here
 // counts or folds — that math is pure and lives next door.
 import { DatabaseSync } from "node:sqlite";
 import { mkdirSync } from "node:fs";
@@ -62,8 +62,8 @@ function toVerdict(r: Row): RubricVerdict {
   };
 }
 
-export function openRubricVerdictStore(dataDir?: string): RubricVerdictStore {
-  const target = dataDir ?? defaultRubricVerdictsDbPath();
+export function openRubricVerdictStore(dbPath?: string): RubricVerdictStore {
+  const target = dbPath ?? defaultRubricVerdictsDbPath();
   const file = target === "memory://" ? ":memory:" : target;
   if (file !== ":memory:") mkdirSync(dirname(file), { recursive: true });
   const db = new DatabaseSync(file);
