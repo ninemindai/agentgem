@@ -121,6 +121,36 @@ you allow it does the host **broker** those MCP calls to the mini-app. The built
 **Repo Pulse** demo ships as an `mcpNeeds`-only mini-app you can inspect. The full
 connector contract lives in the [miniapp spec](miniapps/spec.md).
 
+## The `agentgem-play` MCP server
+
+Your games aren't locked to the console. The same sealed bundles are served to
+**any [MCP Apps](https://modelcontextprotocol.io/docs/extensions/apps) host** by a
+standalone **MCP server** that ships as a separate executable,
+**`agentgem-play`**, installed on your `PATH` alongside `agentgem`. Point a
+host's MCP config at it (it speaks MCP over stdio):
+
+```json
+{
+  "mcpServers": {
+    "agentgem-play": { "command": "agentgem-play" }
+  }
+}
+```
+
+Every saved game (plus the built-in Protocol Inspector) appears as a
+`play_<name>` launcher tool bound to a `ui://agentgem/<name>` resource — calling
+the tool hands the host the game's sealed HTML to render in its own sandbox.
+This is how a mini-game ends up playable inside Claude Code, Claude Desktop, or
+a spatial canvas like [pmx-canvas](https://github.com/pskoett/pmx-canvas),
+unchanged.
+
+The endpoint is deliberately read-only: it serves each bundle and its declared
+metadata, nothing else. External hosts don't get the console's capability
+tools, so a game that asks for live data quietly falls back to its baked
+`game-data` — exactly as it does in the marketplace. Offline games (the 🟢
+pill) are indistinguishable from the console experience. The contract is
+[spec §A8](miniapps/spec.md).
+
 ## On the desktop app
 
 The embedded [desktop console](desktop.md) has the full Play experience — browse,
