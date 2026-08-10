@@ -17,6 +17,7 @@
 // Every string is already scrubbed inside detectEvents (the secret-safe boundary).
 import { statSync, readFileSync } from "node:fs";
 import { resolveTranscriptFile, sourceForFile } from "./watchSessions.js";
+import { wantsPoll, pollReply, type PollMessage } from "./ssePoll.js";
 
 interface SseReq {
   query: Record<string, unknown>;
@@ -35,6 +36,23 @@ export function streamWatchEvents(req: SseReq, res: SseRes): void {
   const fileParam = typeof req.query.file === "string" ? req.query.file : "";
   const resolved = resolveTranscriptFile(fileParam); // pins ?file= to a registered watch root
   const source = resolved ? sourceForFile(resolved) : null;
+
+  // Polling fallback (?poll=1&after=N): the same messages the SSE would deliver,
+  // as one JSON body — events past the `after` cursor only.
+  if (wantsPoll(req.query)) {
+    if (!resolved || !source?.detectEvents) {
+      return pollReply(res, [{ event: "failed", data: { message: "unknown or out-of-scope transcript file" } }], {});
+    }
+    const after = Math.max(0, Math.floor(Number(req.query.after)) || 0);
+    let text = "";
+    try { text = readFileSync(resolved, "utf8"); } catch { /* treated as empty */ }
+    const events = source.detectEvents(text, resolved);
+    const messages: PollMessage[] = [
+      { event: "phase", data: { phase: "watching", agent: source.id } },
+      ...events.slice(after).map((e, i) => ({ event: "event", data: { index: after + i, ...e } })),
+    ];
+    return pollReply(res, messages, { after: Math.max(after, events.length) });
+  }
 
   res.writeHead(200, {
     "Content-Type": "text/event-stream",
@@ -70,6 +88,8 @@ export function streamWatchEvents(req: SseReq, res: SseRes): void {
   tick(); // flush the backlog immediately
 
   const poll = setInterval(tick, POLL_MS);
-  const beat = setInterval(() => { try { res.write(": ping\n\n"); } catch { /* closed */ } }, HEARTBEAT_MS);
+  // A NAMED event, not a `:` comment — EventSource can't observe comments, and the
+  // console's stall watchdog needs to see liveness (see ssePoll.ts).
+  const beat = setInterval(() => { try { send("ping", {}); } catch { /* closed */ } }, HEARTBEAT_MS);
   req.on?.("close", () => { clearInterval(poll); clearInterval(beat); try { res.end(); } catch { /* ended */ } });
 }
