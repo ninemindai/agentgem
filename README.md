@@ -69,7 +69,9 @@ call exactly the same thing.
   console and distill the conversation into a Gem; [Play](docs/play.md) builds
   AI-generated mini-games, sealed to run anywhere and versioned as first-class `game`
   Gems — publish them to the arcade, where they're **installable, offline-playable PWAs**
-  searchable by genre and tag.
+  searchable by genre and tag. The **`agentgem-play`** MCP server serves the same games
+  to any MCP Apps host, so they render inside Claude Code, Claude Desktop, or a spatial
+  canvas unchanged.
 - **Materialize targets** — render a Gem to Eve, Flue, OpenAI Sandbox, and Bedrock
   AgentCore projects (code-gen targets share a common `compose` step), or to editor
   formats like Claude, Codex, and Hermes — and run a rendered Eve/Flue app locally
