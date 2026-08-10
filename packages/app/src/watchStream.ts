@@ -20,6 +20,7 @@ import { readFileSync, statSync } from "node:fs";
 import { basename } from "node:path";
 import { scrubText } from "@agentgem/insight";
 import { resolveTranscriptFile, sourceForFile } from "./watchSessions.js";
+import { wantsPoll, pollReply, type PollMessage } from "./ssePoll.js";
 
 interface SseReq {
   query: Record<string, unknown>;
@@ -44,6 +45,48 @@ export function streamWatch(req: SseReq, res: SseRes): void {
   const fileParam = typeof req.query.file === "string" ? req.query.file : "";
   const resolved = resolveTranscriptFile(fileParam);
   const source = resolved ? sourceForFile(resolved) : null;
+
+  // Polling fallback (?poll=1&after=N&since=MS): one JSON body of the artifact
+  // versions past the cursor. Transcript-driven sources cursor on `after` (count);
+  // file-driven sources cursor on `since` (max file mtime — the per-connection
+  // version counters don't exist across stateless polls, so `version` is the
+  // file's mtimeMs there: still monotonic per path, still a stable change key).
+  if (wantsPoll(req.query)) {
+    if (!resolved || !source) {
+      return pollReply(res, [{ event: "failed", data: { message: "unknown or out-of-scope transcript file" } }], {});
+    }
+    const after = Math.max(0, Math.floor(Number(req.query.after)) || 0);
+    const since = Math.max(0, Number(req.query.since) || 0);
+    const scrub = (raw: string) => {
+      const s = scrubText(raw);
+      return { html: s.slice(0, MAX_HTML), truncated: s.length > MAX_HTML };
+    };
+    const messages: PollMessage[] = [
+      { event: "phase", data: { phase: "watching", file: resolved, mode: source.detectArtifacts ? "transcript" : "file" } },
+    ];
+    let text = "";
+    try { text = readFileSync(resolved, "utf8"); } catch { /* treated as empty */ }
+    if (source.detectArtifacts) {
+      const versions = source.detectArtifacts(text, resolved);
+      versions.slice(after).forEach((v, i) => {
+        const { html, truncated } = scrub(v.html);
+        messages.push({ event: "artifact", data: { index: after + i, path: v.path, name: basename(v.path), tool: v.tool, version: v.version, tsMs: v.tsMs, truncated, html } });
+      });
+      return pollReply(res, messages, { after: Math.max(after, versions.length), since });
+    }
+    let maxMtime = since;
+    let index = after;
+    for (const p of source.resolveArtifactPaths!(text)) {
+      let mtimeMs: number;
+      try { mtimeMs = statSync(p).mtimeMs; } catch { continue; } // not written yet / removed
+      if (mtimeMs <= since) continue;
+      let raw: string; try { raw = readFileSync(p, "utf8"); } catch { continue; }
+      maxMtime = Math.max(maxMtime, mtimeMs);
+      const { html, truncated } = scrub(raw);
+      messages.push({ event: "artifact", data: { index: index++, path: p, name: basename(p), tool: "file", version: Math.floor(mtimeMs), tsMs: mtimeMs, truncated, html } });
+    }
+    return pollReply(res, messages, { after: index, since: maxMtime });
+  }
 
   res.writeHead(200, {
     "Content-Type": "text/event-stream",
@@ -79,7 +122,8 @@ export function streamWatch(req: SseReq, res: SseRes): void {
   tick(); // emit any backlog immediately
 
   const poll = setInterval(tick, POLL_MS);
-  const beat = setInterval(() => { try { res.write(": ping\n\n"); } catch { /* closed */ } }, HEARTBEAT_MS);
+  // Named event, not a `:` comment — the console's stall watchdog must see it (ssePoll.ts).
+  const beat = setInterval(() => { try { send("ping", {}); } catch { /* closed */ } }, HEARTBEAT_MS);
   const cleanup = () => { clearInterval(poll); clearInterval(beat); try { res.end(); } catch { /* ended */ } };
   req.on?.("close", cleanup);
 }

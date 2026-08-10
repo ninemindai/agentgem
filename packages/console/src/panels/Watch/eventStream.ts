@@ -4,6 +4,9 @@
 // The server has already scrubbed every string; the panel renders these as cards,
 // never as markup. tool_call and tool_result arrive as SEPARATE events and are
 // re-paired by toolId in the view (see toItems in SessionFeed).
+// Transport resilience (stall watchdog → ?poll=1 fallback) comes from
+// openResilientStream; the `after` cursor is the count of events delivered.
+import { openResilientStream, type PollResult } from "../_shared/resilientStream.js";
 
 export type FeedSpan =
   | { kind: "message"; role: "user" | "assistant"; text: string }
@@ -26,14 +29,23 @@ export function openEventStream(
   file: string,
   onEvent: (e: FeedMsg) => void,
 ): () => void {
-  const params = new URLSearchParams({ file });
-  const es = new EventSource(`${apiBase}/api/watch/events?${params.toString()}`);
-  const data = (m: Event) => JSON.parse((m as MessageEvent).data);
-
-  es.addEventListener("phase", (m) => { const d = data(m); onEvent({ type: "phase", phase: d.phase, agent: d.agent }); });
-  es.addEventListener("event", (m) => onEvent({ type: "event", event: data(m) as FeedEvent }));
-  es.addEventListener("failed", (m) => { onEvent({ type: "failed", message: data(m).message }); es.close(); });
-  es.addEventListener("error", () => onEvent({ type: "failed", message: "connection lost" }));
-
-  return () => es.close();
+  const close = openResilientStream<{ after: number }>({
+    streamUrl: `${apiBase}/api/watch/events?${new URLSearchParams({ file }).toString()}`,
+    events: ["phase", "event", "failed"],
+    initialCursor: { after: 0 },
+    advance: (c, event, data) => (event === "event" ? { after: (data as FeedEvent).index + 1 } : c),
+    poll: async (c) => {
+      const params = new URLSearchParams({ file, poll: "1", after: String(c.after) });
+      const r = await fetch(`${apiBase}/api/watch/events?${params.toString()}`);
+      if (!r.ok) throw new Error(`events poll ${r.status}`);
+      return (await r.json()) as PollResult<{ after: number }>;
+    },
+    onMessage: (event, data) => {
+      const d = data as Record<string, unknown>;
+      if (event === "phase") onEvent({ type: "phase", phase: d.phase as string, agent: d.agent as string });
+      else if (event === "event") onEvent({ type: "event", event: data as FeedEvent });
+      else if (event === "failed") { onEvent({ type: "failed", message: d.message as string }); close(); }
+    },
+  });
+  return close;
 }

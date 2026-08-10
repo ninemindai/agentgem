@@ -3,6 +3,9 @@
 // phase/artifact/failed — same shape as insightsStream.ts). The server has already
 // redacted each artifact's html; the panel only ever renders it inside a null-origin
 // sandboxed iframe, never in the console's own DOM.
+// Transport resilience (stall watchdog → ?poll=1 fallback) comes from
+// openResilientStream — see resilientStream.ts for the buffering-proxy rationale.
+import { openResilientStream, type PollResult } from "../_shared/resilientStream.js";
 
 export interface WatchSession {
   id: string;
@@ -55,14 +58,30 @@ export function openWatchStream(
   file: string,
   onEvent: (e: WatchEvent) => void,
 ): () => void {
-  const params = new URLSearchParams({ file });
-  const es = new EventSource(`${apiBase}/api/watch/stream?${params.toString()}`);
-  const data = (m: Event) => JSON.parse((m as MessageEvent).data);
-
-  es.addEventListener("phase", (m) => { const d = data(m); onEvent({ type: "phase", phase: d.phase, mode: d.mode }); });
-  es.addEventListener("artifact", (m) => onEvent({ type: "artifact", artifact: data(m) as ArtifactVersion }));
-  es.addEventListener("failed", (m) => { onEvent({ type: "failed", message: data(m).message }); es.close(); });
-  es.addEventListener("error", () => onEvent({ type: "failed", message: "connection lost" }));
-
-  return () => es.close();
+  // Cursor carries both strategies' positions: `after` (transcript-driven count)
+  // and `since` (file-driven max mtime); the server uses whichever fits its mode.
+  type Cursor = { after: number; since: number };
+  const close = openResilientStream<Cursor>({
+    streamUrl: `${apiBase}/api/watch/stream?${new URLSearchParams({ file }).toString()}`,
+    events: ["phase", "artifact", "failed"],
+    initialCursor: { after: 0, since: 0 },
+    advance: (c, event, data) => {
+      if (event !== "artifact") return c;
+      const a = data as ArtifactVersion;
+      return { after: a.index + 1, since: Math.max(c.since, a.tsMs ?? c.since) };
+    },
+    poll: async (c) => {
+      const params = new URLSearchParams({ file, poll: "1", after: String(c.after), since: String(c.since) });
+      const r = await fetch(`${apiBase}/api/watch/stream?${params.toString()}`);
+      if (!r.ok) throw new Error(`stream poll ${r.status}`);
+      return (await r.json()) as PollResult<Cursor>;
+    },
+    onMessage: (event, data) => {
+      const d = data as Record<string, unknown>;
+      if (event === "phase") onEvent({ type: "phase", phase: d.phase as string, mode: d.mode as "transcript" | "file" | undefined });
+      else if (event === "artifact") onEvent({ type: "artifact", artifact: data as ArtifactVersion });
+      else if (event === "failed") { onEvent({ type: "failed", message: d.message as string }); close(); }
+    },
+  });
+  return close;
 }
