@@ -628,7 +628,8 @@ describe("per-session expansion at project scope", () => {
     fireEvent.click(screen.getByRole("button", { name: /unreviewed/i }));
     const first = screen.getAllByTestId("rub-fire-row")[0];
     fireEvent.click(within(first).getByRole("button", { name: /^wrong/i }));
-    expect(spy.mock.calls[0][1].body.sessionId).toBe("s2");
+    // postRubricVerdict(client, body) — so calls[0][1] IS the body, not a wrapper.
+    expect(spy.mock.calls[0][1].sessionId).toBe("s2");
   });
 
   it("does not re-order the list when a verdict is recorded", async () => {
@@ -678,7 +679,8 @@ In `index.tsx`, extend `FactorRow`'s props (after `failed?: boolean;`):
   // project/all scope — at session scope the row IS the session and carries its own
   // buttons instead.
   fires?: PerSessionRow[];
-  summarySessions?: number;
+  // No `summarySessions` prop: the row already has `f.sessions` and passes that
+  // straight through. A second copy would be a dead prop.
   truncated?: boolean;
   verdictFor?: (sessionId: string) => VerdictValueView | undefined;
   noteFor?: (sessionId: string) => string | undefined;
