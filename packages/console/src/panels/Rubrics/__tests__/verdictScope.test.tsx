@@ -6,7 +6,7 @@
 // judgeCoverage enforces for the insights report.
 import { describe, it, expect, afterEach } from "vitest";
 import { render, screen, cleanup } from "@testing-library/react";
-import { RubricReportCard } from "../index.js";
+import { RubricReportCard } from "../RubricReportCard.js";
 import type { RubricReportView } from "../rubricStream.js";
 
 afterEach(cleanup);

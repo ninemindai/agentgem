@@ -7,7 +7,7 @@
 // the exact false all-clear the denominator exists to prevent.
 import { describe, it, expect, afterEach } from "vitest";
 import { render, screen, cleanup, within } from "@testing-library/react";
-import { RubricReportCard } from "../index.js";
+import { RubricReportCard } from "../RubricReportCard.js";
 import type { RubricReportView, RubricFactorView } from "../rubricStream.js";
 
 afterEach(cleanup);
