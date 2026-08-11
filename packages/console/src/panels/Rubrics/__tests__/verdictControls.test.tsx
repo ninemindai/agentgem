@@ -3,7 +3,7 @@
 import { describe, it, expect, vi, afterEach } from "vitest";
 import { render, screen, fireEvent, waitFor, cleanup, within } from "@testing-library/react";
 import type { Client } from "@agentback/client";
-import { RubricReportCard } from "../index.js";
+import { RubricReportCard } from "../RubricReportCard.js";
 import { calibrationLine } from "../rubricStream.js";
 import type { RubricReportView } from "../rubricStream.js";
 
