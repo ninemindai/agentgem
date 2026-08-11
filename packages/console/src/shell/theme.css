@@ -2231,6 +2231,47 @@ button.scorecard-intent { line-height: 1.4; }
 .rub-call-note::placeholder { color: var(--muted); }
 .rub-call-note:focus { outline: none; border-color: var(--accent); box-shadow: var(--ring); }
 
+.rub-fire-list {
+  margin: 6px 0 0 24px;
+  border-left: 1px solid var(--line);
+  padding-left: 10px;
+}
+.rub-fire-rows { list-style: none; margin: 0; padding: 0; }
+.rub-fire-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 3px 0;
+  font-size: 12px;
+}
+.rub-fire-name {
+  color: var(--ink-soft);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 320px;
+}
+.rub-fire-count { color: var(--ink-soft); opacity: 0.7; min-width: 28px; }
+.rub-fire-failed { color: var(--accent); font-size: 11px; }
+.rub-fire-footer {
+  margin: 6px 0 0;
+  font-size: 11px;
+  color: var(--ink-soft);
+  opacity: 0.8;
+}
+.rub-fire-more {
+  margin-left: 8px;
+  padding: 1px 8px;
+  font: inherit;
+  font-size: 11px;
+  color: var(--ink-soft);
+  background: var(--paper);
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  cursor: pointer;
+}
+.rub-fire-more:hover { background: var(--raised); }
+
 /* Catalog */
 .rub-lib-group { margin-top: 14px; }
 .rub-lib-heading { margin: 0 0 6px; font: 700 11px/1.4 var(--font-mono); text-transform: uppercase; letter-spacing: .06em; color: var(--muted); }
