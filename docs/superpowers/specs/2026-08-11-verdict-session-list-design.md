@@ -95,8 +95,15 @@ No server change, no schema change, no new route, no cache interaction. `withVer
 ```
 
 Collapsed by default. The toggle carries the unreviewed count, because that is the number that tells you
-whether opening it is worth anything. A factor with zero unreviewed fires shows the toggle with
-`all reviewed` rather than a count.
+whether opening it is worth anything. Three cases, not two:
+
+- Unreviewed fires remain: `{unreviewed} unreviewed`.
+- None remain, and every fire is present: `all reviewed`.
+- None remain, but the report's 200-row cap (§4) clipped this factor below its summary count: `all
+  {fires.length} shown reviewed`. Saying plain `all reviewed` here would be the same false coverage claim
+  §4 forbids the footer from making — a number implying coverage it does not have — except worse, because
+  the footer that discloses the cap is inside the expansion, so it is invisible exactly when the collapsed
+  label is what's showing. §4's rule governs this label too, not only the footer.
 
 ## 4. Two truncations, never conflated
 
