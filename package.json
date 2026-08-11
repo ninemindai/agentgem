@@ -101,6 +101,7 @@
     "highlight.js": "^11.11.1",
     "marked": "^18.0.9",
     "marked-highlight": "^2.2.4",
+    "puppeteer-core": "^25.5.0",
     "supertest": "^7",
     "typescript": "npm:@typescript/typescript6@^6.0.2",
     "vitest": "^4",
