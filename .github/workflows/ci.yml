@@ -53,6 +53,14 @@ jobs:
       # invokes the esbuild console bundler — and that bundler needs the
       # tsc-compiled @agentgem/* dist to resolve, so order matters.
       - run: pnpm build
+      # Tier 2 of the render-verification gate opens generated HTML in a REAL browser to check the
+      # things jsdom cannot: page-level overflow, offscreen controls, and computed contrast. It needs
+      # a Chrome, and it self-skips without one so a laptop that lacks one still gets a green
+      # `pnpm test`. That skip must never happen HERE — a silently-skipped tier is a green no-op — so
+      # renderCheck.test.ts asserts a browser exists whenever CI is set. `google-chrome-stable` ships
+      # in the ubuntu-latest image; this makes the dependency explicit rather than incidental, and
+      # CHROME_PATH overrides it if the image ever moves.
+      - run: which google-chrome-stable google-chrome chromium 2>/dev/null | head -1 || (echo "no Chrome on the runner — Tier 2 render checks would skip" >&2; exit 1)
       - run: pnpm test
       # `pnpm test` is `tsc -b && vitest run` on the ROOT config, which only covers
       # dist/__tests__ — packages/console's 1150+ tests ran nowhere, in either repo. A

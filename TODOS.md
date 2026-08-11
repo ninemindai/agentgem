@@ -603,3 +603,29 @@ clipping, and computed contrast on every distinct surface (text inheriting the
 body colour inside a tinted region is the failure mode).
 
 **Depends on / blocked by:** Nothing — shares no code with Tier 1.5.
+
+## Gemit card: two gold-on-gold / gold-on-cream contrast failures
+
+**What:** Recolour two pairs in `renderRpgTheme` so 12px text reaches WCAG AA
+(4.5:1). Today: `#e8c87d` on `#d9a441` is **1.39:1** (the "N pt from <tier>"
+line), and `#d9a441` on `#f0eee6` is **1.94:1** (the stat numerals).
+
+**Why:** Found by the Tier 2 render check the first time it ran, on the exact
+artifact that was being screenshotted by hand at 360/380. It fires at every width
+and in every theme, so it is a palette choice rather than a layout bug. 1.39:1 is
+gold-on-gold — effectively unreadable, not merely tight.
+
+**Pros:** The card is the most-shared AgentGem artifact; unreadable numerals on a
+share card are worth more than the fix costs.
+
+**Cons:** The gold-on-gold pair IS the card's visual identity. Darkening the
+foreground or the plate changes its character, so this needs a designer's eye,
+not a mechanical contrast bump. Consider raising the type size instead — at 24px
+the large-text threshold drops to 3:1, which `#d9a441` on cream nearly meets.
+
+**Context:** `src/gemit/themeRpg.ts`. The pairs are pinned in
+`src/__tests__/renderCheckFixtures.test.ts` by distinct colour pair, so these two
+are tolerated and a THIRD fails immediately — the debt is bounded, not laundered.
+Update that expectation when the palette changes.
+
+**Depends on / blocked by:** Nothing. Independent of the Tier 2 harness itself.
