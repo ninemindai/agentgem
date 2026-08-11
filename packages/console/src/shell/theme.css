@@ -2250,6 +2250,7 @@ button.scorecard-intent { line-height: 1.4; }
   text-overflow: ellipsis;
   white-space: nowrap;
   max-width: 320px;
+  flex: 1;
 }
 .rub-fire-count { color: var(--ink-soft); opacity: 0.7; min-width: 28px; }
 /* .rub-call-actions' 24px indent + top margin is authored for the aggregate row's
