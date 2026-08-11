@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { Client } from "@agentback/client";
 import { testbedRecentsRoute, testbedProjectsRoute, rubricsRoute, makeClient, type RecentEntry, type ProjectCandidate, type RubricSummary } from "../../api/routes.js";
 import { defineConsolePage } from "../../registry.js";
@@ -9,6 +9,7 @@ import {
   type VerdictValueView, type FactorCalibrationView,
 } from "./rubricStream.js";
 import { HygieneLeaderboard } from "./HygieneLeaderboard.js";
+import { FactorSessionList } from "./FactorSessionList.js";
 import { SessionPicker, type PickedSession } from "../_shared/SessionPicker.js";
 import { consumePendingRubricRun, type PendingRubricRun } from "../../pendingAnalyze.js";
 import { Loading } from "../../shell/Loading.js";
@@ -49,7 +50,10 @@ function factorTally(f: RubricFactorView): string {
   return `no findings in ${f.applicableSessions} applicable ${f.applicableSessions === 1 ? "session" : "sessions"}`;
 }
 
-function FactorRow({ f, sessionId, current, currentNote, calibration, onRecord, onNote, failed }: {
+function FactorRow({
+  f, sessionId, current, currentNote, calibration, onRecord, onNote, failed,
+  fires, truncated, verdictFor, noteFor, onRecordFor, onNoteFor, failedIds,
+}: {
   f: RubricFactorView;
   // Present only at session scope, where this row maps to exactly one session and a
   // (sessionId, factorId) verdict key is unambiguous.
@@ -66,6 +70,18 @@ function FactorRow({ f, sessionId, current, currentNote, calibration, onRecord, 
   // This row's own failed-write flag — NOT a card-level flag, so one row's failure
   // doesn't disappear the moment a different row's call succeeds.
   failed?: boolean;
+  // The sessions this factor fired in, already filtered and sorted. Present only at
+  // project/all scope — at session scope the row IS the session and carries its own
+  // buttons instead.
+  fires?: PerSessionRow[];
+  // No `summarySessions` prop: the row already has `f.sessions` and passes that
+  // straight through. A second copy would be a dead prop.
+  truncated?: boolean;
+  verdictFor?: (sessionId: string) => VerdictValueView | undefined;
+  noteFor?: (sessionId: string) => string | undefined;
+  onRecordFor?: (sessionId: string, factorId: string, verdict: VerdictValueView) => void;
+  onNoteFor?: (sessionId: string, factorId: string, verdict: VerdictValueView, note: string) => void;
+  failedIds?: ReadonlySet<string>;
 }) {
   const fired = f.count > 0;
   // A check that never applied is neither a pass nor a problem — don't give it the tick.
@@ -76,6 +92,11 @@ function FactorRow({ f, sessionId, current, currentNote, calibration, onRecord, 
   // sessionId's doc above), or with no write handler wired — a control that
   // cannot act must not appear.
   const canCall = fired && !!sessionId && !!onRecord;
+  const [open, setOpen] = useState(false);
+  // Expansion is the project/all-scope path to a verdict. It needs fires to show and
+  // a write handler to be worth showing — a control that cannot act must not appear.
+  const canExpand = fired && !canCall && !!fires?.length && !!onRecordFor;
+  const unreviewed = fires?.filter((r) => !verdictFor?.(r.sessionId)).length ?? 0;
   // Tracks the note text last sent to the server, so blur only re-POSTs on an actual
   // edit — not on every blur of an untouched (or re-blurred) field.
   const lastPosted = useRef(currentNote ?? "");
@@ -129,6 +150,29 @@ function FactorRow({ f, sessionId, current, currentNote, calibration, onRecord, 
         </div>
       )}
       {failed && <p className="insights-hint">That call was not saved — check the console log and try again.</p>}
+      {canExpand && (
+        <button
+          type="button"
+          className="rub-fire-toggle"
+          aria-expanded={open}
+          onClick={() => setOpen((v) => !v)}
+        >
+          {open ? "▾" : "▸"} {unreviewed > 0 ? `${unreviewed} unreviewed` : "all reviewed"}
+        </button>
+      )}
+      {canExpand && open && (
+        <FactorSessionList
+          factorId={f.id}
+          rows={fires!}
+          summarySessions={f.sessions}
+          truncated={!!truncated}
+          verdictFor={verdictFor!}
+          noteFor={noteFor ?? (() => undefined)}
+          onRecord={onRecordFor!}
+          onNote={onNoteFor!}
+          failedIds={failedIds ?? new Set()}
+        />
+      )}
     </li>
   );
 }
@@ -145,6 +189,25 @@ export function RubricReportCard({ report, sessionId, client }: {
   // Verdicts are only unambiguous at session scope (see FactorRow).
   const callable = report.scope === "session" ? sessionId : undefined;
   const stored = report.perSession?.find((s) => s.sessionId === callable)?.verdicts;
+  // One pass over perSession per render, not one per factor per render. Sorted here
+  // so FactorSessionList stays presentational and the order is testable without a DOM.
+  const firesByFactor = useMemo(() => {
+    const out = new Map<string, PerSessionRow[]>();
+    for (const row of report.perSession ?? []) {
+      for (const f of row.factors) {
+        if (f.count <= 0) continue;
+        const list = out.get(f.id) ?? [];
+        list.push(row);
+        out.set(f.id, list);
+      }
+    }
+    const countIn = (row: PerSessionRow, id: string) => row.factors.find((f) => f.id === id)?.count ?? 0;
+    for (const [id, list] of out) {
+      // Worst-first, ties broken on sessionId so the order is total and stable.
+      list.sort((a, b) => countIn(b, id) - countIn(a, id) || a.sessionId.localeCompare(b.sessionId));
+    }
+    return out;
+  }, [report.perSession]);
   const [calls, setCalls] = useState<Record<string, VerdictValueView>>({});
   // Calibration patched from the POST response. Without this the button flips but the
   // rate beside it keeps the pre-click count until the next report fetch, which reads
@@ -237,6 +300,14 @@ export function RubricReportCard({ report, sessionId, client }: {
               onRecord={client && callable ? (fid, v) => record(callable, fid, v) : undefined}
               onNote={client && callable ? (fid, v, note) => record(callable, fid, v, note) : undefined}
               failed={!!rowKey && failedIds.has(rowKey)}
+              fires={firesByFactor.get(f.id)}
+              truncated={!!report.perSessionTruncated}
+              verdictFor={(sid) => calls[verdictKeyOf(sid, f.id)]
+                ?? report.perSession?.find((r) => r.sessionId === sid)?.verdicts?.[f.id]?.verdict}
+              noteFor={(sid) => report.perSession?.find((r) => r.sessionId === sid)?.verdicts?.[f.id]?.note}
+              onRecordFor={client ? record : undefined}
+              onNoteFor={client ? (sid, fid, v, note) => record(sid, fid, v, note) : undefined}
+              failedIds={failedIds}
             />
           );
         })}

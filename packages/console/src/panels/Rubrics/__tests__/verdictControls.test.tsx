@@ -1,7 +1,7 @@
 // Copyright (c) 2026 NineMind, Inc.
 // SPDX-License-Identifier: MIT
 import { describe, it, expect, vi, afterEach } from "vitest";
-import { render, screen, fireEvent, waitFor, cleanup } from "@testing-library/react";
+import { render, screen, fireEvent, waitFor, cleanup, within } from "@testing-library/react";
 import type { Client } from "@agentback/client";
 import { RubricReportCard } from "../index.js";
 import { calibrationLine } from "../rubricStream.js";
@@ -209,5 +209,91 @@ describe("verdict key scoping", () => {
     // is why it is the separator — this test pins that property rather than assuming it.
     const { verdictKeyOf } = await import("../rubricStream.js");
     expect(verdictKeyOf("a", "b|c")).not.toBe(verdictKeyOf("a|b", "c"));
+  });
+});
+
+describe("per-session expansion at project scope", () => {
+  const projectReport = (): RubricReportView => ({
+    rubricId: "hygiene",
+    target: "overview",
+    scope: "project",
+    factors: [
+      { id: "retry-storm", title: "Retry storm", advice: "a", severity: "warn", count: 9, sessions: 3 },
+    ],
+    sessionsScanned: 100,
+    clean: false,
+    degraded: false,
+    skippedFactors: [],
+    perSession: [
+      { sessionId: "s1", transcript: "/tmp/s1.jsonl", factors: [{ id: "retry-storm", title: "Retry storm", advice: "a", severity: "warn", count: 2, sessions: 1 }] },
+      { sessionId: "s2", transcript: "/tmp/s2.jsonl", factors: [{ id: "retry-storm", title: "Retry storm", advice: "a", severity: "warn", count: 6, sessions: 1 }] },
+      { sessionId: "s3", transcript: "/tmp/s3.jsonl", factors: [{ id: "retry-storm", title: "Retry storm", advice: "a", severity: "warn", count: 1, sessions: 1 }] },
+    ],
+  });
+
+  it("keeps the aggregate row button-free at project scope", () => {
+    render(<RubricReportCard report={projectReport()} client={client} />);
+    // The toggle is present; the three verdict buttons are not.
+    expect(screen.getByRole("button", { name: /unreviewed/i })).toBeTruthy();
+    expect(screen.queryByRole("button", { name: /^wrong/i })).toBeNull();
+  });
+
+  it("is collapsed until the toggle is clicked", () => {
+    render(<RubricReportCard report={projectReport()} client={client} />);
+    expect(screen.queryAllByTestId("rub-fire-row")).toHaveLength(0);
+    fireEvent.click(screen.getByRole("button", { name: /unreviewed/i }));
+    expect(screen.getAllByTestId("rub-fire-row")).toHaveLength(3);
+  });
+
+  it("sorts the expansion worst-first", () => {
+    render(<RubricReportCard report={projectReport()} client={client} />);
+    fireEvent.click(screen.getByRole("button", { name: /unreviewed/i }));
+    const names = screen.getAllByTestId("rub-fire-row").map((n) => n.textContent ?? "");
+    expect(names[0]).toContain("s2.jsonl");   // 6 fires
+    expect(names[1]).toContain("s1.jsonl");   // 2
+    expect(names[2]).toContain("s3.jsonl");   // 1
+  });
+
+  it("posts the expanded row's own sessionId, not the panel's selection", async () => {
+    // The panel is pointed at a DIFFERENT session on purpose: the shipped `record`
+    // used to close over that value, and it is still in scope at the new call site.
+    const mod = await import("../rubricStream.js");
+    const spy = vi.spyOn(mod, "postRubricVerdict").mockResolvedValue({
+      ok: true, atMs: 1, calibration: { reviewed: 1, accepted: 0, wrong: 1, wontfix: 0 },
+    });
+    render(<RubricReportCard report={projectReport()} sessionId="SOME-OTHER-SESSION" client={client} />);
+    fireEvent.click(screen.getByRole("button", { name: /unreviewed/i }));
+    const first = screen.getAllByTestId("rub-fire-row")[0];
+    fireEvent.click(within(first).getByRole("button", { name: /^wrong/i }));
+    // postRubricVerdict(client, body) — so calls[0][1] IS the body, not a wrapper.
+    expect(spy.mock.calls[0][1].sessionId).toBe("s2");
+  });
+
+  it("does not re-order the list when a verdict is recorded", async () => {
+    const mod = await import("../rubricStream.js");
+    vi.spyOn(mod, "postRubricVerdict").mockResolvedValue({
+      ok: true, atMs: 1, calibration: { reviewed: 1, accepted: 0, wrong: 1, wontfix: 0 },
+    });
+    render(<RubricReportCard report={projectReport()} client={client} />);
+    fireEvent.click(screen.getByRole("button", { name: /unreviewed/i }));
+    const before = screen.getAllByTestId("rub-fire-row").map((n) => n.textContent ?? "");
+    fireEvent.click(within(screen.getAllByTestId("rub-fire-row")[0]).getByRole("button", { name: /^wrong/i }));
+    const after = screen.getAllByTestId("rub-fire-row").map((n) => n.textContent ?? "");
+    expect(after.map((s) => s.split("×")[0])).toEqual(before.map((s) => s.split("×")[0]));
+  });
+
+  it("counts unreviewed fires on the toggle", () => {
+    const r = projectReport();
+    r.perSession![1].verdicts = { "retry-storm": { sessionId: "s2", factorId: "retry-storm", rubricId: "hygiene", verdict: "wrong", atMs: 1 } };
+    render(<RubricReportCard report={r} client={client} />);
+    expect(screen.getByRole("button", { name: /2 unreviewed/i })).toBeTruthy();
+  });
+
+  it("offers no expansion on a factor that did not fire", () => {
+    const r = projectReport();
+    r.factors[0].count = 0;
+    r.perSession = [];
+    render(<RubricReportCard report={r} client={client} />);
+    expect(screen.queryByRole("button", { name: /unreviewed|all reviewed/i })).toBeNull();
   });
 });

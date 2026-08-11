@@ -2272,6 +2272,20 @@ button.scorecard-intent { line-height: 1.4; }
 }
 .rub-fire-more:hover { background: var(--raised); }
 
+.rub-fire-toggle {
+  margin: 4px 0 0 24px;
+  padding: 0;
+  font: inherit;
+  font-size: 12px;
+  color: var(--ink-soft);
+  background: none;
+  border: none;
+  cursor: pointer;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+.rub-fire-toggle:hover { color: var(--ink); }
+
 /* Catalog */
 .rub-lib-group { margin-top: 14px; }
 .rub-lib-heading { margin: 0 0 6px; font: 700 11px/1.4 var(--font-mono); text-transform: uppercase; letter-spacing: .06em; color: var(--muted); }
