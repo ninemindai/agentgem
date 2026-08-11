@@ -97,6 +97,16 @@ function FactorRow({
   // a write handler to be worth showing — a control that cannot act must not appear.
   const canExpand = fired && !canCall && !!fires?.length && !!onRecordFor;
   const unreviewed = fires?.filter((r) => !verdictFor?.(r.sessionId)).length ?? 0;
+  // Fires are missing from the payload — not merely unshown in this batch — when the
+  // report's 200-row cap (across all factors) clipped this factor's own rows below its
+  // summary count. Matches the footer's condition (FactorSessionList) exactly: a number
+  // must never imply coverage it does not have, and that rule governs this collapsed
+  // label too, since it's what shows while the fires themselves are hidden.
+  const firesMissing = !!truncated && f.sessions > (fires?.length ?? 0);
+  const toggleLabel = unreviewed > 0
+    ? `${unreviewed} unreviewed`
+    : firesMissing ? `all ${fires?.length ?? 0} shown reviewed` : "all reviewed";
+  const fireListId = `rub-fires-${f.id}`;
   // Tracks the note text last sent to the server, so blur only re-POSTs on an actual
   // edit — not on every blur of an untouched (or re-blurred) field.
   const lastPosted = useRef(currentNote ?? "");
@@ -155,22 +165,25 @@ function FactorRow({
           type="button"
           className="rub-fire-toggle"
           aria-expanded={open}
+          aria-controls={fireListId}
+          aria-label={`Sessions where ${f.title} fired — ${toggleLabel}`}
           onClick={() => setOpen((v) => !v)}
         >
-          {open ? "▾" : "▸"} {unreviewed > 0 ? `${unreviewed} unreviewed` : "all reviewed"}
+          <span aria-hidden="true">{open ? "▾" : "▸"}</span> {toggleLabel}
         </button>
       )}
       {canExpand && open && (
         <FactorSessionList
+          id={fireListId}
           factorId={f.id}
           rows={fires!}
           summarySessions={f.sessions}
           truncated={!!truncated}
           verdictFor={verdictFor!}
-          noteFor={noteFor ?? (() => undefined)}
+          noteFor={noteFor!}
           onRecord={onRecordFor!}
           onNote={onNoteFor!}
-          failedIds={failedIds ?? new Set()}
+          failedIds={failedIds!}
         />
       )}
     </li>
@@ -278,10 +291,13 @@ export function RubricReportCard({ report, sessionId, client }: {
         // Not the same as "no verdicts yet" — say which one it is. The same store
         // outage also hides `perSession[].verdicts`, so a factor you already called
         // renders with every button unpressed — indistinguishable from never having
-        // called it (spec §1.9) unless the banner says so too.
+        // called it (spec §1.9) unless the banner says so too. It also inflates every
+        // expansion's "unreviewed" count the same way, since that count is derived
+        // from the same missing verdicts — say that too, rather than a second banner.
         <p className="insights-hint">
           Calibration unavailable — the verdict store could not be read. Findings are unaffected, but any calls you
-          already made on this report won&apos;t show as pressed until the store is back.
+          already made on this report won&apos;t show as pressed, and unreviewed counts may overstate what&apos;s
+          left to judge, until the store is back.
         </p>
       )}
 

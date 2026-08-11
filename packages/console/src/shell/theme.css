@@ -2252,6 +2252,10 @@ button.scorecard-intent { line-height: 1.4; }
   max-width: 320px;
 }
 .rub-fire-count { color: var(--ink-soft); opacity: 0.7; min-width: 28px; }
+/* .rub-call-actions' 24px indent + top margin is authored for the aggregate row's
+   block layout (session scope) — inside this flex, align-items: center sub-row it
+   only adds an unwanted indent and vertical offset, repeated down every fire row. */
+.rub-fire-row .rub-call-actions { margin: 0; }
 .rub-fire-failed { color: var(--accent); font-size: 11px; }
 .rub-fire-footer {
   margin: 6px 0 0;

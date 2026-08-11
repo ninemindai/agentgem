@@ -14,7 +14,7 @@ import { useRef, useState } from "react";
 import { VERDICT_LABELS, verdictKeyOf, type PerSessionRow, type VerdictValueView } from "./rubricStream.js";
 
 /** Rows revealed per click. Small on purpose: the point is to start judging, not to scroll. */
-export const BATCH_SIZE = 10;
+const BATCH_SIZE = 10;
 
 function FireRow({ row, factorId, verdict, note, onRecord, onNote, failed }: {
   row: PerSessionRow;
@@ -67,8 +67,10 @@ function FireRow({ row, factorId, verdict, note, onRecord, onNote, failed }: {
 }
 
 export function FactorSessionList({
-  factorId, rows, summarySessions, truncated, verdictFor, noteFor, onRecord, onNote, failedIds,
+  id, factorId, rows, summarySessions, truncated, verdictFor, noteFor, onRecord, onNote, failedIds,
 }: {
+  /** DOM id for the outer container — the toggle button's `aria-controls` targets this. */
+  id?: string;
   factorId: string;
   /** Already filtered to this factor's fires and already sorted. */
   rows: PerSessionRow[];
@@ -91,7 +93,7 @@ export function FactorSessionList({
   const available = rows.length;
   const missing = truncated ? Math.max(0, summarySessions - available) : 0;
   return (
-    <div className="rub-fire-list">
+    <div className="rub-fire-list" id={id}>
       <ul className="rub-fire-rows">
         {visible.map((row) => (
           <FireRow

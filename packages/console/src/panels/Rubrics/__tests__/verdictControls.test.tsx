@@ -296,4 +296,70 @@ describe("per-session expansion at project scope", () => {
     render(<RubricReportCard report={r} client={client} />);
     expect(screen.queryByRole("button", { name: /unreviewed|all reviewed/i })).toBeNull();
   });
+
+  // F1: the toggle's collapsed label must never claim "all reviewed" coverage the
+  // report does not actually have — the footer that discloses the cap is inside the
+  // (currently collapsed) expansion, so the label is the only thing visible.
+  describe("toggle label — three cases", () => {
+    it("says the unreviewed count when fires remain unreviewed", () => {
+      render(<RubricReportCard report={projectReport()} client={client} />);
+      expect(screen.getByRole("button", { name: /3 unreviewed$/i })).toBeTruthy();
+    });
+
+    it("says plain 'all reviewed' when every fire is present and reviewed", () => {
+      const r = projectReport();
+      for (const row of r.perSession!) {
+        row.verdicts = { "retry-storm": { sessionId: row.sessionId, factorId: "retry-storm", rubricId: "hygiene", verdict: "wrong", atMs: 1 } };
+      }
+      render(<RubricReportCard report={r} client={client} />);
+      expect(screen.getByRole("button", { name: /all reviewed$/i })).toBeTruthy();
+      expect(screen.queryByRole("button", { name: /shown reviewed/i })).toBeNull();
+    });
+
+    it("says 'all N shown reviewed' when the report cap clipped this factor below its summary count", () => {
+      // Summary says 40 sessions fired; only 3 rows survived the 200-row cap, and
+      // those 3 are all reviewed. Plain "all reviewed" would claim the missing 37
+      // were reviewed too.
+      const r = projectReport();
+      r.factors[0].sessions = 40;
+      r.perSessionTruncated = true;
+      for (const row of r.perSession!) {
+        row.verdicts = { "retry-storm": { sessionId: row.sessionId, factorId: "retry-storm", rubricId: "hygiene", verdict: "wrong", atMs: 1 } };
+      }
+      render(<RubricReportCard report={r} client={client} />);
+      expect(screen.getByRole("button", { name: /all 3 shown reviewed$/i })).toBeTruthy();
+    });
+  });
+
+  // F6: the toggle's accessible name must name its own factor — otherwise a report
+  // with several fired factors gives a screen-reader user several buttons that all
+  // read identically ("3 unreviewed"), with no way to tell them apart.
+  it("names the factor in the toggle's accessible name", () => {
+    const r = projectReport();
+    r.factors.push({ id: "thrash-loop", title: "Thrash loop", advice: "b", severity: "warn", count: 4, sessions: 2 });
+    r.perSession = [
+      ...r.perSession!,
+      { sessionId: "s4", transcript: "/tmp/s4.jsonl", factors: [{ id: "thrash-loop", title: "Thrash loop", advice: "b", severity: "warn", count: 4, sessions: 1 }] },
+    ];
+    render(<RubricReportCard report={r} client={client} />);
+    expect(screen.getByRole("button", { name: /Sessions where Retry storm fired/i })).toBeTruthy();
+    expect(screen.getByRole("button", { name: /Sessions where Thrash loop fired/i })).toBeTruthy();
+  });
+
+  // F6: the disclosure glyph must be decorative, not part of the accessible name.
+  it("does not put the disclosure glyph in the toggle's accessible name", () => {
+    render(<RubricReportCard report={projectReport()} client={client} />);
+    const toggle = screen.getByRole("button", { name: /unreviewed/i });
+    expect(toggle.getAttribute("aria-label")).not.toMatch(/[▾▸]/);
+  });
+
+  // F6: aria-controls must point at the expansion's own id.
+  it("points aria-controls at the rendered FactorSessionList container", () => {
+    render(<RubricReportCard report={projectReport()} client={client} />);
+    const toggle = screen.getByRole("button", { name: /unreviewed/i });
+    fireEvent.click(toggle);
+    const controlsId = toggle.getAttribute("aria-controls");
+    expect(controlsId).toBeTruthy();
+    expect(document.getElementById(controlsId!)).toBeTruthy();
+  });
 });
