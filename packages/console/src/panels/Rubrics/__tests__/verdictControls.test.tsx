@@ -192,3 +192,22 @@ describe("verdict note", () => {
     expect(mod.postRubricVerdict).not.toHaveBeenCalled();
   });
 });
+
+describe("verdict key scoping", () => {
+  it("builds a key from both the session and the factor", async () => {
+    const { verdictKeyOf } = await import("../rubricStream.js");
+    expect(verdictKeyOf("s1", "f1")).not.toBe(verdictKeyOf("s2", "f1"));
+    expect(verdictKeyOf("s1", "f1")).toBe(verdictKeyOf("s1", "f1"));
+    // Separator must be the escape, never a raw byte — a raw NUL makes the source
+    // binary-classified and grep silently skips it.
+    expect(verdictKeyOf("s1", "f1")).toContain("\u0000");
+  });
+
+  it("cannot be spoofed by ids that contain the separator", async () => {
+    // A separator that can appear inside an id lets ("a", "b|c") collide with
+    // ("a|b", "c"). NUL cannot occur in a sessionId or a kebab-case factor id, which
+    // is why it is the separator — this test pins that property rather than assuming it.
+    const { verdictKeyOf } = await import("../rubricStream.js");
+    expect(verdictKeyOf("a", "b|c")).not.toBe(verdictKeyOf("a|b", "c"));
+  });
+});

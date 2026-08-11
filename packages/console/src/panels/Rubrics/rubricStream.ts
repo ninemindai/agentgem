@@ -207,3 +207,35 @@ export function calibrationLine(c: FactorCalibrationView): string {
     : `accepted in ${c.accepted} of ${c.reviewed} reviewed calls`;
   return c.wontfix > 0 ? `${head} · ${c.wontfix} won't fix` : head;
 }
+
+/** One row of the report's per-session detail. */
+export type PerSessionRow = NonNullable<RubricReportView["perSession"]>[number];
+
+// Written as an escape, not a literal NUL byte, so the source stays greppable —
+// a stray control byte makes grep classify the file as binary and skip it.
+const VERDICT_KEY_SEP = "\u0000";
+
+/**
+ * The client-side key for one verdict. Both halves are required: the same factor now
+ * appears on many rows, so a factorId-only key would let one row's failure or
+ * optimistic value bleed onto every sibling.
+ */
+export function verdictKeyOf(sessionId: string, factorId: string): string {
+  return `${sessionId}${VERDICT_KEY_SEP}${factorId}`;
+}
+
+// Order and canonical values mirror @agentgem/insight's VERDICT_VALUES
+// (rubricVerdicts.ts: ["accepted", "wrong", "wontfix"]) — the console can't import
+// that package's barrel. The Record forces every VerdictValueView member to have a
+// label, and the exhaustiveness assertion forces the tuple to cover every member,
+// so this list cannot silently drift from the server's canonical one.
+const LABEL_BY_VALUE: Record<VerdictValueView, string> = {
+  accepted: "Accepted", wrong: "Wrong", wontfix: "Won't fix",
+};
+const VERDICT_VALUE_ORDER = ["accepted", "wrong", "wontfix"] as const;
+type _AssertOrderIsExhaustive = Exclude<VerdictValueView, (typeof VERDICT_VALUE_ORDER)[number]> extends never ? true : never;
+const _assertOrderIsExhaustive: _AssertOrderIsExhaustive = true;
+void _assertOrderIsExhaustive;
+
+export const VERDICT_LABELS: { value: VerdictValueView; label: string }[] =
+  VERDICT_VALUE_ORDER.map((value) => ({ value, label: LABEL_BY_VALUE[value] }));
