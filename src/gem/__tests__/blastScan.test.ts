@@ -88,5 +88,44 @@ describe("scanSessionBlast", () => {
     expect(scanSessionBlast("").events).toEqual([]);
     const rep = scanSessionBlast("not json\n" + use("Read", { file_path: `${CWD}/ok.ts` }), { cwd: CWD });
     expect(rep.events).toHaveLength(1);
+    expect(rep.commits).toEqual([]);
+  });
+
+  it("captures commit SHAs from successful git commit results — SHA only, never the subject", () => {
+    const text = [
+      rec({ sessionId: "s5", cwd: CWD, type: "user", message: { role: "user", content: "go" } }),
+      use("Bash", { command: `git commit -m "private subject line"` }, {}, "tu_c1"),
+      rec({ message: { role: "user", content: [{ type: "tool_result", tool_use_id: "tu_c1", content: "[main abc1234] private subject line\n 2 files changed, 4 insertions(+)" }] } }),
+      use("Bash", { command: "git commit -m again" }, {}, "tu_c2"),
+      rec({ message: { role: "user", content: [{ type: "tool_result", tool_use_id: "tu_c2", is_error: true, content: "nothing to commit, working tree clean" }] } }),
+      // array-form content, root-commit marker
+      use("Bash", { command: "git commit -m first" }, {}, "tu_c3"),
+      rec({ message: { role: "user", content: [{ type: "tool_result", tool_use_id: "tu_c3", content: [{ type: "text", text: "[trunk (root-commit) deadbee] first" }] }] } }),
+      // non-commit Bash results never yield commits even if they echo a sha-like token
+      use("Bash", { command: "git log --oneline" }, {}, "tu_c4"),
+      rec({ message: { role: "user", content: [{ type: "tool_result", tool_use_id: "tu_c4", content: "[feature cafe123] old subject" }] } }),
+    ].join("\n");
+    const rep = scanSessionBlast(text, { cwd: CWD });
+    expect(rep.commits).toEqual([
+      { sha: "abc1234", seq: 0, tsMs: Date.parse("2026-07-15T10:00:00.000Z") },
+      { sha: "deadbee", seq: 2, tsMs: Date.parse("2026-07-15T10:00:00.000Z") },
+    ]);
+    const flat = JSON.stringify(rep);
+    expect(flat).not.toContain("private subject");
+    expect(flat).not.toContain("cafe123");
+  });
+
+  it("dedupes a SHA observed twice and ignores malformed commit output", () => {
+    const text = [
+      rec({ sessionId: "s6", cwd: CWD, type: "user", message: { role: "user", content: "go" } }),
+      use("Bash", { command: "git commit -m a" }, {}, "t1"),
+      rec({ message: { role: "user", content: [{ type: "tool_result", tool_use_id: "t1", content: "[main abc1234] a" }] } }),
+      use("Bash", { command: "git commit -m b" }, {}, "t2"),
+      rec({ message: { role: "user", content: [{ type: "tool_result", tool_use_id: "t2", content: "[main abc1234] a" }] } }),
+      use("Bash", { command: "git commit -m c" }, {}, "t3"),
+      rec({ message: { role: "user", content: [{ type: "tool_result", tool_use_id: "t3", content: "husky hook output with no bracket line" }] } }),
+    ].join("\n");
+    const rep = scanSessionBlast(text, { cwd: CWD });
+    expect(rep.commits.map((c) => c.sha)).toEqual(["abc1234"]);
   });
 });

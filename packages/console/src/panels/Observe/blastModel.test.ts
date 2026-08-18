@@ -8,8 +8,8 @@ import type { BlastReport, BlastEvent } from "../../api/routes.js";
 const ev = (seq: number, action: BlastEvent["action"], target: string | null, extra: Partial<BlastEvent> = {}): BlastEvent =>
   ({ seq, msgIndex: seq, tsMs: null, tool: action === "edit" ? "Edit" : "Read", action, target, ...extra });
 
-const report = (events: BlastEvent[], meta: Partial<BlastReport["meta"]> = {}): BlastReport =>
-  ({ meta: { sessionId: "s", transcript: "s.jsonl", project: "~/p", startMs: 0, endMs: 0, ...meta }, events });
+const report = (events: BlastEvent[], meta: Partial<BlastReport["meta"]> = {}, commits: BlastReport["commits"] = []): BlastReport =>
+  ({ meta: { sessionId: "s", transcript: "s.jsonl", project: "~/p", startMs: 0, endMs: 0, ...meta }, events, commits });
 
 describe("buildBlast", () => {
   it("groups project files by top-level dir, outside zones after, then kinds — deterministically", () => {
@@ -64,6 +64,41 @@ describe("buildBlast", () => {
     expect(m.summary).toMatchObject({ files: 3, edited: 1, outside: 1, skills: 1, errors: 1 });
     expect(m.edits).toEqual([1]);
     expect(m.errors).toEqual([2]);
+  });
+
+  it("reports no delivery when the session made no commits", () => {
+    expect(buildBlast(report([ev(0, "edit", "src/a.ts", { zone: "project" })])).delivery).toBeNull();
+  });
+
+  it("withholds shipped/unshipped counts when commits were observed but none resolved to files", () => {
+    const m = buildBlast(report(
+      [ev(0, "edit", "src/a.ts", { zone: "project" })],
+      {},
+      [{ sha: "abc1234", seq: 0, tsMs: null }],
+    ));
+    expect(m.delivery).toEqual({ commits: 1, resolved: 0, shipped: null, unshipped: null });
+    expect(m.groups[0].targets[0].shipped).toBeUndefined();
+  });
+
+  it("marks edited project files shipped when a resolved commit contains them", () => {
+    const m = buildBlast(report(
+      [
+        ev(0, "edit", "src/a.ts", { zone: "project" }),
+        ev(1, "edit", "src/b.ts", { zone: "project" }),
+        ev(2, "edit", "~/.zshrc", { zone: "home" }),          // outside project — never counted
+        ev(3, "read", "src/c.ts", { zone: "project" }),       // read-only — never counted
+      ],
+      {},
+      [
+        { sha: "abc1234", seq: 5, tsMs: null, files: ["src/a.ts", "docs/other.md"] },
+        { sha: "beef456", seq: 6, tsMs: null },               // observed, unresolved — still counts as a commit
+      ],
+    ));
+    expect(m.delivery).toEqual({ commits: 2, resolved: 1, shipped: 1, unshipped: 1 });
+    const targets = m.groups.flatMap((g) => g.targets);
+    expect(targets.find((t) => t.full === "src/a.ts")?.shipped).toBe(true);
+    expect(targets.find((t) => t.full === "src/b.ts")?.shipped).toBe(false);
+    expect(targets.find((t) => t.full === "src/c.ts")?.shipped).toBeUndefined();
   });
 
   it("marks sidechain-only targets", () => {

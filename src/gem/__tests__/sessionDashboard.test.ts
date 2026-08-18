@@ -102,6 +102,7 @@ describe("report facts", () => {
         { seq: 5, msgIndex: 5, tsMs: 6, tool: "Skill", action: "skill", target: "qa" },
         { seq: 6, msgIndex: 6, tsMs: 7, tool: "Task", action: "agent", target: "Explore" },
       ],
+      commits: [],
     };
     const f = blastFacts(rep) as any;
     expect(f).toMatchObject({ events: 7, filesTouched: 2, edited: 1, outsideProject: 1, errors: 1, skills: ["qa"], subagents: ["Explore"] });
