@@ -31,6 +31,7 @@ describe("StructureView", () => {
     const call = vi.spyOn(routes.blastRoute, "call").mockResolvedValue({
       meta: { sessionId: "s", transcript: "s.jsonl", project: "~/p", startMs: 0, endMs: 0 },
       events: [{ seq: 0, msgIndex: 1, tsMs: null, tool: "Edit", action: "edit", target: "src/a.ts", zone: "project" }],
+      commits: [],
     } as any);
     render(<StructureView view={view} collapsed={new Set()} onToggle={() => {}} apiBase="/" agent="claude" />);
     expect(call).not.toHaveBeenCalled();                       // no fetch until the tab opens

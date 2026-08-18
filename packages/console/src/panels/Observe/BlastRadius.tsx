@@ -126,6 +126,11 @@ export function BlastRadius({ apiBase, agent, sessionId }: { apiBase: string; ag
             {m.summary.skills > 0 && <span className="obs-chip">{m.summary.skills} skills</span>}
             {m.summary.agents > 0 && <span className="obs-chip">{m.summary.agents} subagents</span>}
             {m.summary.errors > 0 && <span className="obs-chip br-chip-err">{m.summary.errors} errors</span>}
+            {m.delivery && <span className="obs-chip">{m.delivery.commits} commit{m.delivery.commits === 1 ? "" : "s"}</span>}
+            {m.delivery && m.delivery.shipped !== null && <span className="obs-chip">{m.delivery.shipped} shipped</span>}
+            {m.delivery && m.delivery.unshipped !== null && m.delivery.unshipped > 0 && (
+              <span className="obs-chip br-chip-warn">{m.delivery.unshipped} edited, unshipped</span>
+            )}
           </span>
         </div>
 
@@ -143,7 +148,7 @@ export function BlastRadius({ apiBase, agent, sessionId }: { apiBase: string; ag
                       key={t.key}
                       className={"br-cell" + (depth === 0 ? " is-future" : "") + (t.sidechainOnly ? " is-side" : "") + (pinned === t.key ? " is-pinned" : "")}
                       style={bg ? { background: bg } : undefined}
-                      title={`${t.full} — ${t.visits.length} visit${t.visits.length === 1 ? "" : "s"}${t.edited ? " · edited" : ""}${t.sidechainOnly ? " · subagent" : ""}`}
+                      title={`${t.full} — ${t.visits.length} visit${t.visits.length === 1 ? "" : "s"}${t.edited ? " · edited" : ""}${t.shipped === true ? " · shipped" : t.shipped === false ? " · not in an observed commit" : ""}${t.sidechainOnly ? " · subagent" : ""}`}
                       onClick={() => setPinned(pinned === t.key ? null : t.key)}
                     >
                       {t.name}
@@ -202,6 +207,8 @@ export function BlastRadius({ apiBase, agent, sessionId }: { apiBase: string; ag
             <div className="br-rail-meta">
               <span className="obs-chip">{pinnedT.kind === "file" ? pinnedT.zone : pinnedT.kind}</span>
               {pinnedT.edited && <span className="obs-chip">edited</span>}
+              {pinnedT.shipped === true && <span className="obs-chip">shipped</span>}
+              {pinnedT.shipped === false && <span className="obs-chip br-chip-warn">not in an observed commit</span>}
               {pinnedT.sidechainOnly && <span className="obs-chip">subagent only</span>}
             </div>
             <ul className="br-visits">

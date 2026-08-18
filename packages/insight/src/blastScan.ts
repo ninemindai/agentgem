@@ -30,9 +30,22 @@ export interface BlastEvent {
   error?: boolean;          // paired tool_result.is_error
 }
 
+// A commit the session was OBSERVED to make: the SHA git printed in the paired
+// tool result of a successful `git commit`. Evidence-bounded — only observed
+// SHAs appear; `files` is attached later by the server from git itself and
+// stays absent when the SHA no longer resolves. The commit subject is prose and
+// never leaves the scanner.
+export interface BlastCommit {
+  sha: string;              // hex as printed in git's "[branch sha]" summary line
+  seq: number;              // seq of the `git commit` exec event that produced it
+  tsMs: number | null;
+  files?: string[];         // cwd-relative paths from `git show`; absent = unresolved
+}
+
 export interface BlastReport {
   meta: { sessionId: string; transcript: string; project: string | null; startMs: number; endMs: number };
   events: BlastEvent[];
+  commits: BlastCommit[];
 }
 
 const READ_TOOLS = new Set(["Read"]);
@@ -112,11 +125,31 @@ function codexCommand(args: unknown): string | null {
 
 const EXIT_CODE_RE = /(?:exited with code|exit code)[ :]+(\d+)/i;
 
+// git's commit summary line: "[main abc1234] subject", "[trunk (root-commit)
+// deadbee] …". Greedy prefix + backtrack captures the hex token right before
+// the closing bracket; the subject after it is never read.
+const COMMIT_LINE_RE = /^\[[^\n\]]+\s([0-9a-f]{7,40})\]/m;
+
+function commitSha(out: string): string | null {
+  const m = COMMIT_LINE_RE.exec(out);
+  return m ? m[1] : null;
+}
+
+// A claude tool_result's content is a string or an array of {type:"text"} parts.
+function resultText(block: unknown): string {
+  const c = (block as Record<string, unknown> | null)?.content;
+  if (typeof c === "string") return c;
+  if (Array.isArray(c)) return c.map((p) => (p?.type === "text" && typeof p.text === "string" ? p.text : "")).join("\n");
+  return "";
+}
+
 /** Parse one Codex rollout's text into a BlastReport. Same contract as
  *  scanSessionBlast: pure, total, only scrubbed/relative strings leave. */
 export function scanCodexSessionBlast(text: string, opts: BlastScanOptions = {}): BlastReport {
   const cwd = opts.cwd ?? null;
   const events: BlastEvent[] = [];
+  const commits: BlastCommit[] = [];
+  const seenShas = new Set<string>();
   const byCallId = new Map<string, BlastEvent[]>();
   let sessionId = opts.sessionId ?? "";
   let startMs = Infinity, endMs = 0;
@@ -174,6 +207,13 @@ export function scanCodexSessionBlast(text: string, opts: BlastScanOptions = {})
         const out = typeof p.output === "string" ? p.output : JSON.stringify(p.output ?? "");
         const m = EXIT_CODE_RE.exec(out.slice(0, 400));
         if (m && m[1] !== "0") for (const ev of targets) ev.error = true;
+        else {
+          const committed = targets.find((ev) => ev.action === "exec" && ev.target === "git commit");
+          if (committed) {
+            const sha = commitSha(out);
+            if (sha && !seenShas.has(sha)) { seenShas.add(sha); commits.push({ sha, seq: committed.seq, tsMs: committed.tsMs }); }
+          }
+        }
       }
     }
   }
@@ -187,6 +227,7 @@ export function scanCodexSessionBlast(text: string, opts: BlastScanOptions = {})
       endMs,
     },
     events,
+    commits,
   };
 }
 
@@ -195,6 +236,8 @@ export function scanCodexSessionBlast(text: string, opts: BlastScanOptions = {})
 export function scanSessionBlast(text: string, opts: BlastScanOptions = {}): BlastReport {
   const cwd = opts.cwd ?? null;
   const events: BlastEvent[] = [];
+  const commits: BlastCommit[] = [];
+  const seenShas = new Set<string>();
   const byToolUseId = new Map<string, BlastEvent>();
   let sessionId = opts.sessionId ?? "";
   let startMs = Infinity, endMs = 0;
@@ -251,12 +294,18 @@ export function scanSessionBlast(text: string, opts: BlastScanOptions = {}): Bla
       }
     }
 
-    // tool_result blocks live on USER records; outcome booleans only, never content.
+    // tool_result blocks live on USER records; only outcome booleans and commit
+    // SHAs are derived — result content itself is never retained.
     if (role === "user") {
       for (const block of content) {
         if (block?.type !== "tool_result" || typeof block.tool_use_id !== "string") continue;
         const ev = byToolUseId.get(block.tool_use_id);
-        if (ev && block.is_error === true) ev.error = true;
+        if (!ev) continue;
+        if (block.is_error === true) ev.error = true;
+        else if (ev.action === "exec" && ev.target === "git commit") {
+          const sha = commitSha(resultText(block));
+          if (sha && !seenShas.has(sha)) { seenShas.add(sha); commits.push({ sha, seq: ev.seq, tsMs: ev.tsMs }); }
+        }
       }
     }
   }
@@ -270,5 +319,6 @@ export function scanSessionBlast(text: string, opts: BlastScanOptions = {}): Bla
       endMs,
     },
     events,
+    commits,
   };
 }

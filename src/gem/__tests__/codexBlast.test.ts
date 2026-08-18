@@ -76,6 +76,24 @@ describe("scanCodexSessionBlast", () => {
   it("is total: corrupt lines and empty input yield a valid report", () => {
     expect(scanCodexSessionBlast("").events).toEqual([]);
     expect(scanCodexSessionBlast("not json\n" + call("exec_command", { cmd: "ls" })).events).toHaveLength(1);
+    expect(scanCodexSessionBlast("").commits).toEqual([]);
+  });
+
+  it("captures commit SHAs from successful git commit outputs, skipping failed commits", () => {
+    const text = [
+      rec({ type: "session_meta", payload: { id: "x5", cwd: CWD } }),
+      call("exec_command", { cmd: `git commit -m "private subject"` }, "c1"),
+      output("c1", "Process exited with code 0\nOutput:\n[main abc1234] private subject\n 1 file changed"),
+      call("exec_command", { cmd: "git commit -m nope" }, "c2"),
+      output("c2", "Process exited with code 1\nOutput:\nnothing to commit"),
+      call("exec_command", { cmd: "git log --oneline" }, "c3"),
+      output("c3", "Process exited with code 0\nOutput:\n[main cafe123] old subject"),
+    ].join("\n");
+    const rep = scanCodexSessionBlast(text, { cwd: CWD });
+    expect(rep.commits.map((c) => [c.sha, c.seq])).toEqual([["abc1234", 0]]);
+    const flat = JSON.stringify(rep);
+    expect(flat).not.toContain("private subject");
+    expect(flat).not.toContain("cafe123");
   });
 });
 

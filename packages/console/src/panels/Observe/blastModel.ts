@@ -18,6 +18,7 @@ export interface BlastTarget {
   edited: boolean;
   error: boolean;
   sidechainOnly: boolean;
+  shipped?: boolean;          // edited project files only, and only when ≥1 commit resolved to files
 }
 export interface BlastGroup { label: string; targets: BlastTarget[] }
 export interface Bucket { i: number; fromSeq: number; toSeq: number; observe: number; mutate: number; marks: number; errors: number }
@@ -29,6 +30,10 @@ export interface BlastModel {
   edits: number[];            // seqs of edit events (E key)
   errors: number[];           // seqs of errored events (X key)
   summary: { files: number; edited: number; outside: number; skills: number; agents: number; mcp: number; errors: number };
+  // Evidence-bounded delivery readout: null when no commit was observed; shipped/
+  // unshipped stay null when no observed commit resolved to files (git moved on) —
+  // "0 shipped" is a claim, unknown is not.
+  delivery: null | { commits: number; resolved: number; shipped: number | null; unshipped: number | null };
 }
 
 const MAX_BUCKETS = 72;
@@ -96,6 +101,23 @@ export function buildBlast(rep: BlastReport): BlastModel {
   // Deterministic grouping: project files by top-level dir, then the outside
   // zones, then skills / subagents / MCP servers / commands. Alpha inside each.
   const targets = [...byKey.values()].sort((a, b) => a.full.localeCompare(b.full));
+
+  // Delivery: intersect edited project files with what the observed commits shipped.
+  let delivery: BlastModel["delivery"] = null;
+  if (rep.commits.length) {
+    const resolved = rep.commits.filter((c) => c.files);
+    const shippedSet = new Set(resolved.flatMap((c) => c.files!));
+    const editedProject = targets.filter((t) => t.kind === "file" && t.zone === "project" && t.edited);
+    let shipped: number | null = null;
+    if (resolved.length) {
+      for (const t of editedProject) t.shipped = shippedSet.has(t.full);
+      shipped = editedProject.filter((t) => t.shipped).length;
+    }
+    delivery = {
+      commits: rep.commits.length, resolved: resolved.length,
+      shipped, unshipped: shipped === null ? null : editedProject.length - shipped,
+    };
+  }
   const groupMap = new Map<string, BlastTarget[]>();
   const push = (label: string, t: BlastTarget) => {
     const list = groupMap.get(label) ?? [];
@@ -156,7 +178,7 @@ export function buildBlast(rep: BlastReport): BlastModel {
 
   const files = targets.filter((t) => t.kind === "file");
   return {
-    n, groups, buckets, axis, edits, errors,
+    n, groups, buckets, axis, edits, errors, delivery,
     summary: {
       files: files.length,
       edited: files.filter((t) => t.edited).length,

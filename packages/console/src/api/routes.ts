@@ -487,6 +487,11 @@ export const BlastReportSchema = z.object({
     zone: z.enum(["project", "home", "tmp", "outside"]).optional(),
     sidechain: z.boolean().optional(), error: z.boolean().optional(),
   })),
+  // Observed `git commit` SHAs; `files` attached from git when resolvable.
+  commits: z.array(z.object({
+    sha: z.string(), seq: z.number(), tsMs: z.number().nullable(),
+    files: z.array(z.string()).optional(),
+  })),
 });
 export const blastRoute = defineRoute("GET", "/api/inspect/session/blast", {
   query: z.object({ id: z.string(), agent: z.enum(["claude", "codex"]) }),

@@ -14,6 +14,7 @@ const sample = {
     { seq: 2, msgIndex: 3, tsMs: null, tool: "Read", action: "read", target: "/etc/hosts", zone: "outside", error: true },
     { seq: 3, msgIndex: 4, tsMs: null, tool: "Skill", action: "skill", target: "qa" },
   ],
+  commits: [],
 };
 
 beforeEach(() => { cleanup(); vi.restoreAllMocks(); });
@@ -65,7 +66,7 @@ describe("BlastRadius", () => {
   });
 
   it("renders nothing for an empty report", async () => {
-    vi.spyOn(routes.blastRoute, "call").mockResolvedValue({ meta: sample.meta, events: [] } as any);
+    vi.spyOn(routes.blastRoute, "call").mockResolvedValue({ meta: sample.meta, events: [], commits: [] } as any);
     const { container: c2 } = render(<BlastRadius apiBase="/" agent="claude" sessionId="s2" />);
     await vi.waitFor(() => expect(c2.firstChild).toBeNull());
   });
