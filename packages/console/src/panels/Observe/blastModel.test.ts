@@ -76,7 +76,7 @@ describe("buildBlast", () => {
       {},
       [{ sha: "abc1234", seq: 0, tsMs: null }],
     ));
-    expect(m.delivery).toEqual({ commits: 1, resolved: 0, shipped: null, unshipped: null });
+    expect(m.delivery).toEqual({ commits: 1, resolved: 0, shipped: null, unshipped: null, candidates: 0 });
     expect(m.groups[0].targets[0].shipped).toBeUndefined();
   });
 
@@ -94,11 +94,35 @@ describe("buildBlast", () => {
         { sha: "beef456", seq: 6, tsMs: null },               // observed, unresolved — still counts as a commit
       ],
     ));
-    expect(m.delivery).toEqual({ commits: 2, resolved: 1, shipped: 1, unshipped: 1 });
+    expect(m.delivery).toEqual({ commits: 2, resolved: 1, shipped: 1, unshipped: 1, candidates: 0 });
     const targets = m.groups.flatMap((g) => g.targets);
     expect(targets.find((t) => t.full === "src/a.ts")?.shipped).toBe(true);
     expect(targets.find((t) => t.full === "src/b.ts")?.shipped).toBe(false);
     expect(targets.find((t) => t.full === "src/c.ts")?.shipped).toBeUndefined();
+  });
+
+  it("counts candidate commits separately and never lets them mark files shipped", () => {
+    const m = buildBlast(report(
+      [ev(0, "edit", "src/a.ts", { zone: "project" })],
+      {},
+      [
+        { sha: "abc1234", seq: 0, tsMs: null, files: ["docs/readme.md"] },
+        { sha: "f".repeat(40), seq: null, tsMs: null, candidate: true, files: ["src/a.ts"] },
+      ],
+    ));
+    // one observed commit resolved, but src/a.ts only appears in a CANDIDATE — not shipped
+    expect(m.delivery).toEqual({ commits: 1, resolved: 1, shipped: 0, unshipped: 1, candidates: 1 });
+    expect(m.groups[0].targets[0].shipped).toBe(false);
+  });
+
+  it("reports delivery from candidates alone without claiming anything shipped", () => {
+    const m = buildBlast(report(
+      [ev(0, "edit", "src/a.ts", { zone: "project" })],
+      {},
+      [{ sha: "f".repeat(40), seq: null, tsMs: null, candidate: true, files: ["src/a.ts"] }],
+    ));
+    expect(m.delivery).toEqual({ commits: 0, resolved: 0, shipped: null, unshipped: null, candidates: 1 });
+    expect(m.groups[0].targets[0].shipped).toBeUndefined();
   });
 
   it("marks sidechain-only targets", () => {

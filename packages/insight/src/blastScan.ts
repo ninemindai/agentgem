@@ -30,15 +30,18 @@ export interface BlastEvent {
   error?: boolean;          // paired tool_result.is_error
 }
 
-// A commit the session was OBSERVED to make: the SHA git printed in the paired
-// tool result of a successful `git commit`. Evidence-bounded — only observed
-// SHAs appear; `files` is attached later by the server from git itself and
-// stays absent when the SHA no longer resolves. The commit subject is prose and
-// never leaves the scanner.
+// A commit linked to the session, at one of two confidence tiers. OBSERVED: the
+// SHA git printed in the paired tool result of a successful `git commit` — a fact
+// from the transcript. CANDIDATE (`candidate: true`, added by the server): a
+// commit whose committer time falls inside the session's window while the session
+// ran `git commit` without a confirming SHA — plausible, never presented as fact.
+// `files` is attached by the server from git itself and stays absent when the SHA
+// no longer resolves. The commit subject is prose and never leaves the scanner.
 export interface BlastCommit {
   sha: string;              // hex as printed in git's "[branch sha]" summary line
-  seq: number;              // seq of the `git commit` exec event that produced it
+  seq: number | null;       // seq of the producing `git commit` event; null for candidates
   tsMs: number | null;
+  candidate?: boolean;      // true = window-matched, not transcript-confirmed
   files?: string[];         // cwd-relative paths from `git show`; absent = unresolved
 }
 

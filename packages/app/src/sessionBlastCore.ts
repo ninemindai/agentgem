@@ -54,20 +54,58 @@ export async function attachCommitFiles(rep: BlastReport, cwd: string, run: GitR
   return { ...rep, commits };
 }
 
+// Two minutes either side of the session window: clock skew between the
+// transcript's record timestamps and git's committer clock.
+const WINDOW_MARGIN_MS = 120_000;
+
+/** Candidate tier: for a session that ran `git commit` at all, window-match
+ *  `git log --all` by committer time and append any SHA the transcript did not
+ *  confirm (result missing/truncated, compound command) as `candidate: true` —
+ *  plausible, never presented as observed (a concurrent session in the same
+ *  repo can commit in the same window; that ambiguity is the point of the tier).
+ *  Log-only: file resolution stays attachCommitFiles' job. */
+export async function addCandidateCommits(rep: BlastReport, cwd: string, run: GitRun = gitIn(cwd)): Promise<BlastReport> {
+  const { startMs, endMs } = rep.meta;
+  if (!startMs || !endMs || endMs <= startMs) return rep;
+  if (!rep.events.some((e) => e.action === "exec" && e.target === "git commit")) return rep;
+  const since = new Date(startMs - WINDOW_MARGIN_MS).toISOString();
+  const until = new Date(endMs + WINDOW_MARGIN_MS).toISOString();
+  let out: string;
+  try { out = await run(["log", "--all", "-n", "100", `--since=${since}`, `--until=${until}`, "--format=%H %ct"]); }
+  catch { return rep; }
+  const candidates: BlastReport["commits"] = [];
+  for (const line of out.split("\n")) {
+    const m = /^([0-9a-f]{40}) (\d+)$/.exec(line.trim());
+    if (!m) continue;
+    const [, sha, ct] = m;
+    const ctMs = Number(ct) * 1000;
+    // in-code filter is authoritative; --since/--until only bound the walk
+    if (ctMs < startMs - WINDOW_MARGIN_MS || ctMs > endMs + WINDOW_MARGIN_MS) continue;
+    if (rep.commits.some((c) => sha.startsWith(c.sha))) continue;   // already observed
+    candidates.push({ sha, seq: null, tsMs: ctMs, candidate: true });
+  }
+  return candidates.length ? { ...rep, commits: [...rep.commits, ...candidates] } : rep;
+}
+
+async function withCommitEvidence(rep: BlastReport, cwd: string | null): Promise<BlastReport> {
+  if (!cwd) return rep;
+  return attachCommitFiles(await addCandidateCommits(rep, cwd), cwd);
+}
+
 export async function sessionBlast(id: string, agent: string): Promise<BlastReport> {
   if (agent === "claude") {
     const found = await resolveClaudeSession(id);
     if (!found) throw new BlastInputError(`No Claude session '${id}' found.`);
     const text = await readFile(found.path, "utf8");
     const rep = scanSessionBlast(text, { cwd: found.cwd, sessionId: id, transcript: basename(found.path) });
-    return found.cwd ? attachCommitFiles(rep, found.cwd) : rep;
+    return withCommitEvidence(rep, found.cwd);
   }
   if (agent === "codex") {
     const found = await resolveCodexSession(id);
     if (!found) throw new BlastInputError(`No Codex session '${id}' found.`);
     const text = await readFile(found.path, "utf8");
     const rep = scanCodexSessionBlast(text, { cwd: found.cwd, sessionId: id, transcript: basename(found.path) });
-    return found.cwd ? attachCommitFiles(rep, found.cwd) : rep;
+    return withCommitEvidence(rep, found.cwd);
   }
   throw new BlastInputError(`Blast radius is not available for agent '${agent}'.`);
 }

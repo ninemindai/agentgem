@@ -30,10 +30,12 @@ export interface BlastModel {
   edits: number[];            // seqs of edit events (E key)
   errors: number[];           // seqs of errored events (X key)
   summary: { files: number; edited: number; outside: number; skills: number; agents: number; mcp: number; errors: number };
-  // Evidence-bounded delivery readout: null when no commit was observed; shipped/
-  // unshipped stay null when no observed commit resolved to files (git moved on) —
-  // "0 shipped" is a claim, unknown is not.
-  delivery: null | { commits: number; resolved: number; shipped: number | null; unshipped: number | null };
+  // Evidence-bounded delivery readout: null when no commit was linked at all;
+  // `commits`/`resolved`/`shipped` count OBSERVED commits only — candidates are
+  // tallied separately and never mark anything shipped. shipped/unshipped stay
+  // null when no observed commit resolved to files (git moved on) — "0 shipped"
+  // is a claim, unknown is not.
+  delivery: null | { commits: number; resolved: number; shipped: number | null; unshipped: number | null; candidates: number };
 }
 
 const MAX_BUCKETS = 72;
@@ -105,7 +107,8 @@ export function buildBlast(rep: BlastReport): BlastModel {
   // Delivery: intersect edited project files with what the observed commits shipped.
   let delivery: BlastModel["delivery"] = null;
   if (rep.commits.length) {
-    const resolved = rep.commits.filter((c) => c.files);
+    const observed = rep.commits.filter((c) => !c.candidate);
+    const resolved = observed.filter((c) => c.files);
     const shippedSet = new Set(resolved.flatMap((c) => c.files!));
     const editedProject = targets.filter((t) => t.kind === "file" && t.zone === "project" && t.edited);
     let shipped: number | null = null;
@@ -114,8 +117,9 @@ export function buildBlast(rep: BlastReport): BlastModel {
       shipped = editedProject.filter((t) => t.shipped).length;
     }
     delivery = {
-      commits: rep.commits.length, resolved: resolved.length,
+      commits: observed.length, resolved: resolved.length,
       shipped, unshipped: shipped === null ? null : editedProject.length - shipped,
+      candidates: rep.commits.length - observed.length,
     };
   }
   const groupMap = new Map<string, BlastTarget[]>();

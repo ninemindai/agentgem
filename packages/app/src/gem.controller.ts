@@ -125,9 +125,11 @@ export const BlastReportSchema = z.object({
     zone: z.enum(["project", "home", "tmp", "outside"]).optional(),
     sidechain: z.boolean().optional(), error: z.boolean().optional(),
   })),
-  // Observed `git commit` SHAs; `files` attached from git when resolvable.
+  // Commits linked to the session: transcript-observed SHAs, plus window-matched
+  // `candidate: true` entries; `files` attached from git when resolvable.
   commits: z.array(z.object({
-    sha: z.string(), seq: z.number(), tsMs: z.number().nullable(),
+    sha: z.string(), seq: z.number().nullable(), tsMs: z.number().nullable(),
+    candidate: z.boolean().optional(),
     files: z.array(z.string()).optional(),
   })),
 });
