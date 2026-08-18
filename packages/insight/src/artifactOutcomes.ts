@@ -21,6 +21,7 @@ export interface ArtifactOutcomeRow {
   model: string | null;
   missionHint: string | null;
   atMs: number;
+  commits: number;               // observed commit SHAs in the session (0 = none seen)
 }
 
 /** Join fired artifacts to their session's outcome. Two guards:
@@ -56,6 +57,7 @@ export function buildArtifactOutcomeRows(
         model: facet.model ?? null,
         missionHint: s.missionHint?.task ?? null,
         atMs: facet.atMs,
+        commits: s.commitCount ?? 0,
       });
     }
   }

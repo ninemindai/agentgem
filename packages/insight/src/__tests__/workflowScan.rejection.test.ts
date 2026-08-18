@@ -57,3 +57,35 @@ describe("workflowScan tool-result outcome", () => {
     expect(step?.rejected).not.toBe(true);
   });
 });
+
+describe("workflowScan commit evidence", () => {
+  it("counts distinct observed commit SHAs per session, never retaining subjects", () => {
+    const p = transcript([
+      { sessionId: "s1", message: { role: "assistant", content: [{ type: "tool_use", id: "c1", name: "Bash", input: { command: "git commit -F /tmp/msg.txt" } }] } },
+      { sessionId: "s1", message: { role: "user", content: [{ type: "tool_result", tool_use_id: "c1", content: "[main abc1234] private subject from file\n 2 files changed" }] } },
+      { sessionId: "s1", message: { role: "assistant", content: [{ type: "tool_use", id: "c2", name: "Bash", input: { command: "git commit -m more" } }] } },
+      { sessionId: "s1", message: { role: "user", content: [{ type: "tool_result", tool_use_id: "c2", content: [{ type: "text", text: "[main beef567] more" }] }] } },
+      // failed commit: error path only, no sha
+      { sessionId: "s1", message: { role: "assistant", content: [{ type: "tool_use", id: "c3", name: "Bash", input: { command: "git commit -m nope" } }] } },
+      { sessionId: "s1", message: { role: "user", content: [{ type: "tool_result", tool_use_id: "c3", is_error: true, content: "nothing to commit" }] } },
+      // sha-looking output under a NON-commit verb is never counted
+      { sessionId: "s1", message: { role: "assistant", content: [{ type: "tool_use", id: "c4", name: "Bash", input: { command: "git log --oneline" } }] } },
+      { sessionId: "s1", message: { role: "user", content: [{ type: "tool_result", tool_use_id: "c4", content: "[main cafe123] old subject" }] } },
+    ]);
+    const sig = scanWorkflow([p], EMPTY_INV as any, { retainSequences: true });
+    expect(sig.sequences!.sessions[0].commitCount).toBe(2);
+    const flat = JSON.stringify(sig);
+    expect(flat).not.toContain("private subject from file");   // result content is never retained
+    expect(flat).not.toContain("abc1234");   // count only — SHAs themselves are not retained here
+    expect(flat).not.toContain("cafe123");
+  });
+
+  it("leaves commitCount absent when no commit was observed", () => {
+    const p = transcript([
+      { sessionId: "s1", message: { role: "assistant", content: [{ type: "tool_use", id: "t1", name: "Bash", input: { command: "npx vitest run" } }] } },
+      { sessionId: "s1", message: { role: "user", content: [{ type: "tool_result", tool_use_id: "t1", content: "ok" }] } },
+    ]);
+    const sig = scanWorkflow([p], EMPTY_INV as any, { retainSequences: true });
+    expect(sig.sequences!.sessions[0].commitCount).toBeUndefined();
+  });
+});

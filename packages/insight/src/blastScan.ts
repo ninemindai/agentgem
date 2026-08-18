@@ -138,6 +138,12 @@ function commitSha(out: string): string | null {
   return m ? m[1] : null;
 }
 
+/** SHA from a claude tool_result block whose call was a `git commit` — the same
+ *  observed-tier extraction the blast scan uses, shared with workflowScan. */
+export function commitShaFromResult(block: unknown): string | null {
+  return commitSha(resultText(block));
+}
+
 // A claude tool_result's content is a string or an array of {type:"text"} parts.
 function resultText(block: unknown): string {
   const c = (block as Record<string, unknown> | null)?.content;

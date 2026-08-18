@@ -11,6 +11,7 @@ import { readdirSync, readFileSync, statSync, openSync, readSync, closeSync } fr
 import { join } from "node:path";
 import { normalizeProjectRoot, type ArtifactType, type ProjectInventory, type HookArtifact } from "@agentgem/model";
 import { scrubStep, scrubProse, type ScrubbedStep } from "./scrub.js";
+import { commitShaFromResult } from "./blastScan.js";
 
 export interface ArtifactUsage {
   type: ArtifactType;
@@ -63,7 +64,7 @@ export interface SkillAgentEvent { msgIndex: number; kind: "skill" | "agent"; na
 export interface MissionHint { task: string; outcome: string }
 // `sessionId`/`transcript`/`atMs` are provenance coordinates: which transcript a
 // run came from and when. `transcript` is a basename, never an absolute path.
-export interface SessionSequence { steps: ProcedureStep[]; missionHint?: MissionHint; sessionId: string; transcript: string; atMs: number; model?: string; contextSeries?: TurnUsage[]; eventSeries?: SkillAgentEvent[] }
+export interface SessionSequence { steps: ProcedureStep[]; missionHint?: MissionHint; sessionId: string; transcript: string; atMs: number; model?: string; contextSeries?: TurnUsage[]; eventSeries?: SkillAgentEvent[]; commitCount?: number }
 // A recurring procedure (verb spine), the sessions exercising it, a representative
 // sample index, and ALL exercising session indices (for provenance fan-out).
 export interface ProcedureGroup { key: string; verbs: string[]; sessions: number; sampleSessionIdx: number; sessionIdxs: number[] }
@@ -464,6 +465,7 @@ export function scanWorkflow(paths: string[], inv: ScanInventory, opts: ScanOpti
     const steps: ProcedureStep[] = [];     // ordered scrubbed builtin calls (retainSequences)
     const contextSeries: TurnUsage[] = [];
     const eventSeries: SkillAgentEvent[] = [];
+    const commitShas = new Set<string>();      // observed commit SHAs (counted, never retained)
     let firstUserText: string | null = null;
     let lastAssistantText = "";
     const basename = path.split("/").pop() ?? path;
@@ -554,6 +556,12 @@ export function scanWorkflow(paths: string[], inv: ScanInventory, opts: ScanOpti
             // success" both read as undefined to a consumer (e.g. Task 2's detector).
             target.error = true;
             target.rejected = isDenialResult(block.content);
+          } else if (target.verb === "Bash:git commit") {
+            // Observed commit evidence: the SHA git printed in the result of a
+            // successful commit. Counted per session for the outcome join — the
+            // SHA set itself is scan-local and never leaves this loop.
+            const sha = commitShaFromResult(block);
+            if (sha) commitShas.add(sha);
           }
         }
       }
@@ -581,7 +589,7 @@ export function scanWorkflow(paths: string[], inv: ScanInventory, opts: ScanOpti
     if (opts.retainSequences && steps.length > 0) {
       const missionHint: MissionHint | undefined =
         firstUserText !== null ? { task: scrubProse(firstUserText), outcome: scrubProse(lastAssistantText) } : undefined;
-      const coords = { sessionId: sessionId || basename.replace(/\.jsonl$/, ""), transcript: basename, atMs: ms, model: sessionPrimaryModel(currentSessionRecords), ...(contextSeries.length ? { contextSeries } : {}), ...(eventSeries.length ? { eventSeries } : {}) };
+      const coords = { sessionId: sessionId || basename.replace(/\.jsonl$/, ""), transcript: basename, atMs: ms, model: sessionPrimaryModel(currentSessionRecords), ...(contextSeries.length ? { contextSeries } : {}), ...(eventSeries.length ? { eventSeries } : {}), ...(commitShas.size ? { commitCount: commitShas.size } : {}) };
       seqSessions.push(missionHint ? { steps, missionHint, ...coords } : { steps, ...coords });
     }
   }
