@@ -126,7 +126,12 @@ export function BlastRadius({ apiBase, agent, sessionId }: { apiBase: string; ag
             {m.summary.skills > 0 && <span className="obs-chip">{m.summary.skills} skills</span>}
             {m.summary.agents > 0 && <span className="obs-chip">{m.summary.agents} subagents</span>}
             {m.summary.errors > 0 && <span className="obs-chip br-chip-err">{m.summary.errors} errors</span>}
-            {m.delivery && <span className="obs-chip">{m.delivery.commits} commit{m.delivery.commits === 1 ? "" : "s"}</span>}
+            {m.delivery && m.delivery.commits > 0 && <span className="obs-chip">{m.delivery.commits} commit{m.delivery.commits === 1 ? "" : "s"}</span>}
+            {m.delivery && m.delivery.candidates > 0 && (
+              <span className="obs-chip" title="Committed in this session's time window, but not confirmed by the transcript — another session may have made them.">
+                {m.delivery.candidates} candidate commit{m.delivery.candidates === 1 ? "" : "s"}
+              </span>
+            )}
             {m.delivery && m.delivery.shipped !== null && <span className="obs-chip">{m.delivery.shipped} shipped</span>}
             {m.delivery && m.delivery.unshipped !== null && m.delivery.unshipped > 0 && (
               <span className="obs-chip br-chip-warn">{m.delivery.unshipped} edited, unshipped</span>
