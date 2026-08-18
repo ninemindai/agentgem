@@ -13,9 +13,9 @@ import { join } from "node:path";
 import { openArtifactOutcomesStore, addColumnIfMissing } from "@agentgem/insight";
 import type { ArtifactOutcomeRow } from "@agentgem/insight";
 
-function row(sessionId: string, name: string, outcome: ArtifactOutcomeRow["outcome"]): ArtifactOutcomeRow {
+function row(sessionId: string, name: string, outcome: ArtifactOutcomeRow["outcome"], commits = 0): ArtifactOutcomeRow {
   return { sessionId, artifactType: "skill", artifactName: name, outcome,
-    project: "/r", agent: null, model: "m", missionHint: "t", atMs: 1 };
+    project: "/r", agent: null, model: "m", missionHint: "t", atMs: 1, commits };
 }
 
 describe("ArtifactOutcomesStore", () => {
@@ -136,6 +136,41 @@ describe("ArtifactOutcomesStore — schema version guard", () => {
       const n = (raw.prepare("SELECT count(*) AS c FROM artifact_outcomes").get() as { c: number }).c;
       raw.close();
       expect(n).toBe(1);   // the refusal is non-destructive
+    });
+  });
+
+  it("persists commits per row and adds the column to a pre-commits table on open", () => {
+    withTmpDb((file) => {
+      const a = openArtifactOutcomesStore(file);
+      a.upsertSession("S1", [row("S1", "skill-a", "mostly_achieved", 3)]);
+      a.close();
+      const { DatabaseSync } = require("node:sqlite") as typeof import("node:sqlite");
+      let raw = new DatabaseSync(file);
+      const r = raw.prepare("SELECT commits FROM artifact_outcomes WHERE session_id='S1'").get() as { commits: number };
+      expect(r.commits).toBe(3);
+      raw.close();
+    });
+    // A long-lived file created before the commits column existed: same version "1",
+    // table without the column — open must add it (paired-ALTER), not misread.
+    withTmpDb((file) => {
+      const { DatabaseSync } = require("node:sqlite") as typeof import("node:sqlite");
+      const raw = new DatabaseSync(file);
+      raw.exec(`CREATE TABLE meta (key TEXT PRIMARY KEY, value TEXT);
+        INSERT INTO meta VALUES ('schema_version','1');
+        CREATE TABLE artifact_outcomes (
+          session_id TEXT NOT NULL, artifact_type TEXT NOT NULL, artifact_name TEXT NOT NULL,
+          outcome TEXT NOT NULL, project TEXT, agent TEXT, model TEXT, mission_hint TEXT, at_ms INTEGER,
+          PRIMARY KEY (session_id, artifact_type, artifact_name));
+        INSERT INTO artifact_outcomes VALUES ('OLD','skill','skill-a','mostly_achieved','/r',NULL,'m','t',1);`);
+      raw.close();
+      const s2 = openArtifactOutcomesStore(file);
+      s2.upsertSession("NEW", [row("NEW", "skill-b", "mostly_achieved", 1)]);
+      expect(s2.outcomeForSessions(["OLD"]).get("OLD")).toBe("mostly_achieved");   // old rows intact
+      s2.close();
+      const raw2 = new DatabaseSync(file);
+      const r2 = raw2.prepare("SELECT commits FROM artifact_outcomes WHERE session_id='OLD'").get() as { commits: number | null };
+      expect(r2.commits).toBeNull();   // pre-existing row: unknown, not zero
+      raw2.close();
     });
   });
 

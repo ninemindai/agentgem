@@ -120,11 +120,16 @@ export function openArtifactOutcomesStore(dataDir?: string): ArtifactOutcomesSto
       model         TEXT,
       mission_hint  TEXT,
       at_ms         INTEGER,
+      commits       INTEGER,
       PRIMARY KEY (session_id, artifact_type, artifact_name)
     );
     CREATE INDEX IF NOT EXISTS artifact_outcomes_lookup
       ON artifact_outcomes (artifact_type, artifact_name);
   `);
+  // Paired ALTER for files whose table predates the commits column (the CREATE
+  // above is table-level and never reaches an existing table). NULL there means
+  // "recorded before commit evidence existed", which is distinct from 0.
+  addColumnIfMissing(db, "artifact_outcomes", "commits", "INTEGER");
 
   return {
     upsertSession(sessionId, rows) {
@@ -133,13 +138,13 @@ export function openArtifactOutcomesStore(dataDir?: string): ArtifactOutcomesSto
         db.prepare("DELETE FROM artifact_outcomes WHERE session_id = ?1").run(sessionId);
         const ins = db.prepare(
           `INSERT INTO artifact_outcomes
-             (session_id, artifact_type, artifact_name, outcome, project, agent, model, mission_hint, at_ms)
-           VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9)
-           ON CONFLICT(session_id, artifact_type, artifact_name) DO UPDATE SET outcome=?4`,
+             (session_id, artifact_type, artifact_name, outcome, project, agent, model, mission_hint, at_ms, commits)
+           VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10)
+           ON CONFLICT(session_id, artifact_type, artifact_name) DO UPDATE SET outcome=?4, commits=?10`,
         );
         for (const r of rows) {
           ins.run(r.sessionId, r.artifactType, r.artifactName, r.outcome,
-            r.project, r.agent, r.model, r.missionHint, r.atMs);
+            r.project, r.agent, r.model, r.missionHint, r.atMs, r.commits);
         }
         db.exec("COMMIT");
       } catch (e) {

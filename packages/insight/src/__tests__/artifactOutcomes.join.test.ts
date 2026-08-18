@@ -18,7 +18,7 @@ describe("buildArtifactOutcomeRows", () => {
   it("joins eventSeries to the session's outcome by sessionId", () => {
     const signal = signalWith([{
       sessionId: "S1", transcript: "S1.jsonl", atMs: 100, model: "claude-opus",
-      missionHint: { task: "fix the bug", outcome: "" }, steps: [],
+      missionHint: { task: "fix the bug", outcome: "" }, steps: [], commitCount: 2,
       eventSeries: [
         { msgIndex: 1, kind: "skill", name: "superpowers:brainstorming" },
         { msgIndex: 2, kind: "agent", name: "Explore" },
@@ -30,7 +30,7 @@ describe("buildArtifactOutcomeRows", () => {
     expect(rows[0]).toMatchObject({
       sessionId: "S1", artifactType: "skill", artifactName: "superpowers:brainstorming",
       outcome: "mostly_achieved", project: "/repo", agent: null,
-      model: "claude-opus", missionHint: "fix the bug", atMs: 100,
+      model: "claude-opus", missionHint: "fix the bug", atMs: 100, commits: 2,
     });
     expect(rows[1]).toMatchObject({ artifactType: "agent", artifactName: "Explore" });
   });
@@ -66,5 +66,6 @@ describe("buildArtifactOutcomeRows", () => {
     const rows = buildArtifactOutcomeRows(signal, [facet("S4", "partially_achieved")],
       { project: "/repo", agent: null });
     expect(rows).toHaveLength(1);
+    expect(rows[0].commits).toBe(0);   // no commitCount on the session → 0, never null
   });
 });
