@@ -141,7 +141,7 @@ export interface HookArtifact {
   secretRefs?: SecretRef[]; // names+locations redaction stripped from `config`
 }
 
-export type ChannelPlatform = "slack" | "telegram" | "discord" | "teams" | "twilio" | "github";
+export type ChannelPlatform = "slack" | "telegram" | "discord" | "teams" | "twilio" | "github" | "gitlab";
 
 // A channel declares how the Gem wants to be reached by end users. Neutral + minimal: the
 // platform plus the env-var secrets it needs. The "how it's wired" lives in CHANNEL_REGISTRY.

@@ -11,6 +11,7 @@
 //   teamsChannel(config?)    — optional; reads MICROSOFT_APP_ID, MICROSOFT_APP_PASSWORD, MICROSOFT_TENANT_ID
 //   twilioChannel(config)    — REQUIRED config (allowFrom is non-optional); reads TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN
 //   githubChannel(config?)   — optional; reads GITHUB_APP_ID, GITHUB_APP_PRIVATE_KEY, GITHUB_WEBHOOK_SECRET
+//   gitlabChannel(config?)   — optional; reads GITLAB_APP_ID, GITLAB_APP_PRIVATE_KEY, GITLAB_WEBHOOK_SECRET
 import type { ChannelArtifact, ChannelPlatform, SecretRef } from "./types.js";
 
 export interface ChannelPlatformSpec {
@@ -28,6 +29,7 @@ export const CHANNEL_REGISTRY: Record<ChannelPlatform, ChannelPlatformSpec> = {
   teams:    { platform: "teams",    label: "Microsoft Teams", eveImport: "eve/channels/teams",    factory: "teamsChannel",    secrets: ["MICROSOFT_APP_ID", "MICROSOFT_APP_PASSWORD", "MICROSOFT_TENANT_ID"] },
   twilio:   { platform: "twilio",   label: "Twilio",         eveImport: "eve/channels/twilio",   factory: "twilioChannel",   secrets: ["TWILIO_ACCOUNT_SID", "TWILIO_AUTH_TOKEN"] },
   github:   { platform: "github",   label: "GitHub",         eveImport: "eve/channels/github",   factory: "githubChannel",   secrets: ["GITHUB_APP_ID", "GITHUB_APP_PRIVATE_KEY", "GITHUB_WEBHOOK_SECRET"] },
+  gitlab:   { platform: "gitlab",   label: "GitLab",         eveImport: "eve/channels/gitlab",   factory: "gitlabChannel",   secrets: ["GITLAB_APP_ID", "GITLAB_APP_PRIVATE_KEY", "GITLAB_WEBHOOK_SECRET"] },
 };
 
 // The agent/channels/<name>.ts file Eve materialization emits. Eve channel factories read their

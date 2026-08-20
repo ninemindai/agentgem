@@ -70,7 +70,7 @@ export const InventorySkillSchema = SkillArtifactSchema.extend({ id: z.string(),
 export const InventorySubagentSchema = SubagentArtifactSchema.extend({ id: z.string(), content: z.string().optional() });
 export const InventoryInstructionsSchema = InstructionsArtifactSchema.extend({ id: z.string(), content: z.string().optional() });
 
-export const ChannelPlatformSchema = z.enum(["slack", "telegram", "discord", "teams", "twilio", "github"]);
+export const ChannelPlatformSchema = z.enum(["slack", "telegram", "discord", "teams", "twilio", "github", "gitlab"]);
 
 export const ChannelArtifactSchema = z.object({
   type: z.literal("channel"),

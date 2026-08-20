@@ -2,7 +2,7 @@ import { describe, it, expect } from "vitest";
 import { CHANNEL_REGISTRY, channelScaffold, makeChannelArtifact } from "@agentgem/model";
 import type { ChannelPlatform } from "@agentgem/model";
 
-const PLATFORMS: ChannelPlatform[] = ["slack", "telegram", "discord", "teams", "twilio", "github"];
+const PLATFORMS: ChannelPlatform[] = ["slack", "telegram", "discord", "teams", "twilio", "github", "gitlab"];
 
 describe("CHANNEL_REGISTRY", () => {
   it("has a complete entry for every platform", () => {
