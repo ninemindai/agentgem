@@ -326,6 +326,7 @@ still live in the root `src/__tests__/` and `src/play/__tests__/` trees.)
 | sealed-iframe player + consent modal + capture | `packages/console/src/panels/Play/Runner.tsx` |
 | sealed-doc wrapper (CSP-first, storage/anchor/capture shims) | `packages/console/src/panels/Watch/sandboxDoc.ts` |
 | Studio / Arcade / publish flow | `packages/console/src/panels/Play/Studio.tsx`, `Arcade.tsx`, `publishAction.ts` |
+| remix fork (source proxy, consent card, lineage) | `packages/app/src/gem/remixSourceClient.ts`, `packages/console/src/panels/Play/RemixConfirm.tsx` |
 | authoring contract (agent-facing) | `skills/agentgem-miniapp/SKILL.md` |
 
 Design history: dated specs and plans under `docs/superpowers/specs/` and
