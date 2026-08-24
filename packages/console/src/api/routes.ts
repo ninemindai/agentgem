@@ -1105,6 +1105,12 @@ export const playImportRoute = defineRoute("POST", "/api/play/import", {
   }),
   response: z.object({ name: z.string() }),
 });
+// Same-origin remix-source proxy: the core fetches game-meta + game-html from the aggregator
+// (fail-closed on the creator's allowRemix) so the browser never goes cross-origin.
+export const playRemixSourceRoute = defineRoute("GET", "/api/play/remix-source", {
+  query: z.object({ key: z.string() }),
+  response: z.object({ title: z.string(), genre: z.string(), version: z.string(), html: z.string() }),
+});
 export const playBlankRoute = defineRoute("POST", "/api/play/blank", {
   body: z.object({ title: z.string(), prompt: z.string().optional(), name: z.string().optional(), files: z.array(playUploadFileSchema).optional(), template: z.enum(["canvas", "doc"]).optional() }),
   response: z.object({ name: z.string() }),

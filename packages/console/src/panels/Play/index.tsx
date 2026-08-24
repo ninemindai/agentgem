@@ -5,11 +5,13 @@ import { discoveredAgentsFromSessions, mergeRunnableAndDiscoveredAgents, preferr
 import { fetchSessions } from "../Watch/watchStream.js";
 import { Arcade } from "./Arcade.js";
 import { Composer } from "./Composer.js";
+import { RemixConfirm } from "./RemixConfirm.js";
 import { Studio } from "./Studio.js";
 
 type View =
   | { kind: "arcade" }
   | { kind: "composer"; title?: string; prompt?: string }
+  | { kind: "remix-confirm"; gemKey: string }
   | { kind: "studio"; name: string; seedPrompt?: string };
 const j = (r: Response) => { if (!r.ok) throw new Error(String(r.status)); return r.json(); };
 
@@ -32,6 +34,10 @@ export function Play({ apiBase }: { apiBase: string }) {
   useEffect(() => {
     const applyDeepLink = () => {
       const params = new URLSearchParams(window.location.hash.split("?")[1] ?? "");
+      // remix=<gemKey>: a published game's fork link (marketplace "Remix"). Renders a consent
+      // card only — the fetch and the local write happen on the explicit confirm click.
+      const remix = params.get("remix");
+      if (remix) { setView({ kind: "remix-confirm", gemKey: remix }); return; }
       if (!params.get("new")) return;
       setView({ kind: "composer", title: params.get("title") ?? undefined, prompt: params.get("prompt") ?? undefined });
     };
@@ -76,9 +82,12 @@ export function Play({ apiBase }: { apiBase: string }) {
           <button className={`play-tab play-tab--cta${view.kind === "composer" ? " is-active" : ""}`} onClick={() => setView({ kind: "composer" })}>+ New miniapp</button>
         </div>
       )}
-      {view.kind === "arcade" && <Arcade apiBase={apiBase} onOpen={(name) => setView({ kind: "studio", name })} />}
+      {(view.kind === "arcade" || view.kind === "remix-confirm") && <Arcade apiBase={apiBase} onOpen={(name) => setView({ kind: "studio", name })} />}
       {/* keyed on the seed so a fresh deep-link remounts the Composer — its prefill is useState-initial. */}
       {view.kind === "composer" && <Composer key={`${view.title ?? ""}|${view.prompt ?? ""}`} apiBase={apiBase} agents={selectorAgents} agentId={agentId} onAgentIdChange={chooseAgent} initialTitle={view.title} initialPrompt={view.prompt} onCreated={(name, seedPrompt) => setView({ kind: "studio", name, seedPrompt })} />}
+      {view.kind === "remix-confirm" && <RemixConfirm apiBase={apiBase} gemKey={view.gemKey}
+        onCreated={(name, seedPrompt) => setView({ kind: "studio", name, seedPrompt })}
+        onCancel={() => setView({ kind: "arcade" })} />}
       {view.kind === "studio" && <Studio apiBase={apiBase} name={view.name} seedPrompt={view.seedPrompt} agents={selectorAgents} agentId={agentId} onAgentIdChange={chooseAgent} onBack={() => setView({ kind: "arcade" })} />}
     </section>
   );
