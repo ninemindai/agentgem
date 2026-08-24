@@ -3,6 +3,8 @@
 // Remix-source fetch: pull a published game's meta + sealed html from the hosted aggregator so the
 // console can fork it locally. FAIL-CLOSED on allowRemix — an aggregator that doesn't state
 // allowRemix (a pre-remix deploy) refuses too; the creator's opt-out must never default open.
+// Public-only enforcement is DELEGATED to the aggregator (spec §5 E-PR1): game-meta must report
+// allowRemix true only for public games — this client deliberately adds no second visibility check.
 import { InvalidInputError } from "@agentgem/model";
 
 export interface RemixSource { title: string; genre: string; version: string; html: string }
