@@ -438,6 +438,9 @@ export function Studio({
         // mcpNeeds is declared-authoritative (D10) — the server merges declared∪derived, so dropping
         // it here would lose a wrapper-structured declaration the static scan can't re-derive.
         ...(cur.meta.mcpNeeds ? { mcpNeeds: cur.meta.mcpNeeds } : {}),
+        // remixOf is lineage set once at fork creation — echo it or the save would erase it
+        // (the server's carry-forward is the backstop, this is the primary path).
+        ...(cur.meta.remixOf ? { remixOf: cur.meta.remixOf } : {}),
       } } });
       // The save is the reconciliation. Adopt the meta we just read and stored, minus what the save
       // pruned, so the strip tells the truth and <Runner needs> renegotiates on the correct set.
