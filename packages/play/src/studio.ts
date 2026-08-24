@@ -5,7 +5,7 @@
 // gate: only a path under the miniapps registry (or the neutral fallback) is ever honored.
 import { join, sep, resolve, basename } from "node:path";
 import { readFileSync, writeFileSync, rmSync, existsSync } from "node:fs";
-import { type GameSource, type GameGenre, AUTO_CAPS } from "@agentgem/model";
+import { type GameSource, type GameGenre, type RemixRef, AUTO_CAPS } from "@agentgem/model";
 import { deriveNeeds } from "./capabilityScan.js";
 import { extractSource, type SourceReaders } from "./sourceContext.js";
 import { genreFor } from "./genres.js";
@@ -106,9 +106,12 @@ export async function seedStudio(source: GameSource, readers: SourceReaders, nam
   return { name: id, brief: `${input.brief}\n\n${studioInstructions(MINIAPP_HTML)}` };
 }
 
+export interface ImportOpts { remixOf?: RemixRef; genre?: GameGenre }
+
 // Import a miniapp from existing self-contained HTML. The HTML becomes the miniapp verbatim (a draft);
 // NOT gated here — Save enforces the seal, so imperfect HTML can be brought in and fixed in the studio.
-export async function importStudio(title: string, html: string, name?: string, files?: UploadFile[]): Promise<{ name: string; brief: string }> {
+// `opts` is the remix-fork seam: lineage + the original's genre, baked once at creation.
+export async function importStudio(title: string, html: string, name?: string, files?: UploadFile[], opts?: ImportOpts): Promise<{ name: string; brief: string }> {
   const source: GameSource = { kind: "html", title };
   await ensureRepo(miniappsRoot());
   const { name: id, dir } = claimFor(source, name);
@@ -121,10 +124,13 @@ export async function importStudio(title: string, html: string, name?: string, f
   // bypass the consent prompt, so auto-declaring one (session-data) would let imported html read the
   // viewer's sessions with no gate — that stays an explicit Save. Gated caps keep their per-use prompt.
   const needs = deriveNeeds(html).filter((c) => !AUTO_CAPS.has(c));
-  const meta: MiniappMeta = { title, genre: "project-fun", createdFrom: source, engineVersion: "1", ...(needs.length ? { needs } : {}), ...((uploads.ship || uploads.ref) ? { uploads } : {}) };
+  const meta: MiniappMeta = { title, genre: opts?.genre ?? "project-fun", createdFrom: source, engineVersion: "1", ...(opts?.remixOf ? { remixOf: opts.remixOf } : {}), ...(needs.length ? { needs } : {}), ...((uploads.ship || uploads.ref) ? { uploads } : {}) };
   writeFileSync(join(dir, "meta.json"), JSON.stringify(meta, null, 2));
   await commitWithLock(miniappsRoot(), `import miniapp ${id}`);
-  return { name: id, brief: `You are refining "${title}", a self-contained HTML mini-game the user imported.${uploadsBrief(uploads)}\n\n${studioInstructions(MINIAPP_HTML)}` };
+  const refining = opts?.remixOf
+    ? `You are refining "${title}", the user's remix of the published mini-game "${opts.remixOf.gemKey}".`
+    : `You are refining "${title}", a self-contained HTML mini-game the user imported.`;
+  return { name: id, brief: `${refining}${uploadsBrief(uploads)}\n\n${studioInstructions(MINIAPP_HTML)}` };
 }
 
 // Create a miniapp from scratch — no source context. Seeds a fresh blank sealed canvas titled with the
