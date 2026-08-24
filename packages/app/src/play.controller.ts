@@ -15,6 +15,7 @@ import type { FabricRouter } from "@agentgem/fabric";
 import { FABRIC_ROUTER, MCP_ASK_TIMEOUT_MS, mapAskFailure, type McpAskReply } from "./fabric.binding.js";
 import { defaultReaders } from "./play.readers.js";
 import { listActiveSessions } from "./watchSessions.js";
+import { fetchRemixSource } from "./gem/remixSourceClient.js";
 import {
   PlaySaveRequestSchema, PlaySaveResponseSchema, PlayDeleteRequestSchema, PlayDeleteResponseSchema, MiniappListSchema,
   PlayPublishRequestSchema, PlayPublishResponseSchema,
@@ -23,7 +24,7 @@ import {
   PlayMigrateResponseSchema, PlayInspectorSchema,
   PlayMcpCallRequestSchema, PlayMcpCallResponseSchema, PlayMcpServersQuerySchema, PlayMcpServersResponseSchema,
   PlayMcpCandidatesResponseSchema, PlayMcpCandidateToolsQuerySchema, PlayMcpCandidateToolsResponseSchema,
-  PlayUploadsRequestSchema, PlayUploadsResponseSchema,
+  PlayUploadsRequestSchema, PlayUploadsResponseSchema, PlayRemixSourceQuerySchema, PlayRemixSourceSchema,
 } from "./schemas.js";
 
 @api({ basePath: "/api" })
@@ -86,6 +87,14 @@ export class PlayController {
       const { name } = await blankStudio(input.body.title, input.body.prompt, input.body.name, input.body.files, input.body.template);
       return { name };
     } catch (e) { throw this.createError(e); }
+  }
+
+  // Same-origin remix-source proxy (mirrors the ShareProxy/Benchmark proxy pattern): the browser never
+  // talks to the aggregator. InvalidInputError from the client maps to a clean 4xx like the session
+  // routes' throws do; the allowRemix gate inside fetchRemixSource is fail-closed.
+  @get("/play/remix-source", { query: PlayRemixSourceQuerySchema, response: PlayRemixSourceSchema })
+  async remixSource(input: { query: z.infer<typeof PlayRemixSourceQuerySchema> }): Promise<z.infer<typeof PlayRemixSourceSchema>> {
+    return fetchRemixSource({ key: input.query.key });
   }
 
   // Add files to an EXISTING miniapp's workspace (e.g. mid-Studio-session uploads), as opposed to

@@ -1056,6 +1056,10 @@ export const PlayImportRequestSchema = z.object({ title: z.string().min(1), html
 // Create a miniapp from scratch — no source context. Seeds a blank sealed canvas + opens the studio;
 // `prompt` is optional creative direction handed to the studio agent.
 export const PlayBlankRequestSchema = z.object({ title: z.string().min(1), prompt: z.string().optional(), name: z.string().optional(), files: z.array(UploadFileSchema).optional(), template: z.enum(["canvas", "doc"]).optional() });
+// Remix-source proxy (GET /api/play/remix-source): the console fetches a published game's meta+html
+// through the local core (browser stays same-origin; base resolution + allowRemix gate server-side).
+export const PlayRemixSourceQuerySchema = z.object({ key: z.string().min(1) });
+export const PlayRemixSourceSchema = z.object({ title: z.string(), genre: z.string(), version: z.string(), html: z.string() });
 
 // Host-brokered feed for a replay miniapp: its source-session transcript ({meta, timeline}), fetched on
 // demand so the sealed bundle stays tiny. Only session-sourced miniapps have it (else 404).
