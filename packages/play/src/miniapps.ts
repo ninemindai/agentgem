@@ -7,7 +7,7 @@ import { homedir } from "node:os";
 import { join, sep } from "node:path";
 import { readdirSync, readFileSync, writeFileSync, existsSync, mkdirSync, rmSync } from "node:fs";
 import { safePathSegment, CAP_TOOL, CAP_METHOD } from "@agentgem/model";
-import type { Gem, GameArtifact, GameGenre, GameSource, GameCapability, McpNeed } from "@agentgem/model";
+import type { Gem, GameArtifact, GameGenre, GameSource, GameCapability, McpNeed, RemixRef } from "@agentgem/model";
 import { workspaceDir } from "@agentgem/base";
 import { writeGemArchive, writeArchiveDir } from "@agentgem/archive";
 import { gameGate, runChecks, SHARED_CHECKS, type Finding } from "@ninemind/miniapp-gate";
@@ -20,6 +20,7 @@ import { reconcileNeeds, deriveNeeds, hasDynamicToolCall, deriveMcpNeeds, mergeM
 export interface MiniappMeta {
   title: string; genre: GameGenre; createdFrom: GameSource; engineVersion: string; needs?: GameCapability[];
   mcpNeeds?: McpNeed[];   // declared-authoritative (D10) — merged with derived literals at save, never pruned
+  remixOf?: RemixRef;     // lineage, set once at fork creation; carried forward like uploads
   uploads?: { ship: number; ref: number };   // author-supplied seed files: ship→uploads/, reference→gitignored ref/
 }
 export interface SaveMiniappInput { name: string; html: string; meta: MiniappMeta }
@@ -104,6 +105,7 @@ function writeGameGem(name: string, html: string, meta: MiniappMeta): void {
     html, createdFrom: meta.createdFrom, engineVersion: meta.engineVersion,
     ...(meta.needs ? { needs: meta.needs } : {}),
     ...(meta.mcpNeeds ? { mcpNeeds: meta.mcpNeeds } : {}),
+    ...(meta.remixOf ? { remixOf: meta.remixOf } : {}),
   };
   const gem: Gem = { name, createdFrom: "play", artifacts: [artifact], checks: [], requiredSecrets: [] };
   const wdir = workspaceDir(name);
@@ -204,10 +206,15 @@ export async function saveMiniapp(input: SaveMiniappInput): Promise<SaveMiniappR
 
   // `uploads` is a server-owned authoring counter; the client never sends it, so carry it forward
   // from disk instead of letting a Save wipe it (which silences studioBrief's upload announcement).
+  // Same for remixOf: it's set once at fork creation; a client that echoes meta without it must not erase lineage.
   const metaPath = join(dir, "meta.json");
-  if (meta.uploads === undefined && existsSync(metaPath)) {
-    try { const prev = JSON.parse(readFileSync(metaPath, "utf8")) as MiniappMeta; if (prev.uploads) meta.uploads = prev.uploads; }
-    catch { /* no readable prior meta — nothing to preserve */ }
+  if ((meta.uploads === undefined || meta.remixOf === undefined) && existsSync(metaPath)) {
+    try {
+      const prev = JSON.parse(readFileSync(metaPath, "utf8")) as MiniappMeta;
+      if (meta.uploads === undefined && prev.uploads) meta.uploads = prev.uploads;
+      // remixOf is set once at fork creation; a client that echoes meta without it must not erase lineage.
+      if (meta.remixOf === undefined && prev.remixOf) meta.remixOf = prev.remixOf;
+    } catch { /* no readable prior meta — nothing to preserve */ }
   }
   writeFileSync(metaPath, JSON.stringify(meta, null, 2));
   const note = rec.pruned.length ? ` (pruned unused capability: ${rec.pruned.join(", ")})` : "";

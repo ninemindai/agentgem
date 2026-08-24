@@ -100,6 +100,12 @@ export type GameSource =
   | { kind: "html"; title: string } // imported from an existing self-contained HTML file (provenance = title)
   | { kind: "blank"; title: string }; // created from scratch — no source context (provenance = title)
 
+// Lineage of a remix fork: the published game this miniapp was forked from, pinned to the
+// exact version fetched at fork time. Metadata only — it never grants anything (needs are
+// re-derived from the fork's own code), and it survives deletion of the original because a
+// fork is a full copy.
+export interface RemixRef { gemKey: string; version: string }
+
 export interface GameArtifact {
   type: "game";
   name: string;             // slug, e.g. "auth-bugfix-replay"
@@ -111,6 +117,7 @@ export interface GameArtifact {
   engineVersion: string;    // scaffold/genre version, for future migration
   needs?: GameCapability[]; // declared, read-only; host decides. Absent = pure snapshot.
   mcpNeeds?: McpNeed[];     // declared-authoritative connector manifest — see McpNeed above.
+  remixOf?: RemixRef;       // forked from this published game (pinned at fork time)
   meta?: { controls?: string; estPlaySeconds?: number };
 }
 
