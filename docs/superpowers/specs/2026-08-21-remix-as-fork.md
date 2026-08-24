@@ -234,7 +234,7 @@ Order:
    field is simply not sent).
 2. **E-PR1 (enterprise, after merging upstream O-PR1):** aggregator accepts + persists +
    enforces; DB columns; `game-meta.allowRemix`; `game-remixes` endpoint + originGuard entries.
-   **Deploy api.agentgem.ai** (and the `.ent` twin).
+   **Deploy api.agentgem.ai** (and the `.ent` twin). E-PR1 additionally owns the public-only gate O-PR1 could not enforce: `game-meta` must report `allowRemix: true` only for games whose `visibility` is `public`, so the O-PR1 proxy's fail-closed `allowRemix !== true` check composes into the spec's public-games-only rule without a second client-side visibility lookup.
 3. **O-PR2 (OSS, small):** console sends `allowRemix` + `remixOf` in the publish body/manifest;
    publish checkbox goes live.
 4. **E-PR2 (enterprise):** marketplace UI — remix link/gating, counts, attribution, styles.
