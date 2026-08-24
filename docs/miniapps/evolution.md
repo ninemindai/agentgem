@@ -99,7 +99,7 @@ redaction (`redactForBake`) is best-effort hygiene; the opt-in gates are the
 actual control, which is why the brief tells the agent to treat everything baked
 into the file as shipped.
 
-**D10 — Every widening pairs with a tightening.** The pattern repeats five times
+**D10 — Every widening pairs with a tightening.** The pattern repeats six times
 across the history:
 
 | widening (what miniapps gained) | tightening (what Save/host then enforced) |
@@ -109,6 +109,7 @@ across the history:
 | action methods (`agentgemApp.*`) | derived from method calls like tool needs |
 | clipboard egress | consent never remembered |
 | MCP connectors | digest-pinned, fail-closed consent |
+| one-tap remix of published games | creator `allowRemix` gate, fail-closed at three layers; fork re-derives `needs` from its own code |
 
 A future PR that widens what a miniapp can do without a matching save-time or
 consent-time tightening is, on this record, a design smell.

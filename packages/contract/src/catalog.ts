@@ -8,6 +8,13 @@ import { canonicalJSON } from "@agentgem/insight";
 
 export type Visibility = "public" | "unlisted" | "private";
 
+// Remix lineage on the catalog wire. OPTIONAL end-to-end and NOT yet sent by this repo's
+// publish path: the aggregator must accept these fields before any console signs a manifest
+// containing them (the manifest hash covers the whole object — an aggregator that strips an
+// unknown key verifies a different hash and rejects the publish). Rollout: enterprise E-PR1
+// deploys acceptance; O-PR2 then flips the console to send.
+export interface CatalogRemixRef { gemKey: string; version: string }
+
 export interface GemArtifactRef { name: string; type: string }
 export interface CatalogRow {
   gemKey: string; version: string; publishedBy: string;
@@ -17,6 +24,7 @@ export interface CatalogRow {
   installable?: boolean; // derived: a gem_archives row exists (read path only)
   ownerAccountId?: string | null;
   visibility?: Visibility;
+  allowRemix?: boolean; remixOf?: CatalogRemixRef;
 }
 
 export interface GemStatus { exists: boolean; ownedByMe: boolean; latestVersion: string | null }
@@ -41,6 +49,7 @@ export interface CatalogManifest {
   // digest. Both are inside the signed manifest, so the signature binds the publish to this archive.
   artifacts?: GemArtifactRef[]; gemDigest?: string;
   visibility?: Visibility;
+  allowRemix?: boolean; remixOf?: CatalogRemixRef;
 }
 
 // Grade is a 1..3 floor. Exported so the read path (mapDbToGems) can re-clamp defensively —
