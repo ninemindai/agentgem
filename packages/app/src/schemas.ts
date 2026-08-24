@@ -900,6 +900,10 @@ export const RegistryGemSchema = z.object({
 export const RegistryGemsResponseSchema = z.object({ gems: z.array(RegistryGemSchema) });
 
 // ---- Play (miniapps registry) ----
+// Lineage of a remix fork: the published game it was forked from, pinned at fork time.
+// Optional on every meta hop; zod strips unknown keys, so every play schema that carries
+// meta must name it (PlaySaveRequestSchema, PlayMiniappSchema, PlayImportRequestSchema).
+export const RemixRefSchema = z.object({ gemKey: z.string().min(1), version: z.string().min(1) });
 export const PlaySaveRequestSchema = z.object({
   name: z.string(),
   html: z.string(),
@@ -910,6 +914,7 @@ export const PlaySaveRequestSchema = z.object({
     engineVersion: z.string().default("1"),
     needs: z.array(GameCapabilityEnum).optional(),
     mcpNeeds: McpNeedsSchema,
+    remixOf: RemixRefSchema.optional(),
   }),
 });
 // Mirrors the Finding type from @ninemind/miniapp-gate. Declared here rather than imported because
@@ -988,7 +993,7 @@ export const PlaySessionDataQuerySchema = z.object({ name: z.string(), sessionId
 const PlayShareStateSchema = z.object({ shareId: z.string(), url: z.string(), sharedAtMs: z.number() });
 export const PlayMiniappSchema = z.object({
   name: z.string(), html: z.string(),
-  meta: z.object({ title: z.string(), genre: z.string(), createdFrom: GameArtifactSchema.shape.createdFrom, engineVersion: z.string(), needs: PlayNeedsSchema, mcpNeeds: McpNeedsSchema }),
+  meta: z.object({ title: z.string(), genre: z.string(), createdFrom: GameArtifactSchema.shape.createdFrom, engineVersion: z.string(), needs: PlayNeedsSchema, mcpNeeds: McpNeedsSchema, remixOf: RemixRefSchema.optional() }),
   share: PlayShareStateSchema.optional(),
 });
 // The built-in Protocol Inspector (GET /play/inspector): same shape as PlayMiniappSchema, but this one is
@@ -1047,7 +1052,7 @@ void _storedGuard;
 // Import a miniapp from an existing self-contained HTML file. The HTML becomes the miniapp as-is (a
 // draft opened in the studio); the seal gate is enforced on Save, not import, so imperfect HTML can be
 // brought in and fixed by chatting with the agent.
-export const PlayImportRequestSchema = z.object({ title: z.string().min(1), html: z.string().min(1), name: z.string().optional(), files: z.array(UploadFileSchema).optional() });
+export const PlayImportRequestSchema = z.object({ title: z.string().min(1), html: z.string().min(1), name: z.string().optional(), files: z.array(UploadFileSchema).optional(), remixOf: RemixRefSchema.optional(), genre: GameGenreEnum.optional() });
 // Create a miniapp from scratch — no source context. Seeds a blank sealed canvas + opens the studio;
 // `prompt` is optional creative direction handed to the studio agent.
 export const PlayBlankRequestSchema = z.object({ title: z.string().min(1), prompt: z.string().optional(), name: z.string().optional(), files: z.array(UploadFileSchema).optional(), template: z.enum(["canvas", "doc"]).optional() });

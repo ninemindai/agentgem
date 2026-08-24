@@ -5,6 +5,7 @@ import { join } from "node:path";
 import { importStudio, saveMiniapp, miniappDir } from "@agentgem/play";
 import { workspaceDir } from "@agentgem/base";
 import { readGemArchive, readArchiveDir } from "@agentgem/archive";
+import { PlaySaveRequestSchema, PlayMiniappSchema, PlayImportRequestSchema } from "@agentgem/app/schemas";
 
 let home: string;
 beforeEach(() => { home = mkdtempSync(join(tmpdir(), "agh-")); process.env.AGENTGEM_HOME = home; });
@@ -44,5 +45,23 @@ describe("remix fork lineage", () => {
     await saveMiniapp({ name, html: sealed, meta: metaFor("snake-remix") });
     const meta = JSON.parse(readFileSync(join(miniappDir(name), "meta.json"), "utf8"));
     expect(meta.remixOf).toEqual(REMIX);
+  });
+});
+
+describe("remixOf wire schemas (zod must not strip lineage)", () => {
+  const meta = { title: "t", genre: "project-fun", createdFrom: { kind: "html", title: "t" }, engineVersion: "1", remixOf: REMIX };
+  it("PlaySaveRequestSchema keeps meta.remixOf", () => {
+    expect(PlaySaveRequestSchema.parse({ name: "g", html: "<x>", meta }).meta.remixOf).toEqual(REMIX);
+  });
+  it("PlayMiniappSchema keeps meta.remixOf on the way out", () => {
+    expect(PlayMiniappSchema.parse({ name: "g", html: "<x>", meta }).meta.remixOf).toEqual(REMIX);
+  });
+  it("PlayImportRequestSchema accepts remixOf + genre", () => {
+    const p = PlayImportRequestSchema.parse({ title: "t", html: "<x>", remixOf: REMIX, genre: "skill-run" });
+    expect(p.remixOf).toEqual(REMIX);
+    expect(p.genre).toBe("skill-run");
+  });
+  it("RemixRef rejects empty members", () => {
+    expect(() => PlayImportRequestSchema.parse({ title: "t", html: "<x>", remixOf: { gemKey: "", version: "1" } })).toThrow();
   });
 });

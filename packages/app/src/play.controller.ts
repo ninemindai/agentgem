@@ -75,7 +75,7 @@ export class PlayController {
   @post("/play/import", { body: PlayImportRequestSchema, response: PlayStudioResponseSchema })
   async import(input: { body: z.infer<typeof PlayImportRequestSchema> }): Promise<z.infer<typeof PlayStudioResponseSchema>> {
     try {
-      const { name } = await importStudio(input.body.title, input.body.html, input.body.name, input.body.files);
+      const { name } = await importStudio(input.body.title, input.body.html, input.body.name, input.body.files, { remixOf: input.body.remixOf, genre: input.body.genre });
       return { name };
     } catch (e) { throw this.createError(e); }
   }
@@ -155,6 +155,7 @@ export class PlayController {
           title: r.meta.title, genre: r.meta.genre, createdFrom: r.meta.createdFrom, engineVersion: r.meta.engineVersion,
           ...(r.meta.needs ? { needs: r.meta.needs } : {}),
           ...(r.meta.mcpNeeds ? { mcpNeeds: r.meta.mcpNeeds } : {}),
+          ...(r.meta.remixOf ? { remixOf: r.meta.remixOf } : {}),
         },
         ...(share ? { share } : {}),
       };

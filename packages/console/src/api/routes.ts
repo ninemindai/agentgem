@@ -1057,10 +1057,13 @@ const PlaySourceSchema = z.discriminatedUnion("kind", [
   z.object({ kind: z.literal("html"), title: z.string() }),
   z.object({ kind: z.literal("blank"), title: z.string() }),
 ]);
+// Mirrors RemixRefSchema in src/schemas.ts: lineage of a remix fork, pinned at fork time.
+const PlayRemixRefSchema = z.object({ gemKey: z.string(), version: z.string() });
 const PlayMetaSchema = z.object({
   title: z.string(), genre: z.enum(["replay", "skill-run", "project-fun", "session-heatmap", "project-map", "skill-tuner"]),
   createdFrom: PlaySourceSchema, engineVersion: z.string().default("1"), needs: PlayNeedsSchema,
   mcpNeeds: PlayMcpNeedsSchema,
+  remixOf: PlayRemixRefSchema.optional(),
 });
 
 export const playMiniappsRoute = defineRoute("GET", "/api/play/miniapps", {
@@ -1070,7 +1073,7 @@ export const playMiniappRoute = defineRoute("GET", "/api/play/miniapp", {
   query: z.object({ name: z.string() }),
   response: z.object({
     name: z.string(), html: z.string(),
-    meta: z.object({ title: z.string(), genre: z.string(), createdFrom: PlaySourceSchema, engineVersion: z.string(), needs: PlayNeedsSchema, mcpNeeds: PlayMcpNeedsSchema }),
+    meta: z.object({ title: z.string(), genre: z.string(), createdFrom: PlaySourceSchema, engineVersion: z.string(), needs: PlayNeedsSchema, mcpNeeds: PlayMcpNeedsSchema, remixOf: PlayRemixRefSchema.optional() }),
     share: z.object({ shareId: z.string(), url: z.string(), sharedAtMs: z.number() }).optional(),
   }),
 });
@@ -1095,7 +1098,11 @@ const playUploadFileSchema = z.object({
   name: z.string(), bytesBase64: z.string(), type: z.string().optional(), role: z.enum(["ship", "reference"]),
 });
 export const playImportRoute = defineRoute("POST", "/api/play/import", {
-  body: z.object({ title: z.string(), html: z.string(), name: z.string().optional(), files: z.array(playUploadFileSchema).optional() }),
+  body: z.object({
+    title: z.string(), html: z.string(), name: z.string().optional(), files: z.array(playUploadFileSchema).optional(),
+    remixOf: PlayRemixRefSchema.optional(),
+    genre: z.enum(["replay", "skill-run", "project-fun", "session-heatmap", "project-map", "skill-tuner"]).optional(),
+  }),
   response: z.object({ name: z.string() }),
 });
 export const playBlankRoute = defineRoute("POST", "/api/play/blank", {
