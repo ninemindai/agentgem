@@ -8,11 +8,11 @@ import { canonicalJSON } from "@agentgem/insight";
 
 export type Visibility = "public" | "unlisted" | "private";
 
-// Remix lineage on the catalog wire. OPTIONAL end-to-end and NOT yet sent by this repo's
-// publish path: the aggregator must accept these fields before any console signs a manifest
-// containing them (the manifest hash covers the whole object — an aggregator that strips an
-// unknown key verifies a different hash and rejects the publish). Rollout: enterprise E-PR1
-// deploys acceptance; O-PR2 then flips the console to send.
+// Remix lineage on the catalog wire. OPTIONAL end-to-end; the manifest hash covers the whole
+// object, so an aggregator that strips an unknown key would verify a different hash and reject
+// the publish — the aggregator had to accept these fields before any console could sign a
+// manifest containing them. Rollout: enterprise E-PR1 deployed acceptance; the console here now
+// sends them as of O-PR2.
 export interface CatalogRemixRef { gemKey: string; version: string }
 
 export interface GemArtifactRef { name: string; type: string }

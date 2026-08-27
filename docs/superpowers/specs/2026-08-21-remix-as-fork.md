@@ -49,7 +49,7 @@ property for free — a fork is a full copy.
    both; republish that omits `allowRemix` preserves the stored value (same rule as
    `visibility`).
 8. The aggregator **rejects** publishing a gem whose `remixOf` names a game that doesn't exist,
-   isn't public, or has `allowRemix = false` (reject code `remix_not_allowed`). UI-hiding is
+   isn't public, or has `allowRemix = false` (reject code `remix-not-allowed` — kebab-case matching the sibling rejection codes `invalid-key`/`conflict`; deviation from this spec's earlier draft, ruled at E-PR1). UI-hiding is
    not enforcement; this is.
 
 ### Display
