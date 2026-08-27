@@ -24,8 +24,9 @@ const ReviewPlayBody = z.object({ requestId: z.string() });
 const ReviewPlayResult = z.object({ html: z.string(), needs: z.array(z.string()).optional() });
 const ReviewGroupsResult = z.object({ authenticated: z.boolean(), groups: z.array(z.object({ id: z.string(), name: z.string(), role: z.string() })) });
 
-// Build the same manifest publishSetup builds (src/gem.controller.ts:620-641), MINUS visibility (a
-// staged gem's visibility is decided at approval/publish, not at review submission) and MINUS tags
+// Build the same manifest publishSetup builds (src/gem.controller.ts, buildPublishManifest), MINUS
+// visibility, allowRemix, and remixOf (spec D-f — staging must not carry sharing scope or remix
+// grants/lineage; those are decided at approval/publish, not at review submission) and MINUS tags
 // (publishSetup takes tags from its request body, which the review routes don't collect).
 function buildManifest(b: { workspace: string; scope: string; name?: string; version: string; description?: string }): { manifest: CatalogManifest; archiveBase64: string } {
   const gem = readGemArchive(readWorkspace(b.workspace).files);

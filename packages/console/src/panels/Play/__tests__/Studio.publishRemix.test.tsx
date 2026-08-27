@@ -70,4 +70,21 @@ describe("Studio → Share banner: Allow remixing checkbox", () => {
     await waitFor(() => expect(publish).toHaveBeenCalledTimes(1));
     expect(publish.mock.calls[0][1]).toMatchObject({ body: expect.objectContaining({ allowRemix: false }) });
   });
+
+  it("version-confirm path (already published, owned by me) sends allowRemix: true", async () => {
+    vi.spyOn(routes.bindStatusRoute, "call").mockResolvedValue({ bound: true, login: "bob", sessionActive: true } as never);
+    vi.spyOn(routes.playMiniappRoute, "call").mockResolvedValue(miniapp as never);
+    vi.spyOn(routes.playSaveRoute, "call").mockResolvedValue({ name: "g1", commit: "abc1234", prunedNeeds: [] } as never);
+    vi.spyOn(routes.publishStatusRoute, "call").mockResolvedValue({ exists: true, ownedByMe: true, latestVersion: "0.1.4" } as never);
+    const publish = vi.spyOn(routes.publishSetupRoute, "call").mockResolvedValue({ exploreRef: "@bob/snake", version: "0.1.5", shareUrl: "https://agentgem.ai/share/s" } as never);
+    mount();
+    fireEvent.click(await screen.findByRole("button", { name: /^share$/i }));
+    await screen.findByRole("checkbox", { name: /allow remixing/i });
+
+    fireEvent.click(await screen.findByRole("button", { name: /^skip$/i }));
+    fireEvent.click(await screen.findByRole("button", { name: /^publish v0\.1\.5$/i }));
+
+    await waitFor(() => expect(publish).toHaveBeenCalledTimes(1));
+    expect(publish.mock.calls[0][1]).toMatchObject({ body: expect.objectContaining({ allowRemix: true, version: "0.1.5" }) });
+  });
 });

@@ -36,4 +36,9 @@ describe("fetchRemixSource", () => {
     await expect(fetchRemixSource({ key: "@bob/snake", endpoint: "http://agg", http }))
       .rejects.toThrow(/could not reach the marketplace/);
   });
+  it("maps a body-read failure (http resolves, json() rejects) to the same clean message", async () => {
+    const http: RemixHttp = async () => ({ status: 200, json: async () => { throw new Error("premature close"); } });
+    await expect(fetchRemixSource({ key: "@bob/snake", endpoint: "http://agg", http }))
+      .rejects.toThrow(/could not reach the marketplace/);
+  });
 });
