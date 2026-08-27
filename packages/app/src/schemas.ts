@@ -554,6 +554,7 @@ export const PlaybookPublishBodySchema = z.object({
   description: z.string().optional(), tags: z.array(z.string()).optional(), provenance: z.string(),
   visibility: z.enum(["public", "unlisted", "private"]).optional(),
   coverDataUrl: z.string().optional(),
+  allowRemix: z.boolean().optional(),
 });
 export const PlaybookPublishResponseSchema = z.object({ exploreRef: z.string(), version: z.string(), shareUrl: z.string() });
 

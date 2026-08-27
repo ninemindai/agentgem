@@ -98,6 +98,7 @@ export function Studio({
   const [pendingVersion, setPendingVersion] = useState<{ latestVersion: string; nextVersion: string; login: string } | null>(null);
   const [scope, setScope] = useState<"public" | "unlisted" | "private">("public");
   const [tags, setTags] = useState("");   // free-form publish tags (comma separated), parsed via parseTags
+  const [allowRemix, setAllowRemix] = useState(true);   // "Allow remixing" checkbox, default ON
   // The accepted coverDataUrl, threaded into publish. A ref, not state: it's never rendered, only
   // read inside publishWorkspace — reading it as state there would close over the value as of the
   // render that created the handler (e.g. Use this's onClick), which is stale by one setCover call.
@@ -474,6 +475,7 @@ export function Studio({
         workspace: name, scope: login, name, version, provenance: "play", visibility,
         description: `${g.label} mini-game`, tags: ["game", meta?.genre ?? "project-fun", ...parseTags(tags)],
         coverDataUrl: coverRef.current ?? undefined,
+        allowRemix,
       } });
       // Link the gem's marketplace page (installable / playable), not just the OG teaser card.
       // Unlisted publishes aren't in Explore, so point straight at the playable /games/ link instead.
@@ -734,6 +736,11 @@ export function Studio({
             <label className="play-banner__opts-label" htmlFor="play-share-tags">Tags</label>
             <input id="play-share-tags" className="play-tags-input" type="text" placeholder="tags, comma separated"
               value={tags} onChange={(e) => setTags(e.target.value)} />
+            <label className="play-banner__opts-label" htmlFor="play-share-remix">
+              <input id="play-share-remix" type="checkbox" checked={allowRemix} onChange={(e) => setAllowRemix(e.target.checked)} />
+              Allow remixing
+            </label>
+            <span className="play-banner__opts-help">Others can fork this game as a starting point. Remixes credit you.</span>
           </div>
         </div>
       )}
