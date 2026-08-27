@@ -302,6 +302,7 @@ import { exportGem, importGem } from "@agentgem/distribute";
 import { fetchGemBytes } from "@agentgem/distribute";
 import { sendBytes, receiveTicket, natsStoreFromEnv, assertConfigured, mintCredsFromEnv, fetchAndBurnCiphertext } from "@agentgem/transfer";
 import type { Gem } from "@agentgem/model";
+import type { CatalogManifest, Visibility } from "@agentgem/contract";
 import { transcriptToken, readAnalysisCache, writeAnalysisCache } from "@agentgem/insight";
 import { readGlobalUsageCache, writeGlobalUsageCache, readGlobalUsageCacheStale } from "@agentgem/capture";
 import { computeGlobalUsage, getGlobalUsageIndexed, getGlobalUsageStale } from "@agentgem/capture";
@@ -446,6 +447,31 @@ function decorateInventory(inv: ConfigInventory, defer: boolean): ConfigInventor
     }
   }
   return inv; // inv.projects[] is deliberately untouched: no project-scoped entity path exists yet
+}
+
+// Pure builder for the installable-publish manifest (publishSetup), extracted so the manifest
+// content — esp. the remix lineage fields below — is unit-testable without the archive round-trip.
+export function buildPublishManifest(
+  b: { scope: string; name?: string; workspace: string; version: string; description?: string; tags?: string[]; visibility?: Visibility; allowRemix?: boolean },
+  gem: Gem,
+  gemDigest: string,
+): CatalogManifest {
+  return {
+    gemKey: `${b.scope}/${b.name ?? b.workspace}`, version: b.version,
+    visibility: b.visibility,
+    description: b.description, tags: b.tags, grade: gem.grade,
+    artifactKinds: [...new Set(gem.artifacts.map((a) => a.type))],
+    artifacts: gem.artifacts.map((a) => ({ name: a.name, type: a.type })),
+    gemDigest,
+    ...(b.allowRemix === undefined ? {} : { allowRemix: b.allowRemix }),
+    // Lineage comes from the ARTIFACT, never the request: the fork baked it at creation, and a
+    // client cannot claim lineage its workspace doesn't carry. The deployed aggregator re-gates
+    // it against the target's current allowRemix regardless.
+    ...(() => {
+      const g = gem.artifacts.find((a) => a.type === "game") as { remixOf?: { gemKey: string; version: string } } | undefined;
+      return g?.remixOf ? { remixOf: g.remixOf } : {};
+    })(),
+  };
 }
 
 const PublishStatusQuerySchema = z.object({ workspace: z.string(), scope: z.string(), name: z.string().optional() });
@@ -797,14 +823,7 @@ export class GemController {
         const gem = readGemArchive(readWorkspace(b.workspace).files);
         const { bytes } = exportGem(gem, { version: b.version });
         const { meta } = importGem(bytes);
-        const manifest = {
-          gemKey: `${b.scope}/${b.name ?? b.workspace}`, version: b.version,
-          visibility: b.visibility,
-          description: b.description, tags: b.tags, grade: gem.grade,
-          artifactKinds: [...new Set(gem.artifacts.map((a) => a.type))],
-          artifacts: gem.artifacts.map((a) => ({ name: a.name, type: a.type })),
-          gemDigest: meta.gemDigest,
-        };
+        const manifest = buildPublishManifest(b, gem, meta.gemDigest);
         const identity = loadOrCreateIdentity();
         const r = await postGemPublish({ manifest, archiveBase64: bytes.toString("base64"), identity, coverDataUrl: b.coverDataUrl });
         if (!r.shared) throw shareRejectedError(r.rejected);
