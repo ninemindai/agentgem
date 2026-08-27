@@ -1059,8 +1059,11 @@ const PlaySourceSchema = z.discriminatedUnion("kind", [
 ]);
 // Mirrors RemixRefSchema in src/schemas.ts: lineage of a remix fork, pinned at fork time.
 const PlayRemixRefSchema = z.object({ gemKey: z.string(), version: z.string() });
+// Single source of truth for the play genre enum — RemixConfirm.tsx imports this rather than
+// keeping its own copy in sync.
+export const GAME_GENRE_VALUES = ["replay", "skill-run", "project-fun", "session-heatmap", "project-map", "skill-tuner"] as const;
 const PlayMetaSchema = z.object({
-  title: z.string(), genre: z.enum(["replay", "skill-run", "project-fun", "session-heatmap", "project-map", "skill-tuner"]),
+  title: z.string(), genre: z.enum(GAME_GENRE_VALUES),
   createdFrom: PlaySourceSchema, engineVersion: z.string().default("1"), needs: PlayNeedsSchema,
   mcpNeeds: PlayMcpNeedsSchema,
   remixOf: PlayRemixRefSchema.optional(),
@@ -1088,7 +1091,7 @@ export const playInspectorRoute = defineRoute("GET", "/api/play/inspector", {
 export const playStudioRoute = defineRoute("POST", "/api/play/studio", {
   body: z.object({
     source: PlaySourceSchema, name: z.string().optional(),
-    genre: z.enum(["replay", "skill-run", "project-fun", "session-heatmap", "project-map", "skill-tuner"]).optional(),
+    genre: z.enum(GAME_GENRE_VALUES).optional(),
   }),
   response: z.object({ name: z.string() }),
 });
@@ -1101,7 +1104,7 @@ export const playImportRoute = defineRoute("POST", "/api/play/import", {
   body: z.object({
     title: z.string(), html: z.string(), name: z.string().optional(), files: z.array(playUploadFileSchema).optional(),
     remixOf: PlayRemixRefSchema.optional(),
-    genre: z.enum(["replay", "skill-run", "project-fun", "session-heatmap", "project-map", "skill-tuner"]).optional(),
+    genre: z.enum(GAME_GENRE_VALUES).optional(),
   }),
   response: z.object({ name: z.string() }),
 });

@@ -894,6 +894,8 @@ export const RegistryGemSchema = z.object({
   publishedBy: z.string().optional(),
   grade: z.number().int().min(1).max(3).optional(),
   installable: z.boolean(),
+  allowRemix: z.boolean().optional(),
+  remixOf: z.object({ gemKey: z.string(), version: z.string() }).optional(),
   artifacts: z.array(z.object({ name: z.string(), type: z.string() })).optional(),
   createdAtMs: z.number().optional(),
   updatedAtMs: z.number().optional(),

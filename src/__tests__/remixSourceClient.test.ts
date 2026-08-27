@@ -31,4 +31,9 @@ describe("fetchRemixSource", () => {
     await expect(fetchRemixSource({ key: "@bob/gone", endpoint: "http://agg", http }))
       .rejects.toThrow(/not available to remix/);
   });
+  it("maps a thrown fetch error (timeout/DNS) to a clean marketplace-unreachable message", async () => {
+    const http: RemixHttp = async () => { throw new TypeError("fetch failed"); };
+    await expect(fetchRemixSource({ key: "@bob/snake", endpoint: "http://agg", http }))
+      .rejects.toThrow(/could not reach the marketplace/);
+  });
 });

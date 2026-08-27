@@ -22,16 +22,29 @@ function resolveBase(endpoint: string | undefined): string {
   return "https://api.agentgem.ai";
 }
 
+// A thrown transport error (timeout AbortError, DNS TypeError, ...) is opaque and would otherwise
+// surface to the confirm card as a raw fetch error / 500. Map it to the same clean InvalidInputError
+// shape as every other rejection here. Only wraps the transport call itself — the explicit
+// InvalidInputError throws below (allowRemix refusal, 404 mapping, missing html) happen after a
+// normal resolution and pass through untouched.
+async function safeCall(http: RemixHttp, url: string): Promise<{ status: number; json(): Promise<unknown> }> {
+  try {
+    return await http(url);
+  } catch {
+    throw new InvalidInputError("could not reach the marketplace; try again in a moment");
+  }
+}
+
 export async function fetchRemixSource(args: { key: string; endpoint?: string; http?: RemixHttp }): Promise<RemixSource> {
   const base = resolveBase(args.endpoint);
   const http = args.http ?? defaultHttp;
-  const metaRes = await http(`${base}/api/aggregator/game-meta?key=${encodeURIComponent(args.key)}`);
+  const metaRes = await safeCall(http, `${base}/api/aggregator/game-meta?key=${encodeURIComponent(args.key)}`);
   if (metaRes.status === 404) throw new InvalidInputError("that game is not available to remix");
   if (metaRes.status < 200 || metaRes.status >= 300) throw new InvalidInputError(`could not fetch the game (HTTP ${metaRes.status}); try again in a moment`);
   const meta = (await metaRes.json()) as { title?: string; genre?: string; version?: string; allowRemix?: boolean };
   if (meta.allowRemix !== true) throw new InvalidInputError("the creator hasn't allowed remixing for this game");
   if (!meta.title || !meta.version) throw new InvalidInputError("that game is not available to remix");
-  const htmlRes = await http(`${base}/api/aggregator/game-html?key=${encodeURIComponent(args.key)}&version=${encodeURIComponent(meta.version)}`);
+  const htmlRes = await safeCall(http, `${base}/api/aggregator/game-html?key=${encodeURIComponent(args.key)}&version=${encodeURIComponent(meta.version)}`);
   if (htmlRes.status < 200 || htmlRes.status >= 300) throw new InvalidInputError(`could not fetch the game (HTTP ${htmlRes.status}); try again in a moment`);
   const body = (await htmlRes.json()) as { html?: string };
   if (!body.html) throw new InvalidInputError("that game is not available to remix");

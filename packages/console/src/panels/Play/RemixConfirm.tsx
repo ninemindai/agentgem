@@ -3,11 +3,10 @@
 // renders this card; the fetch + fork happen on the explicit click (spec I3's mirror: pulling a
 // published artifact IN is an authored act too). deeplink.ts's "play installs nothing" stays true.
 import { useState } from "react";
-import { makeClient, playRemixSourceRoute, playImportRoute } from "../../api/routes.js";
+import { makeClient, playRemixSourceRoute, playImportRoute, GAME_GENRE_VALUES } from "../../api/routes.js";
 
-const GENRES = ["replay", "skill-run", "project-fun", "session-heatmap", "project-map", "skill-tuner"] as const;
-type Genre = (typeof GENRES)[number];
-const asGenre = (g: string): Genre | undefined => (GENRES as readonly string[]).includes(g) ? (g as Genre) : undefined;
+type Genre = (typeof GAME_GENRE_VALUES)[number];
+const asGenre = (g: string): Genre | undefined => (GAME_GENRE_VALUES as readonly string[]).includes(g) ? (g as Genre) : undefined;
 
 export function RemixConfirm({ apiBase, gemKey, onCreated, onCancel }: {
   apiBase: string;

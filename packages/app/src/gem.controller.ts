@@ -301,7 +301,7 @@ import { packTar } from "@agentgem/archive";
 import { exportGem, importGem } from "@agentgem/distribute";
 import { fetchGemBytes } from "@agentgem/distribute";
 import { sendBytes, receiveTicket, natsStoreFromEnv, assertConfigured, mintCredsFromEnv, fetchAndBurnCiphertext } from "@agentgem/transfer";
-import type { Gem } from "@agentgem/model";
+import type { Gem, RemixRef } from "@agentgem/model";
 import type { CatalogManifest, Visibility } from "@agentgem/contract";
 import { transcriptToken, readAnalysisCache, writeAnalysisCache } from "@agentgem/insight";
 import { readGlobalUsageCache, writeGlobalUsageCache, readGlobalUsageCacheStale } from "@agentgem/capture";
@@ -468,7 +468,7 @@ export function buildPublishManifest(
     // client cannot claim lineage its workspace doesn't carry. The deployed aggregator re-gates
     // it against the target's current allowRemix regardless.
     ...(() => {
-      const g = gem.artifacts.find((a) => a.type === "game") as { remixOf?: { gemKey: string; version: string } } | undefined;
+      const g = gem.artifacts.find((a) => a.type === "game") as { remixOf?: RemixRef } | undefined;
       return g?.remixOf ? { remixOf: g.remixOf } : {};
     })(),
   };

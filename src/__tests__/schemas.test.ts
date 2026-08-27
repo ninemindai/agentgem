@@ -8,6 +8,7 @@ import {
   GemArtifactSchema, SkippedArtifactSchema,
   SkillArtifactSchema, TriggerContractSchema, DistilledSkillSchema,
   GemApplyResponseSchema, RubricInstallResultSchema,
+  RegistryGemSchema,
 } from "@agentgem/app/schemas";
 
 describe("wire schemas", () => {
@@ -245,5 +246,13 @@ describe("install responses carry an optional rubrics result", () => {
     const base = { dir: "/d", name: "g", written: [], skipped: [] };
     expect(GemApplyResponseSchema.safeParse(base).success).toBe(true);
     expect(GemApplyResponseSchema.safeParse({ ...base, rubrics: { installed: ["r"], skipped: [] } }).success).toBe(true);
+  });
+});
+
+describe("RegistryGemSchema", () => {
+  it("RegistryGemSchema keeps allowRemix + remixOf", () => {
+    const g = RegistryGemSchema.parse({ key: "@b/s", version: "1.0.0", installable: true, allowRemix: false, remixOf: { gemKey: "@a/o", version: "1.0.0" } });
+    expect(g.allowRemix).toBe(false);
+    expect(g.remixOf).toEqual({ gemKey: "@a/o", version: "1.0.0" });
   });
 });

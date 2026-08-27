@@ -18,6 +18,8 @@ export interface RegistryGem {
   publishedBy?: string;
   grade?: number;
   installable: boolean;
+  allowRemix?: boolean;
+  remixOf?: { gemKey: string; version: string };
   artifacts?: { name: string; type: string }[];
   createdAtMs?: number;
   updatedAtMs?: number;
@@ -47,7 +49,7 @@ export function mapDbToGems(rows: CatalogRow[]): RegistryGem[] {
   return rows.map((r) => ({
     key: r.gemKey, version: r.version, author: r.author, description: r.description,
     tags: r.tags, artifactKinds: r.artifactKinds, type: r.type, publishedBy: r.publishedBy,
-    grade: clampGrade(r.grade), installable: r.installable ?? false, artifacts: r.artifacts,
+    grade: clampGrade(r.grade), installable: r.installable ?? false, allowRemix: r.allowRemix, remixOf: r.remixOf, artifacts: r.artifacts,
     createdAtMs: r.createdAtMs, updatedAtMs: r.updatedAtMs ?? r.createdAtMs,
   }));
 }
