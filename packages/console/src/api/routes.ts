@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { createClient, defineRoute, type Client } from "@agentback/client";
+import type { GameGenre } from "@agentgem/model";
 import { MCP_ERROR_CODES } from "../panels/Play/mcpErrors.js";
 
 // Minimal client-side schemas: validate ONLY what the UI reads. Zod strips the
@@ -1059,9 +1060,18 @@ const PlaySourceSchema = z.discriminatedUnion("kind", [
 ]);
 // Mirrors RemixRefSchema in src/schemas.ts: lineage of a remix fork, pinned at fork time.
 const PlayRemixRefSchema = z.object({ gemKey: z.string(), version: z.string() });
-// Single source of truth for the play genre enum — RemixConfirm.tsx imports this rather than
-// keeping its own copy in sync.
+// Single CLIENT-side source of truth for the play genre enum — RemixConfirm.tsx imports this rather
+// than keeping its own copy in sync. The model's GAME_GENRES and parseTags.ts's GENRE_TAGS remain
+// separate copies for the same reason this one exists: a runtime import of @agentgem/model would
+// drag node:* modules into the browser bundle.
 export const GAME_GENRE_VALUES = ["replay", "skill-run", "project-fun", "session-heatmap", "project-map", "skill-tuner"] as const;
+// Compile-time drift guard: GAME_GENRE_VALUES must stay in lockstep with the canonical GameGenre union
+// (packages/model). `import type` is erased at build, so this costs the browser bundle nothing.
+type _GenreDrift = [GameGenre] extends [(typeof GAME_GENRE_VALUES)[number]]
+  ? ((typeof GAME_GENRE_VALUES)[number] extends GameGenre ? true : never)
+  : never;
+const _genreDrift: _GenreDrift = true;
+void _genreDrift;
 const PlayMetaSchema = z.object({
   title: z.string(), genre: z.enum(GAME_GENRE_VALUES),
   createdFrom: PlaySourceSchema, engineVersion: z.string().default("1"), needs: PlayNeedsSchema,
