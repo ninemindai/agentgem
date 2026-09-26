@@ -9,26 +9,26 @@ importers:
   .:
     dependencies:
       '@agentback/core':
-        specifier: ^0.10.0
-        version: 0.10.0
+        specifier: ^0.12.0
+        version: 0.12.0
       '@agentback/extension-rate-limit':
-        specifier: ^0.10.0
-        version: 0.10.0(cors@2.8.6)(express@5.2.1)(hono@4.12.25)
+        specifier: ^0.12.0
+        version: 0.12.0(cors@2.8.6)(express@5.2.1)(hono@4.12.25)
       '@agentback/mcp':
-        specifier: ^0.10.0
-        version: 0.10.0
+        specifier: ^0.12.0
+        version: 0.12.0
       '@agentback/mcp-http':
-        specifier: ^0.10.0
-        version: 0.10.0(cors@2.8.6)(hono@4.12.25)
+        specifier: ^0.12.0
+        version: 0.12.0(cors@2.8.6)(hono@4.12.25)
       '@agentback/openapi':
-        specifier: ^0.10.0
-        version: 0.10.0
+        specifier: ^0.12.0
+        version: 0.12.0
       '@agentback/rest':
-        specifier: ^0.10.0
-        version: 0.10.0(cors@2.8.6)(express@5.2.1)(hono@4.12.25)
+        specifier: ^0.12.0
+        version: 0.12.0(cors@2.8.6)(express@5.2.1)(hono@4.12.25)
       '@agentback/rest-explorer':
-        specifier: ^0.10.0
-        version: 0.10.0(cors@2.8.6)(hono@4.12.25)
+        specifier: ^0.12.0
+        version: 0.12.0(cors@2.8.6)(hono@4.12.25)
       '@agentclientprotocol/sdk':
         specifier: ^1.3.0
         version: 1.3.0(zod@4.4.3)
@@ -169,23 +169,23 @@ importers:
   packages/app:
     dependencies:
       '@agentback/core':
-        specifier: ^0.10.0
-        version: 0.10.0
+        specifier: ^0.12.0
+        version: 0.12.0
       '@agentback/mcp':
-        specifier: ^0.10.0
-        version: 0.10.0
+        specifier: ^0.12.0
+        version: 0.12.0
       '@agentback/mcp-http':
-        specifier: ^0.10.0
-        version: 0.10.0(cors@2.8.6)(hono@4.12.25)
+        specifier: ^0.12.0
+        version: 0.12.0(cors@2.8.6)(hono@4.12.25)
       '@agentback/openapi':
-        specifier: ^0.10.0
-        version: 0.10.0
+        specifier: ^0.12.0
+        version: 0.12.0
       '@agentback/rest':
-        specifier: ^0.10.0
-        version: 0.10.0(cors@2.8.6)(express@5.2.1)(hono@4.12.25)
+        specifier: ^0.12.0
+        version: 0.12.0(cors@2.8.6)(express@5.2.1)(hono@4.12.25)
       '@agentback/rest-explorer':
-        specifier: ^0.10.0
-        version: 0.10.0(cors@2.8.6)(hono@4.12.25)
+        specifier: ^0.12.0
+        version: 0.12.0(cors@2.8.6)(hono@4.12.25)
       '@agentgem/archive':
         specifier: workspace:*
         version: link:../archive
@@ -247,8 +247,8 @@ importers:
   packages/base:
     dependencies:
       '@agentback/common':
-        specifier: ~0.10.0
-        version: 0.10.0
+        specifier: ~0.12.0
+        version: 0.12.0
       '@agentgem/archive':
         specifier: workspace:*
         version: link:../archive
@@ -283,8 +283,8 @@ importers:
   packages/console:
     dependencies:
       '@agentback/client':
-        specifier: ^0.10.0
-        version: 0.10.0(zod@4.4.3)
+        specifier: ^0.12.0
+        version: 0.12.0(zod@4.4.3)
       '@agentgem/insight':
         specifier: workspace:*
         version: link:../insight
@@ -341,8 +341,8 @@ importers:
   packages/contract:
     dependencies:
       '@agentback/core':
-        specifier: ~0.10.0
-        version: 0.10.0
+        specifier: ~0.12.0
+        version: 0.12.0
       '@agentgem/insight':
         specifier: workspace:*
         version: link:../insight
@@ -504,71 +504,71 @@ importers:
 
 packages:
 
-  '@agentback/authentication@0.10.0':
-    resolution: {integrity: sha512-y/kI+uc7CypHVDeadbOD4zC9s+X2t7ZAZ7yR0tAsw38Jk6hVp+ItHRSISbyOWvGOmGRFhD5lf5jpPjRMdFkRcg==}
-    engines: {node: '>=22.13'}
+  '@agentback/authentication@0.12.0':
+    resolution: {integrity: sha512-bTzxb2stBsD+kK82tv/R/Cw4ZsgLZ1b3jXK0WMBQHyj5kYGX32c5OP+sWUqBdZUK9aVKleDUZNj24UcuHD/YbA==}
+    engines: {node: '>=22.18'}
 
-  '@agentback/authorization@0.10.0':
-    resolution: {integrity: sha512-VR4Pe+zOderXOpiRMro3XXW0aiK2UkvlriLM/CzkjBoGV0+N4aanxYyko552SP8yTYrdz3CWNr6D7UrPRORt7A==}
-    engines: {node: '>=22.13'}
+  '@agentback/authorization@0.12.0':
+    resolution: {integrity: sha512-ZX8RYV3atXS0DjKX7ppblH8qJSmKL8QKkZQAsJitSB+f7Pi0w7onGarFqXrgUvhWL8t4hhmmyhKon2Wt70vm3w==}
+    engines: {node: '>=22.18'}
 
-  '@agentback/client@0.10.0':
-    resolution: {integrity: sha512-wuupUy2Y/g46nujd5xaGFgc2cPw17cwK3dJE0gJGhLkRHyaT4mHZhOBqIQQAv4KQBOaZ1fysn7d0JjyeQnxtFw==}
-    engines: {node: '>=22.13'}
+  '@agentback/client@0.12.0':
+    resolution: {integrity: sha512-PO4hL5TlhXc7i1TUhyCcGEZscHw1H6oNcl8oLIyPP3UKAHVTN5wvLWSapqaf2sCNTN9mCSUwp8YAYffBCMSUZA==}
+    engines: {node: '>=22.18'}
     peerDependencies:
       zod: ^4
 
-  '@agentback/common@0.10.0':
-    resolution: {integrity: sha512-dTZWCkqgU8C0bycIxiBcmu2Og7ld6QaXvvp2eMPrDli/7O64KQ6PsG+yix6t2L9I/+V3pRYoK+TkHmGdDKNz2w==}
-    engines: {node: '>=22.13'}
+  '@agentback/common@0.12.0':
+    resolution: {integrity: sha512-/NR8NeMpK8OLnbamKt5Mhh3YAvytd6ZF0I1N63bxBjNYqwU1As22i28IpKP5Pm8HY0D6/Y5ccGpEPkYCcCvsOQ==}
+    engines: {node: '>=22.18'}
 
-  '@agentback/context@0.10.0':
-    resolution: {integrity: sha512-pFXG5aBPgq7dx1Qr1Sy/lClKtEsc/R0lpghOBu57d4SCNLRHaQ8ySZzh03hx4HhrJoWykJ+Sx9pWvOjXkZOjOQ==}
-    engines: {node: '>=22.13'}
+  '@agentback/context@0.12.0':
+    resolution: {integrity: sha512-oRSaL7rIzuq2DrHT8l3sSzp1tzEBK1Uig+iD73Iu5V97z/cI5vYj+rQb8iejjB/hQ+006O1GpI/DwwNrBH8wVg==}
+    engines: {node: '>=22.18'}
 
-  '@agentback/core@0.10.0':
-    resolution: {integrity: sha512-3edy53G7ulxAVJMty6LSb2FcoEvJRoZOeYADeYBmIlow3uABjikKAH2/X/Z1l22Ps5BI7vScJMQgi12ra1DKbQ==}
-    engines: {node: '>=22.13'}
+  '@agentback/core@0.12.0':
+    resolution: {integrity: sha512-MUXsla0I6/ocXzfn0xGYli6NAEeQ/GREQeYNqpvyvB5+XUi82Ag1yOvOa+RZuojl8QIM3M8uQwkHLi1JKNiiqQ==}
+    engines: {node: '>=22.18'}
 
-  '@agentback/extension-rate-limit@0.10.0':
-    resolution: {integrity: sha512-EjaB2Jm5LZG+a46IsJWdoLfO2QuYp8TO7/pqPjFJDQaqiCW1Ongl/UOGx5EQOE1W2ScTrT7knE6/W1Lac50V1g==}
-    engines: {node: '>=22.13'}
+  '@agentback/extension-rate-limit@0.12.0':
+    resolution: {integrity: sha512-NQV27nbFBCeIbw1UxiS9MOifv9L7Vl9Fv+iGNm+VC2/hXXdKTn5sFisCNtruvZEMrd1Yk8gOtvXFYJ8eZiyRwA==}
+    engines: {node: '>=22.18'}
 
-  '@agentback/files@0.10.0':
-    resolution: {integrity: sha512-t/SAvbU3drPXtr0+dMAbXcyC+pfZfkquIa6POikMTZRP6Z2ORhYsGxKHuq4qsGCqHg0eC1MTQM+Ux9RGrqgQiw==}
-    engines: {node: '>=22.13'}
+  '@agentback/files@0.12.0':
+    resolution: {integrity: sha512-GuDl0r8YljfJlalJllaWR3QBGYHpkWi3MsedIljGHaJshwPt0RTa9nB15wmUUBkYxRMH5s/LI1gy+Xq+7eym9A==}
+    engines: {node: '>=22.18'}
 
-  '@agentback/http-server@0.10.0':
-    resolution: {integrity: sha512-YdgZrCfOB2fxambE7lwij8DG4eEmfPGvj+gepzBlD+O8+dYi4qCvUjf+ZStwvm49D+AHsxjAfRYPZNkIz3OFfg==}
-    engines: {node: '>=22.13'}
+  '@agentback/http-server@0.12.0':
+    resolution: {integrity: sha512-64JGThpUrtM3n5ZoY+drVbmwIzUhwa3KXoZqzQDxKG/JjYIh7rRRHN5p2llgvtf30/aecKH6/T6nbFE096oCVQ==}
+    engines: {node: '>=22.18'}
 
-  '@agentback/mcp-http@0.10.0':
-    resolution: {integrity: sha512-yJYBpXTU8aZwizyY1BZZTtqxN9K+0PRWEBU0N1cVZB118P/o6gRqJSd5JWbOHQFFfne3tGxiVJ9YLozxV85FiQ==}
-    engines: {node: '>=22.13'}
+  '@agentback/mcp-http@0.12.0':
+    resolution: {integrity: sha512-p2YRPOtLKkxnrAapd0MvBTP7KsSTuNT1OdJaHnQgsx0K5zaVvCvo4JT14g/iQ91dJQ7VRcBpzHLiPJNfamrtDw==}
+    engines: {node: '>=22.18'}
 
-  '@agentback/mcp@0.10.0':
-    resolution: {integrity: sha512-vUkGThEUbmtxdOq1AhERuDsAq+0+HjLBCtmq+qfZ83/JU2U/mWiRP3FmWGldtYYplM12oPW/vTaVzg1By2FHXQ==}
-    engines: {node: '>=22.13'}
+  '@agentback/mcp@0.12.0':
+    resolution: {integrity: sha512-8C1mqcx+F2eNC6XUAOaFqf98SBTpf7jYowMKObXzCRAx7Yqeh5daIRe2/Q7BzyQ2IViZPWuhgEmctV9Gyt7qfA==}
+    engines: {node: '>=22.18'}
 
-  '@agentback/metadata@0.10.0':
-    resolution: {integrity: sha512-vodtkQZZ02akOgfwddMlewd+Z7h+6N2tc9jDa9GlXnLIVJroXPDYthwMCvpGuWKSoSpW5XpvgPaJ/PXdDL92sQ==}
-    engines: {node: '>=22.13'}
+  '@agentback/metadata@0.12.0':
+    resolution: {integrity: sha512-sC4E0sudIi9VQzMQn72EX8VakNJ62Y9lc+77IbSqufgkOCrIi9QmV3CU8myPOxaFupELHRxVN3UGgzUu7Ol08g==}
+    engines: {node: '>=22.18'}
 
-  '@agentback/middleware@0.10.0':
-    resolution: {integrity: sha512-tZiFvCUkK0A1DEav7qnOIqi1UWa0ENMMvNmOS5dw0v2RbKm3yhnsm2V6x9n6crXQGyPQ6FwzPIRtvi02pD2y/g==}
-    engines: {node: '>=22.13'}
+  '@agentback/middleware@0.12.0':
+    resolution: {integrity: sha512-DyiPdZR3jzHrvIhz2oJbs/Bdt/1M9/uMys8s3ubZH/vfw8JUjbVm91tPrHjQ+aJF0mjua7HovOaYkArln4Majw==}
+    engines: {node: '>=22.18'}
 
-  '@agentback/openapi@0.10.0':
-    resolution: {integrity: sha512-mK2bD+MRr1dsAzbrAWTijLK3WYOK38B8IhqvnyaYASPO3kbsKxyRk6LxuBxiDxU3NWSTqjQRNrdAYkV6mNjSiQ==}
-    engines: {node: '>=22.13'}
+  '@agentback/openapi@0.12.0':
+    resolution: {integrity: sha512-ucnPODb8K/FNPCLc9HFoSc09OO1QAd0lvD/tDR7iynroohoW2/pZOXyN3Wf0z89xNVqgHJsrLmpgE01slx8MbQ==}
+    engines: {node: '>=22.18'}
 
-  '@agentback/rest-explorer@0.10.0':
-    resolution: {integrity: sha512-YSgDd8OFLXNx4jiAkuYIe4JbVnAAnuG7XYZKqdui+JofBCP7dQK/mKoFYNmKyBfXyIxWqfzjhJVElvCE9V7PWA==}
-    engines: {node: '>=22.13'}
+  '@agentback/rest-explorer@0.12.0':
+    resolution: {integrity: sha512-HCPSP315FYmXc2gB7XCON+YTliQWVEkKtMK8AxDoMy44diJezRdgUQqzzb8nmcTDhCN0l2j7+DF5Kg49n9lQww==}
+    engines: {node: '>=22.18'}
 
-  '@agentback/rest@0.10.0':
-    resolution: {integrity: sha512-NgEG78UkMPnXWruCrWwwThDbu33NpxOI2nRfori6yi7t+7dJ6//lL7L7WrrBRbCw3jrGWlq0rPcS9LomGjqV9g==}
-    engines: {node: '>=22.13'}
+  '@agentback/rest@0.12.0':
+    resolution: {integrity: sha512-Dgh49KivLB0rDW5VF6OEYc+Kgc6DPzlYVxIzXjfHEZpOg8vKNfMvqUWZMbAEwFd4ABHhVpvckeQ77Dwsu5XzQw==}
+    engines: {node: '>=22.18'}
     peerDependencies:
       cors: ~2.8.6
       express: ^5.2.1
@@ -581,9 +581,9 @@ packages:
       multer:
         optional: true
 
-  '@agentback/security@0.10.0':
-    resolution: {integrity: sha512-DHlmvgAD7zf4xy7Y+U49pnt4crjxcsTNzE080iurnaTkRwqgONLjevMThgxQHulpPkugvfC2+4d2iX9mgh8Q5A==}
-    engines: {node: '>=22.13'}
+  '@agentback/security@0.12.0':
+    resolution: {integrity: sha512-x4/Ync21vbKl5KjxfMIaqdTylzHCh55x8ECE5+AawNhz7sljNM6cHHf0NaixuCkjQWtDSPfi3MfXYZ6yN70G4Q==}
+    engines: {node: '>=22.18'}
 
   '@agentclientprotocol/sdk@1.3.0':
     resolution: {integrity: sha512-i3h/efaeuMUFAO1HSfo97QZQnnvMd7wWBYtBsdL6UMZg3a78sk3Ffya5Xu7C7tYsXomXoDXJBAzQF2PcFKAhIQ==}
@@ -1019,6 +1019,12 @@ packages:
     peerDependencies:
       hono: ^4
 
+  '@hono/node-server@2.1.1':
+    resolution: {integrity: sha512-ELuehkj5VCBdgEw9zs+ivkKwyzzUCSQuE96YmiPvn1ECBoZCczbFXJLeEGMTYjphP6gydh4pHMqEYPVMYUVgQg==}
+    engines: {node: '>=20'}
+    peerDependencies:
+      hono: ^4
+
   '@jridgewell/gen-mapping@0.3.13':
     resolution: {integrity: sha512-2kkt/7niJ6MgEPxF0bYdQ6etZaA+fQvDcLKckhy1yIQOzaoKjBBjSj63/aLVjYE3qhRt5dvM+uUyfCg6UKCBbA==}
 
@@ -1035,22 +1041,22 @@ packages:
   '@jridgewell/trace-mapping@0.3.31':
     resolution: {integrity: sha512-zzNR+SdQSDJzc8joaeP8QQoCQr8NuYx2dIIytl1QeBEZHJ9uW6hebsrYgbz8hJwUQao3TWCMtmfV8Nu1twOLAw==}
 
-  '@modelcontextprotocol/core@2.0.0':
-    resolution: {integrity: sha512-pJCEwGG7Lfr/+PQp9ZTwKXNeO5wzbfKL7H3MYpCorM4oFBoQrdjnBgEoqG+RjhsvS1FKrDbKux+M1HhlnGWqcA==}
+  '@modelcontextprotocol/core@2.1.0':
+    resolution: {integrity: sha512-YdFj5gMRHr0gYNAhTbQDgjLHiEJdIAUYxomhKseUNye7ZGlISQmUoLh2sveFFCiQ7j2YMffT1kgSND0FSfIFjQ==}
     engines: {node: '>=20'}
 
-  '@modelcontextprotocol/express@2.0.0':
-    resolution: {integrity: sha512-Snlr8j9FR9LcVvEJPF7qJ7d5zTL4Bes2dk7RcacN9eSZ7OLohwxqhEvWu1+UxELyScgLbLLOdeVEGdwKI1iwVQ==}
+  '@modelcontextprotocol/express@2.0.1':
+    resolution: {integrity: sha512-ufZbY2kxdJH5sJqMMG+trJOKhob7qDzoh9elVu/TYaKIMBChm9GfF8aee/zj1yOb3yXHiP0qYDcuauVvNGyB6A==}
     engines: {node: '>=20'}
     peerDependencies:
-      '@modelcontextprotocol/server': ^2.0.0
+      '@modelcontextprotocol/server': ^2.1.0
       express: ^4.18.0 || ^5.0.0
 
-  '@modelcontextprotocol/node@2.0.0':
-    resolution: {integrity: sha512-Y4hAC2XdGDUdDOCbLDOCA4+aL3NUldjsOWlDL/YwpAxrPhRm1xHd7lZ+mLacvZ9t3PaH28wgNoaLQGrIk1P2pg==}
+  '@modelcontextprotocol/node@2.1.0':
+    resolution: {integrity: sha512-6xg3iWVcOfiL8Y7rI6xUqXD0lI2AY5q3djsa/cOi1IJUSwx06t0gvhSwU/6mIIohrFlt40/ANUG56DQ0HLhILQ==}
     engines: {node: '>=20'}
     peerDependencies:
-      '@modelcontextprotocol/server': ^2.0.0
+      '@modelcontextprotocol/server': ^2.1.0
       hono: ^4.11.4
     peerDependenciesMeta:
       hono:
@@ -1066,8 +1072,8 @@ packages:
       '@cfworker/json-schema':
         optional: true
 
-  '@modelcontextprotocol/server@2.0.0':
-    resolution: {integrity: sha512-YhHWdHfpFMQfd0prsEnxKeS3Qz3ytIGmsS0sth4KDjnacIT7hxk6hXHkJ9KysxlkvTM+WZAtQbbcUhdoP4Hvtw==}
+  '@modelcontextprotocol/server@2.1.0':
+    resolution: {integrity: sha512-FdvwZU5N03O77Suh35JqjAqq5R1ZTEPFtwu6N4BgBq28qrQtrCnpbLL5U2pwYCuE194jAw0xnlOVmIqhfoYuUQ==}
     engines: {node: '>=20'}
 
   '@napi-rs/wasm-runtime@1.1.6':
@@ -2024,6 +2030,11 @@ packages:
     resolution: {integrity: sha512-nI4U3TottKAcAD9LLud4Cb7b2QztQMUEfHbvhTH09bqXTxnSie8WnjPALV/WMCrJZ6UV/qHJ6L03OqO3LcdYZw==}
     engines: {node: '>=12'}
 
+  dotenv@18.0.4:
+    resolution: {integrity: sha512-jGt9uI5BIxpVO15kvy+iEFqNAwxYClKWnkptLjSNPnFLC003Imd0ofr3aEVsbpHdSBdSsbcApNIlz4nbyGMwdA==}
+    engines: {node: '>=12'}
+    hasBin: true
+
   drizzle-orm@0.45.2:
     resolution: {integrity: sha512-kY0BSaTNYWnoDMVoyY8uxmyHjpJW1geOmBMdSSicKo9CIIWkSxMIj2rkeSR51b8KAPB7m+qysjuHme5nKP+E5Q==}
     peerDependencies:
@@ -2617,9 +2628,9 @@ packages:
     engines: {node: ^10 || ^12 || ^13.7 || ^14 || >=15.0.1}
     hasBin: true
 
-  nanoid@5.1.16:
-    resolution: {integrity: sha512-kVrnsrJqMR8+oLJnGEmSWw9BivK5mt7H3FZatVRjrc5wGqFYuBxX1yG7+A7Gi5AefkX6t/oCkizcQgpu0cY1dQ==}
-    engines: {node: ^18 || >=20}
+  nanoid@6.0.1:
+    resolution: {integrity: sha512-3wVS3i51pE2pi1k5FFL/95BGfVS0kSsvDVuGXHOtxox/TywUmtgq+3qiTOTbs9J7KfHaXPiN171k/A6dBnaXFw==}
+    engines: {node: ^22 || ^24 || >=26}
     hasBin: true
 
   napi-build-utils@2.0.0:
@@ -2695,15 +2706,15 @@ packages:
   once@1.4.0:
     resolution: {integrity: sha512-lNaJgI+2Q5URQBkccEKHTQOPaXdUxnZZElQTZY0MFUAuaEqe1E+Nyvgdz/aIyNi6Z9MzO5dv1H8n58/GELp3+w==}
 
-  openapi3-ts@4.6.0:
-    resolution: {integrity: sha512-a4sfn6L2sIShhtzJqmjGrARvxAW/3F2BJDdyRVvNF9VhAsZSh5hSyI3a9TNvmzBxXmq66nY5LNT5bQcBxYAZZg==}
+  openapi3-ts@4.6.1:
+    resolution: {integrity: sha512-XW9MOldkhoICNeXVzzmXzmOW5G73ppOEGmh7fLCqHjgfdEYCGGN+00MlVCeUZgovjjfC56j9tvtDt1zGabNjjA==}
 
-  p-event@7.1.0:
-    resolution: {integrity: sha512-/lkPs5W1aC3cp6vqZefpdosOn65J571sWodyfOQiF0+tmDCpU+H8Atwpu0vQROCVUlZuToDN5eyTLsMLLc54mg==}
+  p-event@7.1.1:
+    resolution: {integrity: sha512-T629EpxCTho6yxIZz2dFZwMkyWUM5jh/0h1+u/Xo4+Fllu0DuKQF6ghqIgSWVTluIvHSXL+XBRScH+E+y9TQ0g==}
     engines: {node: '>=20'}
 
-  p-map@7.0.5:
-    resolution: {integrity: sha512-e8vJF4XdVkzqqSHguEMz41mQO1wKwxKm5ENrUJQUu9kLDCtn83cxbyHZcszr4QC5zEA7WffRRC4gsTecC7J9oA==}
+  p-map@7.0.8:
+    resolution: {integrity: sha512-MitaVsCuCFIvOLLPIU7NnfrZvS9H9h7kwMUkDo+T2pEISaJD48IV9S8iIdXB7PsvvdxyYcsSTTrr90XKsbulNw==}
     engines: {node: '>=18'}
 
   p-timeout@7.0.1:
@@ -2829,8 +2840,8 @@ packages:
     resolution: {integrity: sha512-Hrgsx+orqoygnmhFbKaHE6c296J+HTAQXoxEF6gNupROmmGJRoyzfG3ccAveqCBrwr/2yxQ5BVd/GTl5agOwSg==}
     engines: {node: '>= 0.6'}
 
-  rate-limiter-flexible@11.2.0:
-    resolution: {integrity: sha512-L0eIK+BmFMi6NcvmtEg7RSswOFKi9MMD5RhBIypFfOve+G6Jl1Xbb8qEHgK3uRzNtkOFYF0L9f7P4rSf2PnUVw==}
+  rate-limiter-flexible@11.2.1:
+    resolution: {integrity: sha512-JAaz01HZ893zAw+Hx5MdM1z3lLAkyVvNpqR+GNp0k3kjuQB8gY91fXhf5C0osWs+A7iKgFv585qzwmjS3aBHlA==}
 
   raw-body@3.0.2:
     resolution: {integrity: sha512-K5zQjDllxWkf7Z5xJdV0/B0WTNqx6vxG70zJE4N0kBs4LovmEYWJzQGxC9bS9RAKu3bgM40lrd5zoLJ12MQ5BA==}
@@ -3048,8 +3059,8 @@ packages:
     resolution: {integrity: sha512-oK8WG9diS3DlhdUkcFn4tkNIiIbBx9lI2ClF8K+b2/m8Eyv47LSawxUzZQSNKUrVb2KsqeTDCcjAAVPYaSLVTA==}
     engines: {node: '>=14.18.0'}
 
-  swagger-ui-dist@5.32.8:
-    resolution: {integrity: sha512-dgMdWXIgnI4zX4OPhKEdWnlDODbgm8W3AX0Ivn/BBqcUh6xZsBxhZMnvk6DJyRz1BTrj8dPxtarmEGgkz30oyA==}
+  swagger-ui-dist@5.33.0:
+    resolution: {integrity: sha512-wpdK+m6BU5yj6pmUdMskZVTSWYG4DLglAx3sIhylloY37i8O37IrH+YEpqdXNfpaTGxILRBFzUqLF2jKqbfI7A==}
 
   symbol-tree@3.2.4:
     resolution: {integrity: sha512-9QNk5KwDF+Bvz+PyObkmSYjI5ksVUYtjW7AU22r2NKcfLJcXp96hkDWU3+XndOsUb+AQ9QhfzfCT2O+CNWT5Tw==}
@@ -3437,71 +3448,76 @@ packages:
   zod@4.4.3:
     resolution: {integrity: sha512-ytENFjIJFl2UwYglde2jchW2Hwm4GJFLDiSXWdTrJQBIN9Fcyp7n4DhxJEiWNAJMV1/BqWfW/kkg71UDcHJyTQ==}
 
+  zod@4.6.5:
+    resolution: {integrity: sha512-v5l/aFXZQeai4awLbOpSoHecE9UiMrnfx75tEXLjNonXVARxQ5mOeipTjROUchszUNCqnE+hqAMujRsRHsut2Q==}
+
 snapshots:
 
-  '@agentback/authentication@0.10.0':
+  '@agentback/authentication@0.12.0':
     dependencies:
-      '@agentback/context': 0.10.0
-      '@agentback/core': 0.10.0
-      '@agentback/metadata': 0.10.0
-      '@agentback/security': 0.10.0
+      '@agentback/context': 0.12.0
+      '@agentback/core': 0.12.0
+      '@agentback/metadata': 0.12.0
+      '@agentback/security': 0.12.0
       '@types/express': 5.0.6
       tslib: 2.8.1
     transitivePeerDependencies:
       - supports-color
 
-  '@agentback/authorization@0.10.0':
+  '@agentback/authorization@0.12.0':
     dependencies:
-      '@agentback/context': 0.10.0
-      '@agentback/core': 0.10.0
-      '@agentback/metadata': 0.10.0
-      '@agentback/security': 0.10.0
+      '@agentback/context': 0.12.0
+      '@agentback/core': 0.12.0
+      '@agentback/metadata': 0.12.0
+      '@agentback/security': 0.12.0
       tslib: 2.8.1
     transitivePeerDependencies:
       - supports-color
 
-  '@agentback/client@0.10.0(zod@4.4.3)':
+  '@agentback/client@0.12.0(zod@4.4.3)':
     dependencies:
       tslib: 2.8.1
       zod: 4.4.3
 
-  '@agentback/common@0.10.0':
+  '@agentback/common@0.12.0':
     dependencies:
       debug: 4.4.3
-      dotenv: 17.4.2
-      nanoid: 5.1.16
-      p-map: 7.0.5
+      dotenv: 18.0.4
+      nanoid: 6.0.1
+      p-map: 7.0.8
       toposort: 2.0.2
       tslib: 2.8.1
     transitivePeerDependencies:
       - supports-color
 
-  '@agentback/context@0.10.0':
+  '@agentback/context@0.12.0':
     dependencies:
-      '@agentback/common': 0.10.0
-      '@agentback/metadata': 0.10.0
+      '@agentback/common': 0.12.0
+      '@agentback/metadata': 0.12.0
       '@types/debug': 4.1.13
       debug: 4.4.3
-      p-event: 7.1.0
+      p-event: 7.1.1
       tslib: 2.8.1
     transitivePeerDependencies:
       - supports-color
 
-  '@agentback/core@0.10.0':
+  '@agentback/core@0.12.0':
     dependencies:
-      '@agentback/common': 0.10.0
-      '@agentback/context': 0.10.0
+      '@agentback/common': 0.12.0
+      '@agentback/context': 0.12.0
       '@types/debug': 4.1.13
       debug: 4.4.3
       tslib: 2.8.1
     transitivePeerDependencies:
       - supports-color
 
-  '@agentback/extension-rate-limit@0.10.0(cors@2.8.6)(express@5.2.1)(hono@4.12.25)':
+  '@agentback/extension-rate-limit@0.12.0(cors@2.8.6)(express@5.2.1)(hono@4.12.25)':
     dependencies:
-      '@agentback/rest': 0.10.0(cors@2.8.6)(express@5.2.1)(hono@4.12.25)
+      '@agentback/common': 0.12.0
+      '@agentback/core': 0.12.0
+      '@agentback/rest': 0.12.0(cors@2.8.6)(express@5.2.1)(hono@4.12.25)
       '@types/express': 5.0.6
-      rate-limiter-flexible: 11.2.0
+      rate-limiter-flexible: 11.2.1
       tslib: 2.8.1
     transitivePeerDependencies:
       - cors
@@ -3510,16 +3526,16 @@ snapshots:
       - multer
       - supports-color
 
-  '@agentback/files@0.10.0':
+  '@agentback/files@0.12.0':
     dependencies:
-      '@agentback/core': 0.10.0
+      '@agentback/core': 0.12.0
       tslib: 2.8.1
     transitivePeerDependencies:
       - supports-color
 
-  '@agentback/http-server@0.10.0':
+  '@agentback/http-server@0.12.0':
     dependencies:
-      '@agentback/common': 0.10.0
+      '@agentback/common': 0.12.0
       '@types/debug': 4.1.13
       debug: 4.4.3
       stoppable: 1.1.0
@@ -3527,20 +3543,20 @@ snapshots:
     transitivePeerDependencies:
       - supports-color
 
-  '@agentback/mcp-http@0.10.0(cors@2.8.6)(hono@4.12.25)':
+  '@agentback/mcp-http@0.12.0(cors@2.8.6)(hono@4.12.25)':
     dependencies:
-      '@agentback/authentication': 0.10.0
-      '@agentback/common': 0.10.0
-      '@agentback/core': 0.10.0
-      '@agentback/mcp': 0.10.0
-      '@agentback/rest': 0.10.0(cors@2.8.6)(express@5.2.1)(hono@4.12.25)
-      '@agentback/security': 0.10.0
-      '@modelcontextprotocol/express': 2.0.0(@modelcontextprotocol/server@2.0.0)(express@5.2.1)
-      '@modelcontextprotocol/node': 2.0.0(@modelcontextprotocol/server@2.0.0)(hono@4.12.25)
-      '@modelcontextprotocol/server': 2.0.0
+      '@agentback/authentication': 0.12.0
+      '@agentback/common': 0.12.0
+      '@agentback/core': 0.12.0
+      '@agentback/mcp': 0.12.0
+      '@agentback/rest': 0.12.0(cors@2.8.6)(express@5.2.1)(hono@4.12.25)
+      '@agentback/security': 0.12.0
+      '@modelcontextprotocol/express': 2.0.1(@modelcontextprotocol/server@2.1.0)(express@5.2.1)
+      '@modelcontextprotocol/node': 2.1.0(@modelcontextprotocol/server@2.1.0)(hono@4.12.25)
+      '@modelcontextprotocol/server': 2.1.0
       '@types/express': 5.0.6
       express: 5.2.1
-      rate-limiter-flexible: 11.2.0
+      rate-limiter-flexible: 11.2.1
       tslib: 2.8.1
     transitivePeerDependencies:
       - cors
@@ -3548,26 +3564,26 @@ snapshots:
       - multer
       - supports-color
 
-  '@agentback/mcp@0.10.0':
+  '@agentback/mcp@0.12.0':
     dependencies:
-      '@agentback/authorization': 0.10.0
-      '@agentback/common': 0.10.0
-      '@agentback/context': 0.10.0
-      '@agentback/core': 0.10.0
-      '@agentback/metadata': 0.10.0
-      '@agentback/openapi': 0.10.0
-      '@agentback/security': 0.10.0
-      '@modelcontextprotocol/server': 2.0.0
+      '@agentback/authorization': 0.12.0
+      '@agentback/common': 0.12.0
+      '@agentback/context': 0.12.0
+      '@agentback/core': 0.12.0
+      '@agentback/metadata': 0.12.0
+      '@agentback/openapi': 0.12.0
+      '@agentback/security': 0.12.0
+      '@modelcontextprotocol/server': 2.1.0
       '@types/debug': 4.1.13
       debug: 4.4.3
       tslib: 2.8.1
-      zod: 4.4.3
+      zod: 4.6.5
     transitivePeerDependencies:
       - supports-color
 
-  '@agentback/metadata@0.10.0':
+  '@agentback/metadata@0.12.0':
     dependencies:
-      '@agentback/common': 0.10.0
+      '@agentback/common': 0.12.0
       debug: 4.4.3
       lodash-es: 4.18.1
       reflect-metadata: 0.2.2
@@ -3575,11 +3591,11 @@ snapshots:
     transitivePeerDependencies:
       - supports-color
 
-  '@agentback/middleware@0.10.0':
+  '@agentback/middleware@0.12.0':
     dependencies:
-      '@agentback/common': 0.10.0
-      '@agentback/context': 0.10.0
-      '@agentback/core': 0.10.0
+      '@agentback/common': 0.12.0
+      '@agentback/context': 0.12.0
+      '@agentback/core': 0.12.0
       '@types/cors': 2.8.19
       '@types/express': 5.0.6
       '@types/on-finished': 2.3.5
@@ -3589,31 +3605,33 @@ snapshots:
     transitivePeerDependencies:
       - supports-color
 
-  '@agentback/openapi@0.10.0':
+  '@agentback/openapi@0.12.0':
     dependencies:
-      '@agentback/common': 0.10.0
-      '@agentback/context': 0.10.0
-      '@agentback/core': 0.10.0
-      '@agentback/metadata': 0.10.0
+      '@agentback/common': 0.12.0
+      '@agentback/context': 0.12.0
+      '@agentback/core': 0.12.0
+      '@agentback/metadata': 0.12.0
       '@types/debug': 4.1.13
       '@types/json-merge-patch': 1.0.0
       '@types/lodash-es': 4.17.12
       debug: 4.4.3
       http-status: 2.1.0
       lodash-es: 4.18.1
-      openapi3-ts: 4.6.0
+      openapi3-ts: 4.6.1
       tslib: 2.8.1
-      zod: 4.4.3
+      zod: 4.6.5
     transitivePeerDependencies:
       - supports-color
 
-  '@agentback/rest-explorer@0.10.0(cors@2.8.6)(hono@4.12.25)':
+  '@agentback/rest-explorer@0.12.0(cors@2.8.6)(hono@4.12.25)':
     dependencies:
-      '@agentback/rest': 0.10.0(cors@2.8.6)(express@5.2.1)(hono@4.12.25)
+      '@agentback/common': 0.12.0
+      '@agentback/core': 0.12.0
+      '@agentback/rest': 0.12.0(cors@2.8.6)(express@5.2.1)(hono@4.12.25)
       '@types/express': 5.0.6
       '@types/swagger-ui-dist': 3.30.6
       express: 5.2.1
-      swagger-ui-dist: 5.32.8
+      swagger-ui-dist: 5.33.0
       tslib: 2.8.1
     transitivePeerDependencies:
       - cors
@@ -3621,27 +3639,27 @@ snapshots:
       - multer
       - supports-color
 
-  '@agentback/rest@0.10.0(cors@2.8.6)(express@5.2.1)(hono@4.12.25)':
+  '@agentback/rest@0.12.0(cors@2.8.6)(express@5.2.1)(hono@4.12.25)':
     dependencies:
-      '@agentback/authentication': 0.10.0
-      '@agentback/authorization': 0.10.0
-      '@agentback/common': 0.10.0
-      '@agentback/context': 0.10.0
-      '@agentback/core': 0.10.0
-      '@agentback/files': 0.10.0
-      '@agentback/http-server': 0.10.0
-      '@agentback/metadata': 0.10.0
-      '@agentback/middleware': 0.10.0
-      '@agentback/openapi': 0.10.0
-      '@agentback/security': 0.10.0
-      '@hono/node-server': 2.0.8(hono@4.12.25)
+      '@agentback/authentication': 0.12.0
+      '@agentback/authorization': 0.12.0
+      '@agentback/common': 0.12.0
+      '@agentback/context': 0.12.0
+      '@agentback/core': 0.12.0
+      '@agentback/files': 0.12.0
+      '@agentback/http-server': 0.12.0
+      '@agentback/metadata': 0.12.0
+      '@agentback/middleware': 0.12.0
+      '@agentback/openapi': 0.12.0
+      '@agentback/security': 0.12.0
+      '@hono/node-server': 2.1.1(hono@4.12.25)
       '@types/cors': 2.8.19
       '@types/debug': 4.1.13
       '@types/express': 5.0.6
       debug: 4.4.3
       http-errors: 2.0.1
       tslib: 2.8.1
-      zod: 4.4.3
+      zod: 4.6.5
     optionalDependencies:
       cors: 2.8.6
       express: 5.2.1
@@ -3649,9 +3667,9 @@ snapshots:
       - hono
       - supports-color
 
-  '@agentback/security@0.10.0':
+  '@agentback/security@0.12.0':
     dependencies:
-      '@agentback/core': 0.10.0
+      '@agentback/core': 0.12.0
       tslib: 2.8.1
     transitivePeerDependencies:
       - supports-color
@@ -3928,6 +3946,10 @@ snapshots:
     dependencies:
       hono: 4.12.25
 
+  '@hono/node-server@2.1.1(hono@4.12.25)':
+    dependencies:
+      hono: 4.12.25
+
   '@jridgewell/gen-mapping@0.3.13':
     dependencies:
       '@jridgewell/sourcemap-codec': 1.5.5
@@ -3951,20 +3973,20 @@ snapshots:
       '@jridgewell/sourcemap-codec': 1.5.5
     optional: true
 
-  '@modelcontextprotocol/core@2.0.0':
+  '@modelcontextprotocol/core@2.1.0':
     dependencies:
       zod: 4.4.3
 
-  '@modelcontextprotocol/express@2.0.0(@modelcontextprotocol/server@2.0.0)(express@5.2.1)':
+  '@modelcontextprotocol/express@2.0.1(@modelcontextprotocol/server@2.1.0)(express@5.2.1)':
     dependencies:
-      '@modelcontextprotocol/server': 2.0.0
+      '@modelcontextprotocol/server': 2.1.0
       cors: 2.8.6
       express: 5.2.1
 
-  '@modelcontextprotocol/node@2.0.0(@modelcontextprotocol/server@2.0.0)(hono@4.12.25)':
+  '@modelcontextprotocol/node@2.1.0(@modelcontextprotocol/server@2.1.0)(hono@4.12.25)':
     dependencies:
       '@hono/node-server': 1.19.14(hono@4.12.25)
-      '@modelcontextprotocol/server': 2.0.0
+      '@modelcontextprotocol/server': 2.1.0
     optionalDependencies:
       hono: 4.12.25
 
@@ -3990,9 +4012,9 @@ snapshots:
     transitivePeerDependencies:
       - supports-color
 
-  '@modelcontextprotocol/server@2.0.0':
+  '@modelcontextprotocol/server@2.1.0':
     dependencies:
-      '@modelcontextprotocol/core': 2.0.0
+      '@modelcontextprotocol/core': 2.1.0
       zod: 4.4.3
 
   '@napi-rs/wasm-runtime@1.1.6(@emnapi/core@1.11.1)(@emnapi/runtime@1.11.1)':
@@ -4768,6 +4790,8 @@ snapshots:
 
   dotenv@17.4.2: {}
 
+  dotenv@18.0.4: {}
+
   drizzle-orm@0.45.2(@electric-sql/pglite@0.5.4)(@types/better-sqlite3@7.6.13)(@types/pg@8.20.0)(better-sqlite3@12.10.1)(kysely@0.29.3)(pg@8.22.0):
     optionalDependencies:
       '@electric-sql/pglite': 0.5.4
@@ -5292,7 +5316,7 @@ snapshots:
 
   nanoid@3.3.12: {}
 
-  nanoid@5.1.16: {}
+  nanoid@6.0.1: {}
 
   napi-build-utils@2.0.0:
     optional: true
@@ -5380,15 +5404,15 @@ snapshots:
     dependencies:
       wrappy: 1.0.2
 
-  openapi3-ts@4.6.0:
+  openapi3-ts@4.6.1:
     dependencies:
       yaml: 2.9.0
 
-  p-event@7.1.0:
+  p-event@7.1.1:
     dependencies:
       p-timeout: 7.0.1
 
-  p-map@7.0.5: {}
+  p-map@7.0.8: {}
 
   p-timeout@7.0.1: {}
 
@@ -5529,7 +5553,7 @@ snapshots:
 
   range-parser@1.2.1: {}
 
-  rate-limiter-flexible@11.2.0: {}
+  rate-limiter-flexible@11.2.1: {}
 
   raw-body@3.0.2:
     dependencies:
@@ -5835,7 +5859,7 @@ snapshots:
     transitivePeerDependencies:
       - supports-color
 
-  swagger-ui-dist@5.32.8:
+  swagger-ui-dist@5.33.0:
     dependencies:
       '@scarf/scarf': 1.4.0
 
@@ -6123,3 +6147,5 @@ snapshots:
   zod@3.25.76: {}
 
   zod@4.4.3: {}
+
+  zod@4.6.5: {}

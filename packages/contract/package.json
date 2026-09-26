@@ -20,7 +20,7 @@
     "build": "tsc -b"
   },
   "dependencies": {
-    "@agentback/core": "~0.10.0",
+    "@agentback/core": "~0.12.0",
     "@agentgem/insight": "workspace:*"
   }
 }
