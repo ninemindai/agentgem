@@ -18,12 +18,12 @@
     "build": "tsc -b"
   },
   "dependencies": {
-    "@agentback/core": "^0.10.0",
-    "@agentback/mcp": "^0.10.0",
-    "@agentback/mcp-http": "^0.10.0",
-    "@agentback/openapi": "^0.10.0",
-    "@agentback/rest": "^0.10.0",
-    "@agentback/rest-explorer": "^0.10.0",
+    "@agentback/core": "^0.12.0",
+    "@agentback/mcp": "^0.12.0",
+    "@agentback/mcp-http": "^0.12.0",
+    "@agentback/openapi": "^0.12.0",
+    "@agentback/rest": "^0.12.0",
+    "@agentback/rest-explorer": "^0.12.0",
     "@agentgem/archive": "workspace:*",
     "@agentgem/base": "workspace:*",
     "@agentgem/build": "workspace:*",
