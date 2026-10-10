@@ -46,18 +46,26 @@ function hasPreexistingArtifacts(base: string): boolean {
   return existsSync(shareConfigPath());
 }
 
-function packageVersion(): string {
-  try {
-    const here = dirname(fileURLToPath(import.meta.url));
-    // dist/home/state.js -> ../../package.json is the repo root.
-    return JSON.parse(readFileSync(join(here, "..", "..", "package.json"), "utf8")).version ?? "0.0.0";
-  } catch {
-    return "0.0.0";
+// The product's manifests: the npm package (also the repo root) and the desktop core bundle.
+const PRODUCT_PACKAGE_NAMES = ["@ninemind/agentgem", "agentgem-core"];
+
+// Walk up from `startDir` to the first product manifest. A fixed relative path cannot work:
+// this module ships loose (packages/app/dist/home/), inlined into the npm bin (dist/), and
+// inlined into the desktop core (resources/core/), and each puts the manifest somewhere else.
+export function productVersion(startDir: string = dirname(fileURLToPath(import.meta.url))): string {
+  for (let dir = startDir; ; dir = dirname(dir)) {
+    try {
+      const pkg = JSON.parse(readFileSync(join(dir, "package.json"), "utf8"));
+      if (PRODUCT_PACKAGE_NAMES.includes(pkg.name) && pkg.version) return pkg.version;
+    } catch {
+      // no readable manifest here; keep walking
+    }
+    if (dirname(dir) === dir) return "0.0.0";
   }
 }
 
 function computeInitialState(base: string): HomeState {
-  return { existingUser: hasPreexistingArtifacts(base), firstSeenVersion: packageVersion() };
+  return { existingUser: hasPreexistingArtifacts(base), firstSeenVersion: productVersion() };
 }
 
 // Read persisted state. On first read (file absent) OR on a corrupt file (unparseable JSON —

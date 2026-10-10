@@ -86,6 +86,8 @@ writeFileSync(
   JSON.stringify(
     {
       name: "agentgem-core",
+      // home/state.ts reads this to record firstSeenVersion; without it the core reports 0.0.0.
+      version: JSON.parse(__rf(join(repo, "package.json"), "utf8")).version,
       private: true,
       type: "module",
       dependencies: {
