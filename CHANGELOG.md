@@ -7,6 +7,32 @@ All notable changes to AgentGem are documented here. The format follows
 The npm core (`@ninemind/agentgem`) and the desktop app share a version number but
 are tagged separately: core releases are tagged `v*`, desktop releases `desktop-v*`.
 
+## [0.12.2] — `@ninemind/agentgem` (npm core) — 2026-10-10
+
+Four commits, three of them fixes.
+
+### Fixed
+
+- **The Sign in dialog opens above the page.** Clicking *Sign in* in the sidebar opened
+  the Connect GitHub dialog behind the current page. The page stayed sharp over the
+  blurred backdrop, and clicks landed on the page, so the dialog could not be used. The
+  sidebar is `position: sticky`, which gives it its own stacking context, and the dialog
+  rendered inside it. The dialog now renders at the top of the document.
+- **`home-state.json` records the real version.** `firstSeenVersion` was `0.0.0` on npm
+  and desktop installs, and `@agentgem/app`'s `0.7.0` in a checkout. It now reads the
+  product version. Existing files keep their value, because the field is written once.
+
+## [desktop-v0.12.2] — desktop app — 2026-10-10
+
+### Fixed
+
+- **Sign in works**, from the core fix above.
+- **`pnpm -C desktop dev` starts again.** The dev build looked for the core at
+  `dist/index.js`, which no longer exists, and failed with "AgentGem core not found".
+  Installed apps were not affected.
+
+Embeds everything in core 0.12.2.
+
 ## [0.12.1] — `@ninemind/agentgem` (npm core) — 2026-10-10
 
 Two commits. This is the first npm release that carries 0.12.0's changes. 0.12.0
