@@ -58,14 +58,21 @@ const banner = {
     "const __dirname = __d(__filename);",
 };
 
-// The published entrypoints: the three bins + the app bootstrap (`start` script)
+// The published entrypoints: the four bins + the app bootstrap (`start` script)
 // + the scorecard warm worker. Every `bin` in package.json must be listed here, or it
 // ships with unresolvable bare `@agentgem/*` imports and dies at startup on a
 // consumer's install. `warm/scorecardWorker.js` is spawned by `new Worker(path)`, so
 // it is an entrypoint the bundler cannot see from any import graph — it needs the same
 // treatment or the worker thread dies on a consumer's install (the parent then logs and
 // falls back to warming inline, i.e. silently slow).
-const entries = ["cli.js", "client.js", "distill/mcpServer.js", "goldmine/mcpServer.js", "warm/scorecardWorker.js", "transcriptParseWorker.js"];
+const entries = ["cli.js", "client.js", "distill/mcpServer.js", "goldmine/mcpServer.js", "play/mcpServer.js", "warm/scorecardWorker.js", "transcriptParseWorker.js"];
+
+// The rule above is enforced, not just stated: agentgem-play was added as a bin without an
+// entry here, and `npm publish --dry-run` stayed green while the bin died on install.
+const unbundledBins = Object.values(pkg.bin ?? {})
+  .map((p) => p.replace(/^(\.\/)?dist\//, ""))
+  .filter((rel) => !entries.includes(rel));
+if (unbundledBins.length) throw new Error(`bin(s) missing from bundle-bins entries: ${unbundledBins.join(", ")}`);
 
 // `dist/client.js` self-runs behind `isMain(import.meta)` so that `node dist/client.js`
 // boots it directly. That guard compares `import.meta.url` to `process.argv[1]`.
