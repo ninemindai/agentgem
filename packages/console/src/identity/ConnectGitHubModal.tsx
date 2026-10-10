@@ -3,7 +3,12 @@
 // Modal chrome around ConnectGitHub, for signing in from the shell's identity chip.
 // Owns its own classes: Setup's `setup-modal` styles are panel-local and renaming
 // them there must not silently break the chip.
+//
+// Portaled to <body>: the chip sits in the sticky sidebar, which is its own stacking
+// context, so a dialog rendered in place paints under .console-main whatever its z-index,
+// and clicks on it land on the page behind.
 import { type ReactElement } from "react";
+import { createPortal } from "react-dom";
 import { useDialogA11y } from "../shell/useDialogA11y.js";
 import { ConnectGitHub } from "./ConnectGitHub.js";
 import type { GitHubBind } from "./useGitHubBind.js";
@@ -19,7 +24,7 @@ export function ConnectGitHubModal({
 }): ReactElement {
   const panelRef = useDialogA11y(onClose);
 
-  return (
+  return createPortal(
     <div className="identity-modal" role="dialog" aria-modal="true" aria-label={title} onClick={onClose}>
       <div className="identity-modal__panel" ref={panelRef} onClick={(e) => e.stopPropagation()}>
         <div className="identity-modal__head">
@@ -34,6 +39,7 @@ export function ConnectGitHubModal({
           />
         </div>
       </div>
-    </div>
+    </div>,
+    document.body,
   );
 }
