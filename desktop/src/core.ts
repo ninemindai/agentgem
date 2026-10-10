@@ -4,11 +4,12 @@ import { join } from "node:path";
 // Packaged builds ship a self-contained esbuild bundle of the core at
 // resources/core/index.mjs (see scripts/bundle-core.mjs + extraResources). Dev
 // runs against the sibling repo dist two levels up from desktop/dist, which has
-// the repo's node_modules alongside it.
+// the repo's node_modules alongside it. The entry is dist/client.js, the same file
+// bundle-core bundles; dist/index.js went away when the server moved to @agentgem/app.
 export function coreEntryCandidates(mainDir: string, resourcesPath: string): string[] {
   return [
     join(resourcesPath, "core", "index.mjs"),
-    join(mainDir, "..", "..", "dist", "index.js"),
+    join(mainDir, "..", "..", "dist", "client.js"),
   ];
 }
 
