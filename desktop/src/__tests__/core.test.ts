@@ -9,7 +9,7 @@ describe("coreEntryCandidates", () => {
     const list = coreEntryCandidates("/app/desktop/dist", "/app/resources");
     expect(list).toEqual([
       join("/app/resources", "core", "index.mjs"),
-      join("/app/desktop/dist", "..", "..", "dist", "index.js"),
+      join("/app/desktop/dist", "..", "..", "dist", "client.js"),
     ]);
   });
 });
