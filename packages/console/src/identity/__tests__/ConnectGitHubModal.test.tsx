@@ -35,11 +35,24 @@ describe("ConnectGitHubModal", () => {
 
   it("overlay click closes, panel click does not", () => {
     const onClose = vi.fn();
-    const { container } = render(<ConnectGitHubModal bind={bind()} onClose={onClose} />);
-    fireEvent.click(container.querySelector(".identity-modal__panel")!);
+    render(<ConnectGitHubModal bind={bind()} onClose={onClose} />);
+    fireEvent.click(document.querySelector(".identity-modal__panel")!);
     expect(onClose).not.toHaveBeenCalled();
-    fireEvent.click(container.querySelector(".identity-modal")!);
+    fireEvent.click(document.querySelector(".identity-modal")!);
     expect(onClose).toHaveBeenCalledTimes(1);
+  });
+
+  // The chip lives in the sticky sidebar, which is its own stacking context: a dialog
+  // rendered there paints under .console-main however high its z-index, and clicks land on
+  // the page instead. It must render at the top of the document instead.
+  it("renders outside the container it is mounted in", () => {
+    const nav = document.createElement("nav");
+    document.body.appendChild(nav);
+    render(<ConnectGitHubModal bind={bind()} onClose={vi.fn()} />, { container: nav });
+    const dialog = screen.getByRole("dialog");
+    expect(nav.contains(dialog)).toBe(false);
+    expect(dialog.parentElement).toBe(document.body);
+    nav.remove();
   });
 
   it("the close button closes", () => {
