@@ -7,6 +7,110 @@ All notable changes to AgentGem are documented here. The format follows
 The npm core (`@ninemind/agentgem`) and the desktop app share a version number but
 are tagged separately: core releases are tagged `v*`, desktop releases `desktop-v*`.
 
+## [0.12.0] — `@ninemind/agentgem` (npm core) — 2026-10-10
+
+Eighty-two commits, built around one theme: a number on screen must not claim a
+check that never happened. Rubric criteria now report how many sessions they could
+apply to, and a person can mark a fired criterion right or wrong and see that
+criterion's calibration. Generated reports and miniapps pass a render gate before
+anyone sees them.
+
+The release also makes every gem archive a conformant Agent Plugin, gives minted
+miniapps an MCP endpoint and remix lineage, and raises the Node floor.
+
+### Added
+
+- **Gem archives are also Agent Plugins.** Format v2 writes a conformant Agent
+  Plugins 1.0.0 `plugin.json` and a spec-shaped `mcp.json` next to the existing
+  `skills/`. Portable MCP servers live once, in `mcp.json`. v2 also keeps a skill's
+  sibling files, which v1 silently dropped. `readAgentPlugin` imports any conformant
+  Agent Plugin as a gem. An archive with no `formatVersion` still reads as v1.
+- **Record a verdict on a rubric finding.** A fired factor takes one of three
+  verdicts: *accepted*, *wrong* or *won't fix*. *Wrong* says the criterion is bad.
+  *Won't fix* says its advice is not compelling. The two stay separate because they
+  need different fixes. Expand a factor to judge every session it fired in, one row
+  per session, in an order that does not shift as you click.
+  - Each criterion shows a calibration line, counted against reviewed calls only. An
+    untriaged fire is not an implicit pass, and a criterion with no verdicts shows no
+    rate rather than "0 of 0".
+  - Verdicts live in their own sqlite file. A human verdict cannot be regenerated,
+    so it does not share a store whose schema moves for other reasons.
+  - Notes stay on your machine. The report-rendering agent never receives verdict
+    notes or calibration.
+  - `POST /api/rubric/verdict` writes a verdict. It rejects a malformed body and a
+    client-supplied timestamp.
+- **`ship-discipline`, the first built-in rubric with an LLM criterion.** It asks
+  one question: did this session commit or push without running the tests? A judge
+  reads the commands that really ran, because "run the tests" has no fixed spelling.
+  The rubric applies only to sessions that committed or pushed, so it reports
+  "1 in 1 of 4 applicable sessions". The picker labels it as an LLM rubric. Every
+  other built-in rubric stays cheap.
+- **A render gate for generated HTML.** A report or miniapp whose script throws, or
+  whose `#report-data` seam is missing, no longer ships silently. The gate checks the
+  bytes that actually ship. A failed report gets one repair turn and keeps the repair
+  only if it is better. Studio now shows non-blocking save findings ("worth a look")
+  after a successful save.
+- **`agentgem-play`, an MCP server for minted miniapps.** The new bin speaks MCP
+  over stdio. It lists a `play_<name>` launcher per miniapp and serves each bundle
+  byte-for-byte, so the games render in any MCP Apps host. It is read-only: no
+  capability tools and no registry changes. See `docs/play.md`.
+- **Remix lineage for miniapps.** Studio's Share banner has an "Allow remixing"
+  checkbox (on by default). A fork records its source as `remixOf`, taken from the
+  gem's own artifact and never from the request. A remix deep link shows a consent
+  card before it forks. The remix-source proxy fails closed when the creator has not
+  allowed remixing.
+- **Commits in the blast radius.** The replay map shows which edited files were
+  actually committed, from the SHAs git printed in the session. A commit found only
+  by time window shows as a *candidate*, never as observed, and never marks a file
+  shipped.
+
+### Changed
+
+- **Node `^24.15.0 || >=26` is required.** jsdom 30, a runtime dependency of the
+  CLI, raised its floor. The old `>=24` would have claimed support we no longer have.
+- **A criterion that never applied no longer reads as "no findings".** It reads
+  "did not apply to any checked session" and loses the green tick. Fires are counted
+  against a denominator: "2 in 2 of 9 applicable".
+- **A rubric cannot report "clean" when it did not check.** A degraded judge, a
+  sampled run, a session cut at 80 steps, or criteria that applied nowhere all block
+  the all-clear. The judge now returns a roster for every session, so silence is no
+  longer read as a pass. A session missing from the roster leaves the denominator.
+- **Live Watch panels survive buffering proxies.** A proxy that holds an SSE stream
+  open but delivers nothing used to leave the panel empty forever. A 25-second
+  watchdog now detects the stall and falls back to polling the same route.
+- **Rendered Eve gems track eve 0.30.8's defaults:** `eve ^0.30.8`, `ai ^7.0.38`,
+  `@vercel/connect 0.4.3`, `engines.node >=24`.
+- **`@agentback/*` 0.12.0.** No code changes were needed.
+
+### Fixed
+
+- **The criterion judge could not read a fenced reply.** It called `JSON.parse` on
+  raw text, so a reply wrapped in a ```` ```json ```` fence degraded every chunk.
+  The criterion path had never worked against a live agent. All six judges now share
+  one parser that reads the fence first.
+- **The judge no longer mints passes out of silence.** An unparseable reply used to
+  count as "found nothing". It now degrades the chunk and keeps any findings it
+  carried. A warning fires when the judge leaves sessions off its roster.
+- **"Mined from 154 sessions · 20664 days" is gone.** One transcript record stamped
+  1970-01-01 set the start of the span. Timestamps must now be plausible, and a
+  `.jsonl` file under `~/.claude/projects` counts as a session only if it has a
+  user or assistant turn. A hook's log file no longer becomes a phantom session.
+- **Cached reports no longer outlive the code that rendered them.** The report and
+  rubric cache keys now include what produces the output, so a renderer change
+  invalidates old entries without anyone bumping a constant.
+
+## [desktop-v0.12.0] — desktop app — 2026-10-10
+
+### Changed
+
+- **Electron 43.3.0** and electron-builder 26.15.7.
+- **Live Watch panels fall back to polling** when a proxy buffers the event stream,
+  which matters most on corporate networks.
+- **The rubric panel takes verdicts and shows calibration**, and Studio shows save
+  findings after a successful save.
+
+Embeds everything in core 0.12.0.
+
 ## [0.11.0] — `@ninemind/agentgem` (npm core) — 2026-07-29
 
 Thirteen commits, and two of them fix numbers that were lying. Overview reported
