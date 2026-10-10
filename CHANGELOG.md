@@ -7,6 +7,32 @@ All notable changes to AgentGem are documented here. The format follows
 The npm core (`@ninemind/agentgem`) and the desktop app share a version number but
 are tagged separately: core releases are tagged `v*`, desktop releases `desktop-v*`.
 
+## [0.12.1] — `@ninemind/agentgem` (npm core) — 2026-10-10
+
+Two commits. This is the first npm release that carries 0.12.0's changes. 0.12.0
+was tagged but never published to npm, because its `agentgem-play` bin did not
+start from an npm install.
+
+### Fixed
+
+- **`agentgem-play` starts after `npm install`.** The bin was added in 0.12.0 but
+  left out of the publish-time bundler. Its published file kept an import of the
+  private `@agentgem/play` package and failed with `ERR_MODULE_NOT_FOUND`.
+  `npm publish --dry-run` did not catch it. The bundler now refuses to run when a
+  `package.json` bin has no bundle entry.
+
+## [desktop-v0.12.1] — desktop app — 2026-10-10
+
+### Fixed
+
+- **The macOS build is signed again.** The macOS job for desktop-v0.12.0 failed when
+  it unlocked its signing keychain, so 0.12.0 shipped for Windows and Linux only.
+  electron-builder up to 26.15.7 passed the certificate password where the keychain
+  password belongs. The current macOS runner image rejects that. electron-builder
+  26.17.0 passes the right password.
+
+Embeds everything in core 0.12.1.
+
 ## [0.12.0] — `@ninemind/agentgem` (npm core) — 2026-10-10
 
 Eighty-two commits, built around one theme: a number on screen must not claim a
