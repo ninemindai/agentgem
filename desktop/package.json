@@ -24,7 +24,7 @@
     "cross-env": "^10.1.0",
     "esbuild": "^0.28.1",
     "electron": "^43.3.0",
-    "electron-builder": "^26.15.7",
+    "electron-builder": "^26.17.0",
     "typescript": "npm:@typescript/typescript6@^6.0.2",
     "vite": "^8.2.0",
     "vitest": "^4.1.10"
