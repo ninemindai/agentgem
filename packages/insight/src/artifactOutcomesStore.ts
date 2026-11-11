@@ -1,4 +1,4 @@
-// Copyright (c) 2026 NineMind, Inc.
+// Copyright (c) 2026 Zhaohui Feng
 // SPDX-License-Identifier: MIT
 //
 // The proven-use store: its OWN local sqlite (~/.agentgem/artifact-outcomes.db),

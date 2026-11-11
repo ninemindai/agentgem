@@ -1,4 +1,4 @@
-// Copyright (c) 2026 NineMind, Inc.
+// Copyright (c) 2026 Zhaohui Feng
 // SPDX-License-Identifier: MIT
 // Shared registry types used across @agentgem/distribute. Pulled out into their own module so
 // other modules in this package can depend on the shapes without depending on the registry

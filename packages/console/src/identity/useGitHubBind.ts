@@ -1,4 +1,4 @@
-// Copyright (c) 2026 NineMind, Inc.
+// Copyright (c) 2026 Zhaohui Feng
 // SPDX-License-Identifier: MIT
 // The GitHub device-flow, once. Flow state is per-consumer (a Studio banner and a
 // Settings row must not share a spinner), so this is a hook — not context. Status

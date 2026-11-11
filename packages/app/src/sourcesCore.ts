@@ -1,4 +1,4 @@
-// Copyright (c) 2026 NineMind, Inc.
+// Copyright (c) 2026 Zhaohui Feng
 // SPDX-License-Identifier: MIT
 // Shared "install a curated persona as a local skill" core, used by both the
 // /api/sources/install route and the `agentgem sources install` CLI so the two

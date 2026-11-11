@@ -1,4 +1,4 @@
-// Copyright (c) 2026 NineMind, Inc.
+// Copyright (c) 2026 Zhaohui Feng
 // SPDX-License-Identifier: MIT
 //
 // Cline / Roo task ingestion. Clean flat JSON (contrast Cursor's SQLite): each task dir holds

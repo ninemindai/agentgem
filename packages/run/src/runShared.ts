@@ -1,4 +1,4 @@
-// Copyright (c) 2026 NineMind, Inc.
+// Copyright (c) 2026 Zhaohui Feng
 // SPDX-License-Identifier: MIT
 // Shared run machinery: process-runner plumbing, the run registry, and project rendering.
 // Split out of run.ts so every consumer of the run state reads/writes the same registry.

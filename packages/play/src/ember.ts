@@ -1,4 +1,4 @@
-// Copyright (c) 2026 NineMind, Inc.
+// Copyright (c) 2026 Zhaohui Feng
 // SPDX-License-Identifier: MIT
 // EMBER — a built-in miniapp: a flame that grows and smokes as the viewer's LIVE session context window
 // fills toward its cap. Served as a CONSTANT (never written to the registry), like the Protocol Inspector,

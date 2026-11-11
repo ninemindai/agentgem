@@ -1,4 +1,4 @@
-// Copyright (c) 2026 NineMind, Inc.
+// Copyright (c) 2026 Zhaohui Feng
 // SPDX-License-Identifier: MIT
 // `agentgem get <key>[@<version>]` — download a published gem from the hosted marketplace and import
 // it into the local app as a workspace. Zero-config: no registry setup, no browser, no running daemon

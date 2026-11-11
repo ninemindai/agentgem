@@ -1,4 +1,4 @@
-// Copyright (c) 2026 NineMind, Inc.
+// Copyright (c) 2026 Zhaohui Feng
 // SPDX-License-Identifier: MIT
 // The capability <-> MCP host-tool bijection. It lives beside the GameCapability union because two
 // consumers must agree on it exactly: the console's host router (which dispatches a tool call to an

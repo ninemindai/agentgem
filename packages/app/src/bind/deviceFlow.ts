@@ -1,4 +1,4 @@
-// Copyright (c) 2026 NineMind, Inc.
+// Copyright (c) 2026 Zhaohui Feng
 // SPDX-License-Identifier: MIT
 // src/bind/deviceFlow.ts
 // GitHub OAuth device flow (https://docs.github.com/apps/oauth-device-flow). No callback URL,

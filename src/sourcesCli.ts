@@ -1,4 +1,4 @@
-// Copyright (c) 2026 NineMind, Inc.
+// Copyright (c) 2026 Zhaohui Feng
 // SPDX-License-Identifier: MIT
 // `agentgem sources install <sourceId> <path>` — install a curated persona as a
 // local skill (the command the marketplace /sources page tells visitors to copy).

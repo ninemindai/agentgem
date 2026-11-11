@@ -1,4 +1,4 @@
-// Copyright (c) 2026 NineMind, Inc.
+// Copyright (c) 2026 Zhaohui Feng
 // SPDX-License-Identifier: MIT
 // A Loop is a scheduled or goal-bounded, budgeted, gem-driven automation. It is an optional
 // top-level facet of a Gem (sibling of `contract`/`grade`), NOT an artifact type — a Loop has

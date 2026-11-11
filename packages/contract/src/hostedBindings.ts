@@ -1,4 +1,4 @@
-// Copyright (c) 2026 NineMind, Inc.
+// Copyright (c) 2026 Zhaohui Feng
 // SPDX-License-Identifier: MIT
 // Neutral DI binding keys for hosted-only capabilities that kept-OSS controllers inject
 // OPTIONALLY. The keys live in the wire-contract package because they ARE the agreement

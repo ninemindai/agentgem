@@ -1,4 +1,4 @@
-// Copyright (c) 2026 NineMind, Inc.
+// Copyright (c) 2026 Zhaohui Feng
 // SPDX-License-Identifier: MIT
 // src/bind/cli.ts — `agentgem bind`: device-flow auth, then bind the local key to a GitHub account.
 import { bindConfig, startDeviceBind, completeDeviceBind } from "@agentgem/app/bind/bindCore";

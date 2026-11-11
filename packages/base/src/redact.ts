@@ -1,4 +1,4 @@
-// Copyright (c) 2026 NineMind, Inc.
+// Copyright (c) 2026 Zhaohui Feng
 // SPDX-License-Identifier: MIT
 // src/gem/redact.ts
 // Strip secret VALUES from an MCP/hook config while preserving its shape, and record the

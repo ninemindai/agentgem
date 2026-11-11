@@ -1,4 +1,4 @@
-// Copyright (c) 2026 NineMind, Inc.
+// Copyright (c) 2026 Zhaohui Feng
 // SPDX-License-Identifier: MIT
 // Training Grounds sim math: pure projection functions, the serialization revival
 // the report page performs, and the setup-formula mirror cross-checked against the

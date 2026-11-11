@@ -1,4 +1,4 @@
-// Copyright ninemind.ai 2026. All Rights Reserved.
+// Copyright Zhaohui Feng 2026. All Rights Reserved.
 // Node module: agentgem website builder.
 //
 // Builds the AgentGem static site into website/dist:

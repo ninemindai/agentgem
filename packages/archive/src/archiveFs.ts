@@ -1,4 +1,4 @@
-// Copyright (c) 2026 NineMind, Inc.
+// Copyright (c) 2026 Zhaohui Feng
 // SPDX-License-Identifier: MIT
 // src/gem/archiveFs.ts
 import { mkdirSync, writeFileSync, readFileSync, readdirSync, statSync } from "node:fs";

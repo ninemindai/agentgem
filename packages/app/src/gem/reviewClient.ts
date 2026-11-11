@@ -1,4 +1,4 @@
-// Copyright (c) 2026 NineMind, Inc.
+// Copyright (c) 2026 Zhaohui Feng
 // SPDX-License-Identifier: MIT
 // Local sign+forward client for the aggregator review-staging routes. Mirrors gemPublishClient, but
 // signs the review-specific payloads (never catalogSigningPayload) so a captured review request can't

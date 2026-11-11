@@ -1,4 +1,4 @@
-// Copyright (c) 2026 NineMind, Inc.
+// Copyright (c) 2026 Zhaohui Feng
 // SPDX-License-Identifier: MIT
 // src/gemCache.ts
 // Revalidation guard for the inventory reads, as a REST dispatch hook. Mirrors src/playCache.ts —

@@ -114,4 +114,4 @@ stopped health checks from responding.
 
 ## License
 
-MIT © NineMind, Inc. See [LICENSE](./LICENSE).
+MIT © Zhaohui Feng. See [LICENSE](./LICENSE).

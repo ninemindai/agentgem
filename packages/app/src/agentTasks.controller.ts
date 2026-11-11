@@ -1,4 +1,4 @@
-// Copyright (c) 2026 NineMind, Inc.
+// Copyright (c) 2026 Zhaohui Feng
 // SPDX-License-Identifier: MIT
 // Settings surface for background agent tasks (report render, distill, recommender,
 // judge): which local agent runs each family and which model it requests. Backed by

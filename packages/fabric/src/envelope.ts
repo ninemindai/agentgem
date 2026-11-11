@@ -1,4 +1,4 @@
-// Copyright (c) 2026 NineMind, Inc.
+// Copyright (c) 2026 Zhaohui Feng
 // SPDX-License-Identifier: MIT
 // The one envelope every fabric message rides (docs/proposals/message-fabric.md
 // §Envelope). Versioned because cross-install skew is the steady state; unknown

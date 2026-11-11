@@ -1,4 +1,4 @@
-// Copyright (c) 2026 NineMind, Inc.
+// Copyright (c) 2026 Zhaohui Feng
 // SPDX-License-Identifier: MIT
 // src/agentgemConfig.ts
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";

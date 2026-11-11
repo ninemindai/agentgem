@@ -1,4 +1,4 @@
-// Copyright (c) 2026 NineMind, Inc.
+// Copyright (c) 2026 Zhaohui Feng
 // SPDX-License-Identifier: MIT
 // The neutral catalog wire-contract: the pure types + signing-payload builders that both the
 // hosted aggregator and the local dev-app client share. No DB, no auth — the aggregator imports

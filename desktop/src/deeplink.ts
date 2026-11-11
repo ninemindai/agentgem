@@ -1,4 +1,4 @@
-// Copyright (c) 2026 NineMind, Inc.
+// Copyright (c) 2026 Zhaohui Feng
 // SPDX-License-Identifier: MIT
 //
 // Pure parsing for the agentgem:// deep-link protocol, kept out of the electron-coupled main.ts so

@@ -2,7 +2,7 @@ import resvgWasm from "@resvg/resvg-wasm/index_bg.wasm";   // wrangler -> WebAss
 import cardFont from "../assets/card-font.ttf";            // wrangler Data rule -> bytes
 import { initRaster } from "./raster.js";
 import { handleShare, isCacheable } from "./share.js";
-// Copyright ninemind.ai 2026. All Rights Reserved.
+// Copyright Zhaohui Feng 2026. All Rights Reserved.
 // This file is licensed under the MIT License.
 // License text available at https://opensource.org/license/mit/
 

@@ -1,4 +1,4 @@
-// Copyright (c) 2026 NineMind, Inc.
+// Copyright (c) 2026 Zhaohui Feng
 // SPDX-License-Identifier: MIT
 //
 // SHARED BY TWO HOSTS. This file moved out of `@agentgem/play` so AgentGem and a second host can

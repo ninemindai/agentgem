@@ -1,4 +1,4 @@
-// Copyright (c) 2026 NineMind, Inc.
+// Copyright (c) 2026 Zhaohui Feng
 // SPDX-License-Identifier: MIT
 // Codemod for stored miniapps: bring any bundle up to the standard MCP Apps client shim
 // (`mcpAppClient()` in mcpAppClient.ts). Two paths reach it — rewriting the old private postMessage

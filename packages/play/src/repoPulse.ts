@@ -1,4 +1,4 @@
-// Copyright (c) 2026 NineMind, Inc.
+// Copyright (c) 2026 Zhaohui Feng
 // SPDX-License-Identifier: MIT
 // REPO PULSE — a built-in miniapp: a GitHub dashboard (open PRs / recently merged / recent commits)
 // that demos MCP connectors. Served as a CONSTANT (never written to the registry), like EMBER: listed

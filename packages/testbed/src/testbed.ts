@@ -1,4 +1,4 @@
-// Copyright (c) 2026 NineMind, Inc.
+// Copyright (c) 2026 Zhaohui Feng
 // SPDX-License-Identifier: MIT
 // src/gem/testbed.ts
 // The inverse of introspect.ts: scaffold a runnable .claude/ testbed and merge selected

@@ -1,4 +1,4 @@
-// Copyright (c) 2026 NineMind, Inc.
+// Copyright (c) 2026 Zhaohui Feng
 // SPDX-License-Identifier: MIT
 // Publish invariant: a shared miniapp must render with NO host. app.agentgem.ai plays games in a sealed
 // iframe with no capability broker, so a game that depends on a host-brokered content feed would sit

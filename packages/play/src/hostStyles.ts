@@ -1,4 +1,4 @@
-// Copyright (c) 2026 NineMind, Inc.
+// Copyright (c) 2026 Zhaohui Feng
 // SPDX-License-Identifier: MIT
 // String-emitting port of ext-apps/src/styles.ts — applyDocumentTheme + applyHostStyleVariables, injected
 // into the sealed shim so a miniapp themes to the host with no code. applyHostFonts is deliberately NOT

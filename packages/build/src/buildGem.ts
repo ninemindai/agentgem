@@ -1,4 +1,4 @@
-// Copyright (c) 2026 NineMind, Inc.
+// Copyright (c) 2026 Zhaohui Feng
 // SPDX-License-Identifier: MIT
 // src/gem/buildGem.ts
 import type { ConfigInventory, Gem, GemArtifact, GemCheck, GemContract, SecretRequirement, ChannelPlatform } from "@agentgem/model";

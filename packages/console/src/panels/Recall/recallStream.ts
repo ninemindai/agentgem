@@ -1,4 +1,4 @@
-// Copyright (c) 2026 NineMind, Inc.
+// Copyright (c) 2026 Zhaohui Feng
 // SPDX-License-Identifier: MIT
 // Recall funnel stream — named SSE events (session_started/session_done/capped/
 // synthesis_delta/done/cancelled/failed) from GET /api/recall/stream?jobId=.

@@ -1,4 +1,4 @@
-// Copyright (c) 2026 NineMind, Inc.
+// Copyright (c) 2026 Zhaohui Feng
 // SPDX-License-Identifier: MIT
 // Hosted-aggregator read client for the desktop's Benchmark tab. Mirrors shareClient:
 // resolve the base (explicit -> AGENTGEM_AGGREGATOR_URL -> the public default) and GET the

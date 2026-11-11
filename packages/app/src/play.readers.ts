@@ -1,4 +1,4 @@
-// Copyright (c) 2026 NineMind, Inc.
+// Copyright (c) 2026 Zhaohui Feng
 // SPDX-License-Identifier: MIT
 // Production SourceReaders for Play, wired to the real local source APIs. Lives in root src/ (not
 // packages/play) so packages/play stays free of the heavy insight/capture/testbed deps and any cycle.

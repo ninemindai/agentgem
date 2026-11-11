@@ -1,4 +1,4 @@
-// Copyright (c) 2026 NineMind, Inc.
+// Copyright (c) 2026 Zhaohui Feng
 // SPDX-License-Identifier: MIT
 // The authoring contract handed to the Play Studio agent on its first turn (see studio.ts
 // studioInstructions) and mirrored, byte-for-byte, into skills/agentgem-miniapp/SKILL.md for humans

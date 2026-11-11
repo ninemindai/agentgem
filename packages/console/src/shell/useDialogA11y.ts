@@ -1,4 +1,4 @@
-// Copyright (c) 2026 NineMind, Inc.
+// Copyright (c) 2026 Zhaohui Feng
 // SPDX-License-Identifier: MIT
 // Escape-to-close plus focus handoff, shared by the console's modal dialogs.
 // This is behavior only — no markup, no CSS — so a dialog keeps owning its own

@@ -1,4 +1,4 @@
-// Copyright (c) 2026 NineMind, Inc.
+// Copyright (c) 2026 Zhaohui Feng
 // SPDX-License-Identifier: MIT
 // The neutral binding wire-contract: the pure payload the client signs and the server verifies for
 // pubkey->account binding. The DB-backed recordBinding lives in the aggregator and imports this.

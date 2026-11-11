@@ -1,4 +1,4 @@
-// Copyright (c) 2026 NineMind, Inc.
+// Copyright (c) 2026 Zhaohui Feng
 // SPDX-License-Identifier: MIT
 // The embedded client shim a sealed miniapp loads to talk MCP Apps `ui/*` JSON-RPC to the trusted host
 // (the console Runner's `mcpUiHost` router). This is the standard-wire successor to the old private

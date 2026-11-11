@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// Copyright (c) 2026 NineMind, Inc.
+// Copyright (c) 2026 Zhaohui Feng
 // SPDX-License-Identifier: MIT
 // src/goldmine/mcpServer.ts
 import { z } from "zod";

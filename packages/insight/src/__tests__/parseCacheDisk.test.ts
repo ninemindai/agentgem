@@ -1,4 +1,4 @@
-// Copyright (c) 2026 NineMind, Inc.
+// Copyright (c) 2026 Zhaohui Feng
 // SPDX-License-Identifier: MIT
 // The PERSISTED tier of the incremental parse cache. The in-memory map was already
 // incremental — a re-scan re-reads only files whose (mtime, size) moved — but it died with

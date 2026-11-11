@@ -1,4 +1,4 @@
-// Copyright (c) 2026 NineMind, Inc.
+// Copyright (c) 2026 Zhaohui Feng
 // SPDX-License-Identifier: MIT
 // @agentgem/capture — introspect local agent config, redact, usage/recents, draft a build.
 export * from "./introspect.js";

@@ -1,4 +1,4 @@
-// Copyright (c) 2026 NineMind, Inc.
+// Copyright (c) 2026 Zhaohui Feng
 // SPDX-License-Identifier: MIT
 // src/learnCli.ts — `agentgem learn [root] [--session <id>] [--dir <claude-home>]`:
 // distill one session into the dream review queue from the terminal, no server needed.

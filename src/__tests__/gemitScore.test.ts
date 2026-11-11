@@ -1,4 +1,4 @@
-// Copyright (c) 2026 NineMind, Inc.
+// Copyright (c) 2026 Zhaohui Feng
 // SPDX-License-Identifier: MIT
 // Golden tests for the gemit scoring core: pure inputs → exact card payload.
 import { describe, expect, it } from "vitest";

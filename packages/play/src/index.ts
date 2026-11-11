@@ -1,4 +1,4 @@
-// Copyright (c) 2026 NineMind, Inc.
+// Copyright (c) 2026 Zhaohui Feng
 // SPDX-License-Identifier: MIT
 export { staticGate, gameGate, type GateResult, type StaticGateResult, type GateOptions, type RenderDigest } from "@ninemind/miniapp-gate";
 export { GENRES, genreFor, type GenreSpec } from "./genres.js";

@@ -1,4 +1,4 @@
-// Copyright (c) 2026 NineMind, Inc.
+// Copyright (c) 2026 Zhaohui Feng
 // SPDX-License-Identifier: MIT
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import { postAttestation, hostedIngestEndpoint, type IngestHttp } from "../ingestClient.js";

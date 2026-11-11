@@ -1,4 +1,4 @@
-// Copyright (c) 2026 NineMind, Inc.
+// Copyright (c) 2026 Zhaohui Feng
 // SPDX-License-Identifier: MIT
 // The on-disk score cache: it must be TRANSPARENT (same inputs, byte-identical output,
 // cached or not), keyed so a changed transcript can never serve a stale row, and unable to

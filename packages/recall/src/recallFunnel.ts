@@ -1,4 +1,4 @@
-// Copyright (c) 2026 NineMind, Inc.
+// Copyright (c) 2026 Zhaohui Feng
 // SPDX-License-Identifier: MIT
 // The "A engine": fan `ask_session` across the selected sessions under a hard cap
 // and bounded concurrency, then synthesize. Raw transcripts never reach here — a

@@ -1,4 +1,4 @@
-// Copyright (c) 2026 NineMind, Inc.
+// Copyright (c) 2026 Zhaohui Feng
 // SPDX-License-Identifier: MIT
 // The CLI extension seam. OSS ships an empty table; a downstream build can register
 // additional `agentgem <cmd>` subcommands (e.g. commands a later phase moves out of

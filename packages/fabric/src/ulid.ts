@@ -1,4 +1,4 @@
-// Copyright (c) 2026 NineMind, Inc.
+// Copyright (c) 2026 Zhaohui Feng
 // SPDX-License-Identifier: MIT
 // ULID generation (spec: 48-bit ms timestamp + 80 random bits, Crockford base32).
 // Deliberately stricter than the contract's shape validator ULID_RE: the first

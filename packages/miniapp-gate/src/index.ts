@@ -1,4 +1,4 @@
-// Copyright (c) 2026 NineMind, Inc.
+// Copyright (c) 2026 Zhaohui Feng
 // SPDX-License-Identifier: MIT
 // The two pieces of miniapp machinery that are genuinely host-neutral: the admission gate and the
 // bake-time redactor. Everything else about hosting a miniapp — storage, data path, transport,

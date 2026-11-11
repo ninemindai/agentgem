@@ -1,4 +1,4 @@
-// Copyright (c) 2026 NineMind, Inc.
+// Copyright (c) 2026 Zhaohui Feng
 // SPDX-License-Identifier: MIT
 import { useEffect, useMemo, useState } from "react";
 import { defineConsolePage } from "../../registry.js";

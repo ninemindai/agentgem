@@ -1,4 +1,4 @@
-// Copyright (c) 2026 NineMind, Inc.
+// Copyright (c) 2026 Zhaohui Feng
 // SPDX-License-Identifier: MIT
 // Import a conformant Agent Plugin 1.0.0 directory tree as a Gem. Plugin-level
 // schema violations are fatal (InvalidInputError); component-level failures are

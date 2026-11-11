@@ -1,4 +1,4 @@
-// Copyright (c) 2026 NineMind, Inc.
+// Copyright (c) 2026 Zhaohui Feng
 // SPDX-License-Identifier: MIT
 // Keep the RecallIndex current against the live session set. Incremental: a
 // session's change stamp is (endMs:msgs) — appending to a transcript grows both,

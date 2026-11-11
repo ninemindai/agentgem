@@ -1,4 +1,4 @@
-// Copyright (c) 2026 NineMind, Inc.
+// Copyright (c) 2026 Zhaohui Feng
 // SPDX-License-Identifier: MIT
 // src/gem/recents.ts
 // Persisted "testbeds you've opened in agentgem" — a small JSON list under ~/.agentgem.

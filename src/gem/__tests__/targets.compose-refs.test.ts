@@ -1,4 +1,4 @@
-// Copyright (c) 2026 NineMind, Inc.
+// Copyright (c) 2026 Zhaohui Feng
 // SPDX-License-Identifier: MIT
 // Compose targets (eve/flue/sandbox/agentcore) re-derive their MCP wiring straight from
 // gem.artifacts, which never includes ReferenceArtifacts — before this fix, a package ref that

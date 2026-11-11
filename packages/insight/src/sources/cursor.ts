@@ -1,4 +1,4 @@
-// Copyright (c) 2026 NineMind, Inc.
+// Copyright (c) 2026 Zhaohui Feng
 // SPDX-License-Identifier: MIT
 //
 // Cursor ingestion. Sessions live in a binary SQLite DB (state.vscdb, table cursorDiskKV):

@@ -1,4 +1,4 @@
-// Copyright (c) 2026 NineMind, Inc.
+// Copyright (c) 2026 Zhaohui Feng
 // SPDX-License-Identifier: MIT
 // The cohort claim must be absent unless it is backed by a real, large-enough sample.
 import { describe, expect, it } from "vitest";

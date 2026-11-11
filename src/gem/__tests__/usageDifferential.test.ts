@@ -1,4 +1,4 @@
-// Copyright (c) 2026 NineMind, Inc.
+// Copyright (c) 2026 Zhaohui Feng
 // SPDX-License-Identifier: MIT
 //
 // The gate for the raw-rows change. `computeGlobalUsage` resolves at PARSE time; the indexed path

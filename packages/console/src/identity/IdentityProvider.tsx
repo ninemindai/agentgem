@@ -1,4 +1,4 @@
-// Copyright (c) 2026 NineMind, Inc.
+// Copyright (c) 2026 Zhaohui Feng
 // SPDX-License-Identifier: MIT
 // One source of truth for "who is signed in" across the console. Mounted once in
 // Shell. Fetched on mount and on explicit refresh() — never polled: the bind only

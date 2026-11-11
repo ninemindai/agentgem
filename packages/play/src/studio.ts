@@ -1,4 +1,4 @@
-// Copyright (c) 2026 NineMind, Inc.
+// Copyright (c) 2026 Zhaohui Feng
 // SPDX-License-Identifier: MIT
 // The Chat studio seam: seed a miniapp dir from a source (scaffold + injected DATA), build the agent's
 // studio brief from its meta, and guard which cwd a chat session may adopt. studioCwd is the security

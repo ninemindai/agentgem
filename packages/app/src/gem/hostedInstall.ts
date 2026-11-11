@@ -1,4 +1,4 @@
-// Copyright (c) 2026 NineMind, Inc.
+// Copyright (c) 2026 Zhaohui Feng
 // SPDX-License-Identifier: MIT
 // Zero-config install of a hosted (shared) gem: fetch the .gem archive from the hosted aggregator's
 // public download (no registry config), and surface the executable artifacts (MCP servers, hooks)

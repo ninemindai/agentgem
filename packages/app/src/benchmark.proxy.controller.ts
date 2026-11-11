@@ -1,4 +1,4 @@
-// Copyright (c) 2026 NineMind, Inc.
+// Copyright (c) 2026 Zhaohui Feng
 // SPDX-License-Identifier: MIT
 // Same-origin proxy the console calls for the Benchmark tab. Forwards to the hosted aggregator
 // via benchmarkClient (server-side, anonymous). Mirrors ShareProxyController: keeps the browser

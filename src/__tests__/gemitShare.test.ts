@@ -1,4 +1,4 @@
-// Copyright (c) 2026 NineMind, Inc.
+// Copyright (c) 2026 Zhaohui Feng
 // SPDX-License-Identifier: MIT
 // Share packaging tests: the privacy strip (no skill/subagent names ship), the
 // gem-archive round-trip with a signed digest, and the share/X URLs.

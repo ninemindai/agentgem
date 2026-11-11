@@ -1,4 +1,4 @@
-// Copyright (c) 2026 NineMind, Inc.
+// Copyright (c) 2026 Zhaohui Feng
 // SPDX-License-Identifier: MIT
 import { describe, it, expect } from "vitest";
 import { workspaceArtifactPath, parseWorkspaceArtifactPath, WORKSPACE_COLLECTIONS } from "@agentgem/model";

@@ -1,4 +1,4 @@
-// Copyright (c) 2026 NineMind, Inc.
+// Copyright (c) 2026 Zhaohui Feng
 // SPDX-License-Identifier: MIT
 // The Protocol Inspector — a built-in conformance harness, ported from ext-apps' debug-server view. It
 // exercises every host capability on purpose (an event log filterable by every callback, a host-info

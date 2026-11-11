@@ -1,4 +1,4 @@
-// Copyright (c) 2026 NineMind, Inc.
+// Copyright (c) 2026 Zhaohui Feng
 // SPDX-License-Identifier: MIT
 // Chrome-free device-flow UI. Studio renders it as an inline banner; IdentityChip
 // renders it inside ConnectGitHubModal. Button labels are asserted by

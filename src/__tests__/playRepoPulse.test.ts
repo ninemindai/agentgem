@@ -1,4 +1,4 @@
-// Copyright (c) 2026 NineMind, Inc.
+// Copyright (c) 2026 Zhaohui Feng
 // SPDX-License-Identifier: MIT
 // src/__tests__/playRepoPulse.test.ts — the built-in Repo Pulse demo is served (list + read) and its
 // connector manifest is honored by mcp/call + mcp/servers even though readMiniapp() cannot find it

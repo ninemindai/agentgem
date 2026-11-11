@@ -1,4 +1,4 @@
-// Copyright (c) 2026 NineMind, Inc.
+// Copyright (c) 2026 Zhaohui Feng
 // SPDX-License-Identifier: MIT
 // Hierarchical fabric addresses (docs/proposals/message-fabric.md §Addresses):
 // agentgem://<root>[/<segment>]*. Roots are federated identities holding keys;

@@ -1,4 +1,4 @@
-// Copyright (c) 2026 NineMind, Inc.
+// Copyright (c) 2026 Zhaohui Feng
 // SPDX-License-Identifier: MIT
 // src/gem/targets.ts
 // Render a normalized Gem INTO a harness's on-disk layout. Pure; writes nothing — returns an

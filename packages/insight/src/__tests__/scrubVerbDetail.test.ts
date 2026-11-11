@@ -1,4 +1,4 @@
-// Copyright (c) 2026 NineMind, Inc.
+// Copyright (c) 2026 Zhaohui Feng
 // SPDX-License-Identifier: MIT
 // `ScrubbedStep.verbDetail` — the finer verb for the one case the coarse verb hides: a script
 // runner, where argv0 names the interpreter rather than the work.

@@ -1,4 +1,4 @@
-// Copyright (c) 2026 NineMind, Inc.
+// Copyright (c) 2026 Zhaohui Feng
 // SPDX-License-Identifier: MIT
 // Local console-facing routes that drive the aggregator review-staging flow: build the archive+manifest
 // (like GemController.publishSetup) and forward it via the Task 1 sign+forward client

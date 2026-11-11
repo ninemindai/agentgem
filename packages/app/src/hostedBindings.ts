@@ -1,4 +1,4 @@
-// Copyright (c) 2026 NineMind, Inc.
+// Copyright (c) 2026 Zhaohui Feng
 // SPDX-License-Identifier: MIT
 // Re-export shim: the neutral hosted-capability binding keys moved to
 // "@agentgem/contract/bindings" — the wire-contract package — so a downstream deployment

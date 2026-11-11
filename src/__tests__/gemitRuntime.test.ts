@@ -1,4 +1,4 @@
-// Copyright (c) 2026 NineMind, Inc.
+// Copyright (c) 2026 Zhaohui Feng
 // SPDX-License-Identifier: MIT
 // Behavioural coverage for RUNTIME_JS — the page's inline <script>, string-built and
 // injected verbatim into the rendered HTML rather than imported as a module, so no

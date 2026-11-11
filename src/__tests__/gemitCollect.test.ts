@@ -1,4 +1,4 @@
-// Copyright (c) 2026 NineMind, Inc.
+// Copyright (c) 2026 Zhaohui Feng
 // SPDX-License-Identifier: MIT
 // Collector tests: window/floor filtering, sample cap, codex guard, and the
 // pure browser-open command builder. All session sources injected — no fs.

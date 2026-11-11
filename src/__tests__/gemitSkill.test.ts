@@ -1,4 +1,4 @@
-// Copyright (c) 2026 NineMind, Inc.
+// Copyright (c) 2026 Zhaohui Feng
 // SPDX-License-Identifier: MIT
 // The /gemit skill is deliberately THIN: run the CLI, relay the tier, offer --share.
 // This guard keeps scoring logic out of the skill and the one-liner exact.

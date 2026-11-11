@@ -1,4 +1,4 @@
-// Copyright (c) 2026 NineMind, Inc.
+// Copyright (c) 2026 Zhaohui Feng
 // SPDX-License-Identifier: MIT
 // src/registry/emitAdoption.ts
 import { buildGemAdoption, signGemAdoption, postGemAdoption } from "@agentgem/insight";

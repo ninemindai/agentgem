@@ -1,4 +1,4 @@
-// Copyright (c) 2026 NineMind, Inc.
+// Copyright (c) 2026 Zhaohui Feng
 // SPDX-License-Identifier: MIT
 // The console's identity affordance. Signed in, it mints a one-time handoff code and
 // opens app.agentgem.ai already authenticated (desktop: main.ts routes window.open to

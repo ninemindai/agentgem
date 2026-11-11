@@ -1,4 +1,4 @@
-// Copyright (c) 2026 NineMind, Inc.
+// Copyright (c) 2026 Zhaohui Feng
 // SPDX-License-Identifier: MIT
 // src/gem/workspaces.ts
 // A gem's persistent local home: the canonical archive at the workspace root (source of truth) plus

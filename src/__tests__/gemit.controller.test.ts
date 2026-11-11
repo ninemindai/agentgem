@@ -1,4 +1,4 @@
-// Copyright (c) 2026 NineMind, Inc.
+// Copyright (c) 2026 Zhaohui Feng
 // SPDX-License-Identifier: MIT
 // GemitController: the two guards that stop a bad card from being published, and the
 // opt-in threading through to the shipped archive. The scan itself is stubbed via the

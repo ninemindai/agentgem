@@ -1,6 +1,6 @@
 appId: ai.ninemind.agentgem
 productName: AgentGem
-copyright: © ninemind.ai
+copyright: © Zhaohui Feng
 # Copies core-dist/node_modules into the packaged app (extraResources drops it — see below).
 afterPack: scripts/after-pack.mjs
 # Register the agentgem:// URL scheme with the OS at install time (macOS CFBundleURLTypes, Windows

@@ -1,4 +1,4 @@
-// Copyright (c) 2026 NineMind, Inc.
+// Copyright (c) 2026 Zhaohui Feng
 // SPDX-License-Identifier: MIT
 // src/playbookDraft.ts
 // Assemble a Playbook Gem from distilled wins (skills) + lessons (instructions).

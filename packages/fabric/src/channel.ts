@@ -1,4 +1,4 @@
-// Copyright (c) 2026 NineMind, Inc.
+// Copyright (c) 2026 Zhaohui Feng
 // SPDX-License-Identifier: MIT
 // Channel declarations (docs/proposals/message-fabric.md §Channels). Channels are
 // declared, not ad-hoc: class (stream = ephemeral, feed = durable log), the kinds

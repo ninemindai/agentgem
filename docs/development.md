@@ -48,7 +48,7 @@ MCP proxy, and TOML.
   The REST controller and MCP service in `src/` are thin adapters that call into them. Keep
   new core logic in the right package so it stays testable and reusable across both surfaces;
   see the [package map](architecture.md#the-gem-core-agentgem-packages).
-- **Every source file carries the MIT/SPDX header** (`// Copyright (c) 2026 NineMind, Inc.`
+- **Every source file carries the MIT/SPDX header** (`// Copyright (c) 2026 Zhaohui Feng`
   + `// SPDX-License-Identifier: MIT`), below any shebang.
 - **One contract per operation.** Add or change a Zod schema in `src/schemas.ts`, then surface
   it on the REST controller and/or the MCP service. Don't hand-write a second schema for the

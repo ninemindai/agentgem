@@ -1,4 +1,4 @@
-// Copyright (c) 2026 NineMind, Inc.
+// Copyright (c) 2026 Zhaohui Feng
 // SPDX-License-Identifier: MIT
 // @agentgem/base — cross-cutting shared helpers: workspace fs, deploy records,
 // ACP session, redaction. Used across run/insight/deploy/capture.

@@ -1,4 +1,4 @@
-// Copyright (c) 2026 NineMind, Inc.
+// Copyright (c) 2026 Zhaohui Feng
 // SPDX-License-Identifier: MIT
 // The message-fabric contract package: envelope, addresses, zones, channels, and the
 // kind registry. Types, zod schemas, and pure helpers only — the router is increment 2.
