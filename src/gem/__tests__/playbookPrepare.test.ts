@@ -1,4 +1,4 @@
-// Copyright (c) 2026 NineMind, Inc.
+// Copyright (c) 2026 Zhaohui Feng
 // SPDX-License-Identifier: MIT
 import { describe, it, expect } from "vitest";
 import { preparePlaybook } from "@agentgem/app/gem/playbookPrepareCore"; // pure core extracted below

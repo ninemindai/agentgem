@@ -1,4 +1,4 @@
-// Copyright (c) 2026 NineMind, Inc.
+// Copyright (c) 2026 Zhaohui Feng
 // SPDX-License-Identifier: MIT
 // The MCP connector call envelope, canonical for every layer (spec 4A). The server route derives
 // `payload` ONCE with derivePayload(); the console router and the in-html shim mirror the error

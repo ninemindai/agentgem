@@ -1,4 +1,4 @@
-// Copyright (c) 2026 NineMind, Inc.
+// Copyright (c) 2026 Zhaohui Feng
 // SPDX-License-Identifier: MIT
 // src/gem/targetProjects.ts
 // Discover materialize-target projects (eve, flue) that already exist independently on the machine.

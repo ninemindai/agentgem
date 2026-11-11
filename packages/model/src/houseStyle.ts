@@ -1,4 +1,4 @@
-// Copyright (c) 2026 NineMind, Inc.
+// Copyright (c) 2026 Zhaohui Feng
 // SPDX-License-Identifier: MIT
 // The shared visual contract for every self-contained HTML document AgentGem generates: miniapp
 // scaffolds (packages/play) today, and the report + dashboard render agents (packages/insight) in

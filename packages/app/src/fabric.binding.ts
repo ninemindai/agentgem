@@ -1,4 +1,4 @@
-// Copyright (c) 2026 NineMind, Inc.
+// Copyright (c) 2026 Zhaohui Feng
 // SPDX-License-Identifier: MIT
 // Fabric router wiring for the app spine: the DI key, the standard in-app kind
 // registrations, and the MCP adapter (docs/proposals/message-fabric.md §Parties).

@@ -1,4 +1,4 @@
-// Copyright (c) 2026 NineMind, Inc.
+// Copyright (c) 2026 Zhaohui Feng
 // SPDX-License-Identifier: MIT
 // Pure push-candidate builder: scrub raw signal text, hash it into a stable key,
 // and dedupe both within the batch and against memories already pushed. No I/O —

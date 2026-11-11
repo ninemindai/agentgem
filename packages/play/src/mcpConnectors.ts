@@ -1,4 +1,4 @@
-// Copyright (c) 2026 NineMind, Inc.
+// Copyright (c) 2026 Zhaohui Feng
 // SPDX-License-Identifier: MIT
 // Live in-process MCP client manager for miniapp connectors (spec §3, 1A/2A/D14).
 //

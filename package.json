@@ -21,7 +21,7 @@
   "publishConfig": {
     "access": "public"
   },
-  "author": "ninemind.ai",
+  "author": "Zhaohui Feng",
   "homepage": "https://agentgem.ninemind.ai",
   "repository": {
     "type": "git",

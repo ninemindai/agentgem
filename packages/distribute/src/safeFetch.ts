@@ -1,4 +1,4 @@
-// Copyright (c) 2026 NineMind, Inc.
+// Copyright (c) 2026 Zhaohui Feng
 // SPDX-License-Identifier: MIT
 // src/gem/safeFetch.ts
 // SSRF guard for installing a .gem from a URL. A localhost-bound dev server is still

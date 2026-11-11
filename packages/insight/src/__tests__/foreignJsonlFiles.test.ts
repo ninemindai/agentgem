@@ -1,4 +1,4 @@
-// Copyright (c) 2026 NineMind, Inc.
+// Copyright (c) 2026 Zhaohui Feng
 // SPDX-License-Identifier: MIT
 // The Claude source scans EVERY *.jsonl under ~/.claude/projects, while the Codex and
 // Gemini sources prefix-filter their own stores. That tree is the one third-party tooling

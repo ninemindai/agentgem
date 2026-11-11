@@ -1,4 +1,4 @@
-// Copyright (c) 2026 NineMind, Inc.
+// Copyright (c) 2026 Zhaohui Feng
 // SPDX-License-Identifier: MIT
 // The ONE genre-aware seam: GameSource → a compact GenerationInput (a human brief + JSON data) that
 // seeds the Chat studio. Readers are injected so this is unit-testable without disk/agents.

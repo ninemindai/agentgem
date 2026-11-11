@@ -1,4 +1,4 @@
-// Copyright (c) 2026 NineMind, Inc.
+// Copyright (c) 2026 Zhaohui Feng
 // SPDX-License-Identifier: MIT
 // Signs a gem-status pre-flight with the local producer key and asks the hosted aggregator whether
 // a key already exists, whether we own it, and its latest version. Mirrors gemPublishClient.ts.

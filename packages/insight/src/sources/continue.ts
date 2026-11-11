@@ -1,4 +1,4 @@
-// Copyright (c) 2026 NineMind, Inc.
+// Copyright (c) 2026 Zhaohui Feng
 // SPDX-License-Identifier: MIT
 //
 // Continue.dev ingestion. Sessions are plain JSON: an index (sessions.json) of metadata + one

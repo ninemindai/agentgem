@@ -1,4 +1,4 @@
-// Copyright (c) 2026 NineMind, Inc.
+// Copyright (c) 2026 Zhaohui Feng
 // SPDX-License-Identifier: MIT
 // Pure inventory helper shared by the gem routes and the deploy routes: introspect the
 // selected config dir, plus any explicitly-listed project roots (deduped, canonicalized).

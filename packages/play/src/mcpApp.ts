@@ -1,4 +1,4 @@
-// Copyright (c) 2026 NineMind, Inc.
+// Copyright (c) 2026 Zhaohui Feng
 // SPDX-License-Identifier: MIT
 // Serve-time adapter: mint a stored miniapp as an MCP Apps UI resource + launcher tool.
 // Spec: modelcontextprotocol/ext-apps, accepted MVP 2026-01-26 (extension id io.modelcontextprotocol/ui).

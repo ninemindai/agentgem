@@ -1,4 +1,4 @@
-// Copyright (c) 2026 NineMind, Inc.
+// Copyright (c) 2026 Zhaohui Feng
 // SPDX-License-Identifier: MIT
 // src/client.ts — DESKTOP entry: a pure API client, independent of src/index.ts. Imports only
 // from appCommon.ts (the shared app-building surface) and benchmark.proxy.controller.ts (the

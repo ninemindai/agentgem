@@ -1,4 +1,4 @@
-// Copyright (c) 2026 NineMind, Inc.
+// Copyright (c) 2026 Zhaohui Feng
 // SPDX-License-Identifier: MIT
 // Browse-only public gem catalog: flatten the registry index's discovery metadata and cache it.
 import type { RegistryIndex } from "@agentgem/distribute";

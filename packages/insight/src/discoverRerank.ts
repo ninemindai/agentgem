@@ -1,4 +1,4 @@
-// Copyright (c) 2026 NineMind, Inc.
+// Copyright (c) 2026 Zhaohui Feng
 // SPDX-License-Identifier: MIT
 //
 // Discover (Optimize Plan 2, Stage 2): optionally re-rank the Stage-1 candidates by

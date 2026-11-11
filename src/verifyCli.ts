@@ -1,4 +1,4 @@
-// Copyright (c) 2026 NineMind, Inc.
+// Copyright (c) 2026 Zhaohui Feng
 // SPDX-License-Identifier: MIT
 // src/verifyCli.ts — `agentgem verify <archive-dir>`: run the cross-agent
 // verification matrix from the terminal, no server needed. Exit codes:

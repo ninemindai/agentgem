@@ -1,4 +1,4 @@
-// Copyright (c) 2026 NineMind, Inc.
+// Copyright (c) 2026 Zhaohui Feng
 // SPDX-License-Identifier: MIT
 // The genre registry — the one place that knows what each genre is FOR. Adding a genre (or a future
 // kind like a non-game miniapp) is one entry here + one scaffold + one sourceContext branch.

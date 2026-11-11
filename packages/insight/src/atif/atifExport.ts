@@ -1,4 +1,4 @@
-// Copyright (c) 2026 NineMind, Inc.
+// Copyright (c) 2026 Zhaohui Feng
 // SPDX-License-Identifier: MIT
 //
 // TranscriptView → ATIF v1.7 document. Built from the SCRUBBED view on purpose:

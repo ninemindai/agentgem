@@ -1,4 +1,4 @@
-// Copyright (c) 2026 NineMind, Inc.
+// Copyright (c) 2026 Zhaohui Feng
 // SPDX-License-Identifier: MIT
 import { describe, it, expect, afterEach } from "vitest";
 import { startWarmSchedule } from "@agentgem/app/warm/schedule";

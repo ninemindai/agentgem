@@ -1,4 +1,4 @@
-// Copyright (c) 2026 NineMind, Inc.
+// Copyright (c) 2026 Zhaohui Feng
 // SPDX-License-Identifier: MIT
 // Pure route-confusion scorer. The platform-runner adapter supplies a real LLM/embedding
 // judge; tests supply a fake one. No I/O, no LLM here — deterministic and offline.

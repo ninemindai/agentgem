@@ -1,4 +1,4 @@
-// Copyright (c) 2026 NineMind, Inc.
+// Copyright (c) 2026 Zhaohui Feng
 // SPDX-License-Identifier: MIT
 // src/dream/__tests__/dreamPass.test.ts
 import { describe, it, expect, beforeEach } from "vitest";

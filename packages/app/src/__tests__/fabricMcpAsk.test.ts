@@ -1,4 +1,4 @@
-// Copyright (c) 2026 NineMind, Inc.
+// Copyright (c) 2026 Zhaohui Feng
 // SPDX-License-Identifier: MIT
 //  Increment-2 proof: the MCP tool call rides router.ask() — fabric errors map back
 //  onto the existing MCP error-code contract, application errors ride the reply.

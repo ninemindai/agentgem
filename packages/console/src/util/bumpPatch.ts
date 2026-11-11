@@ -1,4 +1,4 @@
-// Copyright (c) 2026 NineMind, Inc.
+// Copyright (c) 2026 Zhaohui Feng
 // SPDX-License-Identifier: MIT
 // Bump the patch component of a plain "major.minor.patch" version. Versions are opaque plain
 // strings here (no semver dependency); this is the only place a next version is computed.

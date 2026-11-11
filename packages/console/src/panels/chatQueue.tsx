@@ -1,4 +1,4 @@
-// Copyright (c) 2026 NineMind, Inc.
+// Copyright (c) 2026 Zhaohui Feng
 // SPDX-License-Identifier: MIT
 // The type-while-busy message queue shared by both chat composers (Play Studio, Chat tab) —
 // extracted per the 2026-07-20 eng review (issue 2) so queue behavior evolves in ONE place.

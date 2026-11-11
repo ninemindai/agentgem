@@ -1,4 +1,4 @@
-// Copyright (c) 2026 NineMind, Inc.
+// Copyright (c) 2026 Zhaohui Feng
 // SPDX-License-Identifier: MIT
 // The on-disk BM25 index over scrubbed transcript turns. A standalone FTS5 table
 // (`chunks_fts`) holds the searchable text; a parallel `chunks` table holds the

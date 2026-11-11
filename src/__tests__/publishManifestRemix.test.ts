@@ -1,4 +1,4 @@
-// Copyright (c) 2026 NineMind, Inc.
+// Copyright (c) 2026 Zhaohui Feng
 // SPDX-License-Identifier: MIT
 // buildPublishManifest is the pure helper extracted from GemController#publishSetup so the
 // manifest content (esp. the new allowRemix/remixOf lineage fields) is unit-testable without

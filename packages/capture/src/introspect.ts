@@ -1,4 +1,4 @@
-// Copyright (c) 2026 NineMind, Inc.
+// Copyright (c) 2026 Zhaohui Feng
 // SPDX-License-Identifier: MIT
 // src/gem/introspect.ts
 import { existsSync, readFileSync, readdirSync } from "node:fs";

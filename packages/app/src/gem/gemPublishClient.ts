@@ -1,4 +1,4 @@
-// Copyright (c) 2026 NineMind, Inc.
+// Copyright (c) 2026 Zhaohui Feng
 // SPDX-License-Identifier: MIT
 // Signs a gem manifest with the local producer key AND uploads the .gem archive to the hosted
 // aggregator's installable-publish endpoint. Mirrors catalogShareClient.ts, but carries the archive

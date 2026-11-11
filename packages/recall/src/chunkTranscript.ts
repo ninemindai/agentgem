@@ -1,4 +1,4 @@
-// Copyright (c) 2026 NineMind, Inc.
+// Copyright (c) 2026 Zhaohui Feng
 // SPDX-License-Identifier: MIT
 // Turn a scrubbed TranscriptView into per-turn text rows for the BM25 index.
 // Mirrors sessionAsk.renderTranscript's span rendering, but keeps each turn a

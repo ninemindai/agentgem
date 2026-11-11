@@ -1,4 +1,4 @@
-// Copyright (c) 2026 NineMind, Inc.
+// Copyright (c) 2026 Zhaohui Feng
 // SPDX-License-Identifier: MIT
 // The kind registry (docs/proposals/message-fabric.md §Envelope). Kinds are a public
 // API the moment they cross an install boundary: each has one owning package, a zod

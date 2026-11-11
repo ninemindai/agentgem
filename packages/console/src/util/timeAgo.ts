@@ -1,4 +1,4 @@
-// Copyright (c) 2026 NineMind, Inc.
+// Copyright (c) 2026 Zhaohui Feng
 // SPDX-License-Identifier: MIT
 export function timeAgo(fromMs: number, nowMs: number = Date.now()): string {
   const s = Math.max(0, Math.round((nowMs - fromMs) / 1000));

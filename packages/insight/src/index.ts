@@ -1,4 +1,4 @@
-// Copyright (c) 2026 NineMind, Inc.
+// Copyright (c) 2026 Zhaohui Feng
 // SPDX-License-Identifier: MIT
 // @agentgem/insight — scan transcripts -> signals, distill skills, recommend & attest Gems.
 export * from "./workflowScan.js";

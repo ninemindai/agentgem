@@ -1,4 +1,4 @@
-// Copyright (c) 2026 NineMind, Inc.
+// Copyright (c) 2026 Zhaohui Feng
 // SPDX-License-Identifier: MIT
 import { useEffect, useState } from "react";
 import { recallSearchRoute, recallStatusRoute, makeClient, type MomentHit } from "../../api/routes.js";

@@ -1,4 +1,4 @@
-// Copyright (c) 2026 NineMind, Inc.
+// Copyright (c) 2026 Zhaohui Feng
 // SPDX-License-Identifier: MIT
 import { describe, it, expect, afterEach } from "vitest";
 import { runWarmPass, getWarmStatus, beginForeground, endForeground, PHASE_OF } from "@agentgem/app/warm/orchestrator";

@@ -1,4 +1,4 @@
-// Copyright (c) 2026 NineMind, Inc.
+// Copyright (c) 2026 Zhaohui Feng
 // SPDX-License-Identifier: MIT
 // Trust zones (docs/proposals/message-fabric.md §Trust zones). Zones are trust
 // boundaries, not network distance — "sealed" is local-but-untrusted code (miniapps,

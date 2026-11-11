@@ -3,7 +3,7 @@
   "version": "0.12.2",
   "private": true,
   "description": "Native desktop host for AgentGem",
-  "author": "ninemind.ai",
+  "author": "Zhaohui Feng",
   "repository": {
     "type": "git",
     "url": "git+https://github.com/ninemindai/agentgem.git"

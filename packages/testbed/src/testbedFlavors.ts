@@ -1,4 +1,4 @@
-// Copyright (c) 2026 NineMind, Inc.
+// Copyright (c) 2026 Zhaohui Feng
 // SPDX-License-Identifier: MIT
 // src/gem/testbedFlavors.ts
 // The set of harness "flavors" a testbed can be authored/test-driven as. Flavors drive the

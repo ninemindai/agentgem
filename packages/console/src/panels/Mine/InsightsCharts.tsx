@@ -1,4 +1,4 @@
-// Copyright (c) 2026 NineMind, Inc.
+// Copyright (c) 2026 Zhaohui Feng
 // SPDX-License-Identifier: MIT
 // Visual companions for the Insights text report: an outcomes donut (mostly /
 // partial / not) and a per-model stacked bar. Reuses recharts — the same

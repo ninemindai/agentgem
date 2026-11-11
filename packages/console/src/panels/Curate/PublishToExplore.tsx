@@ -1,4 +1,4 @@
-// Copyright (c) 2026 NineMind, Inc.
+// Copyright (c) 2026 Zhaohui Feng
 // SPDX-License-Identifier: MIT
 // Publish a reviewed Curate selection as a Playbook to the Explore registry.
 // Two-step: (1) save the selection as a named workspace via createWorkspaceRoute,

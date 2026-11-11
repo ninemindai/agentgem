@@ -1,4 +1,4 @@
-// Copyright (c) 2026 NineMind, Inc.
+// Copyright (c) 2026 Zhaohui Feng
 // SPDX-License-Identifier: MIT
 // src/__tests__/rubric.controller.test.ts
 import { describe, it, expect, beforeAll, afterAll, afterEach } from "vitest";

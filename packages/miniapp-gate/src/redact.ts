@@ -1,4 +1,4 @@
-// Copyright (c) 2026 NineMind, Inc.
+// Copyright (c) 2026 Zhaohui Feng
 // SPDX-License-Identifier: MIT
 // De-identify the source data BEFORE it is baked into a shareable, publicly-runnable miniapp bundle.
 // Best-effort scrubbing (home-dir path + common secret token shapes), NOT a security guarantee — a

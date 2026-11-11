@@ -1,4 +1,4 @@
-// Copyright (c) 2026 NineMind, Inc.
+// Copyright (c) 2026 Zhaohui Feng
 // SPDX-License-Identifier: MIT
 // Modal chrome around ConnectGitHub, for signing in from the shell's identity chip.
 // Owns its own classes: Setup's `setup-modal` styles are panel-local and renaming

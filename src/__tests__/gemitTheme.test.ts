@@ -1,4 +1,4 @@
-// Copyright (c) 2026 NineMind, Inc.
+// Copyright (c) 2026 Zhaohui Feng
 // SPDX-License-Identifier: MIT
 // The rpg theme must be a pure presentation function emitting self-contained
 // HTML: zero external URLs, payload baked as a JSON island, every interpolated

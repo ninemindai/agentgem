@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// Copyright (c) 2026 NineMind, Inc.
+// Copyright (c) 2026 Zhaohui Feng
 // SPDX-License-Identifier: MIT
 // src/cli.ts — the `agentgem` command. A thin wrapper over runClient() in client.ts:
 // parses a couple of flags and starts the local pure-client app (a client of the

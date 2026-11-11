@@ -1,4 +1,4 @@
-// Copyright (c) 2026 NineMind, Inc.
+// Copyright (c) 2026 Zhaohui Feng
 // SPDX-License-Identifier: MIT
 // src/gem/archiveTar.ts
 // Bundle a FileTree into a single .tar.gz buffer and back — the archive's transport/shipping form

@@ -225,4 +225,4 @@ For deeper reference, see [`docs/`](docs/index.md):
 
 ## License
 
-[MIT](LICENSE) © ninemind.ai
+[MIT](LICENSE) © Zhaohui Feng

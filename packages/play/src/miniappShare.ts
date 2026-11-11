@@ -1,4 +1,4 @@
-// Copyright (c) 2026 NineMind, Inc.
+// Copyright (c) 2026 Zhaohui Feng
 // SPDX-License-Identifier: MIT
 // Durable per-miniapp share state: the aggregator shareId minted for a miniapp, so the console can
 // show + revoke a link across restarts. A sidecar `share.json` beside meta.json — deliberately NOT in

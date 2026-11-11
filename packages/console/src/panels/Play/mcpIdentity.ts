@@ -1,4 +1,4 @@
-// Copyright (c) 2026 NineMind, Inc.
+// Copyright (c) 2026 Zhaohui Feng
 // SPDX-License-Identifier: MIT
 // Canonical watch-registry identity for an in-flight/watched MCP call: normalizes `input` into the exact
 // JSON value the poll will send to `/call` (the `body`), and derives a collision-free, deterministic `key`

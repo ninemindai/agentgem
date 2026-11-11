@@ -1,4 +1,4 @@
-// Copyright (c) 2026 NineMind, Inc.
+// Copyright (c) 2026 Zhaohui Feng
 // SPDX-License-Identifier: MIT
 // Decide WHICH session a replay's session-data feed should load. Default = the miniapp's own recorded
 // (author) session. A viewer OVERRIDE (sessionId + agent) is honored ONLY when it names one of the

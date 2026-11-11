@@ -1,4 +1,4 @@
-// Copyright (c) 2026 NineMind, Inc.
+// Copyright (c) 2026 Zhaohui Feng
 // SPDX-License-Identifier: MIT
 // src/bind/bindCore.ts
 // Shared core for device-flow binding. Extracted so both the CLI and the console

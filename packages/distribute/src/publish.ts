@@ -1,4 +1,4 @@
-// Copyright (c) 2026 NineMind, Inc.
+// Copyright (c) 2026 Zhaohui Feng
 // SPDX-License-Identifier: MIT
 // src/gem/publish.ts
 // Pure render: a (redacted) Gem -> the Managed Agents `agents.create` payload (sans skills) plus

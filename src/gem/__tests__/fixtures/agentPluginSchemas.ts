@@ -1,4 +1,4 @@
-// Copyright (c) 2026 NineMind, Inc.
+// Copyright (c) 2026 Zhaohui Feng
 // SPDX-License-Identifier: MIT
 // Vendored verbatim from https://agent-plugins.org/schemas/1.0.0/ (immutable URIs
 // per spec §versioning). Do not hand-edit; re-vendor if the pinned version changes.

@@ -1,4 +1,4 @@
-// Copyright (c) 2026 NineMind, Inc.
+// Copyright (c) 2026 Zhaohui Feng
 // SPDX-License-Identifier: MIT
 // A view over a GemVerificationReport — no persistence. Surfaces the net route score,
 // collisions, and context budget for the console scorecard (Plan 2) and grade input.

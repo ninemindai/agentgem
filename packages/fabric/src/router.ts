@@ -1,4 +1,4 @@
-// Copyright (c) 2026 NineMind, Inc.
+// Copyright (c) 2026 Zhaohui Feng
 // SPDX-License-Identifier: MIT
 // The in-proc fabric router (docs/proposals/message-fabric.md §The router,
 // increment 2). One instance per app spine, constructed in buildCommonApp and

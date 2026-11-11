@@ -1,4 +1,4 @@
-// Copyright (c) 2026 NineMind, Inc.
+// Copyright (c) 2026 Zhaohui Feng
 // SPDX-License-Identifier: MIT
 // Sealed-play modal for the Reviews inbox "Play to test" action: wraps the standalone Runner
 // player over a staged game's html. Broker-less on purpose (no apiBase/name/needs) — a staged

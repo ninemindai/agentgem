@@ -1,4 +1,4 @@
-// Copyright (c) 2026 NineMind, Inc.
+// Copyright (c) 2026 Zhaohui Feng
 // SPDX-License-Identifier: MIT
 import type { RecallIndex } from "@agentgem/recall";
 import type { MemoryProvider, ProviderConfig } from "./types.js";

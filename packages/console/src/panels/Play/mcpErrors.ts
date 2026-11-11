@@ -1,4 +1,4 @@
-// Copyright (c) 2026 NineMind, Inc.
+// Copyright (c) 2026 Zhaohui Feng
 // SPDX-License-Identifier: MIT
 // Browser-safe mirror of @agentgem/model's MCP_ERROR_CODES. The console is bundled for the browser
 // (scripts/build-console.mjs) and @agentgem/model's barrel pulls node:fs/os/path, so it cannot be

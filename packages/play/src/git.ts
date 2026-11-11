@@ -1,4 +1,4 @@
-// Copyright (c) 2026 NineMind, Inc.
+// Copyright (c) 2026 Zhaohui Feng
 // SPDX-License-Identifier: MIT
 // A thin child_process git wrapper for the local miniapps registry. No dependency; git must be on
 // PATH. Commits carry a fixed local identity so they work headless/in CI (a user can re-attribute).

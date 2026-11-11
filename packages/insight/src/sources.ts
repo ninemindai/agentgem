@@ -1,4 +1,4 @@
-// Copyright (c) 2026 NineMind, Inc.
+// Copyright (c) 2026 Zhaohui Feng
 // SPDX-License-Identifier: MIT
 //
 // The inbound SourceSpec registry: one entry per coding agent AgentGem can ingest. Mirrors the

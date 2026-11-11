@@ -1,4 +1,4 @@
-// Copyright (c) 2026 NineMind, Inc.
+// Copyright (c) 2026 Zhaohui Feng
 // SPDX-License-Identifier: MIT
 // src/gem/channels.ts
 // The single place that knows how each platform maps onto Eve's channel factories. Generalizes the

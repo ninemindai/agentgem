@@ -1,4 +1,4 @@
-// Copyright (c) 2026 NineMind, Inc.
+// Copyright (c) 2026 Zhaohui Feng
 // SPDX-License-Identifier: MIT
 // packages/console/src/panels/_shared/BloatCurve.tsx
 import { useEffect, useRef } from "react";

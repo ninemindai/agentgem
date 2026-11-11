@@ -1,4 +1,4 @@
-// Copyright (c) 2026 NineMind, Inc.
+// Copyright (c) 2026 Zhaohui Feng
 // SPDX-License-Identifier: MIT
 // Remix-source fetch: pull a published game's meta + sealed html from the hosted aggregator so the
 // console can fork it locally. FAIL-CLOSED on allowRemix — an aggregator that doesn't state

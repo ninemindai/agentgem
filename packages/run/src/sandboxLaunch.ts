@@ -1,4 +1,4 @@
-// Copyright (c) 2026 NineMind, Inc.
+// Copyright (c) 2026 Zhaohui Feng
 // SPDX-License-Identifier: MIT
 // src/gem/sandboxLaunch.ts
 // Pure generators for the OS-native sandbox launchers. The v1 boundary contains

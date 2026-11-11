@@ -1,4 +1,4 @@
-// Copyright (c) 2026 NineMind, Inc.
+// Copyright (c) 2026 Zhaohui Feng
 // SPDX-License-Identifier: MIT
 // src/gem/sandbox.ts
 // Pluggable sandbox-backend registry in front of the RunConnectFn seam. Each backend

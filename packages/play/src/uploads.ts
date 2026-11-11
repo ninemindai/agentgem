@@ -1,4 +1,4 @@
-// Copyright (c) 2026 NineMind, Inc.
+// Copyright (c) 2026 Zhaohui Feng
 // SPDX-License-Identifier: MIT
 // Author-supplied uploads for a seeded miniapp. Reference files inform the build only (gitignored ref/);
 // ship files are inlined into the single-file miniapp, so they are capped small (the save gate rejects

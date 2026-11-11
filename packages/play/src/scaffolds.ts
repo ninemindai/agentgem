@@ -1,4 +1,4 @@
-// Copyright (c) 2026 NineMind, Inc.
+// Copyright (c) 2026 Zhaohui Feng
 // SPDX-License-Identifier: MIT
 // Sealed HTML scaffolds — runnable starting points the studio agent writes into. Inline everything
 // (no external src/href/fetch; data: assets only) so a scaffold passes gameGate before the agent

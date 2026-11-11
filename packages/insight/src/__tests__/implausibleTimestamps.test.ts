@@ -1,4 +1,4 @@
-// Copyright (c) 2026 NineMind, Inc.
+// Copyright (c) 2026 Zhaohui Feng
 // SPDX-License-Identifier: MIT
 // startMs/endMs are Math.min/Math.max reductions over every record in a transcript, so
 // a SINGLE corrupt timestamp is not a rounding error — it becomes the boundary of the

@@ -1,4 +1,4 @@
-// Copyright (c) 2026 NineMind, Inc.
+// Copyright (c) 2026 Zhaohui Feng
 // SPDX-License-Identifier: MIT
 // src/play/__tests__/mcpConnectors.test.ts
 import { describe, it, expect, afterEach } from "vitest";

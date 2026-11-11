@@ -1,4 +1,4 @@
-// Copyright (c) 2026 NineMind, Inc.
+// Copyright (c) 2026 Zhaohui Feng
 // SPDX-License-Identifier: MIT
 // src/playCache.ts
 // Revalidation guard for the Play registry reads, as a REST dispatch hook.

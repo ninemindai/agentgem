@@ -1,4 +1,4 @@
-// Copyright (c) 2026 NineMind, Inc.
+// Copyright (c) 2026 Zhaohui Feng
 // SPDX-License-Identifier: MIT
 // src/nostr/linkLocal.ts — `agentgem nostr link`: the local fast-path for linking a Nostr key to
 // your account. Because the AgentGem host holds BOTH the account-bound session (from `agentgem bind`)

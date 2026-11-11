@@ -1,4 +1,4 @@
-// Copyright (c) 2026 NineMind, Inc.
+// Copyright (c) 2026 Zhaohui Feng
 // SPDX-License-Identifier: MIT
 // Connector-identity digest for consent pinning (spec D3/D7). Over the REDACTED config, so it is:
 //   • STABLE across a secret rotation (redactMcpConfig blanks the value; the env var NAME survives) —
